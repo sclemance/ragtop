@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate squeekboard layouts with Ctrl, Alt, Super and Shift keys, for Fliparchy.
+"""Generate squeekboard layouts with Esc, Ctrl, Alt, Super and Shift keys, for Fliparchy.
 
 Squeekboard's layouts are GPL-3.0-or-later data files, so Fliparchy doesn't
 ship modified copies. This script builds them locally from squeekboard's
@@ -31,13 +31,17 @@ CACHE = Path.home() / ".cache/fliparchy"
 # Content-purpose subdirectories where modifier keys make no sense.
 SKIP_DIRS = {"number", "pin", "emoji"}
 
-# (button name, label, squeekboard modifier), in row order.
-MODIFIERS = [
-    ("fl_ctrl", "Ctrl", "Control"),
-    ("fl_alt", "Alt", "Alt"),
-    ("fl_super", "Super", "Mod4"),
-    ("fl_shift", "Shift", "Shift"),
+# (button name, label, what it sends), in row order. Esc is an ordinary key;
+# the rest are squeekboard modifiers.
+ROW_KEYS = [
+    ("fl_esc", "Esc", {"keysym": "Escape"}),
+    ("fl_ctrl", "Ctrl", {"modifier": "Control"}),
+    ("fl_alt", "Alt", {"modifier": "Alt"}),
+    ("fl_super", "Super", {"modifier": "Mod4"}),
+    ("fl_shift", "Shift", {"modifier": "Shift"}),
 ]
+SUPER = ROW_KEYS[3]
+ESC = ROW_KEYS[0]
 # Squeekboard uses the outline name as the button's CSS class, so this also
 # lets Fliparchy's theme style the keys.
 MOD_OUTLINE = "fl-mod"
@@ -94,31 +98,34 @@ def patch(layout):
 
     alt = existing_modifier(buttons, "Alt")
     if alt:
-        # Terminal layouts: add Super beside their Alt, in their modifier row.
-        name, label, modifier = MODIFIERS[2]
+        # Terminal layouts already have a Ctrl/Alt/Shift row: add Esc at its
+        # start (theirs is only on the function-key view) and Super after Alt.
         alt_outline = (buttons[alt] or {}).get("outline", "default")
         outlines[MOD_OUTLINE] = dict(outlines[alt_outline])
-        buttons[name] = {"modifier": modifier, "outline": MOD_OUTLINE, "label": label}
+        for name, label, sends in (ESC, SUPER):
+            buttons[name] = dict(sends, outline=MOD_OUTLINE, label=label)
         changed = False
         for rows in views.values():
             for i, row in enumerate(rows):
                 keys = row.split()
-                if alt in keys and name not in keys:
-                    keys.insert(keys.index(alt) + 1, name)
-                    rows[i] = " ".join(keys)
-                    changed = True
+                if alt not in keys or SUPER[0] in keys:
+                    continue
+                keys.insert(keys.index(alt) + 1, SUPER[0])
+                keys.insert(0, ESC[0])
+                rows[i] = " ".join(keys)
+                changed = True
         return changed
 
-    # Everything else: a new half-height modifier row at the top of each view,
-    # as wide as the widest existing row.
-    width = widest_row(layout) / len(MODIFIERS)
+    # Everything else: a new half-height row at the top of each view, as wide
+    # as the widest existing row.
+    width = widest_row(layout) / len(ROW_KEYS)
     height = float(outlines["default"].get("height", 52)) * ROW_HEIGHT_RATIO
     if width <= 0:
         return False
     outlines[MOD_OUTLINE] = {"width": round(width, 3), "height": round(height, 3)}
-    for name, label, modifier in MODIFIERS:
-        buttons[name] = {"modifier": modifier, "outline": MOD_OUTLINE, "label": label}
-    row = " ".join(name for name, _, _ in MODIFIERS)
+    for name, label, sends in ROW_KEYS:
+        buttons[name] = dict(sends, outline=MOD_OUTLINE, label=label)
+    row = " ".join(name for name, _, _ in ROW_KEYS)
     for rows in views.values():
         rows.insert(0, row)
     return True
