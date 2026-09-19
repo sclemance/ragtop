@@ -81,7 +81,49 @@ Item {
   }
   Timer { id: oskRestart; interval: 3000; onTriggered: oskProc.running = true }
 
-  Component.onCompleted: oskProc.running = true
+  // Squeekboard only reads GTK CSS at startup. ~/.config/gtk-3.0/gtk.css
+  // imports the file written here, so a theme or font change means rewrite
+  // then restart. The first write happens before squeekboard's first start.
+  readonly property string themeScript:
+    Qt.resolvedUrl("squeekboard-theme.sh").toString().replace(/^file:\/\//, "")
+  property string themeCss: ""
+  property bool themeChecked: false
+
+  Process {
+    id: themeProc
+    command: ["sh", root.themeScript]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var first = !root.themeChecked
+        root.themeChecked = true
+        if (text === "" || text === root.themeCss) {
+          if (first) oskProc.running = true
+          return
+        }
+        root.themeCss = text
+        themeWriteProc.restartOsk = !first
+        themeWriteProc.command = [
+          "sh", "-c",
+          'd="$HOME/.local/state/fliparchy" && mkdir -p "$d" && printf "%s" "$1" > "$d/squeekboard.css.tmp" && mv -f "$d/squeekboard.css.tmp" "$d/squeekboard.css"',
+          "--", text
+        ]
+        themeWriteProc.running = true
+      }
+    }
+  }
+  Process {
+    id: themeWriteProc
+    property bool restartOsk: false
+    // Stopping squeekboard lets oskProc's own exit handler bring it back.
+    onExited: if (restartOsk) oskProc.running = false; else oskProc.running = true
+  }
+  Timer {
+    interval: 5000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!themeProc.running) themeProc.running = true
+  }
 
   Process { id: oskToggleProc }
 
