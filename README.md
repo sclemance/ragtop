@@ -107,7 +107,7 @@ have to live elsewhere. The installer:
 6. Adds two hooks to `~/.config/omarchy/hooks/post-update.d/` that keep the
    layouts and overlay clones in step after `omarchy update`.
 7. Only if you can't read the tablet-mode switch, and only after asking:
-   installs a udev rule with sudo (see [Tablet-mode detection](#tablet-mode-detection)).
+   installs a udev rule, asking for your password (see [Tablet-mode detection](#tablet-mode-detection)).
 
 Each of these is undone by the uninstaller.
 

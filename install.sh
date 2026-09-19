@@ -132,14 +132,15 @@ offer_udev_rule() {
     return 1
   fi
   local answer
-  read -r -p "   Install it now with sudo? [y/N] " answer
+  read -r -p "   Install it now? You'll be asked for your password. [y/N] " answer
   [[ $answer == [yY]* ]] || return 1
 
-  printf '# Installed by Fliparchy: read access to switch devices for the logged-in user.\n%s\n' "$udev_rule" |
-    sudo tee "$udev_rule_file" >/dev/null || return 1
-  sudo udevadm control --reload
-  sudo udevadm trigger --action=change "/sys/class/input/$(basename "$path")"
-  sudo udevadm settle
+  as_root '
+    printf "# Installed by Fliparchy: read access to switch devices for the logged-in user.\n%s\n" "$1" >"$2"
+    udevadm control --reload
+    udevadm trigger --action=change "$3"
+    udevadm settle
+  ' "$udev_rule" "$udev_rule_file" "/sys/class/input/$(basename "$path")" || return 1
   if [[ -r $path ]]; then
     echo "   installed; $path is readable now"
   else
@@ -150,13 +151,26 @@ offer_udev_rule() {
 
 remove_udev_rule() {
   [[ -f $udev_rule_file ]] || return 0
-  echo "   $udev_rule_file needs sudo to remove"
-  if sudo rm -f "$udev_rule_file"; then
-    sudo udevadm control --reload
-    sudo udevadm trigger --action=change --subsystem-match=input
+  echo "   removing $udev_rule_file needs your password"
+  if as_root '
+    rm -f "$1"
+    udevadm control --reload
+    udevadm trigger --action=change --subsystem-match=input
+  ' "$udev_rule_file"; then
     echo "   removed"
   else
     warn "couldn't remove it; delete it yourself: sudo rm $udev_rule_file"
+  fi
+}
+
+# as_root <script> [args...]: run a bash script as root with one password
+# prompt: Omarchy's polkit dialog via pkexec, or sudo if pkexec is missing.
+as_root() {
+  local script="$1"; shift
+  if command -v pkexec >/dev/null; then
+    pkexec /usr/bin/bash -c "$script" _ "$@"
+  else
+    sudo /usr/bin/bash -c "$script" _ "$@"
   fi
 }
 
