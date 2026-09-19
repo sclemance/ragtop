@@ -222,9 +222,13 @@ Item {
     return keys
   }
 
+  // Flat unless the style's background is a gradient (see KeyboardTheme).
   Rectangle {
     anchors.fill: parent
-    color: root.theme.background
+    gradient: Gradient {
+      GradientStop { position: 0; color: root.theme.backgroundTop }
+      GradientStop { position: 1; color: root.theme.background }
+    }
   }
 
   Repeater {

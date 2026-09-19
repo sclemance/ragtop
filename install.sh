@@ -71,6 +71,18 @@ rows = {
     "setup.tablet.modifiers.sticky": dict(icon="\U000f0634", label="Sticky",
         description="Stay on until tapped again",
         checked=f'"{cmd}" modifiers is sticky', action=f'"{cmd}" modifiers set sticky'),
+    "setup.tablet.key-style": dict(icon="\U000f0831", label="Key Style",
+        description="The shape of the on-screen keyboard's keys"),
+    **{f"setup.tablet.key-style.{name}": dict(icon="\U000f0831", label=label,
+        checked=f'"{cmd}" key-style is {name}', action=f'"{cmd}" key-style set {name}')
+       for name, label in (("rounded", "Rounded"), ("rectangle", "Rectangle"), ("pill", "Pill"),
+                           ("outline", "Outline"), ("keycap", "Keycap"), ("angular", "Angular"))},
+    "setup.tablet.background": dict(icon="\U000f06a0", label="Background",
+        description="Tint, blur or gradient behind the on-screen keyboard's keys; blur needs Hyprland's blur turned on"),
+    **{f"setup.tablet.background.{name}": dict(icon="\U000f06a0", label=label,
+        checked=f'"{cmd}" background is {name}', action=f'"{cmd}" background set {name}')
+       for name, label in (("style", "From Style"), ("tint", "Tint"), ("blur", "Blur"),
+                           ("gradient", "Gradient"))},
     "setup.tablet.transparency": dict(icon="\U000f1853", label="Transparency",
         description="Let the desktop show through the on-screen keyboard's background"),
     **{f"setup.tablet.transparency.{level}": dict(icon="\U000f1853", label=label,

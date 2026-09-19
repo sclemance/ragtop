@@ -170,6 +170,43 @@ shortcuts work from it. For keybindings or scripts:
 omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 ```
 
+### Key styles
+
+**Setup › Tablet › Key Style** picks the keys' shape: Rounded (the default),
+Rectangle, Pill, Outline, Keycap or Angular. **Setup › Tablet › Background**
+picks what's behind them with any shape: a flat Tint, Blur, or a Gradient
+towards your theme's accent; From Style uses the style's own. Colours always
+come from your Omarchy theme, and whatever a key looks like, a touch goes to
+the nearest key, so no shape makes keys harder to hit.
+
+Blur is done by Hyprland, which Omarchy ships with blur turned off. Ragtop
+doesn't turn it on, since that would also blur your see-through windows:
+Blur shows once you've enabled `decoration.blur.enabled` in your Hyprland
+config, and looks like Tint until then.
+
+A style is a small JSON file of settings, never code. Ragtop's are in
+`styles/`; put your own in `~/.config/ragtop/styles/<name>.json` (a file with
+a built-in's name replaces it) and pick it with `./ragtop key-style set <name>`:
+
+```json
+{ "name": "Chunky", "shape": "keycap", "depth": 7, "radius": 10, "gap": 8, "labelScale": 1.1 }
+```
+
+| Field | Values | Default |
+| --- | --- | --- |
+| `shape` | `rounded`, `rectangle`, `pill`, `outline`, `keycap`, `angular` | `rounded` |
+| `radius` | corner radius in pixels, 0–30, or `"auto"` for Omarchy's | `"auto"` |
+| `border` | border width, 0–4 | 1 |
+| `gap` | space between keys, 2–14 | 6 |
+| `labelScale` | label size, 0.6–1.6 | 1 |
+| `depth` | Keycap: how far the key's side shows, 0–10 | 4 |
+| `chamfer` | Angular: how much of each corner is cut, 0–20 | 8 |
+| `background` | `tint`, `blur`, `gradient` | `tint` |
+
+Anything missing, unknown or out of range falls back to its default. The lock
+screen's keyboard takes the shape and measurements from the style too, but
+never the background.
+
 ## Omarchy's overlays
 
 Omarchy's menu, pickers and polkit prompt are full-screen surfaces that take
@@ -252,6 +289,8 @@ the gear key on the on-screen keyboard opens directly:
 | Tablet mode: Automatic (follow the hinge), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard modifiers: One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
+| Key shape: Rounded, Rectangle, Pill, Outline, Keycap or Angular (see [Key styles](#key-styles)) | Rounded | Setup › Tablet › Key Style |
+| Keyboard background: From Style, Tint, Blur or Gradient | From Style | Setup › Tablet › Background |
 | Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › Transparency |
 | Touch typing in each overlay, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
 
@@ -262,7 +301,8 @@ while the keyboard is closed, and the keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`modifiers set oneshot|sticky` and
+`modifiers set oneshot|sticky`, `key-style set <name>` (`key-style list` shows
+them), `background set style|tint|blur|gradient` and
 `transparency set auto|opaque|low|medium|high|full`. Settings other than the
 overlays are kept in
 `~/.config/ragtop/settings.conf`, and changes apply straight away.

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -13,7 +14,8 @@ import qs.Commons
 // nothing added to the desktop keyboard reaches the lock screen unless it's
 // added here too. It only edits the password text: no key events, no helper,
 // no modifiers other than Shift. It copies the desktop keyboard's key shapes
-// and proportions, in the lock screen's own colours (Color.lock).
+// and proportions, in the lock screen's own colours (Color.lock), and takes
+// only the key style's shape and measurements, never its background.
 Item {
   id: root
 
@@ -101,8 +103,43 @@ Item {
     "space": 5.5, "enter": 2
   })
 
+  // The key style's shape and measurements, as Ragtop's service last wrote
+  // them. Checked again here with this file's own rules; anything missing,
+  // unknown or out of range gets the Rounded default.
+  property var style: cleanStyle(null)
+
+  function cleanStyle(raw) {
+    raw = raw && typeof raw === "object" ? raw : {}
+    function num(value, low, high, fallback) {
+      return typeof value === "number" && isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback
+    }
+    var shapes = ["rounded", "rectangle", "pill", "outline", "keycap", "angular"]
+    return {
+      shape: shapes.indexOf(raw.shape) !== -1 ? raw.shape : "rounded",
+      radius: typeof raw.radius === "number" ? num(raw.radius, 0, 30, "auto") : "auto",
+      border: num(raw.border, 0, 4, 1),
+      gap: Math.round(num(raw.gap, 2, 14, 6)),
+      labelScale: num(raw.labelScale, 0.6, 1.6, 1),
+      depth: num(raw.depth, 0, 10, 4),
+      chamfer: num(raw.chamfer, 0, 20, 8)
+    }
+  }
+
+  FileView {
+    path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-style.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var raw = null
+      try { raw = JSON.parse(text()) } catch (e) {}
+      root.style = root.cleanStyle(raw)
+    }
+    onLoadFailed: root.style = root.cleanStyle(null)
+  }
+
   // Sized as the desktop keyboard is, so the longest row fits.
-  readonly property int gap: 6
+  readonly property int gap: style.gap
   readonly property int padding: 8
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
   readonly property real unit: Math.min((width - 2 * padding) / rowUnits, 84)
@@ -112,7 +149,9 @@ Item {
   readonly property color keyColor: Qt.tint(Color.lock.background, Util.alpha(Color.lock.text, 0.10))
   readonly property color specialKeyColor: Qt.tint(Color.lock.background, Util.alpha(Color.lock.text, 0.05))
   readonly property color keyBorder: Util.alpha(Color.lock.text, 0.12)
-  readonly property real keyRadius: Math.max(Style.cornerRadius, 6)
+  // The Outline shape's edges, which carry the key on their own.
+  readonly property color outline: Util.alpha(Color.lock.text, 0.45)
+  readonly property real keyRadius: style.radius === "auto" ? Math.max(Style.cornerRadius, 6) : style.radius
 
   implicitHeight: rows.implicitHeight + 2 * padding + 12
   opacity: typing ? 1 : 0.5
@@ -185,30 +224,82 @@ Item {
         Repeater {
           model: parent.modelData
 
-          Rectangle {
+          Item {
             id: key
             required property string modelData
             readonly property bool accent: modelData === "enter" || (modelData === "shift" && root.capsLock)
             readonly property bool latched: modelData === "shift" && root.shift
             readonly property bool special: modelData in root.labels || modelData === "space"
-            width: root.unit * (root.widths[modelData] || 1) - root.gap
-            height: root.keyHeight
-            radius: root.keyRadius
-            border.width: 1
-            border.color: root.keyBorder
-            color: area.pressed ? Color.lock.selection
+            readonly property string shape: root.style.shape
+            readonly property color fill: area.pressed ? Color.lock.selection
               : accent ? Color.lock.borderActive
               : latched ? Color.lock.selection
               : special ? root.specialKeyColor
               : root.keyColor
+            // Keycap: the face sits above the key's side and sinks when pressed.
+            readonly property real depth: shape === "keycap" ? Math.min(root.style.depth, height / 4) : 0
+            readonly property real faceY: area.pressed ? depth * 0.6 : 0
+            readonly property real faceHeight: height - depth
+            width: root.unit * (root.widths[modelData] || 1) - root.gap
+            height: root.keyHeight
+
+            // Keycap: the key's side, showing below the face.
+            Rectangle {
+              visible: key.shape === "keycap"
+              anchors.fill: parent
+              radius: root.keyRadius
+              color: Qt.darker(key.fill, 1.6)
+            }
+
+            // Every shape but Angular.
+            Rectangle {
+              visible: key.shape !== "angular"
+              y: key.faceY
+              width: key.width
+              height: key.faceHeight
+              radius: key.shape === "rectangle" ? 0 : key.shape === "pill" ? height / 2 : root.keyRadius
+              // Outline keys are just their edges unless pressed or marked.
+              color: key.shape === "outline" && !area.pressed && !key.accent && !key.latched ? "transparent" : key.fill
+              border.width: root.style.border
+              border.color: key.shape === "outline" ? root.outline : root.keyBorder
+            }
+
+            // Angular: the corners cut off.
+            Shape {
+              id: angular
+              visible: key.shape === "angular"
+              anchors.fill: parent
+              preferredRendererType: Shape.CurveRenderer
+              readonly property real c: Math.min(root.style.chamfer, key.width / 3, key.height / 3)
+
+              ShapePath {
+                fillColor: key.fill
+                strokeColor: root.keyBorder
+                strokeWidth: root.style.border
+                joinStyle: ShapePath.MiterJoin
+                PathPolyline {
+                  path: [
+                    Qt.point(angular.c, 0), Qt.point(key.width - angular.c, 0),
+                    Qt.point(key.width, angular.c), Qt.point(key.width, key.height - angular.c),
+                    Qt.point(key.width - angular.c, key.height), Qt.point(angular.c, key.height),
+                    Qt.point(0, key.height - angular.c), Qt.point(0, angular.c), Qt.point(angular.c, 0)
+                  ]
+                }
+              }
+            }
 
             Text {
-              anchors.centerIn: parent
+              y: key.faceY
+              width: key.width
+              height: key.faceHeight
+              horizontalAlignment: Text.AlignHCenter
+              verticalAlignment: Text.AlignVCenter
               text: root.label(key.modelData)
               color: key.accent ? Color.background : Color.lock.text
               font.family: Style.font.family
               // Short labels (a letter) larger than words like "?123".
-              font.pixelSize: Math.round(Math.min(key.height * 0.42, 26) * (text.length > 1 ? 0.75 : 1.25))
+              font.pixelSize: Math.round(Math.min(key.faceHeight * 0.42, 26) * root.style.labelScale
+                * (text.length > 1 ? 0.75 : 1.25))
             }
 
             MouseArea {

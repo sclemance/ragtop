@@ -10,10 +10,14 @@
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop transparency (get | is <level> | set <level>)
 #        ragtop modifiers (get | is <mode> | set <mode>)
+#        ragtop key-style (get | is <style> | set <style> | list)
+#        ragtop background (get | is <background> | set <background>)
 # where <overlay> is menu, emojis, clipboard, polkit or lock, <mode> is auto
 # (follow the hinge's switch), on or off, <level> is auto (match Omarchy's
 # bar), opaque, low, medium, high or full, and the modifiers <mode> is
-# oneshot or sticky.
+# oneshot or sticky. <style> names a style file in ~/.config/ragtop/styles/
+# or Ragtop's styles/ (rounded, rectangle, pill, outline, keycap, angular),
+# and <background> is style (the style's own), tint, blur or gradient.
 #
 # Touch typing in an overlay means replacing Omarchy's own with a patched
 # clone (see overlay-clones.sh), so each one is off until the user turns it on.
@@ -26,7 +30,7 @@ conf="$HOME/.local/state/ragtop/install.conf"
 clones="$repo/overlay-clones.sh"
 settings="$HOME/.config/ragtop/settings.conf"
 
-usage() { sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,21p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 label() {
   case "$1" in
@@ -144,14 +148,59 @@ choice_notice() {
     "transparency full") echo "The keyboard's background is fully transparent." ;;
     "modifiers oneshot") echo "Ctrl, Alt, Super and Shift now apply to the next key; tap twice to lock." ;;
     "modifiers sticky") echo "Ctrl, Alt, Super and Shift now stay on until tapped again." ;;
+    "background style") echo "The keyboard's background now follows its key style." ;;
+    "background tint") echo "The keyboard's background is a flat tint." ;;
+    "background blur")
+      if hyprctl getoption decoration:blur:enabled 2>/dev/null | grep -q 'bool: true'; then
+        echo "The keyboard's background now blurs what's behind it."
+      else
+        echo "Blur needs Hyprland's blur turned on (decoration.blur.enabled in your Hyprland config); until then it looks like Tint."
+      fi
+      ;;
+    "background gradient") echo "The keyboard's background is a gradient." ;;
     *) return 1 ;;
   esac
+}
+
+# Key styles: the user's own in ~/.config/ragtop/styles/ win over Ragtop's.
+style_file() {
+  [[ $1 =~ ^[a-z0-9-]{1,32}$ ]] || return 1
+  local f
+  for f in "$HOME/.config/ragtop/styles/$1.json" "$repo/styles/$1.json"; do
+    [[ -f $f ]] && { echo "$f"; return 0; }
+  done
+  return 1
+}
+
+styles() {
+  local f
+  for f in "$HOME/.config/ragtop/styles/"*.json "$repo/styles/"*.json; do
+    [[ -f $f ]] && basename "$f" .json
+  done | sort -u
+}
+
+# A style's display name, from its file's "name", else the file name.
+style_name() {
+  python3 -c 'import json, sys
+try:
+    name = json.load(open(sys.argv[1])).get("name")
+except Exception:
+    name = None
+print(name if isinstance(name, str) and name.strip() else sys.argv[2])' "$(style_file "$1")" "$1"
 }
 
 case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "transparency "*) choice transparency auto "${2:-}" "${3:-}" ;;
   "modifiers "*) choice modifiers oneshot "${2:-}" "${3:-}" ;;
+  "background "*) choice background style "${2:-}" "${3:-}" ;;
+  "key-style list") styles ;;
+  "key-style set")
+    style_file "${3:-}" >/dev/null || { echo "No key style named '${3:-}'. Available: $(styles | tr '\n' ' ')" >&2; exit 2; }
+    put key-style "$3"
+    notify "The keyboard's keys are now $(style_name "$3")."
+    ;;
+  "key-style "*) choice key-style rounded "${2:-}" "${3:-}" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
