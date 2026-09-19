@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "id": "sclemance.fliparchy",
   "name": "Fliparchy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "sclemance",
-  "description": "Convertible tablet support: keeps iio-hyprland (auto screen/touch rotation) and squeekboard (on-screen keyboard) running, and shows a keyboard toggle icon only while the hardware tablet-mode switch is engaged.",
+  "description": "Convertible tablet support: keeps iio-hyprland (auto screen/touch rotation) and squeekboard (on-screen keyboard) running, shows keyboard-toggle and rotation-lock icons only while the hardware tablet-mode switch is engaged, and persists its settings to its own ~/.config/fliparchy/config.json without touching any other config.",
   "kinds": ["bar-widget"],
   "entryPoints": { "barWidget": "BarWidget.qml" },
   "barWidget": {
-    "displayName": "On-Screen Keyboard",
-    "description": "Toggle the on-screen keyboard; only visible in tablet mode",
+    "displayName": "Fliparchy",
+    "description": "Toggle the on-screen keyboard and rotation lock; only visible in tablet mode",
     "category": "Input",
     "allowMultiple": false,
     "defaultSection": "right"
