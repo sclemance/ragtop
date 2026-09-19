@@ -3,12 +3,13 @@ import QtQuick
 // Ragtop's own on-screen keyboard, the alternative to squeekboard
 // (Setup › Tablet › Keyboard). It draws the keys and decides what each tap
 // means; keyboard-helper.py, run by the service, turns that into key events.
-// Characters go by what they are, not where they sit, so the keys type
-// correctly whatever the Hyprland layout; the labels are US for now.
+// The letter keys are those of the active Hyprland layout, as the helper
+// reads them from the keymap (US until it reports). Characters go by what
+// they are, not where they sit, so they type correctly in any layout.
 Item {
   id: root
 
-  // Service.qml: sendKeys(command), openSettings(), modifierMode.
+  // Service.qml: sendKeys(command), openSettings(), modifierMode, keyLabels.
   required property var service
   required property var theme
 
@@ -21,11 +22,27 @@ Item {
   // The extra row of desktop keys, then the pages. A key is its character,
   // or one of the named keys below.
   readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super", "left", "up", "down", "right"]
+  readonly property var fallbackRows: [
+    [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
+    [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
+    [["z","Z"],["x","X"],["c","C"],["v","V"],["b","B"],["n","N"],["m","M"]]
+  ]
+  readonly property var layoutRows: root.service.keyLabels && root.service.keyLabels.rows.length === 3
+    ? root.service.keyLabels.rows : fallbackRows
+  readonly property string layoutName: root.service.keyLabels ? root.service.keyLabels.name : ""
+  // Each letter's shifted character, e.g. "Ü" for "ü".
+  readonly property var shiftOf: {
+    var map = {}
+    layoutRows.forEach(function(row) { row.forEach(function(k) { map[k[0]] = k[1] }) })
+    return map
+  }
+  function letters(row) { return row.map(function(k) { return k[0] }) }
+
   readonly property var pages: ({
     "letters": [
-      ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-      ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-      ["shift", "z", "x", "c", "v", "b", "n", "m", "backspace"],
+      letters(layoutRows[0]),
+      letters(layoutRows[1]),
+      ["shift"].concat(letters(layoutRows[2]), ["backspace"]),
       ["symbols", "settings", "space", ".", "enter"]
     ],
     "symbols": [
@@ -59,15 +76,22 @@ Item {
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right"]
 
-  readonly property real unit: Math.min((width - 2 * theme.padding) / 10, 84)
+  // Sized so the longest row fits; layouts differ (10 to 12 letter keys).
+  readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
+  readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, 84)
   readonly property real keyHeight: Math.max(40, Math.min(Math.round(unit * 0.78), 60))
   readonly property real topRowHeight: Math.round(keyHeight * 0.62)
 
   implicitHeight: column.implicitHeight + 2 * theme.padding
 
   function label(key) {
+    if (key === "space") return layoutName
     if (key in labels) return labels[key]
-    return upper ? key.toUpperCase() : key
+    return upper ? shifted(key) : key
+  }
+
+  function shifted(key) {
+    return shiftOf[key] || key.toUpperCase()
   }
 
   function kind(key) {
@@ -136,7 +160,7 @@ Item {
       if (combo.length > 0)
         service.sendKeys(["key", key].concat(activeMods(true)).join(" "))
       else
-        service.sendKeys("type " + (upper ? key.toUpperCase() : key))
+        service.sendKeys("type " + (upper ? shifted(key) : key))
     }
     afterKey()
   }
@@ -179,7 +203,7 @@ Item {
             label: root.label(modelData)
             kind: root.kind(modelData)
             // The top row spreads its keys over the full width.
-            width: (row.index === 0 ? root.unit * 10 / root.topRow.length : root.unit * (root.widths[modelData] || 1)) - root.theme.gap
+            width: (row.index === 0 ? root.unit * root.rowUnits / root.topRow.length : root.unit * (root.widths[modelData] || 1)) - root.theme.gap
             height: row.index === 0 ? root.topRowHeight : root.keyHeight
             onKeyPressed: root.press(modelData)
             onKeyReleased: root.release(modelData)

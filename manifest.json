@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sclemance.ragtop",
   "name": "Ragtop",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "author": "sclemance",
   "description": "Tablet mode for convertibles: follows the hinge's tablet-mode switch (auto-detected), auto-rotation with a lock, an Omarchy-themed on-screen keyboard with Esc/Tab/modifier/arrow keys that work with SUPER shortcuts, a touch panel for window management, and touch-typable Omarchy menu, pickers and password prompt. Run install.sh after adding; see README.",
   "kinds": ["bar-widget", "service"],

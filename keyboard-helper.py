@@ -18,10 +18,16 @@ commands on stdin, one per line:
   reload                      re-read Hyprland's layouts, e.g. after a switch
   quit
 
+At startup and after each reload it also prints "labels <json>": the active
+layout's name and the characters on its letter keys, row by row, as
+[normal, shifted] pairs, for the keyboard to draw.
+
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
 for each command.
 """
 
+import ctypes
+import ctypes.util
 import json
 import os
 import re
@@ -87,6 +93,64 @@ def hyprland_layout():
     if real:
         active = next((k for k in real if k.get("main")), real[0]).get("active_layout_index", 0)
     return names, active
+
+
+class XkbLabels:
+    """What a keymap's keys type, read with libxkbcommon itself."""
+
+    def __init__(self):
+        lib = ctypes.CDLL(ctypes.util.find_library("xkbcommon"))
+        lib.xkb_context_new.restype = ctypes.c_void_p
+        lib.xkb_context_new.argtypes = [ctypes.c_int]
+        lib.xkb_keymap_new_from_string.restype = ctypes.c_void_p
+        lib.xkb_keymap_new_from_string.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+        lib.xkb_keymap_unref.argtypes = [ctypes.c_void_p]
+        lib.xkb_keymap_key_by_name.restype = ctypes.c_uint32
+        lib.xkb_keymap_key_by_name.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.xkb_keymap_key_get_syms_by_level.restype = ctypes.c_int
+        lib.xkb_keymap_key_get_syms_by_level.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32,
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_uint32))]
+        lib.xkb_keysym_to_utf32.restype = ctypes.c_uint32
+        lib.xkb_keysym_to_utf32.argtypes = [ctypes.c_uint32]
+        lib.xkb_keymap_layout_get_name.restype = ctypes.c_char_p
+        lib.xkb_keymap_layout_get_name.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        self.lib = lib
+        self.context = lib.xkb_context_new(0)
+
+    # The letter rows of a physical keyboard, by xkb key name.
+    ROWS = (("AD", 12), ("AC", 11), ("AB", 10))
+
+    def letter_rows(self, keymap_text, group):
+        """{"name": layout name, "rows": [[[normal, shifted], ...], ...]}, with
+        the keys that type letters; punctuation keys are left to the
+        keyboard's symbol pages."""
+        lib = self.lib
+        keymap = lib.xkb_keymap_new_from_string(self.context, keymap_text.encode(), 1, 0)
+        if not keymap:
+            return None
+
+        def char(code, level):
+            syms = ctypes.POINTER(ctypes.c_uint32)()
+            if lib.xkb_keymap_key_get_syms_by_level(keymap, code, group, level, ctypes.byref(syms)) < 1:
+                return ""
+            u = lib.xkb_keysym_to_utf32(syms[0])
+            return chr(u) if u else ""
+
+        rows = []
+        for prefix, count in self.ROWS:
+            row = []
+            for i in range(1, count + 1):
+                code = lib.xkb_keymap_key_by_name(keymap, f"{prefix}{i:02d}".encode())
+                if code == 0xFFFFFFFF:
+                    continue
+                normal = char(code, 0)
+                if normal.isalpha():
+                    row.append([normal, char(code, 1) or normal.upper()])
+            rows.append(row)
+        name = lib.xkb_keymap_layout_get_name(keymap, group)
+        lib.xkb_keymap_unref(keymap)
+        return {"name": name.decode() if name else "", "rows": rows}
 
 
 def xkb_args(names):
@@ -205,6 +269,12 @@ class Keyboard:
         self.keymap = Keymap(names, group)
         self._new_device()
         threading.Thread(target=self.keymap.warm, daemon=True).start()
+        try:
+            labels = XkbLabels().letter_rows(self.keymap.base, group)
+        except OSError:
+            labels = None  # no libxkbcommon to read: the keyboard keeps its US labels
+        if labels:
+            print("labels " + json.dumps(labels, ensure_ascii=False), flush=True)
 
     def _new_device(self):
         """Replace the virtual keyboard with one carrying the current keymap.
@@ -362,13 +432,17 @@ def main():
             except ValueError as e:
                 print(f"error: {e}", flush=True)
     finally:
-        # Never leave a key or modifier stuck down.
-        kb.release_all()
-        kb.vk.destroy()
-        kb.display.roundtrip()
-        sys.stdout.flush()
-        # Skip Python's own teardown: it frees pywayland objects in an order
-        # libwayland crashes on. The compositor cleans up after the socket.
+        try:
+            # Never leave a key or modifier stuck down.
+            kb.release_all()
+            kb.vk.destroy()
+            kb.display.roundtrip()
+            sys.stdout.flush()
+        except Exception:
+            pass  # e.g. BrokenPipeError: the shell that read us has exited
+        # Skip Python's own teardown, whatever happened above: it frees
+        # pywayland objects in an order libwayland crashes on. The
+        # compositor cleans up after the socket.
         os._exit(0)
 
 

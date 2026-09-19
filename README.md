@@ -166,9 +166,12 @@ squeekboard it has:
   Setup › Tablet › Modifier Keys to have them stay on until tapped again.
 - **Any character** your layout can't type (é on a US layout, emoji) still
   arrives, and keys type correctly whatever your Hyprland layout is.
+- **Your layout's letters**: the letter keys follow the active Hyprland
+  layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), and the space bar shows its
+  name.
 - A settings key that opens Setup › Tablet directly.
 
-The key labels are US English for now. `keyboard-helper.py` sends the keys: it
+`keyboard-helper.py` sends the keys: it
 registers a Wayland virtual keyboard with the same keymap as your physical
 keyboard, which is also why your SUPER shortcuts work from it. The shell runs
 it only while this keyboard is chosen. For keybindings or scripts:

@@ -583,6 +583,13 @@ Item {
     command: ["python3", Qt.resolvedUrl("keyboard-helper.py").toString().replace(/^file:\/\//, "")]
     running: root.keyboardEngine === "ragtop"
     stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (line.startsWith("labels ")) {
+          try { root.keyLabels = JSON.parse(line.slice(7)) } catch (e) {}
+        }
+      }
+    }
     onExited: if (root.keyboardEngine === "ragtop") keyboardHelperRestart.start()
   }
   Timer {
@@ -590,6 +597,10 @@ Item {
     interval: 3000
     onTriggered: keyboardHelper.running = root.keyboardEngine === "ragtop"
   }
+
+  // The active layout's name and letter keys, from the helper:
+  // { name, rows: [[[normal, shifted], ...], ...] }; null until it reports.
+  property var keyLabels: null
 
   // One command per line; see keyboard-helper.py.
   function sendKeys(command) {
