@@ -10,6 +10,11 @@ BarWidget {
   readonly property string tabletSwitchDevice: String(root.setting("tabletSwitchDevice", ""))
   readonly property bool tabletMode: root.service ? root.service.tabletMode : false
   readonly property bool oskVisible: root.service ? root.service.oskVisible : false
+  property bool shortcutsOpen: false
+
+  // PopupCard calls its owner's close() when tapped outside.
+  function close() { root.shortcutsOpen = false }
+  onTabletModeChanged: if (!root.tabletMode) root.close()
 
   // Stay visible while locked, even outside tablet mode, so a rotation that
   // was locked in portrait can always be unlocked from the bar.
@@ -63,7 +68,7 @@ BarWidget {
 
   Grid {
     id: grid
-    columns: root.vertical ? 1 : 2
+    columns: root.vertical ? 1 : 3
 
     BarIconButton {
       visible: root.tabletMode
@@ -75,11 +80,28 @@ BarWidget {
     }
 
     BarIconButton {
+      id: shortcutsButton
+      visible: root.tabletMode
+      bar: root.bar
+      text: ""
+      tooltipText: "Window shortcuts"
+      active: root.shortcutsOpen
+      onPressed: root.shortcutsOpen = !root.shortcutsOpen
+    }
+
+    BarIconButton {
       bar: root.bar
       text: root.rotationLocked ? "" : ""
       tooltipText: root.rotationLocked ? "Unlock rotation" : "Lock rotation"
       active: root.rotationLocked
       onPressed: root.toggleRotationLock()
     }
+  }
+
+  ShortcutsPopup {
+    anchorItem: shortcutsButton
+    bar: root.bar
+    owner: root
+    open: root.shortcutsOpen
   }
 }
