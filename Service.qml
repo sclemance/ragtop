@@ -477,7 +477,19 @@ Item {
 
   // The active layout's name and letter keys, from the helper:
   // { name, rows: [[[normal, shifted], ...], ...] }; null until it reports.
+  // Also written to $XDG_RUNTIME_DIR/ragtop-layout.json for the lock
+  // screen's keyboard, which can't reach this service.
   property var keyLabels: null
+  onKeyLabelsChanged: {
+    if (!root.keyLabels) return
+    layoutWriteProc.command = [
+      "sh", "-c",
+      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-layout.json.tmp" && mv -f "$d/ragtop-layout.json.tmp" "$d/ragtop-layout.json"',
+      "--", JSON.stringify(root.keyLabels)
+    ]
+    layoutWriteProc.running = true
+  }
+  Process { id: layoutWriteProc }
 
   // One command per line; see keyboard-helper.py.
   function sendKeys(command) {

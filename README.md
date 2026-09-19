@@ -215,10 +215,19 @@ What turning one on means:
 The lock screen is different: while it's up, Hyprland shows nothing else at
 all, so no on-screen keyboard can appear over it. Its clone (**Lock Screen**
 in the same menu) keeps Omarchy's lock screen as it is and adds a keyboard of
-its own along the bottom, in tablet mode only: letters with Shift (tap twice
-for Caps), and two pages of digits and symbols. The keys edit the password the
-same way typing does, and Omarchy checks it as usual. The keyboard itself is
-`LockKeyboard.qml` in Ragtop's folder, which the clone loads.
+its own along the bottom, in tablet mode only: your layout's letters with
+Shift (tap twice for Caps), and two pages of digits and symbols. The keys edit
+the password the same way typing does, and Omarchy checks it as usual. The
+keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
+loads.
+
+It's shaped like the desktop keyboard but drawn in the lock screen's own
+colours, and it's deliberately a separate, self-contained file: it shares no
+code with the desktop keyboard, sends no key events and has no Ctrl, Alt or
+Super, so nothing added to the desktop keyboard reaches the lock screen by
+accident, and there's one short file to review. It learns your layout's letters
+from `$XDG_RUNTIME_DIR/ragtop-layout.json`, which Ragtop's service writes, and
+falls back to US if that's missing or malformed.
 
 The screen doesn't rotate while it's locked, with or without this: Omarchy's
 lock screen isn't redrawn for a rotated display, although touches would be
