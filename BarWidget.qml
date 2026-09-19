@@ -27,12 +27,27 @@ BarWidget {
   // Persisted inline on this widget's shell.json entry, the same way the
   // built-in clock saves its format; the shell only writes when it changed.
   function toggleRotationLock() {
+    setRotationLocked(!root.rotationLocked)
+  }
+
+  // Idempotent, since every monitor's widget instance reacts to the same
+  // tablet-mode exit.
+  function setRotationLocked(locked) {
+    if (root.rotationLocked === locked) return
     var entry = { id: root.moduleName }
     for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
-    entry.rotationLocked = !root.rotationLocked
+    entry.rotationLocked = locked
     root.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
       root.bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  // A portrait lock is never wanted once the hardware keyboard is back.
+  // Driven by the service's signal rather than tabletMode here, which also
+  // drops to false when the service is torn down on reload.
+  Connections {
+    target: root.service
+    function onTabletModeExited() { root.setRotationLocked(false) }
   }
 
   // The service may be created after this widget, so retry until it exists.

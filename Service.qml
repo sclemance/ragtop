@@ -24,13 +24,27 @@ Item {
     rotationProc.running = !locked
   }
 
+  signal tabletModeExited()
+
+  // The keyboard toggle is hidden outside tablet mode, so the on-screen
+  // keyboard must be put away here or it would be stuck on screen.
+  onTabletModeChanged: {
+    if (root.tabletMode) return
+    root.setOskVisible(false)
+    root.tabletModeExited()
+  }
+
   function toggleOsk() {
+    setOskVisible(!root.oskVisible)
+  }
+
+  function setOskVisible(visible) {
     oskToggleProc.command = [
       "gdbus", "call", "--session",
       "--dest", root.oskDest,
       "--object-path", root.oskPath,
       "--method", root.oskDest + ".SetVisible",
-      root.oskVisible ? "false" : "true"
+      visible ? "true" : "false"
     ]
     oskToggleProc.running = true
   }
