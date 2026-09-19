@@ -9,7 +9,6 @@ BarWidget {
   readonly property bool rotationLocked: root.setting("rotationLocked", false) === true
   readonly property string tabletSwitchDevice: String(root.setting("tabletSwitchDevice", ""))
   readonly property bool tabletMode: root.service ? root.service.tabletMode : false
-  readonly property bool oskVisible: root.service ? root.service.oskVisible : false
   property bool shortcutsOpen: false
 
   // PopupCard calls its owner's close() when tapped outside.
@@ -68,16 +67,7 @@ BarWidget {
 
   Grid {
     id: grid
-    columns: root.vertical ? 1 : 3
-
-    BarIconButton {
-      visible: root.tabletMode
-      bar: root.bar
-      text: "󰌌"
-      tooltipText: root.oskVisible ? "Hide on-screen keyboard" : "Show on-screen keyboard"
-      active: root.oskVisible
-      onPressed: if (root.service) root.service.toggleOsk()
-    }
+    columns: root.vertical ? 1 : 2
 
     BarIconButton {
       id: shortcutsButton

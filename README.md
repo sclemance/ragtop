@@ -113,13 +113,17 @@ Each of these is undone by the uninstaller.
 
 ## Using it
 
-In tablet mode, three icons appear in the bar:
+In tablet mode, two icons appear in the bar:
 
 | Icon | Does |
 | --- | --- |
-| Keyboard | Shows or hides the on-screen keyboard. Highlighted while it's showing. |
 | Grid | Opens the window shortcuts panel. |
 | Padlock | Locks or unlocks rotation. Highlighted while locked, and stays in the bar while locked, even in laptop mode. |
+
+A slim handle, coloured like the bar, runs along the bottom of the screen in
+tablet mode. Tap it to show the keyboard (it shows a wide ^) and tap it again
+to hide it (a wide v). It reserves its own space, so windows never sit under
+it; with the bar at the bottom, the handle sits just above the bar.
 
 The keyboard also comes up on its own when you open the Omarchy menu, the emoji
 or clipboard picker, or a password prompt, and goes away when you close it.

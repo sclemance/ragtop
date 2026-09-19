@@ -1,9 +1,12 @@
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Wayland
+import qs.Commons
 
-// Headless singleton: the shell creates one of these per session, whereas the
+// Singleton: the shell creates one of these per session, whereas the
 // bar widget is created once per monitor. Owning the daemons here means there
 // is exactly one rotation daemon for the lock to stop.
 Item {
@@ -57,6 +60,8 @@ Item {
   }
 
   function setOskVisible(visible) {
+    // Shown straight away; the visibility poll corrects it if it didn't take.
+    root.oskVisible = visible
     oskToggleProc.command = [
       "gdbus", "call", "--session",
       "--dest", root.oskDest,
@@ -65,6 +70,58 @@ Item {
       visible ? "true" : "false"
     ]
     oskToggleProc.running = true
+  }
+
+  // A handle along the bottom edge in tablet mode: tap it to show or hide
+  // the keyboard. It reserves its own space, so windows never sit under it.
+  // Layers reserving the same edge stack in the order they appear, so a
+  // bottom bar keeps the edge with the handle above it, and the keyboard
+  // opens above the handle, leaving the handle where it was.
+  readonly property int handleHeight: 24
+
+  Variants {
+    model: Quickshell.screens
+
+    PanelWindow {
+      required property var modelData
+      screen: modelData
+      visible: root.tabletMode
+
+      WlrLayershell.namespace: "fliparchy-keyboard-handle"
+      WlrLayershell.layer: WlrLayer.Top
+      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      exclusionMode: ExclusionMode.Auto
+      anchors { bottom: true; left: true; right: true }
+      implicitHeight: root.handleHeight
+      color: Color.bar.background
+
+      MouseArea {
+        id: handleArea
+        anchors.fill: parent
+        onClicked: root.toggleOsk()
+      }
+
+      // A wide ^ while the keyboard is hidden, a wide v while it's showing.
+      Shape {
+        anchors.centerIn: parent
+        width: 56
+        height: 8
+        opacity: handleArea.pressed ? 0.5 : 1
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+          strokeColor: Color.bar.text
+          strokeWidth: 2
+          fillColor: "transparent"
+          capStyle: ShapePath.RoundCap
+          joinStyle: ShapePath.RoundJoin
+          startX: 0
+          startY: root.oskVisible ? 0 : 8
+          PathLine { x: 28; y: root.oskVisible ? 8 : 0 }
+          PathLine { x: 56; y: root.oskVisible ? 0 : 8 }
+        }
+      }
+    }
   }
 
   // Rotation waits for a widget to report the saved lock state, so a saved
