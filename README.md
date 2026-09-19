@@ -49,7 +49,7 @@ everything returns to normal.
 - A convertible whose kernel driver reports a tablet-mode switch
   (`lenovo-ymc`, `intel-vbtn`, `intel-hid`, `asus-wmi`, `hp-wmi`,
   `thinkpad_acpi` and others), and an accelerometer for rotation.
-- Packages, all from the official repositories: `squeekboard`, `evtest`,
+- Packages, all from the official repositories: `squeekboard`,
   `iio-sensor-proxy`, `python-yaml`, `python-gobject` and `git`. Omarchy's `fcitx5` is used to notice
   text fields (see [Using it](#using-it)).
 - Read access to the tablet-mode switch. If you don't have it, the installer

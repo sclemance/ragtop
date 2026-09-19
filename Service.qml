@@ -539,18 +539,27 @@ Item {
     onTriggered: if (!detectProc.running) detectProc.running = true
   }
 
-  // Poll the tablet-mode switch.
+  // Watch the tablet-mode switch: tablet-switch.py prints "tablet" or
+  // "laptop" at start and whenever it moves.
+  readonly property bool watchSwitch: root.switchDevice !== "" && root.tabletModeSetting === "auto"
+  onWatchSwitchChanged: tabletModeProc.running = root.watchSwitch
+  // A different device: stop, and onExited starts it again on the new one.
+  onSwitchDeviceChanged: if (tabletModeProc.running) tabletModeProc.running = false
+  Component.onCompleted: tabletModeProc.running = root.watchSwitch
   Process {
     id: tabletModeProc
-    command: ["evtest", "--query", root.switchDevice, "EV_SW", "SW_TABLET_MODE"]
-    onExited: function(exitCode) { root.applySwitchReading(exitCode === 10) }
+    command: ["python3", Qt.resolvedUrl("tablet-switch.py").toString().replace(/^file:\/\//, ""), root.switchDevice]
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (line === "tablet" || line === "laptop") root.applySwitchReading(line === "tablet")
+      }
+    }
+    onExited: if (root.watchSwitch) tabletModeRestart.start()
   }
   Timer {
-    interval: 1000
-    running: root.switchDevice !== "" && root.tabletModeSetting === "auto"
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: if (!tabletModeProc.running) tabletModeProc.running = true
+    id: tabletModeRestart
+    interval: 5000
+    onTriggered: tabletModeProc.running = root.watchSwitch
   }
 
   // Poll squeekboard's current visibility to keep the icon/tooltip in sync.
