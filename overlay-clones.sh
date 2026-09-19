@@ -23,7 +23,8 @@
 # The polkit clone keeps the authentication capability: Omarchy stamps a
 # clone with its source's capabilities via clonedFrom.
 #
-# Usage: overlay-clones.sh [install|sync|remove|status] [menu|emojis|clipboard|polkit ...]
+# Usage: overlay-clones.sh [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit ...]
+# `installed` succeeds only if every named overlay has a Fliparchy clone.
 set -euo pipefail
 
 # name:entry-file for each supported built-in overlay.
@@ -184,7 +185,8 @@ for o in "${selected[@]}"; do
     sync) sync_one || status=1 ;;
     remove) remove_one || status=1 ;;
     status) status_one ;;
-    *) echo "Usage: $0 [install|sync|remove|status] [menu|emojis|clipboard|polkit ...]" >&2; exit 2 ;;
+    installed) is_patched || status=1 ;;
+    *) echo "Usage: $0 [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit ...]" >&2; exit 2 ;;
   esac
 done
 

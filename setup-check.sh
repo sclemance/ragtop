@@ -25,6 +25,8 @@ grep -qs 'hl-virtual-keyboard-squeekboard.*resolve_binds_by_sym' "$HOME/.config/
   echo "SUPER shortcuts from the keyboard aren't enabled in input.lua."
 compgen -G "$state/keyboards/*.yaml" >/dev/null ||
   echo "Keyboard layouts haven't been generated."
+grep -qsF "// Fliparchy: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ||
+  echo "Fliparchy's settings aren't in the Omarchy menu."
 
 # Only the overlays the installer was asked to patch.
 overlays=$(sed -n 's/^overlays=//p' "$conf")

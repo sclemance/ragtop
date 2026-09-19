@@ -28,10 +28,12 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
   for focus, swap, close, fullscreen, float, split, pop out, resize, move to
   workspace 1–5, scratchpad and window cycling. Each button runs the same
   action as Omarchy's own keybinding.
-- **Type into Omarchy's overlays by touch.** The Omarchy menu, emoji picker,
-  clipboard picker and polkit password prompt normally close when you tap the
-  on-screen keyboard. Fliparchy fixes that in tablet mode, brings the keyboard
-  up with them, and keeps them clear of it.
+- **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
+  emoji picker, clipboard picker and polkit password prompt normally close when
+  you tap the on-screen keyboard. Fliparchy can fix that in tablet mode, bring
+  the keyboard up with them, and keep them clear of it. It's off until you turn
+  it on, one overlay at a time (see [Omarchy's overlays](#omarchys-overlays)).
+- **Settings in the Omarchy menu,** under Setup › Tablet.
 
 ## Requirements
 
@@ -86,8 +88,6 @@ The installer can be re-run safely. Options:
 
 | Option | Effect |
 | --- | --- |
-| `--skip-polkit` | Don't patch the polkit password prompt (see [Overlays](#omarchys-overlays)). |
-| `--no-overlays` | Don't patch any of Omarchy's overlays. |
 | `--no-restart` | Don't restart the Omarchy shell at the end. |
 
 ### What the installer changes
@@ -104,13 +104,15 @@ have to live elsewhere. The installer:
    it, SUPER shortcuts typed on the on-screen keyboard do nothing.
 4. Generates keyboard layouts into `~/.local/state/fliparchy/keyboards` (see
    [Licensing](#credits-and-licensing)).
-5. Clones and patches Omarchy's overlays (below).
-6. Adds two hooks to `~/.config/omarchy/hooks/post-update.d/` that keep the
-   layouts and overlay clones in step after `omarchy update`.
+5. Adds Fliparchy's settings to the Omarchy menu, as a marked block at the
+   top of `~/.config/omarchy/extensions/omarchy-menu.jsonc`.
+6. Adds a hook to `~/.config/omarchy/hooks/post-update.d/` that regenerates
+   the layouts after `omarchy update`.
 7. Only if you can't read the tablet-mode switch, and only after asking:
    installs a udev rule, asking for your password (see [Tablet-mode detection](#tablet-mode-detection)).
 
-Each of these is undone by the uninstaller.
+Each of these is undone by the uninstaller. The installer doesn't touch
+Omarchy's overlays; that's up to you (below).
 
 ## Using it
 
@@ -135,8 +137,9 @@ on-screen keyboard, so the two can't be told apart. Use the handle.
 Apps that don't talk to an input method (some Electron and Chromium apps)
 won't bring it up.
 
-The keyboard also comes up on its own when you open the Omarchy menu, the emoji
-or clipboard picker, or a password prompt, and goes away when you close it.
+If you've turned on touch typing for them, the keyboard also comes up on its own
+when you open the Omarchy menu, the emoji or clipboard picker, or a password
+prompt, and goes away when you close it.
 
 ## Omarchy's overlays
 
@@ -146,33 +149,49 @@ before checking anything stacked above it. So a tap on the on-screen keyboard
 lands on the overlay and closes it. This can't be fixed from the keyboard's
 side.
 
-Fliparchy therefore installs clones of those overlays (with Omarchy's own
+Fliparchy can replace them with clones (made with Omarchy's own
 `omarchy plugin clone`) that change two lines, and only in tablet mode: they
 take focus *on demand*, which still gets focus when they open and still
 receives typed keys, and they respect the keyboard's reserved space so they
 sit above it. In laptop mode they behave exactly as shipped; on-demand focus
 there could let a window under the mouse on another monitor take focus away.
 
-`overlay-clones.sh` manages them:
+Replacing part of Omarchy is your call, so each clone is off until you turn it
+on. In the Omarchy menu, go to **Setup › Tablet › System Overlays** and
+tap an overlay to turn it on or off (✓ means on). The shell restarts to load
+the change. From a terminal, the same thing is:
 
 ```bash
-./overlay-clones.sh status             # installed, and in sync with Omarchy?
-./overlay-clones.sh sync               # re-clone any whose built-in changed (runs after omarchy update)
-./overlay-clones.sh remove polkit      # go back to one built-in overlay
+./fliparchy overlay toggle menu        # or: enable, disable; menu, emojis, clipboard, polkit
+./fliparchy overlay status             # which are on, and in sync with Omarchy?
 ```
 
-A clone never receives Omarchy's own updates, which is why `sync` runs after
-every `omarchy update`. It refuses to replace a clone you've edited yourself.
+What turning one on means:
 
-**The polkit prompt:** the clone keeps its authentication role (Omarchy passes
-a clone its original's capabilities), but its code then lives in your
-user-writable config instead of the root-owned system folder. Anything running
-as you could already interfere with your session in other ways, but if you'd
-rather not, install with `--skip-polkit` or run `./overlay-clones.sh remove polkit`.
+- **It stops getting Omarchy's fixes directly.** A clone is a copy, so once it's
+  on, Omarchy's updates to the original don't reach it by themselves. A hook
+  re-clones it after every `omarchy update`, but refuses to replace a clone
+  you've edited yourself, and tells you so.
+- **In tablet mode it doesn't hold the keyboard to itself.** That's the fix,
+  but it also means another window could take keyboard focus while the overlay
+  is open, for example one under the mouse on a second monitor, and receive
+  what you type.
+- **The password prompt matters most.** Its clone keeps its authentication role
+  (Omarchy passes a clone its original's capabilities), but its code then lives
+  in your user-writable config instead of the root-owned system folder, and the
+  point above applies to your password. Anything running as you could already
+  interfere with your session in other ways, but it's the one to think about
+  before turning on.
 
 ## Settings
 
-Fliparchy's bar entry in `~/.config/omarchy/shell.json` takes:
+Fliparchy's settings are in the Omarchy menu under **Setup › Tablet**:
+
+| Setting | Default | Where |
+| --- | --- | --- |
+| Touch typing in each overlay | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
+
+A couple more live in Fliparchy's bar entry in `~/.config/omarchy/shell.json`:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -225,8 +244,8 @@ If tablet mode is never detected:
 ./install.sh uninstall
 ```
 
-This removes the overlay clones, the config lines and hooks the installer
-added, the generated files, and the plugin itself (or unlinks it, if it was
+This removes any overlay clones you turned on, Fliparchy's rows in the
+Omarchy menu, the config lines and hooks the installer added, the generated files, and the plugin itself (or unlinks it, if it was
 linked from a checkout).
 
 ## Credits and licensing

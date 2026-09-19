@@ -1,0 +1,77 @@
+#!/bin/bash
+# Fliparchy's settings, behind its rows in the Omarchy menu (Setup › Tablet).
+#
+# Usage: fliparchy overlay enabled <overlay>   succeeds if touch typing is on
+#        fliparchy overlay enable <overlay>
+#        fliparchy overlay disable <overlay>
+#        fliparchy overlay toggle <overlay>
+#        fliparchy overlay status
+# where <overlay> is menu, emojis, clipboard or polkit.
+#
+# Touch typing in an overlay means replacing Omarchy's own with a patched
+# clone (see overlay-clones.sh), so each one is off until the user turns it on.
+set -euo pipefail
+
+repo="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+conf="$HOME/.local/state/fliparchy/install.conf"
+clones="$repo/overlay-clones.sh"
+
+usage() { sed -n '4,9p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+
+label() {
+  case "$1" in
+    menu) echo "the Omarchy menu" ;;
+    emojis) echo "the emoji picker" ;;
+    clipboard) echo "the clipboard picker" ;;
+    polkit) echo "the password prompt" ;;
+    *) echo "Unknown overlay: $1 (expected: menu, emojis, clipboard, polkit)" >&2; exit 2 ;;
+  esac
+}
+
+# Records which overlays the user turned on, so setup-check.sh can tell a
+# clone that went missing from one that was never wanted.
+record() {
+  local on=() o
+  for o in menu emojis clipboard polkit; do
+    "$clones" installed "$o" && on+=("$o")
+  done
+  mkdir -p "$(dirname "$conf")"
+  if [[ -f $conf ]] && grep -q '^overlays=' "$conf"; then
+    sed -i "s/^overlays=.*/overlays=${on[*]}/" "$conf"
+  else
+    printf 'overlays=%s\n' "${on[*]}" >>"$conf"
+  fi
+}
+
+notify() {
+  command -v omarchy-notification-send >/dev/null &&
+    omarchy-notification-send -g 󰌌 "Fliparchy" "$1" || true
+}
+
+set_overlay() {
+  local overlay="$1" on="$2" name
+  name=$(label "$overlay")
+  if (( on )); then
+    "$clones" install "$overlay" >/dev/null
+    record
+    notify "Touch typing is on for ${name}."
+  else
+    "$clones" remove "$overlay" >/dev/null
+    record
+    notify "Touch typing is off for ${name}."
+  fi
+  # Omarchy only picks clones up, or drops them, when the shell starts.
+  omarchy-restart-shell >/dev/null 2>&1 &
+}
+
+case "${1:-} ${2:-}" in
+  "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
+  "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
+  "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;
+  "overlay toggle")
+    [[ -n ${3:-} ]] || usage
+    if "$clones" installed "$3"; then set_overlay "$3" 0; else set_overlay "$3" 1; fi
+    ;;
+  "overlay status") "$clones" status ;;
+  *) usage ;;
+esac

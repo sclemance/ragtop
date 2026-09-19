@@ -3,7 +3,7 @@
 # removes them again. Safe to re-run: each step checks before it changes
 # anything.
 #
-# Usage: install.sh [--skip-polkit] [--no-overlays] [--no-restart]
+# Usage: install.sh [--no-restart]
 #        install.sh uninstall [--no-restart]
 set -euo pipefail
 
@@ -15,6 +15,7 @@ state_dir="$HOME/.local/state/fliparchy"
 gtk_css="$HOME/.config/gtk-3.0/gtk.css"
 input_lua="$HOME/.config/hypr/input.lua"
 layouts_hook="$HOME/.config/omarchy/hooks/post-update.d/fliparchy-layouts.hook"
+menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 
 # Lets the person logged in at the machine read switch devices (tablet mode,
 # lid, jacks) without joining the `input` group, which would also expose
@@ -71,6 +72,68 @@ for line in lines:
 if out != lines:
     open(path, "w").write("\n".join(out))
     print(f"   removed from {path}")
+EOF
+}
+
+# Fliparchy's rows in the Omarchy menu (Setup › Tablet), written into the
+# user's menu extension file between two marker comments. They go right after
+# the opening brace, each with a trailing comma, which the menu's JSONC
+# reader accepts, so they can't break whatever the user has below them.
+# menu_block <add|remove>
+menu_block() {
+  python3 - "$1" "$menu_file" <<'EOF'
+import json, os, sys
+action, path = sys.argv[1:]
+start = "  // Fliparchy: tablet settings. Added by Fliparchy's installer; removed by its uninstaller."
+end = "  // End of Fliparchy's tablet settings."
+cmd = "$HOME/.config/omarchy/plugins/sclemance.fliparchy/fliparchy"
+
+overlays = [
+    ("menu", "\U000f035c", "Omarchy Menu"),
+    ("emojis", "\U000f0785", "Emoji Picker"),
+    ("clipboard", "\U000f014c", "Clipboard Picker"),
+    ("polkit", "\U000f033e", "Password Prompt"),
+]
+rows = {
+    "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "fliparchy"],
+                        when=f'[[ -x "{cmd}" ]]'),
+    "setup.tablet.overlays": dict(icon="\U000f030c", label="System Overlays",
+        description="Let the on-screen keyboard type into Omarchy's full-screen overlays in tablet mode"),
+}
+for name, icon, label in overlays:
+    rows[f"setup.tablet.overlays.{name}"] = dict(
+        icon=icon, label=label,
+        description=("Replaces Omarchy's password prompt with a patched copy that doesn't hold "
+                     "the keyboard to itself in tablet mode" if name == "polkit" else
+                     f"Replaces Omarchy's {label.lower()} with a patched copy"),
+        checked=f'"{cmd}" overlay enabled {name}',
+        action=f'"{cmd}" overlay toggle {name}')
+block = [start] + [f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," for k, v in rows.items()] + [end]
+
+text = open(path).read() if os.path.exists(path) else ""
+lines = text.split("\n")
+if start in lines:
+    i = lines.index(start)
+    j = lines.index(end, i)
+    del lines[i:j + 1]
+    changed = "removed"
+else:
+    changed = None
+
+if action == "add":
+    if not text.strip():
+        lines = ["{"] + block + ["}", ""]
+    else:
+        opening = next((i for i, l in enumerate(lines) if l.strip() == "{"), None)
+        if opening is None:
+            sys.exit("no line with just an opening brace")
+        lines[opening + 1:opening + 1] = block
+    changed = "updated" if changed else "added"
+
+if changed:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "w").write("\n".join(lines))
+    print(f"   {changed} in {path.replace(os.path.expanduser('~'), '~', 1)}")
 EOF
 }
 
@@ -214,11 +277,9 @@ restart_shell() {
 }
 
 install() {
-  local overlays=(menu emojis clipboard polkit) restart=1 with_overlays=1
+  local restart=1
   for arg in "$@"; do
     case "$arg" in
-      --skip-polkit) overlays=(menu emojis clipboard) ;;
-      --no-overlays) with_overlays=0 ;;
       --no-restart) restart=0 ;;
       *) die "unknown option: $arg" ;;
     esac
@@ -241,17 +302,17 @@ install() {
 
   install_layouts
 
-  if (( with_overlays )); then
-    say "Patching Omarchy's overlays for touch: ${overlays[*]}"
-    "$repo/overlay-clones.sh" install "${overlays[@]}" | grep -v "omarchy-restart-shell" | sed 's/^/   /'
-  else
-    overlays=()
-  fi
+  say "Adding Fliparchy's settings to the Omarchy menu (Setup › Tablet)"
+  menu_block add || warn "couldn't edit ${menu_file/#$HOME/\~}; Fliparchy's settings won't be in the menu."
 
-  # What was asked for, so setup-check.sh doesn't report deliberately
-  # skipped overlays as missing.
+  # Touch typing in Omarchy's overlays swaps in patched clones, so it stays
+  # off until the user turns it on; `fliparchy` records which ones are on.
+  if [[ $("$repo/fliparchy" overlay status) != *": installed"* ]]; then
+    echo "   Touch typing in Omarchy's menu, pickers and password prompt is off. Turn it on per"
+    echo "   overlay in Setup › Tablet › System Overlays."
+  fi
   mkdir -p "$state_dir"
-  printf 'overlays=%s\n' "${overlays[*]}" >"$state_dir/install.conf"
+  [[ -f $state_dir/install.conf ]] || printf 'overlays=\n' >"$state_dir/install.conf"
 
   (( restart )) && restart_shell
   say "Done. Fliparchy's icons appear in the bar in tablet mode."
@@ -270,6 +331,7 @@ uninstall() {
   "$repo/overlay-clones.sh" remove | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
 
   say "Removing config lines"
+  menu_block remove
   remove_block "$gtk_css" "${gtk_block[@]}"
   remove_block "$input_lua" "${input_block[@]}"
 
