@@ -144,6 +144,41 @@ Item {
   Process { id: oskToggleProc }
   Process { id: modeWriteProc }
 
+  // A plugin added with `omarchy plugin add` runs without install.sh having
+  // set up its config lines, layouts and overlay patches. Check once per
+  // session and offer to run the installer; installing a plugin never runs
+  // its code, so this asks rather than doing it.
+  readonly property string installScript:
+    Qt.resolvedUrl("install.sh").toString().replace(/^file:\/\//, "")
+
+  function offerSetup(problems) {
+    if (problems.length === 0) return
+    var shown = problems.slice(0, 3)
+    if (problems.length > 3) shown.push("…and " + (problems.length - 3) + " more.")
+    setupNotifyProc.command = [
+      "omarchy-notification-send", "-g", "󰌌",
+      "Fliparchy needs setup",
+      shown.join("\n") + "\nClick to run the installer.",
+      "--exec", "omarchy-launch-floating-terminal-with-presentation",
+      "'" + root.installScript.replace(/'/g, "'\\''") + "'"
+    ]
+    setupNotifyProc.running = true
+  }
+
+  Process {
+    id: setupCheckProc
+    command: ["bash", Qt.resolvedUrl("setup-check.sh").toString().replace(/^file:\/\//, "")]
+    stdout: StdioCollector {
+      onStreamFinished: root.offerSetup(text.split("\n").filter(function(s) { return s !== "" }))
+    }
+  }
+  Process { id: setupNotifyProc }
+  Timer {
+    interval: 8000
+    running: true
+    onTriggered: setupCheckProc.running = true
+  }
+
   // Namespaces of overlays patched by overlay-clones.sh. An open overlay
   // covers the bar, so the keyboard is brought up with it; with a stock
   // overlay taps on the keyboard would only close it, so only patched ones

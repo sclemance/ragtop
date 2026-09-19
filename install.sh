@@ -97,17 +97,7 @@ check_deps() {
 check_switch() {
   say "Looking for a tablet-mode switch"
   local device
-  device=$(python3 - <<'EOF'
-import re
-for block in re.split(r"\n\s*\n", open("/proc/bus/input/devices").read()):
-    handler = re.search(r"^H: Handlers=.*\b(event\d+)\b", block, re.M)
-    sw = re.search(r"^B: SW=([0-9a-fA-F ]+)$", block, re.M)
-    name = re.search(r'^N: Name="(.*)"', block, re.M)
-    if handler and sw and int(sw.group(1).split()[-1], 16) & 2:
-        print(f"/dev/input/{handler.group(1)}\t{name.group(1) if name else ''}")
-        break
-EOF
-)
+  device=$("$repo/find-tablet-switch.py")
   if [[ -z $device ]]; then
     warn "no device reports a tablet-mode switch. Fliparchy will keep looking (a detachable's keyboard may add one),"
     warn "but tablet mode won't be detected until one appears. See 'Tablet-mode detection' in the README."
@@ -190,7 +180,14 @@ install() {
   if (( with_overlays )); then
     say "Patching Omarchy's overlays for touch: ${overlays[*]}"
     "$repo/overlay-clones.sh" install "${overlays[@]}" | grep -v "omarchy-restart-shell" | sed 's/^/   /'
+  else
+    overlays=()
   fi
+
+  # What was asked for, so setup-check.sh doesn't report deliberately
+  # skipped overlays as missing.
+  mkdir -p "$state_dir"
+  printf 'overlays=%s\n' "${overlays[*]}" >"$state_dir/install.conf"
 
   (( restart )) && restart_shell
   say "Done. Fliparchy's icons appear in the bar in tablet mode."

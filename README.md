@@ -77,6 +77,10 @@ omarchy plugin add <repository-url>
 Or clone it anywhere and run `./install.sh`; it links the checkout into
 Omarchy's plugin folder.
 
+If you enable Fliparchy without running the installer, or something it set up
+goes missing later, Fliparchy shows a "Fliparchy needs setup" notification
+after the shell starts. Click it to run the installer in a terminal.
+
 The installer can be re-run safely. Options:
 
 | Option | Effect |
@@ -209,3 +213,4 @@ linked from a checkout).
   installed squeekboard version and adds the extra row locally.
 - Clones of Omarchy's overlays are made on your machine from Omarchy's
   MIT-licensed source.
+- Fliparchy itself is released under the [MIT License](LICENSE).
