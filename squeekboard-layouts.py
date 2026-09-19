@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate squeekboard layouts with Esc, Ctrl, Alt, Super and Shift keys, for Fliparchy.
+"""Generate squeekboard layouts with Esc, Tab, modifier and arrow keys, for Fliparchy.
 
 Squeekboard's layouts are GPL-3.0-or-later data files, so Fliparchy doesn't
 ship modified copies. This script builds them locally from squeekboard's
@@ -31,17 +31,23 @@ CACHE = Path.home() / ".cache/fliparchy"
 # Content-purpose subdirectories where modifier keys make no sense.
 SKIP_DIRS = {"number", "pin", "emoji"}
 
-# (button name, label, what it sends), in row order. Esc is an ordinary key;
-# the rest are squeekboard modifiers.
+# (button name, label, what it sends), in row order. Ctrl, Alt, Super and
+# Shift are squeekboard modifiers; the rest are ordinary keys. Terminal
+# layouts already have Tab and arrows, so they only take Esc and Super.
+ESC = ("fl_esc", "Esc", {"keysym": "Escape"})
+SUPER = ("fl_super", "Super", {"modifier": "Mod4"})
 ROW_KEYS = [
-    ("fl_esc", "Esc", {"keysym": "Escape"}),
+    ESC,
+    ("fl_tab", "Tab", {"keysym": "Tab"}),
     ("fl_ctrl", "Ctrl", {"modifier": "Control"}),
     ("fl_alt", "Alt", {"modifier": "Alt"}),
-    ("fl_super", "Super", {"modifier": "Mod4"}),
+    SUPER,
     ("fl_shift", "Shift", {"modifier": "Shift"}),
+    ("fl_left", "←", {"keysym": "Left"}),
+    ("fl_up", "↑", {"keysym": "Up"}),
+    ("fl_down", "↓", {"keysym": "Down"}),
+    ("fl_right", "→", {"keysym": "Right"}),
 ]
-SUPER = ROW_KEYS[3]
-ESC = ROW_KEYS[0]
 # Squeekboard uses the outline name as the button's CSS class, so this also
 # lets Fliparchy's theme style the keys.
 MOD_OUTLINE = "fl-mod"
