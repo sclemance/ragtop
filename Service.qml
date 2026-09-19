@@ -8,7 +8,7 @@ import qs.Commons
 
 // Singleton: the shell creates one of these per session, whereas the
 // bar widget is created once per monitor. Owning the daemons here means there
-// is exactly one rotation daemon for the lock to stop.
+// is exactly one orientation watcher for the lock to stop.
 Item {
   id: root
 
@@ -27,8 +27,9 @@ Item {
     root.tabletSwitchDevice = device || ""
     root.rotationLocked = locked
     configureFallback.stop()
-    // Locking just means "stop the rotation daemon", which freezes the
+    // Locking just means "stop watching the orientation", which freezes the
     // display at whatever orientation it's currently in.
+    if (locked) orientationSettle.stop()
     rotationProc.running = !locked
   }
 
@@ -133,11 +134,60 @@ Item {
     onTriggered: rotationProc.running = !root.rotationLocked
   }
 
+  // Orientation comes from iio-sensor-proxy, through its monitor-sensor
+  // tool, which prints the current orientation on start and every change
+  // after. Changes are applied once the sensor settles, since a tilt can
+  // pass through several in quick succession.
+  property string pendingOrientation: ""
+  property string appliedOrientation: ""
+  readonly property var orientationTransforms:
+    ({ "normal": 0, "left-up": 1, "bottom-up": 2, "right-up": 3 })
+
   Process {
     id: rotationProc
-    command: ["iio-hyprland"]
+    command: ["monitor-sensor", "--accel"]
+    // A fresh start reports the current orientation, which must be applied
+    // even if it matches the last one, since it may have been changed
+    // while locked.
+    onRunningChanged: if (running) root.appliedOrientation = ""
+    stdout: SplitParser {
+      onRead: function(line) {
+        var match = /orientation(?: changed)?: ([a-z-]+)/.exec(line)
+        if (!match || !(match[1] in root.orientationTransforms)) return
+        root.pendingOrientation = match[1]
+        orientationSettle.restart()
+      }
+    }
     onExited: if (!root.rotationLocked) rotationRestart.start()
   }
+  Timer {
+    id: orientationSettle
+    interval: 300
+    onTriggered: root.applyOrientation(root.pendingOrientation)
+  }
+
+  // The built-in panel, which is the one with the accelerometer.
+  function internalMonitorName() {
+    var monitors = Hyprland.monitors.values
+    for (var i = 0; i < monitors.length; i++)
+      if (/^(eDP|DSI|LVDS)-/.test(monitors[i].name)) return monitors[i].name
+    return monitors.length > 0 ? monitors[0].name : ""
+  }
+
+  // The same transform for the display, touchscreen and pen, so touches
+  // land where they're drawn.
+  function applyOrientation(orientation) {
+    if (root.rotationLocked || orientation === root.appliedOrientation) return
+    var output = root.internalMonitorName()
+    if (output === "") return
+    var t = root.orientationTransforms[orientation]
+    rotateApplyProc.command = ["hyprctl", "eval",
+      "hl.monitor({ output = '" + output + "', transform = " + t + " }) " +
+      "hl.config({ input = { touchdevice = { transform = " + t + " }, tablet = { transform = " + t + " } } })"]
+    rotateApplyProc.running = true
+    root.appliedOrientation = orientation
+  }
+  Process { id: rotateApplyProc }
   Timer {
     id: rotationRestart
     interval: 3000

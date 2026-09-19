@@ -14,7 +14,7 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
   tablet features appear only while folded. The switch is auto-detected
   whichever driver provides it.
 - **Auto-rotation with a lock.** Screen and touch input rotate with the device
-  (via `iio-hyprland`). A bar button locks the orientation; the lock is
+  (via `iio-sensor-proxy`). A bar button locks the orientation; the lock is
   remembered, and released automatically when you fold back to laptop mode.
 - **An on-screen keyboard that fits Omarchy.** [Squeekboard](https://gitlab.gnome.org/World/Phosh/squeekboard),
   styled from your current Omarchy theme's colours and font, restyled
@@ -39,8 +39,8 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
 - A convertible whose kernel driver reports a tablet-mode switch
   (`lenovo-ymc`, `intel-vbtn`, `intel-hid`, `asus-wmi`, `hp-wmi`,
   `thinkpad_acpi` and others), and an accelerometer for rotation.
-- Packages: `squeekboard`, `evtest`, `python-yaml`, `python-gobject`, `git`,
-  and `iio-hyprland-git` from the AUR. Omarchy's `fcitx5` is used to notice
+- Packages, all from the official repositories: `squeekboard`, `evtest`,
+  `iio-sensor-proxy`, `python-yaml`, `python-gobject` and `git`. Omarchy's `fcitx5` is used to notice
   text fields (see [Using it](#using-it)).
 - Read access to the tablet-mode switch. If you don't have it, the installer
   offers to fix it (see [Tablet-mode detection](#tablet-mode-detection)).

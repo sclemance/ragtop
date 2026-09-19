@@ -12,9 +12,10 @@ if [[ ! -f $conf ]]; then
   exit 0
 fi
 
-for cmd in iio-hyprland squeekboard evtest git; do
+for cmd in squeekboard evtest git; do
   command -v "$cmd" >/dev/null || echo "Package missing: $cmd"
 done
+command -v monitor-sensor >/dev/null || echo "Package missing: iio-sensor-proxy"
 python3 -c "import yaml" 2>/dev/null || echo "Package missing: python-yaml"
 python3 -c "import gi" 2>/dev/null || echo "Package missing: python-gobject"
 

@@ -87,7 +87,7 @@ plugin_discovered() {
 check_deps() {
   say "Checking dependencies"
   local missing=() hints=()
-  command -v iio-hyprland >/dev/null || { missing+=(iio-hyprland); hints+=("iio-hyprland-git (AUR)"); }
+  command -v monitor-sensor >/dev/null || { missing+=(monitor-sensor); hints+=(iio-sensor-proxy); }
   command -v squeekboard >/dev/null || { missing+=(squeekboard); hints+=(squeekboard); }
   command -v evtest >/dev/null || { missing+=(evtest); hints+=(evtest); }
   command -v git >/dev/null || { missing+=(git); hints+=(git); }
