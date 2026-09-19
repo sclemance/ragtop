@@ -213,7 +213,10 @@ Item {
 
             MouseArea {
               id: area
+              // Half the gap on every side, so neighbouring keys meet in the
+              // middle of the gap and a tap there isn't lost.
               anchors.fill: parent
+              anchors.margins: -root.gap / 2
               onPressed: root.press(key.modelData)
               // Holding backspace keeps deleting.
               onPressAndHold: if (key.modelData === "backspace") repeat.start()

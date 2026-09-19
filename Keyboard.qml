@@ -81,7 +81,50 @@ Item {
   readonly property real keyHeight: Math.max(40, Math.min(Math.round(unit * 0.78), 60))
   readonly property real topRowHeight: Math.round(keyHeight * 0.62)
 
-  implicitHeight: column.implicitHeight + 2 * theme.padding
+  // Where each key sits: { key, x, y, width, height } for every key of the
+  // top row and the current page, rows centred. A key's slot is this
+  // rectangle; how it's drawn inside is up to KeyboardKey.qml, and never
+  // affects which key a touch means.
+  readonly property var slots: {
+    var rows = [root.topRow].concat(root.pages[root.page])
+    var gap = root.theme.gap
+    var out = []
+    var y = root.theme.padding
+    rows.forEach(function(row, i) {
+      // The top row spreads its keys over the full width.
+      var widths = row.map(function(k) {
+        return i === 0 ? root.unit * root.rowUnits / root.topRow.length : root.unit * (root.widths[k] || 1)
+      })
+      var h = i === 0 ? root.topRowHeight : root.keyHeight
+      var x = (root.width - widths.reduce(function(a, b) { return a + b }, 0)) / 2
+      row.forEach(function(k, j) {
+        out.push({ key: k, x: x + gap / 2, y: y, width: widths[j] - gap, height: h })
+        x += widths[j]
+      })
+      y += h + gap
+    })
+    return out
+  }
+  readonly property real slotsBottom: slots.length > 0
+    ? slots[slots.length - 1].y + slots[slots.length - 1].height : 0
+
+  implicitHeight: slotsBottom + theme.padding
+
+  // The key a touch at (x, y) means: the one whose slot is nearest, so a
+  // touch in a gap goes to the closer key and the keys at a row's ends
+  // reach the keyboard's edges. Measured to the slot's edges, not its
+  // centre, so a touch on a wide key like the space bar is always that key.
+  function keyAt(x, y) {
+    var best = null, bestDist = Infinity
+    for (var i = 0; i < slots.length; i++) {
+      var s = slots[i]
+      var dx = Math.max(s.x - x, 0, x - (s.x + s.width))
+      var dy = Math.max(s.y - y, 0, y - (s.y + s.height))
+      var d = dx * dx + dy * dy
+      if (d < bestDist) { bestDist = d; best = s.key }
+    }
+    return best
+  }
 
   function label(key) {
     if (key === "space") return layoutName
@@ -171,44 +214,66 @@ Item {
     }
   }
 
+  // Keys held down by a finger (or the mouse), as touch point id -> key.
+  property var held: ({})
+  readonly property var heldKeys: {
+    var keys = {}
+    for (var id in held) keys[held[id]] = true
+    return keys
+  }
+
   Rectangle {
     anchors.fill: parent
     color: root.theme.background
   }
 
-  Column {
-    id: column
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.top: parent.top
-    anchors.topMargin: root.theme.padding
-    spacing: root.theme.gap
+  Repeater {
+    model: root.slots
 
-    Repeater {
-      model: [root.topRow].concat(root.pages[root.page])
-
-      Row {
-        id: row
-        required property var modelData
-        required property int index
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: root.theme.gap
-
-        Repeater {
-          model: row.modelData
-
-          KeyboardKey {
-            required property string modelData
-            theme: root.theme
-            label: root.label(modelData)
-            kind: root.kind(modelData)
-            // The top row spreads its keys over the full width.
-            width: (row.index === 0 ? root.unit * root.rowUnits / root.topRow.length : root.unit * (root.widths[modelData] || 1)) - root.theme.gap
-            height: row.index === 0 ? root.topRowHeight : root.keyHeight
-            onKeyPressed: root.press(modelData)
-            onKeyReleased: root.release(modelData)
-          }
-        }
-      }
+    KeyboardKey {
+      required property var modelData
+      theme: root.theme
+      x: modelData.x
+      y: modelData.y
+      width: modelData.width
+      height: modelData.height
+      label: root.label(modelData.key)
+      kind: root.kind(modelData.key)
+      pressed: modelData.key in root.heldKeys
     }
+  }
+
+  // One touch layer for the whole keyboard: each finger picks its key when
+  // it comes down and keeps it until it lifts, however it moves. Several
+  // fingers can be down at once, e.g. the next key tapped before the last
+  // is released.
+  MultiPointTouchArea {
+    anchors.fill: parent
+    onPressed: function(points) {
+      var next = Object.assign({}, root.held)
+      var pressed = []
+      points.forEach(function(p) {
+        var key = root.keyAt(p.x, p.y)
+        if (key === null) return
+        next[p.pointId] = key
+        pressed.push(key)
+      })
+      root.held = next
+      pressed.forEach(root.press)
+    }
+    onReleased: function(points) { root.lift(points) }
+    onCanceled: function(points) { root.lift(points) }
+  }
+
+  function lift(points) {
+    var next = Object.assign({}, root.held)
+    var lifted = []
+    points.forEach(function(p) {
+      if (!(p.pointId in next)) return
+      lifted.push(next[p.pointId])
+      delete next[p.pointId]
+    })
+    root.held = next
+    lifted.forEach(root.release)
   }
 }
