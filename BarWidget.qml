@@ -3,7 +3,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "sclemance.fliparchy"
+  moduleName: "sclemance.ragtop"
 
   property var service: null
   readonly property bool rotationLocked: root.setting("rotationLocked", false) === true

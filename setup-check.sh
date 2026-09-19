@@ -1,10 +1,10 @@
 #!/bin/bash
-# Prints one line per missing piece of Fliparchy's setup, and nothing when
-# it's complete. Fliparchy's service runs this at startup and offers to run
+# Prints one line per missing piece of Ragtop's setup, and nothing when
+# it's complete. Ragtop's service runs this at startup and offers to run
 # install.sh if anything is printed.
 
 dir="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
-state="$HOME/.local/state/fliparchy"
+state="$HOME/.local/state/ragtop"
 conf="$state/install.conf"
 
 if [[ ! -f $conf ]]; then
@@ -23,17 +23,17 @@ grep -qsF "$state/squeekboard.css" "$HOME/.config/gtk-3.0/gtk.css" ||
   echo "Keyboard theme isn't imported in gtk.css."
 grep -qs 'hl-virtual-keyboard-squeekboard.*resolve_binds_by_sym' "$HOME/.config/hypr/input.lua" ||
   echo "SUPER shortcuts from the keyboard aren't enabled in input.lua."
-grep -qs 'o.bind("XF86Tools", "Fliparchy settings"' "$HOME/.config/hypr/bindings.lua" ||
+grep -qs 'o.bind("XF86Tools", "Ragtop settings"' "$HOME/.config/hypr/bindings.lua" ||
   echo "The keyboard's gear key isn't bound in bindings.lua."
 compgen -G "$state/keyboards/*.yaml" >/dev/null ||
   echo "Keyboard layouts haven't been generated."
-grep -qsF "// Fliparchy: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ||
-  echo "Fliparchy's settings aren't in the Omarchy menu."
+grep -qsF "// Ragtop: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ||
+  echo "Ragtop's settings aren't in the Omarchy menu."
 
 # Only the overlays the installer was asked to patch.
 overlays=$(sed -n 's/^overlays=//p' "$conf")
 for overlay in $overlays; do
-  grep -qs "id: fliparchyMode" "$HOME/.config/omarchy/plugins/$USER.$overlay"/*.qml ||
+  grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.$overlay"/*.qml ||
     echo "The $overlay overlay isn't patched for touch."
 done
 

@@ -3,7 +3,7 @@
 # menu, emoji picker, clipboard picker and polkit password prompt) patched
 # for tablets.
 #
-# While Fliparchy reports tablet mode (via $XDG_RUNTIME_DIR/fliparchy-mode),
+# While Ragtop reports tablet mode (via $XDG_RUNTIME_DIR/ragtop-mode),
 # each clone:
 #   - takes keyboard focus on demand instead of exclusively. Hyprland routes
 #     every touch to a layer surface with exclusive focus before hit-testing
@@ -24,7 +24,7 @@
 # clone with its source's capabilities via clonedFrom.
 #
 # Usage: overlay-clones.sh [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit ...]
-# `installed` succeeds only if every named overlay has a Fliparchy clone.
+# `installed` succeeds only if every named overlay has a Ragtop clone.
 set -euo pipefail
 
 # name:entry-file for each supported built-in overlay.
@@ -32,15 +32,15 @@ overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitA
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 builtin_root="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins"
-hook_file="$HOME/.config/omarchy/hooks/post-update.d/fliparchy-overlay-sync.hook"
-old_hook_file="$HOME/.config/omarchy/hooks/post-update.d/fliparchy-menu-sync.hook"
+hook_file="$HOME/.config/omarchy/hooks/post-update.d/ragtop-overlay-sync.hook"
+old_hook_file="$HOME/.config/omarchy/hooks/post-update.d/ragtop-menu-sync.hook"
 self="$(realpath "$0")"
 
 stock_focus='    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive'
-patched_focus='    WlrLayershell.keyboardFocus: fliparchyMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
-    FileView { id: fliparchyMode; property bool tablet: false; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/fliparchy-mode"; watchChanges: true; printErrors: false; onFileChanged: reload(); onLoaded: tablet = text().trim() === "tablet"; onLoadFailed: tablet = false }'
+patched_focus='    WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
+    FileView { id: ragtopMode; property bool tablet: false; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-mode"; watchChanges: true; printErrors: false; onFileChanged: reload(); onLoaded: tablet = text().trim() === "tablet"; onLoadFailed: tablet = false }'
 stock_exclusion='    exclusionMode: ExclusionMode.Ignore'
-patched_exclusion='    exclusionMode: fliparchyMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore
+patched_exclusion='    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore
     exclusiveZone: 0'
 
 # Per-overlay paths, set by select_overlay.
@@ -51,7 +51,7 @@ select_overlay() {
   clone_id="$USER.$name"
   clone_dir="$plugins_dir/$clone_id"
   builtin_dir="$builtin_root/$name"
-  base_file="$clone_dir/.fliparchy-base"
+  base_file="$clone_dir/.ragtop-base"
 }
 
 # replace <file> <apply|revert>
@@ -72,7 +72,7 @@ EOF
 # Hash of a plugin directory's files, ignoring the manifest (the clone
 # command rewrites it) and our own marker.
 dir_hash() {
-  (cd "$1" && find . -type f ! -name manifest.json ! -name .fliparchy-base -print0 |
+  (cd "$1" && find . -type f ! -name manifest.json ! -name .ragtop-base -print0 |
     sort -z | xargs -0 sha256sum) | sha256sum | cut -d' ' -f1
 }
 
@@ -85,7 +85,7 @@ clone_unpatched_hash() {
   rm -rf "$tmp"
 }
 
-is_patched() { [[ -f $clone_dir/$entry ]] && grep -q 'id: fliparchyMode' "$clone_dir/$entry"; }
+is_patched() { [[ -f $clone_dir/$entry ]] && grep -q 'id: ragtopMode' "$clone_dir/$entry"; }
 
 # True when nobody but us changed the clone since it was made.
 clone_is_ours() {
@@ -96,19 +96,19 @@ in_sync() { [[ $(dir_hash "$builtin_dir") == "$(cat "$base_file" 2>/dev/null)" ]
 
 notify() {
   command -v omarchy-notification-send >/dev/null &&
-    omarchy-notification-send -g 󰌌 "Fliparchy" "$1" || true
+    omarchy-notification-send -g 󰌌 "Ragtop" "$1" || true
 }
 
 install_hook() {
   mkdir -p "$(dirname "$hook_file")"
-  printf '#!/bin/bash\n# Keeps Fliparchy'"'"'s overlay clones in step with Omarchy updates.\n"%s" sync\n' "$self" >"$hook_file"
+  printf '#!/bin/bash\n# Keeps Ragtop'"'"'s overlay clones in step with Omarchy updates.\n"%s" sync\n' "$self" >"$hook_file"
   chmod +x "$hook_file"
   rm -f "$old_hook_file"
 }
 
 install_one() {
   if [[ -d $clone_dir ]] && ! is_patched; then
-    echo "$clone_dir exists but isn't Fliparchy's; leaving it alone." >&2
+    echo "$clone_dir exists but isn't Ragtop's; leaving it alone." >&2
     return 1
   fi
   if is_patched; then
@@ -128,7 +128,7 @@ sync_one() {
     return
   fi
   if ! clone_is_ours; then
-    echo "The built-in $name changed, but $clone_id has edits besides Fliparchy's; not replacing it." >&2
+    echo "The built-in $name changed, but $clone_id has edits besides Ragtop's; not replacing it." >&2
     notify "Omarchy's $name was updated, but your clone has other edits, so it wasn't resynced."
     return 1
   fi
@@ -142,7 +142,7 @@ remove_one() {
   if [[ ! -d $clone_dir ]]; then
     echo "No $clone_id clone installed."
   elif ! clone_is_ours; then
-    echo "$clone_id has edits besides Fliparchy's; remove it yourself with: omarchy plugin remove $clone_id" >&2
+    echo "$clone_id has edits besides Ragtop's; remove it yourself with: omarchy plugin remove $clone_id" >&2
     return 1
   else
     omarchy plugin remove "$clone_id" --yes >/dev/null
@@ -158,7 +158,7 @@ status_one() {
   else
     echo "$name: installed, built-in has changed (run: $self sync)"
   fi
-  if is_patched && ! clone_is_ours; then echo "$name: note: the clone has edits besides Fliparchy's"; fi
+  if is_patched && ! clone_is_ours; then echo "$name: note: the clone has edits besides Ragtop's"; fi
 }
 
 command="${1:-install}"

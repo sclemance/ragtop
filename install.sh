@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs Fliparchy and the pieces it needs outside its plugin folder, or
+# Installs Ragtop and the pieces it needs outside its plugin folder, or
 # removes them again. Safe to re-run: each step checks before it changes
 # anything.
 #
@@ -8,37 +8,37 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
-id="sclemance.fliparchy"
+id="sclemance.ragtop"
 plugins_dir="$HOME/.config/omarchy/plugins"
 plugin_dir="$plugins_dir/$id"
-state_dir="$HOME/.local/state/fliparchy"
+state_dir="$HOME/.local/state/ragtop"
 gtk_css="$HOME/.config/gtk-3.0/gtk.css"
 input_lua="$HOME/.config/hypr/input.lua"
-layouts_hook="$HOME/.config/omarchy/hooks/post-update.d/fliparchy-layouts.hook"
+layouts_hook="$HOME/.config/omarchy/hooks/post-update.d/ragtop-layouts.hook"
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 
 # Lets the person logged in at the machine read switch devices (tablet mode,
 # lid, jacks) without joining the `input` group, which would also expose
 # every keyboard. Must sort before systemd's 73-seat-late.rules, which applies
 # uaccess tags.
-udev_rule_file="/etc/udev/rules.d/70-fliparchy-tablet-switch.rules"
+udev_rule_file="/etc/udev/rules.d/70-ragtop-tablet-switch.rules"
 udev_rule='SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{ID_INPUT_KEY}!="1", TAG+="uaccess"'
 
 # Lines added to the user's config. Each block is identified by its last
 # line; the comment lines above it are removed with it on uninstall.
 gtk_block=(
-  "/* Fliparchy: on-screen keyboard styled from the active Omarchy theme */"
+  "/* Ragtop: on-screen keyboard styled from the active Omarchy theme */"
   "@import url(\"file://$state_dir/squeekboard.css\");"
 )
 input_block=(
-  "-- Fliparchy: let SUPER shortcuts work from the on-screen keyboard's Super key."
+  "-- Ragtop: let SUPER shortcuts work from the on-screen keyboard's Super key."
   "-- Squeekboard uploads its own keymap, so match its keys by symbol, not keycode."
   'hl.device({ name = "hl-virtual-keyboard-squeekboard", resolve_binds_by_sym = true })'
 )
 bindings_lua="$HOME/.config/hypr/bindings.lua"
 bindings_block=(
-  "-- Fliparchy: the on-screen keyboard's gear key sends XF86Tools; open its settings."
-  'o.bind("XF86Tools", "Fliparchy settings", "omarchy menu summon setup.tablet")'
+  "-- Ragtop: the on-screen keyboard's gear key sends XF86Tools; open its settings."
+  'o.bind("XF86Tools", "Ragtop settings", "omarchy menu summon setup.tablet")'
 )
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
@@ -80,7 +80,7 @@ if out != lines:
 EOF
 }
 
-# Fliparchy's rows in the Omarchy menu (Setup › Tablet), written into the
+# Ragtop's rows in the Omarchy menu (Setup › Tablet), written into the
 # user's menu extension file between two marker comments. They go right after
 # the opening brace, each with a trailing comma, which the menu's JSONC
 # reader accepts, so they can't break whatever the user has below them.
@@ -89,9 +89,9 @@ menu_block() {
   python3 - "$1" "$menu_file" <<'EOF'
 import json, os, sys
 action, path = sys.argv[1:]
-start = "  // Fliparchy: tablet settings. Added by Fliparchy's installer; removed by its uninstaller."
-end = "  // End of Fliparchy's tablet settings."
-cmd = "$HOME/.config/omarchy/plugins/sclemance.fliparchy/fliparchy"
+start = "  // Ragtop: tablet settings. Added by Ragtop's installer; removed by its uninstaller."
+end = "  // End of Ragtop's tablet settings."
+cmd = "$HOME/.config/omarchy/plugins/sclemance.ragtop/ragtop"
 
 overlays = [
     ("menu", "\U000f035c", "Omarchy Menu"),
@@ -100,7 +100,7 @@ overlays = [
     ("polkit", "\U000f033e", "Password Prompt"),
 ]
 rows = {
-    "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "fliparchy"],
+    "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "ragtop"],
                         when=f'[[ -x "{cmd}" ]]'),
     "setup.tablet.mode": dict(icon="\U000f04f6", label="Tablet Mode",
         description="Follow the hinge, or keep tablet mode on or off"),
@@ -192,7 +192,7 @@ check_deps() {
   python3 -c "import yaml" 2>/dev/null || { missing+=(python-yaml); hints+=(python-yaml); }
   python3 -c "import gi" 2>/dev/null || { missing+=(python-gobject); hints+=(python-gobject); }
   for cmd in omarchy omarchy-shell hyprctl gdbus; do
-    command -v "$cmd" >/dev/null || die "$cmd not found; Fliparchy needs Omarchy 4 with Hyprland."
+    command -v "$cmd" >/dev/null || die "$cmd not found; Ragtop needs Omarchy 4 with Hyprland."
   done
   if (( ${#missing[@]} )); then
     die "missing ${missing[*]}. Install: ${hints[*]}"
@@ -205,7 +205,7 @@ check_switch() {
   local device
   device=$("$repo/find-tablet-switch.py")
   if [[ -z $device ]]; then
-    warn "no device reports a tablet-mode switch. Fliparchy will keep looking (a detachable's keyboard may add one),"
+    warn "no device reports a tablet-mode switch. Ragtop will keep looking (a detachable's keyboard may add one),"
     warn "but tablet mode won't be detected until one appears. See 'Tablet-mode detection' in the README."
     return
   fi
@@ -222,7 +222,7 @@ check_switch() {
 # re-apply it to the device. Succeeds if the device is readable afterwards.
 offer_udev_rule() {
   local path="$1"
-  echo "   Fliparchy can install a udev rule giving the logged-in user read access"
+  echo "   Ragtop can install a udev rule giving the logged-in user read access"
   echo "   to switch devices only (tablet mode, lid, headphone jack; never keyboards):"
   echo "     $udev_rule_file"
   echo "     $udev_rule"
@@ -235,7 +235,7 @@ offer_udev_rule() {
   [[ $answer == [yY]* ]] || return 1
 
   as_root '
-    printf "# Installed by Fliparchy: read access to switch devices for the logged-in user.\n%s\n" "$1" >"$2"
+    printf "# Installed by Ragtop: read access to switch devices for the logged-in user.\n%s\n" "$1" >"$2"
     udevadm control --reload
     udevadm trigger --action=change "$3"
     udevadm settle
@@ -249,17 +249,20 @@ offer_udev_rule() {
 }
 
 remove_udev_rule() {
-  [[ -f $udev_rule_file ]] || return 0
-  echo "   removing $udev_rule_file needs your password"
-  if as_root '
-    rm -f "$1"
-    udevadm control --reload
-    udevadm trigger --action=change --subsystem-match=input
-  ' "$udev_rule_file"; then
-    echo "   removed"
-  else
-    warn "couldn't remove it; delete it yourself: sudo rm $udev_rule_file"
-  fi
+  local file
+  for file in "$udev_rule_file" "$old_udev_rule_file"; do
+    [[ -f $file ]] || continue
+    echo "   removing $file needs your password"
+    if as_root '
+      rm -f "$1"
+      udevadm control --reload
+      udevadm trigger --action=change --subsystem-match=input
+    ' "$file"; then
+      echo "   removed"
+    else
+      warn "couldn't remove it; delete it yourself: sudo rm $file"
+    fi
+  done
 }
 
 # as_root <script> [args...]: run a bash script as root with one password
@@ -300,7 +303,7 @@ install_layouts() {
   say "Generating keyboard layouts with Esc, Tab, modifier and arrow keys"
   "$repo/squeekboard-layouts.py" | sed 's/^/   /'
   mkdir -p "$(dirname "$layouts_hook")"
-  printf '#!/bin/bash\n# Regenerates Fliparchy'"'"'s keyboard layouts when squeekboard is upgraded.\n"%s" >/dev/null\n' \
+  printf '#!/bin/bash\n# Regenerates Ragtop'"'"'s keyboard layouts when squeekboard is upgraded.\n"%s" >/dev/null\n' \
     "$repo/squeekboard-layouts.py" >"$layouts_hook"
   chmod +x "$layouts_hook"
   echo "   regenerated after Omarchy updates by ${layouts_hook/#$HOME/\~}"
@@ -309,6 +312,95 @@ install_layouts() {
 restart_shell() {
   say "Restarting the Omarchy shell"
   omarchy-restart-shell
+}
+
+# Ragtop was called Fliparchy before 1.9.0. This moves a Fliparchy setup over
+# to the new names, keeping its settings and the overlays that were turned on.
+# Each step only acts on what it finds, so it does nothing on a fresh install.
+old_udev_rule_file="/etc/udev/rules.d/70-fliparchy-tablet-switch.rules"
+old_switch_device=""
+migrate_from_fliparchy() {
+  local old_id="sclemance.fliparchy" old_link="$plugins_dir/sclemance.fliparchy"
+  local shell_json="$HOME/.config/omarchy/shell.json" hooks="$HOME/.config/omarchy/hooks/post-update.d"
+  local old_menu_start="  // Fliparchy: tablet settings. Added by Fliparchy's installer; removed by its uninstaller."
+
+  local in_bar=0
+  jq -e --arg id "$old_id" '[.bar.layout[][]? | select(.id? == $id)] | length > 0' "$shell_json" >/dev/null 2>&1 && in_bar=1
+  if ! (( in_bar )) && [[ ! -e $old_link && ! -L $old_link && ! -d $HOME/.config/fliparchy &&
+        ! -d $HOME/.local/state/fliparchy ]] && ! grep -qsF "$old_menu_start" "$menu_file"; then
+    return 0
+  fi
+  say "Moving your Fliparchy setup over to Ragtop"
+
+  # The bar entry, keeping a switch-device override for the new one.
+  if (( in_bar )); then
+    old_switch_device=$(jq -r --arg id "$old_id" \
+      '[.bar.layout[][]? | select(.id? == $id) | .tabletSwitchDevice // empty][0] // empty' "$shell_json")
+    (source omarchy-shell-config
+     commit '.bar.layout |= map_values(map(select(.id? != "sclemance.fliparchy")))')
+    echo "   removed Fliparchy from the bar"
+  fi
+  if [[ -L $old_link ]]; then
+    rm "$old_link" && echo "   unlinked ${old_link/#$HOME/\~}"
+  elif [[ -d $old_link ]]; then
+    warn "${old_link/#$HOME/\~} is a plugin folder, not a link; remove it with: omarchy plugin remove $old_id"
+  fi
+
+  # Settings, generated files and the squeekboard source cache.
+  local dir
+  for dir in .config .local/state .cache; do
+    if [[ -d $HOME/$dir/fliparchy && ! -e $HOME/$dir/ragtop ]]; then
+      mv "$HOME/$dir/fliparchy" "$HOME/$dir/ragtop" && echo "   moved ~/$dir/fliparchy to ~/$dir/ragtop"
+    elif [[ -d $HOME/$dir/fliparchy ]]; then
+      warn "both ~/$dir/fliparchy and ~/$dir/ragtop exist; left ~/$dir/fliparchy for you to remove"
+    fi
+  done
+
+  # Config lines; the installer adds the renamed ones back afterwards.
+  remove_block "$gtk_css" \
+    "/* Fliparchy: on-screen keyboard styled from the active Omarchy theme */" \
+    "@import url(\"file://$HOME/.local/state/fliparchy/squeekboard.css\");"
+  remove_block "$input_lua" \
+    "-- Fliparchy: let SUPER shortcuts work from the on-screen keyboard's Super key." \
+    "-- Squeekboard uploads its own keymap, so match its keys by symbol, not keycode." \
+    'hl.device({ name = "hl-virtual-keyboard-squeekboard", resolve_binds_by_sym = true })'
+  remove_block "$bindings_lua" \
+    "-- Fliparchy: the on-screen keyboard's gear key sends XF86Tools; open its settings." \
+    'o.bind("XF86Tools", "Fliparchy settings", "omarchy menu summon setup.tablet")'
+  if grep -qsF "$old_menu_start" "$menu_file"; then
+    python3 - "$menu_file" "$old_menu_start" "  // End of Fliparchy's tablet settings." <<'EOF'
+import sys
+path, start, end = sys.argv[1:]
+lines = open(path).read().split("\n")
+i = lines.index(start)
+del lines[i:lines.index(end, i) + 1]
+open(path, "w").write("\n".join(lines))
+EOF
+    echo "   removed Fliparchy's rows from the Omarchy menu"
+  fi
+  rm -f "$hooks/fliparchy-layouts.hook" "$hooks/fliparchy-overlay-sync.hook" "$hooks/fliparchy-menu-sync.hook" \
+    "${XDG_RUNTIME_DIR:-/tmp}/fliparchy-mode"
+
+  # Overlay clones that were turned on: re-tag the patch in place, so they
+  # stay on without being re-cloned, and re-register their sync hook.
+  local overlay file clone migrated=()
+  for overlay in menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitAgent.qml; do
+    clone="$plugins_dir/$USER.${overlay%%:*}"
+    file="$clone/${overlay#*:}"
+    grep -qs 'id: fliparchyMode' "$file" || continue
+    sed -i 's/fliparchyMode/ragtopMode/g; s#/fliparchy-mode"#/ragtop-mode"#' "$file"
+    [[ -f $clone/.fliparchy-base ]] && mv "$clone/.fliparchy-base" "$clone/.ragtop-base"
+    migrated+=("${overlay%%:*}")
+  done
+  if (( ${#migrated[@]} )); then
+    "$repo/overlay-clones.sh" install "${migrated[@]}" >/dev/null
+    echo "   kept overlay clones on: ${migrated[*]}"
+  fi
+
+  if [[ -f $old_udev_rule_file ]]; then
+    echo "   the switch access rule keeps its old name, ${old_udev_rule_file}; it still"
+    echo "   works, and the uninstaller removes it"
+  fi
 }
 
 install() {
@@ -321,8 +413,13 @@ install() {
   done
 
   check_deps
+  migrate_from_fliparchy
   check_switch
   link_plugin
+  if [[ -n $old_switch_device ]]; then
+    omarchy bar set "$id" tabletSwitchDevice "$old_switch_device" >/dev/null &&
+      echo "   kept your tablet-mode switch device: $old_switch_device"
+  fi
 
   say "Theming the keyboard (GTK)"
   add_block "$gtk_css" "${gtk_block[@]}"
@@ -335,7 +432,7 @@ install() {
     warn "  ${input_block[-1]}"
   fi
 
-  say "Letting the keyboard's gear key open Fliparchy's settings (Hyprland)"
+  say "Letting the keyboard's gear key open Ragtop's settings (Hyprland)"
   if [[ -f $bindings_lua ]]; then
     add_block "$bindings_lua" "${bindings_block[@]}"
   else
@@ -345,12 +442,12 @@ install() {
 
   install_layouts
 
-  say "Adding Fliparchy's settings to the Omarchy menu (Setup › Tablet)"
-  menu_block add || warn "couldn't edit ${menu_file/#$HOME/\~}; Fliparchy's settings won't be in the menu."
+  say "Adding Ragtop's settings to the Omarchy menu (Setup › Tablet)"
+  menu_block add || warn "couldn't edit ${menu_file/#$HOME/\~}; Ragtop's settings won't be in the menu."
 
   # Touch typing in Omarchy's overlays swaps in patched clones, so it stays
-  # off until the user turns it on; `fliparchy` records which ones are on.
-  if [[ $("$repo/fliparchy" overlay status) != *": installed"* ]]; then
+  # off until the user turns it on; `ragtop` records which ones are on.
+  if [[ $("$repo/ragtop" overlay status) != *": installed"* ]]; then
     echo "   Touch typing in Omarchy's menu, pickers and password prompt is off. Turn it on per"
     echo "   overlay in Setup › Tablet › System Overlays."
   fi
@@ -358,7 +455,7 @@ install() {
   [[ -f $state_dir/install.conf ]] || printf 'overlays=\n' >"$state_dir/install.conf"
 
   (( restart )) && restart_shell
-  say "Done. Fliparchy's icons appear in the bar in tablet mode."
+  say "Done. Ragtop's icons appear in the bar in tablet mode."
 }
 
 uninstall() {
@@ -387,8 +484,8 @@ uninstall() {
 
   say "Removing generated files and hooks"
   rm -f "$layouts_hook"
-  rm -rf "$state_dir" "$HOME/.cache/fliparchy" "$HOME/.config/fliparchy"
-  rm -f "${XDG_RUNTIME_DIR:-/tmp}/fliparchy-mode"
+  rm -rf "$state_dir" "$HOME/.cache/ragtop" "$HOME/.config/ragtop"
+  rm -f "${XDG_RUNTIME_DIR:-/tmp}/ragtop-mode"
 
   say "Removing the plugin"
   if plugin_enabled; then omarchy plugin disable "$id" >/dev/null && echo "   disabled"; fi
@@ -399,7 +496,7 @@ uninstall() {
   fi
 
   (( restart )) && restart_shell
-  say "Fliparchy removed."
+  say "Ragtop removed."
 }
 
 case "${1:-}" in

@@ -9,7 +9,7 @@
 # Usage: layout-sync.sh [--restore]
 set -euo pipefail
 
-state="$HOME/.local/state/fliparchy"
+state="$HOME/.local/state/ragtop"
 saved="$state/input-sources.orig"
 schema=org.gnome.desktop.input-sources
 
