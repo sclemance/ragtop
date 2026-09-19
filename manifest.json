@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "sclemance.tablet-mode",
+  "name": "Tablet Mode",
+  "version": "1.0.0",
+  "author": "sclemance",
+  "description": "Convertible tablet support: keeps iio-hyprland (auto screen/touch rotation) and squeekboard (on-screen keyboard) running, and shows a keyboard toggle icon only while the hardware tablet-mode switch is engaged.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "On-Screen Keyboard",
+    "description": "Toggle the on-screen keyboard; only visible in tablet mode",
+    "category": "Input",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
