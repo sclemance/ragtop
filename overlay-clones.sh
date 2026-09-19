@@ -1,6 +1,7 @@
 #!/bin/bash
 # Installs, syncs or removes clones of Omarchy's full-screen overlays (the
-# menu, emoji picker and clipboard picker) patched for tablets.
+# menu, emoji picker, clipboard picker and polkit password prompt) patched
+# for tablets.
 #
 # While Fliparchy reports tablet mode (via $XDG_RUNTIME_DIR/fliparchy-mode),
 # each clone:
@@ -19,11 +20,14 @@
 # any whose built-in has changed; `install` registers it as an Omarchy
 # post-update hook.
 #
-# Usage: overlay-clones.sh [install|sync|remove|status] [menu|emojis|clipboard ...]
+# The polkit clone keeps the authentication capability: Omarchy stamps a
+# clone with its source's capabilities via clonedFrom.
+#
+# Usage: overlay-clones.sh [install|sync|remove|status] [menu|emojis|clipboard|polkit ...]
 set -euo pipefail
 
 # name:entry-file for each supported built-in overlay.
-overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml)
+overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitAgent.qml)
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 builtin_root="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins"
@@ -166,7 +170,7 @@ else
   for want in "$@"; do
     match=""
     for o in "${overlays[@]}"; do [[ ${o%%:*} == "$want" ]] && match="$o"; done
-    [[ -n $match ]] || { echo "Unknown overlay: $want (expected: menu, emojis, clipboard)" >&2; exit 2; }
+    [[ -n $match ]] || { echo "Unknown overlay: $want (expected: menu, emojis, clipboard, polkit)" >&2; exit 2; }
     selected+=("$match")
   done
 fi
@@ -180,7 +184,7 @@ for o in "${selected[@]}"; do
     sync) sync_one || status=1 ;;
     remove) remove_one || status=1 ;;
     status) status_one ;;
-    *) echo "Usage: $0 [install|sync|remove|status] [menu|emojis|clipboard ...]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [install|sync|remove|status] [menu|emojis|clipboard|polkit ...]" >&2; exit 2 ;;
   esac
 done
 

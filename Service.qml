@@ -38,7 +38,8 @@ Item {
     root.tabletModeKnown = true
     if (tablet === root.tabletMode && !first) return
     root.tabletMode = tablet
-    // Read by the patched menu clone (menu-clone.sh) to pick its focus mode.
+    // Read by the patched overlay clones (overlay-clones.sh) to pick their
+    // focus mode.
     modeWriteProc.command = [
       "sh", "-c",
       'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/fliparchy-mode.tmp" && mv -f "$d/fliparchy-mode.tmp" "$d/fliparchy-mode"',
@@ -154,7 +155,7 @@ Item {
   Process {
     id: patchCheckProc
     command: ["sh", "-c",
-      'for p in menu:Menu emojis:Emojis clipboard:Clipboard; do ' +
+      'for p in menu:Menu emojis:Emojis clipboard:Clipboard polkit:PolkitAgent; do ' +
       'grep -qs "id: fliparchyMode" "$HOME/.config/omarchy/plugins/$USER.${p%%:*}/${p#*:}.qml" && echo "omarchy-${p%%:*}"; ' +
       'done; true']
     running: true
