@@ -100,9 +100,19 @@ Item {
     model: Quickshell.screens
 
     PanelWindow {
+      id: handle
       required property var modelData
       screen: modelData
       visible: root.tabletMode
+
+      // Under an open keyboard the handle takes the keyboard's background
+      // and text colours, so the two read as one panel with the handle as
+      // its tab; otherwise it matches the bar. Only on the keyboard's screen.
+      readonly property bool underKeyboard: root.oskVisible && modelData === keyboardWindow.screen
+      readonly property color fill: underKeyboard ? keyboardTheme.background
+        : root.barTransparent ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
+        : Color.bar.background
+      readonly property color line: underKeyboard ? keyboardTheme.text : Color.bar.text
 
       WlrLayershell.namespace: "ragtop-keyboard-handle"
       WlrLayershell.layer: WlrLayer.Top
@@ -110,7 +120,13 @@ Item {
       exclusionMode: ExclusionMode.Auto
       anchors { bottom: true; left: true; right: true }
       implicitHeight: root.handleHeight
-      color: root.barTransparent ? "transparent" : Color.bar.background
+      color: "transparent"
+
+      Rectangle {
+        anchors.fill: parent
+        color: handle.fill
+        Behavior on color { ColorAnimation { duration: 150 } }
+      }
 
       MouseArea {
         id: handleArea
@@ -120,14 +136,17 @@ Item {
 
       // A wide ^ while the keyboard is hidden, a wide v while it's showing.
       Shape {
+        id: chevron
         anchors.centerIn: parent
         width: 56
         height: 8
         opacity: handleArea.pressed ? 0.5 : 1
         preferredRendererType: Shape.CurveRenderer
+        property color lineColor: handle.line
+        Behavior on lineColor { ColorAnimation { duration: 150 } }
 
         ShapePath {
-          strokeColor: Color.bar.text
+          strokeColor: chevron.lineColor
           strokeWidth: 2
           fillColor: "transparent"
           capStyle: ShapePath.RoundCap

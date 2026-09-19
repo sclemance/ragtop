@@ -128,7 +128,9 @@ In tablet mode, two icons appear in the bar:
 A slim handle, coloured like the bar, runs along the bottom of the screen in
 tablet mode. Tap it to show the keyboard (it shows a wide ^) and tap it again
 to hide it (a wide v). It reserves its own space, so windows never sit under
-it; with the bar at the bottom, the handle sits just above the bar.
+it; with the bar at the bottom, the handle sits just above the bar. While the
+keyboard is open, the handle fades to the keyboard's background, so the two
+read as one panel.
 
 The keyboard also comes up on its own when you tap into a text field, or
 switch to a window that takes typing, like a terminal. Ragtop learns about
@@ -255,7 +257,8 @@ the gear key on the on-screen keyboard opens directly:
 
 Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
 keyboard background, a transparent bar a fully clear one. The keys themselves
-always stay solid. The handle along the bottom follows the bar the same way.
+always stay solid. The handle along the bottom follows the bar the same way
+while the keyboard is closed, and the keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
