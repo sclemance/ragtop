@@ -44,6 +44,29 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
 - Read access to the tablet-mode switch, which normally means being in the
   `input` group. The installer checks this.
 
+## Tested hardware — feedback wanted
+
+Fliparchy has so far been tested on one machine:
+
+| Device | Tablet-mode driver | Status |
+| --- | --- | --- |
+| Lenovo 300w Yoga Gen 4 | `lenovo-ymc` | Works |
+
+Nothing in Fliparchy is written for that model: the tablet-mode switch is
+auto-detected, and rotation comes from the standard accelerometer stack. It
+should work on other convertibles whose kernel reports the switch, but that's
+untested. **If you have a convertible or detachable we haven't listed, please
+try it and open an issue**, whether it works or not. It helps to include:
+
+- your device model,
+- the installer's "Looking for a tablet-mode switch" output,
+- whether folding shows and hides the bar icons,
+- whether the screen and touch input rotate the right way round,
+- anything that didn't work, and what you expected.
+
+Reports for detachables (tablets with a keyboard cover) are especially
+welcome, since some signal the keyboard being detached differently.
+
 ## Install
 
 ```bash
