@@ -1,7 +1,7 @@
 #!/bin/bash
 # Installs, syncs or removes clones of Omarchy's full-screen overlays (the
-# menu, emoji picker, clipboard picker and polkit password prompt) patched
-# for tablets.
+# menu, emoji picker, clipboard picker and polkit password prompt) and its
+# lock screen, patched for tablets.
 #
 # While Ragtop reports tablet mode (via $XDG_RUNTIME_DIR/ragtop-mode),
 # each clone:
@@ -16,38 +16,68 @@
 # overlay can lose focus to a window under the mouse on another monitor.
 # Focus approach from Gimbal (MIT): github.com/mechanicsunlocked/gimbal
 #
+# The lock screen is a session lock, which hides every other surface, the
+# on-screen keyboard included, so its clone instead loads Ragtop's own
+# LockKeyboard.qml at the bottom of the screen while in tablet mode.
+#
 # Clones stop receiving Omarchy's updates, so `sync` re-clones and re-patches
 # any whose built-in has changed; `install` registers it as an Omarchy
 # post-update hook.
 #
-# The polkit clone keeps the authentication capability: Omarchy stamps a
-# clone with its source's capabilities via clonedFrom.
+# The polkit and lock clones keep the authentication capability: Omarchy
+# stamps a clone with its source's capabilities via clonedFrom.
 #
-# Usage: overlay-clones.sh [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit ...]
+# Usage: overlay-clones.sh [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit|lock ...]
 # `installed` succeeds only if every named overlay has a Ragtop clone.
 set -euo pipefail
 
 # name:entry-file for each supported built-in overlay.
-overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitAgent.qml)
+overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitAgent.qml lock:LockView.qml)
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 builtin_root="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins"
 hook_file="$HOME/.config/omarchy/hooks/post-update.d/ragtop-overlay-sync.hook"
-old_hook_file="$HOME/.config/omarchy/hooks/post-update.d/ragtop-menu-sync.hook"
 self="$(realpath "$0")"
 
+# Every patch includes this, which is also how a Ragtop clone is recognised.
+mode_file_view='FileView { id: ragtopMode; property bool tablet: false; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-mode"; watchChanges: true; printErrors: false; onFileChanged: reload(); onLoaded: tablet = text().trim() === "tablet"; onLoadFailed: tablet = false }'
+
 stock_focus='    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive'
-patched_focus='    WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
-    FileView { id: ragtopMode; property bool tablet: false; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-mode"; watchChanges: true; printErrors: false; onFileChanged: reload(); onLoaded: tablet = text().trim() === "tablet"; onLoadFailed: tablet = false }'
+patched_focus="    WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
+    $mode_file_view"
 stock_exclusion='    exclusionMode: ExclusionMode.Ignore'
 patched_exclusion='    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore
     exclusiveZone: 0'
 
-# Per-overlay paths, set by select_overlay.
-name="" entry="" clone_id="" clone_dir="" builtin_dir="" base_file=""
+stock_lock_import='import qs.Ui'
+patched_lock_import='import qs.Ui
+import Quickshell
+import Quickshell.Io'
+stock_lock_view='    BorderSurface {
+      id: inputField'
+patched_lock_view="    $mode_file_view
+    // Ragtop: an on-screen keyboard for the lock screen in tablet mode.
+    Loader {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      active: ragtopMode.tablet
+      source: \"file://\" + Quickshell.env(\"HOME\") + \"/.config/omarchy/plugins/sclemance.ragtop/LockKeyboard.qml\"
+      onLoaded: item.view = root
+    }
+    BorderSurface {
+      id: inputField"
+
+# Per-overlay paths and patch (stock/patched text pairs), set by select_overlay.
+name="" entry="" clone_id="" clone_dir="" builtin_dir="" base_file="" patch=()
 select_overlay() {
   name="${1%%:*}"
   entry="${1#*:}"
+  if [[ $name == lock ]]; then
+    patch=("$stock_lock_import" "$patched_lock_import" "$stock_lock_view" "$patched_lock_view")
+  else
+    patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion")
+  fi
   clone_id="$USER.$name"
   clone_dir="$plugins_dir/$clone_id"
   builtin_dir="$builtin_root/$name"
@@ -56,7 +86,7 @@ select_overlay() {
 
 # replace <file> <apply|revert>
 replace() {
-  python3 - "$1" "$2" "$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion" <<'EOF'
+  python3 - "$1" "$2" "${patch[@]}" <<'EOF'
 import sys
 path, direction, *pairs = sys.argv[1:]
 text = open(path).read()
@@ -103,7 +133,6 @@ install_hook() {
   mkdir -p "$(dirname "$hook_file")"
   printf '#!/bin/bash\n# Keeps Ragtop'"'"'s overlay clones in step with Omarchy updates.\n"%s" sync\n' "$self" >"$hook_file"
   chmod +x "$hook_file"
-  rm -f "$old_hook_file"
 }
 
 install_one() {
@@ -171,7 +200,7 @@ else
   for want in "$@"; do
     match=""
     for o in "${overlays[@]}"; do [[ ${o%%:*} == "$want" ]] && match="$o"; done
-    [[ -n $match ]] || { echo "Unknown overlay: $want (expected: menu, emojis, clipboard, polkit)" >&2; exit 2; }
+    [[ -n $match ]] || { echo "Unknown overlay: $want (expected: menu, emojis, clipboard, polkit, lock)" >&2; exit 2; }
     selected+=("$match")
   done
 fi
@@ -202,7 +231,7 @@ case "$command" in
     # Only drop the hook once no clones are left for it to keep in step.
     remaining=0
     for o in "${overlays[@]}"; do select_overlay "$o"; is_patched && remaining=1; done
-    (( remaining )) || rm -f "$hook_file" "$old_hook_file"
+    (( remaining )) || rm -f "$hook_file"
     echo "Run omarchy-restart-shell to go back to the built-in overlays."
     ;;
 esac

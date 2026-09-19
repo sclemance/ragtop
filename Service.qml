@@ -29,7 +29,7 @@ Item {
     configureFallback.stop()
     // Locking just means "stop watching the orientation", which freezes the
     // display at whatever orientation it's currently in.
-    if (locked) orientationSettle.stop()
+    if (locked) { orientationSettle.stop(); lockRecheck.stop() }
     rotationProc.running = !locked
   }
 
@@ -202,10 +202,35 @@ Item {
     return monitors.length > 0 ? monitors[0].name : ""
   }
 
-  // The same transform for the display, touchscreen and pen, so touches
-  // land where they're drawn.
+  // Rotation waits while the screen is locked: Omarchy's lock screen isn't
+  // redrawn for a rotated display, though touches would be rotated, so what's
+  // drawn and where taps land would disagree. Asking only when about to
+  // rotate avoids polling; while locked, it asks again until unlocked.
   function applyOrientation(orientation) {
     if (root.rotationLocked || orientation === root.appliedOrientation) return
+    if (!lockCheckProc.running) lockCheckProc.running = true
+  }
+
+  Process {
+    id: lockCheckProc
+    command: ["omarchy-shell", "lock", "isLocked"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        if (text.trim() === "true") lockRecheck.restart()
+        else root.rotateNow(root.pendingOrientation)
+      }
+    }
+  }
+  Timer {
+    id: lockRecheck
+    interval: 2000
+    onTriggered: root.applyOrientation(root.pendingOrientation)
+  }
+
+  // The same transform for the display, touchscreen and pen, so touches
+  // land where they're drawn.
+  function rotateNow(orientation) {
+    if (root.rotationLocked || orientation === "" || orientation === root.appliedOrientation) return
     var output = root.internalMonitorName()
     if (output === "") return
     var t = root.orientationTransforms[orientation]

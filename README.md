@@ -38,6 +38,9 @@ everything returns to normal.
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
   the keyboard up with them, and keep them clear of it. It's off until you turn
   it on, one overlay at a time (see [Omarchy's overlays](#omarchys-overlays)).
+- **Unlock without unfolding, if you want to.** The lock screen hides every
+  other window, the on-screen keyboard included, so Ragtop can give it a
+  keyboard of its own in tablet mode. Also off until you turn it on.
 - **Settings in the Omarchy menu,** under Setup › Tablet.
 
 ## Requirements
@@ -171,7 +174,7 @@ tap an overlay to turn it on or off (✓ means on). The shell restarts to load
 the change. From a terminal, the same thing is:
 
 ```bash
-./ragtop overlay toggle menu        # or: enable, disable; menu, emojis, clipboard, polkit
+./ragtop overlay toggle menu        # or: enable, disable; menu, emojis, clipboard, polkit, lock
 ./ragtop overlay status             # which are on, and in sync with Omarchy?
 ```
 
@@ -192,6 +195,27 @@ What turning one on means:
   interfere with your session in other ways, but it's the one to think about
   before turning on.
 
+### The lock screen
+
+The lock screen is different: while it's up, Hyprland shows nothing else at
+all, so no on-screen keyboard can appear over it. Its clone (**Lock Screen**
+in the same menu) keeps Omarchy's lock screen as it is and adds a keyboard of
+its own along the bottom, in tablet mode only: letters with Shift (tap twice
+for Caps), and two pages of digits and symbols. The keys edit the password the
+same way typing does, and Omarchy checks it as usual. The keyboard itself is
+`LockKeyboard.qml` in Ragtop's folder, which the clone loads.
+
+The screen doesn't rotate while it's locked, with or without this: Omarchy's
+lock screen isn't redrawn for a rotated display, although touches would be
+rotated, so taps would land in the wrong place. The lock screen keeps the
+orientation it was locked in, and the screen catches up when you unlock.
+
+The same points apply as for the password prompt, since this is where you type
+your login password: the clone and the keyboard live in your user-writable
+config. Keys light up when tapped, as on any on-screen keyboard, so mind who's
+watching. Try it the first time with the laptop unfolded and Tablet Mode set to
+Always On, so the physical keyboard is there if anything goes wrong.
+
 ## Settings
 
 Ragtop's settings are in the Omarchy menu under **Setup › Tablet**, which
@@ -204,7 +228,7 @@ the gear key on the on-screen keyboard opens directly:
 | Keyboard uses your Hyprland keyboard layout | on | Setup › Tablet › Match Layout |
 | Keyboard styled from the Omarchy theme; off leaves squeekboard's own look | on | Setup › Tablet › Auto Theme |
 | Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › Transparency (only while Auto Theme is on) |
-| Touch typing in each overlay | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
+| Touch typing in each overlay, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
 
 Match Layout exists because squeekboard takes its layout from GNOME's
 `org.gnome.desktop.input-sources` setting, which Omarchy leaves empty (it sets

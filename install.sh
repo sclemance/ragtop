@@ -98,6 +98,7 @@ overlays = [
     ("emojis", "\U000f0785", "Emoji Picker"),
     ("clipboard", "\U000f014c", "Clipboard Picker"),
     ("polkit", "\U000f033e", "Password Prompt"),
+    ("lock", "\U000f0ddb", "Lock Screen"),
 ]
 rows = {
     "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "ragtop"],
@@ -138,9 +139,12 @@ rows = {
 for name, icon, label in overlays:
     rows[f"setup.tablet.overlays.{name}"] = dict(
         icon=icon, label=label,
-        description=("Replaces Omarchy's password prompt with a patched copy that doesn't hold "
-                     "the keyboard to itself in tablet mode" if name == "polkit" else
-                     f"Replaces Omarchy's {label.lower()} with a patched copy"),
+        description={
+            "polkit": "Replaces Omarchy's password prompt with a patched copy that doesn't hold "
+                      "the keyboard to itself in tablet mode",
+            "lock": "Replaces Omarchy's lock screen with a patched copy that has an on-screen "
+                    "keyboard in tablet mode",
+        }.get(name, f"Replaces Omarchy's {label.lower()} with a patched copy"),
         checked=f'"{cmd}" overlay enabled {name}',
         action=f'"{cmd}" overlay toggle {name}')
 block = [start] + [f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," for k, v in rows.items()] + [end]

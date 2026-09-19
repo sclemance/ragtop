@@ -11,7 +11,7 @@
 #        ragtop layout-sync (enabled | enable | disable | toggle)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop transparency (get | is <level> | set <level>)
-# where <overlay> is menu, emojis, clipboard or polkit, <mode> is auto
+# where <overlay> is menu, emojis, clipboard, polkit or lock, <mode> is auto
 # (follow the hinge's switch), on or off, and <level> is auto (match
 # Omarchy's bar), opaque, low, medium, high or full.
 #
@@ -34,7 +34,8 @@ label() {
     emojis) echo "the emoji picker" ;;
     clipboard) echo "the clipboard picker" ;;
     polkit) echo "the password prompt" ;;
-    *) echo "Unknown overlay: $1 (expected: menu, emojis, clipboard, polkit)" >&2; exit 2 ;;
+    lock) echo "the lock screen" ;;
+    *) echo "Unknown overlay: $1 (expected: menu, emojis, clipboard, polkit, lock)" >&2; exit 2 ;;
   esac
 }
 
@@ -42,7 +43,7 @@ label() {
 # clone that went missing from one that was never wanted.
 record() {
   local on=() o
-  for o in menu emojis clipboard polkit; do
+  for o in menu emojis clipboard polkit lock; do
     "$clones" installed "$o" && on+=("$o")
   done
   mkdir -p "$(dirname "$conf")"
@@ -64,11 +65,19 @@ set_overlay() {
   if (( on )); then
     "$clones" install "$overlay" >/dev/null
     record
-    notify "Touch typing is on for ${name}."
+    if [[ $overlay == lock ]]; then
+      notify "The lock screen now has an on-screen keyboard in tablet mode."
+    else
+      notify "Touch typing is on for ${name}."
+    fi
   else
     "$clones" remove "$overlay" >/dev/null
     record
-    notify "Touch typing is off for ${name}."
+    if [[ $overlay == lock ]]; then
+      notify "The lock screen no longer has an on-screen keyboard."
+    else
+      notify "Touch typing is off for ${name}."
+    fi
   fi
   # Omarchy only picks clones up, or drops them, when the shell starts.
   omarchy-restart-shell >/dev/null 2>&1 &
