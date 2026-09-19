@@ -60,7 +60,8 @@ sq_button.change-view-3,
 sq_button.subtle-highlight,
 sq_button.subtle-highlight-2,
 sq_button.emoji-group,
-sq_button.character-group {
+sq_button.character-group,
+sq_button.fl-mod {
   background: mix(@fl_bg, @fl_fg, 0.12);
   border-color: mix(@fl_bg, @fl_fg, 0.2);
 }
@@ -75,13 +76,19 @@ sq_button.change-view-3:active,
 sq_button.subtle-highlight:active,
 sq_button.subtle-highlight-2:active,
 sq_button.emoji-group:active,
-sq_button.character-group:active {
+sq_button.character-group:active,
+sq_button.fl-mod:active {
   background: mix(@fl_bg, @fl_fg, 0.3);
 }
 
 sq_button.placeholder,
 sq_button.placeholder-2 {
   background: mix(@fl_bg, @fl_fg, 0.04);
+}
+
+/* Fliparchy's modifier keys (Ctrl, Alt, Super, Shift), from squeekboard-layouts.py */
+sq_button.fl-mod {
+  font-size: 0.6em;
 }
 
 sq_button.latched {
