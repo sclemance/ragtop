@@ -18,11 +18,13 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
   remembered, and released automatically when you fold back to laptop mode.
 - **An on-screen keyboard that fits Omarchy.** [Squeekboard](https://gitlab.gnome.org/World/Phosh/squeekboard),
   styled from your current Omarchy theme's colours and font, restyled
-  automatically when you switch themes.
+  automatically when you switch themes. Its background can be see-through,
+  matching the bar's transparency by default.
 - **The keys a desktop needs.** Every keyboard layout gets a slim extra row with
   Esc, Tab, Ctrl, Alt, Super, Shift and arrow keys, without making the keyboard
   taller. The modifiers are toggles: tap Super, tap Return, tap Super again to
-  open a terminal. Your Hyprland SUPER shortcuts work from it.
+  open a terminal. Your Hyprland SUPER shortcuts work from it. A gear key at
+  the end opens Fliparchy's settings.
 - **Window shortcuts panel.** Omarchy windows have no title bars and moving or
   resizing them needs SUPER plus a mouse, so a bar button opens a touch panel
   for focus, swap, close, fullscreen, float, split, pop out, resize, move to
@@ -102,13 +104,16 @@ have to live elsewhere. The installer:
 3. Adds one line to `~/.config/hypr/input.lua` so Hyprland matches keys from
    squeekboard's virtual keyboard by symbol (`resolve_binds_by_sym`). Without
    it, SUPER shortcuts typed on the on-screen keyboard do nothing.
-4. Generates keyboard layouts into `~/.local/state/fliparchy/keyboards` (see
+4. Adds one keybinding to `~/.config/hypr/bindings.lua` for the keyboard's gear
+   key. Squeekboard keys can't run commands, so the gear sends the otherwise
+   unused `XF86Tools` key, and the binding opens Setup › Tablet.
+5. Generates keyboard layouts into `~/.local/state/fliparchy/keyboards` (see
    [Licensing](#credits-and-licensing)).
-5. Adds Fliparchy's settings to the Omarchy menu, as a marked block at the
+6. Adds Fliparchy's settings to the Omarchy menu, as a marked block at the
    top of `~/.config/omarchy/extensions/omarchy-menu.jsonc`.
-6. Adds a hook to `~/.config/omarchy/hooks/post-update.d/` that regenerates
+7. Adds a hook to `~/.config/omarchy/hooks/post-update.d/` that regenerates
    the layouts after `omarchy update`.
-7. Only if you can't read the tablet-mode switch, and only after asking:
+8. Only if you can't read the tablet-mode switch, and only after asking:
    installs a udev rule, asking for your password (see [Tablet-mode detection](#tablet-mode-detection)).
 
 Each of these is undone by the uninstaller. The installer doesn't touch
@@ -135,7 +140,8 @@ on-screen keyboard while in tablet mode. It doesn't hide the keyboard when you
 leave a text field: fcitx5's "hide" also fires on every keystroke from the
 on-screen keyboard, so the two can't be told apart. Use the handle.
 Apps that don't talk to an input method (some Electron and Chromium apps)
-won't bring it up.
+won't bring it up. To turn this off, tap **Setup › Tablet › Auto Keyboard** in
+the Omarchy menu.
 
 If you've turned on touch typing for them, the keyboard also comes up on its own
 when you open the Omarchy menu, the emoji or clipboard picker, or a password
@@ -185,11 +191,25 @@ What turning one on means:
 
 ## Settings
 
-Fliparchy's settings are in the Omarchy menu under **Setup › Tablet**:
+Fliparchy's settings are in the Omarchy menu under **Setup › Tablet**, which
+the gear key on the on-screen keyboard opens directly:
 
 | Setting | Default | Where |
 | --- | --- | --- |
+| Tablet mode: Automatic (follow the hinge), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
+| Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
+| Keyboard styled from the Omarchy theme; off leaves squeekboard's own look | on | Setup › Tablet › Auto Theme |
+| Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › Transparency (only while Auto Theme is on) |
 | Touch typing in each overlay | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
+
+Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
+keyboard background, a transparent bar a fully clear one. The keys themselves
+always stay solid. The handle along the bottom follows the bar the same way.
+
+From a terminal, `./fliparchy <setting> ...` does the same as the menu rows:
+`tablet-mode set auto|on|off`, `auto-show toggle`, `auto-theme toggle`
+(or `enable`, `disable`) and `transparency set auto|opaque|low|medium|high|full`. Settings other than the overlays are kept in
+`~/.config/fliparchy/settings.conf`, and changes apply straight away.
 
 A couple more live in Fliparchy's bar entry in `~/.config/omarchy/shell.json`:
 
@@ -203,6 +223,10 @@ A couple more live in Fliparchy's bar entry in `~/.config/omarchy/shell.json`:
 Fliparchy picks the input device that advertises the standard tablet-mode
 switch (`SW_TABLET_MODE`) and polls it once a second. If none exists yet, it
 keeps looking every 10 seconds, which covers keyboards that attach later.
+
+If your device has no usable switch, or you want the touch controls with the
+keyboard attached, set **Setup › Tablet › Tablet Mode** to **Always On**.
+Always On and Always Off stop Fliparchy reading the switch at all.
 
 If tablet mode is never detected:
 

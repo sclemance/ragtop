@@ -9,6 +9,9 @@ SQUEEKBOARD_KEYBOARDSDIR. Layouts missing there fall back to the built-in ones.
 
 Every view gets a half-height modifier row, like squeekboard's own terminal
 layout; terminal layouts, which already have Ctrl/Alt/Shift, just gain Super.
+The row ends with a gear key that opens Fliparchy's settings: it sends
+XF86Tools, which Fliparchy's installer binds in Hyprland to the Omarchy menu's
+Setup › Tablet (squeekboard keys can't run commands themselves).
 The keys are squeekboard modifiers: tap one on, tap a key, tap it off. For
 Hyprland to run SUPER bindings from them, the squeekboard virtual keyboard
 needs resolve_binds_by_sym (see Fliparchy's README).
@@ -36,6 +39,8 @@ SKIP_DIRS = {"number", "pin", "emoji"}
 # layouts already have Tab and arrows, so they only take Esc and Super.
 ESC = ("fl_esc", "Esc", {"keysym": "Escape"})
 SUPER = ("fl_super", "Super", {"modifier": "Mod4"})
+# The Nerd Font cog (md-cog), like the icons in the Omarchy menu.
+SETTINGS = ("fl_settings", "\U000f0493", {"keysym": "XF86Tools"})
 ROW_KEYS = [
     ESC,
     ("fl_tab", "Tab", {"keysym": "Tab"}),
@@ -47,6 +52,7 @@ ROW_KEYS = [
     ("fl_up", "↑", {"keysym": "Up"}),
     ("fl_down", "↓", {"keysym": "Down"}),
     ("fl_right", "→", {"keysym": "Right"}),
+    SETTINGS,
 ]
 # Squeekboard uses the outline name as the button's CSS class, so this also
 # lets Fliparchy's theme style the keys.
@@ -105,10 +111,11 @@ def patch(layout):
     alt = existing_modifier(buttons, "Alt")
     if alt:
         # Terminal layouts already have a Ctrl/Alt/Shift row: add Esc at its
-        # start (theirs is only on the function-key view) and Super after Alt.
+        # start (theirs is only on the function-key view), Super after Alt and
+        # the settings key at its end.
         alt_outline = (buttons[alt] or {}).get("outline", "default")
         outlines[MOD_OUTLINE] = dict(outlines[alt_outline])
-        for name, label, sends in (ESC, SUPER):
+        for name, label, sends in (ESC, SUPER, SETTINGS):
             buttons[name] = dict(sends, outline=MOD_OUTLINE, label=label)
         changed = False
         for rows in views.values():
@@ -118,6 +125,7 @@ def patch(layout):
                     continue
                 keys.insert(keys.index(alt) + 1, SUPER[0])
                 keys.insert(0, ESC[0])
+                keys.append(SETTINGS[0])
                 rows[i] = " ".join(keys)
                 changed = True
         return changed

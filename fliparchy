@@ -6,17 +6,26 @@
 #        fliparchy overlay disable <overlay>
 #        fliparchy overlay toggle <overlay>
 #        fliparchy overlay status
-# where <overlay> is menu, emojis, clipboard or polkit.
+#        fliparchy auto-show (enabled | enable | disable | toggle)
+#        fliparchy auto-theme (enabled | enable | disable | toggle)
+#        fliparchy tablet-mode (get | is <mode> | set <mode>)
+#        fliparchy transparency (get | is <level> | set <level>)
+# where <overlay> is menu, emojis, clipboard or polkit, <mode> is auto
+# (follow the hinge's switch), on or off, and <level> is auto (match
+# Omarchy's bar), opaque, low, medium, high or full.
 #
 # Touch typing in an overlay means replacing Omarchy's own with a patched
 # clone (see overlay-clones.sh), so each one is off until the user turns it on.
+# Other settings are key=value lines in settings.conf, which Fliparchy's
+# service watches, so they apply straight away.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 conf="$HOME/.local/state/fliparchy/install.conf"
 clones="$repo/overlay-clones.sh"
+settings="$HOME/.config/fliparchy/settings.conf"
 
-usage() { sed -n '4,9p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,17p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 label() {
   case "$1" in
@@ -64,7 +73,75 @@ set_overlay() {
   omarchy-restart-shell >/dev/null 2>&1 &
 }
 
+# get <key> <default>
+get() {
+  local value
+  value=$(sed -n "s/^$1=//p" "$settings" 2>/dev/null | tail -n 1)
+  echo "${value:-$2}"
+}
+
+# put <key> <value>, written whole and renamed into place so the service
+# never reads a half-written file.
+put() {
+  mkdir -p "$(dirname "$settings")"
+  { grep -v "^$1=" "$settings" 2>/dev/null || true; echo "$1=$2"; } >"$settings.tmp"
+  mv -f "$settings.tmp" "$settings"
+}
+
+# switch <key> <enabled|enable|disable|toggle> for an on/off setting that
+# defaults to on.
+switch() {
+  local key="$1" value
+  case "${2:-}" in
+    enabled) [[ $(get "$key" on) == on ]]; return ;;
+    enable) value=on ;;
+    disable) value=off ;;
+    toggle) [[ $(get "$key" on) == on ]] && value=off || value=on ;;
+    *) usage ;;
+  esac
+  put "$key" "$value"
+  case "$key $value" in
+    "auto-show on") notify "The keyboard now comes up by itself on text fields." ;;
+    "auto-show off") notify "The keyboard no longer comes up by itself on text fields." ;;
+    "auto-theme on") notify "The keyboard now follows your Omarchy theme." ;;
+    "auto-theme off") notify "The keyboard now keeps its own look." ;;
+  esac
+}
+
+# choice <key> <default> <get|is|set> [value] for a setting with named values;
+# the allowed values are the cases in choice_notice.
+choice() {
+  local key="$1" default="$2"
+  case "${3:-}" in
+    get) get "$key" "$default" ;;
+    is) [[ -n ${4:-} ]] || usage; [[ $(get "$key" "$default") == "$4" ]] ;;
+    set)
+      local notice
+      notice=$(choice_notice "$key" "${4:-}") || usage
+      put "$key" "$4"
+      notify "$notice"
+      ;;
+    *) usage ;;
+  esac
+}
+
+choice_notice() {
+  case "$1 $2" in
+    "tablet-mode auto") echo "Tablet mode now follows the hinge." ;;
+    "tablet-mode on") echo "Tablet mode is on until you change it back." ;;
+    "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
+    "transparency auto") echo "The keyboard's background now matches the bar's transparency." ;;
+    "transparency opaque") echo "The keyboard's background is solid." ;;
+    "transparency low"|"transparency medium"|"transparency high") echo "The keyboard's background is now $2 transparency." ;;
+    "transparency full") echo "The keyboard's background is fully transparent." ;;
+    *) return 1 ;;
+  esac
+}
+
 case "${1:-} ${2:-}" in
+  "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
+  "transparency "*) choice transparency auto "${2:-}" "${3:-}" ;;
+  "auto-show "*|"auto-theme "*) switch "$1" "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;

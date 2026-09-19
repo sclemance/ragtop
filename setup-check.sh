@@ -23,6 +23,8 @@ grep -qsF "$state/squeekboard.css" "$HOME/.config/gtk-3.0/gtk.css" ||
   echo "Keyboard theme isn't imported in gtk.css."
 grep -qs 'hl-virtual-keyboard-squeekboard.*resolve_binds_by_sym' "$HOME/.config/hypr/input.lua" ||
   echo "SUPER shortcuts from the keyboard aren't enabled in input.lua."
+grep -qs 'o.bind("XF86Tools", "Fliparchy settings"' "$HOME/.config/hypr/bindings.lua" ||
+  echo "The keyboard's gear key isn't bound in bindings.lua."
 compgen -G "$state/keyboards/*.yaml" >/dev/null ||
   echo "Keyboard layouts haven't been generated."
 grep -qsF "// Fliparchy: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ||

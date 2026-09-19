@@ -24,7 +24,14 @@ BarWidget {
   function pushConfig() {
     if (root.service) root.service.configure(root.tabletSwitchDevice, root.rotationLocked)
   }
-  onServiceChanged: pushConfig()
+  onServiceChanged: { pushConfig(); pushBarTransparent() }
+
+  // The bar keeps `transparent` live on the object it hands widgets.
+  readonly property bool barTransparent: root.bar ? root.bar.transparent === true : false
+  onBarTransparentChanged: pushBarTransparent()
+  function pushBarTransparent() {
+    if (root.service) root.service.barTransparent = root.barTransparent
+  }
   onRotationLockedChanged: pushConfig()
   onTabletSwitchDeviceChanged: pushConfig()
 

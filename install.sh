@@ -35,6 +35,11 @@ input_block=(
   "-- Squeekboard uploads its own keymap, so match its keys by symbol, not keycode."
   'hl.device({ name = "hl-virtual-keyboard-squeekboard", resolve_binds_by_sym = true })'
 )
+bindings_lua="$HOME/.config/hypr/bindings.lua"
+bindings_block=(
+  "-- Fliparchy: the on-screen keyboard's gear key sends XF86Tools; open its settings."
+  'o.bind("XF86Tools", "Fliparchy settings", "omarchy menu summon setup.tablet")'
+)
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -97,7 +102,33 @@ overlays = [
 rows = {
     "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "fliparchy"],
                         when=f'[[ -x "{cmd}" ]]'),
-    "setup.tablet.overlays": dict(icon="\U000f030c", label="System Overlays",
+    "setup.tablet.mode": dict(icon="\U000f04f6", label="Tablet Mode",
+        description="Follow the hinge, or keep tablet mode on or off"),
+    "setup.tablet.mode.auto": dict(icon="\U000f006a", label="Automatic",
+        description="Tablet mode when the screen is folded back",
+        checked=f'"{cmd}" tablet-mode is auto', action=f'"{cmd}" tablet-mode set auto'),
+    "setup.tablet.mode.on": dict(icon="\U000f04f6", label="Always On",
+        description="Tablet controls in laptop mode too",
+        checked=f'"{cmd}" tablet-mode is on', action=f'"{cmd}" tablet-mode set on'),
+    "setup.tablet.mode.off": dict(icon="\U000f0322", label="Always Off",
+        description="Never switch to tablet mode",
+        checked=f'"{cmd}" tablet-mode is off', action=f'"{cmd}" tablet-mode set off'),
+    "setup.tablet.auto-show": dict(icon="\U000f030c", label="Auto Keyboard",
+        description="Bring the on-screen keyboard up when a text field gets focus in tablet mode",
+        checked=f'"{cmd}" auto-show enabled',
+        action=f'"{cmd}" auto-show toggle'),
+    "setup.tablet.auto-theme": dict(icon="\U000f03d8", label="Auto Theme",
+        description="Style the on-screen keyboard from the current Omarchy theme",
+        checked=f'"{cmd}" auto-theme enabled',
+        action=f'"{cmd}" auto-theme toggle'),
+    "setup.tablet.transparency": dict(icon="\U000f1853", label="Transparency",
+        description="Let the desktop show through the on-screen keyboard's background",
+        when=f'"{cmd}" auto-theme enabled'),
+    **{f"setup.tablet.transparency.{level}": dict(icon="\U000f1853", label=label,
+        checked=f'"{cmd}" transparency is {level}', action=f'"{cmd}" transparency set {level}')
+       for level, label in (("auto", "Match Bar"), ("opaque", "Opaque"), ("low", "Low"),
+                            ("medium", "Medium"), ("high", "High"), ("full", "Full"))},
+    "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays",
         description="Let the on-screen keyboard type into Omarchy's full-screen overlays in tablet mode"),
 }
 for name, icon, label in overlays:
@@ -300,6 +331,14 @@ install() {
     warn "  ${input_block[-1]}"
   fi
 
+  say "Letting the keyboard's gear key open Fliparchy's settings (Hyprland)"
+  if [[ -f $bindings_lua ]]; then
+    add_block "$bindings_lua" "${bindings_block[@]}"
+  else
+    warn "${bindings_lua/#$HOME/\~} not found; add this line to your Hyprland config yourself:"
+    warn "  ${bindings_block[-1]}"
+  fi
+
   install_layouts
 
   say "Adding Fliparchy's settings to the Omarchy menu (Setup › Tablet)"
@@ -334,13 +373,14 @@ uninstall() {
   menu_block remove
   remove_block "$gtk_css" "${gtk_block[@]}"
   remove_block "$input_lua" "${input_block[@]}"
+  remove_block "$bindings_lua" "${bindings_block[@]}"
 
   say "Removing the switch access rule"
   remove_udev_rule
 
   say "Removing generated files and hooks"
   rm -f "$layouts_hook"
-  rm -rf "$state_dir" "$HOME/.cache/fliparchy"
+  rm -rf "$state_dir" "$HOME/.cache/fliparchy" "$HOME/.config/fliparchy"
   rm -f "${XDG_RUNTIME_DIR:-/tmp}/fliparchy-mode"
 
   say "Removing the plugin"

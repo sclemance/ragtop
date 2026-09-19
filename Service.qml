@@ -33,11 +33,39 @@ Item {
     rotationProc.running = !locked
   }
 
-  // False until the first switch reading, so "laptop mode" can be told
-  // apart from "not polled yet".
+  // False until tablet mode is first decided, so "laptop mode" can be told
+  // apart from "not decided yet".
   property bool tabletModeKnown: false
 
+  // The hinge's switch, as last read; only followed in the "auto" setting.
+  property bool switchTablet: false
+  property bool switchKnown: false
+
   function applySwitchReading(tablet) {
+    root.switchTablet = tablet
+    root.switchKnown = true
+    root.updateTabletMode()
+  }
+
+  // Tablet mode is the switch, or fixed on or off by the "tablet-mode"
+  // setting (Setup › Tablet › Tablet Mode), for convertibles without a
+  // usable switch or for touch controls in laptop mode.
+  readonly property string tabletModeSetting:
+    ["on", "off"].indexOf(root.settings["tablet-mode"]) !== -1 ? root.settings["tablet-mode"] : "auto"
+  onTabletModeSettingChanged: updateTabletMode()
+
+  function updateTabletMode() {
+    // Waits for the settings, so a fixed mode isn't briefly overridden by
+    // the switch at startup.
+    if (!root.settingsLoaded) return
+    if (root.tabletModeSetting === "auto") {
+      if (root.switchKnown) applyTabletMode(root.switchTablet)
+    } else {
+      applyTabletMode(root.tabletModeSetting === "on")
+    }
+  }
+
+  function applyTabletMode(tablet) {
     var first = !root.tabletModeKnown
     root.tabletModeKnown = true
     if (tablet === root.tabletMode && !first) return
@@ -94,7 +122,7 @@ Item {
       exclusionMode: ExclusionMode.Auto
       anchors { bottom: true; left: true; right: true }
       implicitHeight: root.handleHeight
-      color: Color.bar.background
+      color: root.barTransparent ? "transparent" : Color.bar.background
 
       MouseArea {
         id: handleArea
@@ -204,50 +232,103 @@ Item {
   }
   Timer { id: oskRestart; interval: 3000; onTriggered: oskProc.running = true }
 
+  // Settings written by the `fliparchy` command (Setup › Tablet in the
+  // Omarchy menu), as key=value lines; a missing key keeps its default.
+  property var settings: ({})
+  property bool settingsLoaded: false
+
+  // Whether Omarchy's bar is transparent (Style › Bar › Transparency), passed
+  // on by the bar widget; the keyboard handle and, by default, the keyboard's
+  // background follow it.
+  property bool barTransparent: false
+  FileView {
+    path: Quickshell.env("HOME") + "/.config/fliparchy/settings.conf"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var parsed = {}
+      text().split("\n").forEach(function(line) {
+        var eq = line.indexOf("=")
+        if (eq > 0) parsed[line.slice(0, eq).trim()] = line.slice(eq + 1).trim()
+      })
+      root.settings = parsed
+      root.settingsLoaded = true
+      root.updateTabletMode()
+    }
+    onLoadFailed: {
+      root.settings = ({})
+      root.settingsLoaded = true
+      root.updateTabletMode()
+    }
+  }
+  readonly property bool autoShowEnabled: root.settings["auto-show"] !== "off"
+
   // In tablet mode, bring the keyboard up when a text field gets focus. The
   // bridge learns about focus from fcitx5, Omarchy's input method, and prints
   // "show"; hiding stays with the user (see fcitx-osk-bridge.py for why).
+  // Stopping it hands fcitx5 back its own interface.
   Process {
     id: focusBridgeProc
     command: ["python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
-    running: root.tabletMode
+    running: root.tabletMode && root.autoShowEnabled
     stdout: SplitParser {
       onRead: function(line) {
-        if (line === "show" && root.tabletMode && !root.oskVisible) root.setOskVisible(true)
+        if (line === "show" && root.tabletMode && root.autoShowEnabled && !root.oskVisible) root.setOskVisible(true)
       }
     }
-    onExited: if (root.tabletMode) focusBridgeRestart.start()
+    onExited: if (root.tabletMode && root.autoShowEnabled) focusBridgeRestart.start()
   }
-  Timer { id: focusBridgeRestart; interval: 5000; onTriggered: focusBridgeProc.running = root.tabletMode }
+  Timer {
+    id: focusBridgeRestart
+    interval: 5000
+    onTriggered: focusBridgeProc.running = root.tabletMode && root.autoShowEnabled
+  }
 
   // Squeekboard only reads GTK CSS at startup. ~/.config/gtk-3.0/gtk.css
   // imports the file written here, so a theme or font change means rewrite
   // then restart. The first write happens before squeekboard's first start.
+  // With the "auto-theme" setting off, only the rules Fliparchy's own key row
+  // needs are written, leaving squeekboard's stock look.
   readonly property string themeScript:
     Qt.resolvedUrl("squeekboard-theme.sh").toString().replace(/^file:\/\//, "")
+  readonly property bool autoThemeEnabled: root.settings["auto-theme"] !== "off"
+  // "auto" follows Omarchy's bar transparency (Style › Bar › Transparency),
+  // which is either fully clear or solid.
+  readonly property string keyboardTransparency: {
+    var level = root.settings["transparency"]
+    if (["opaque", "low", "medium", "high", "full"].indexOf(level) !== -1) return level
+    return root.barTransparent ? "full" : "opaque"
+  }
   property string themeCss: ""
   property bool themeChecked: false
+  onAutoThemeEnabledChanged: themeCheck.restart()
+  onKeyboardTransparencyChanged: themeCheck.restart()
+
+  function applyThemeCss(css) {
+    var first = !root.themeChecked
+    root.themeChecked = true
+    if (css === "" || css === root.themeCss) {
+      if (first) oskProc.running = true
+      return
+    }
+    root.themeCss = css
+    themeWriteProc.restartOsk = !first
+    themeWriteProc.command = [
+      "sh", "-c",
+      'd="$HOME/.local/state/fliparchy" && mkdir -p "$d" && printf "%s" "$1" > "$d/squeekboard.css.tmp" && mv -f "$d/squeekboard.css.tmp" "$d/squeekboard.css"',
+      "--", css
+    ]
+    themeWriteProc.running = true
+  }
 
   Process {
     id: themeProc
-    command: ["sh", root.themeScript]
+    command: root.autoThemeEnabled
+      ? ["sh", root.themeScript, "--transparency", root.keyboardTransparency]
+      : ["sh", root.themeScript, "--no-theme"]
     stdout: StdioCollector {
-      onStreamFinished: {
-        var first = !root.themeChecked
-        root.themeChecked = true
-        if (text === "" || text === root.themeCss) {
-          if (first) oskProc.running = true
-          return
-        }
-        root.themeCss = text
-        themeWriteProc.restartOsk = !first
-        themeWriteProc.command = [
-          "sh", "-c",
-          'd="$HOME/.local/state/fliparchy" && mkdir -p "$d" && printf "%s" "$1" > "$d/squeekboard.css.tmp" && mv -f "$d/squeekboard.css.tmp" "$d/squeekboard.css"',
-          "--", text
-        ]
-        themeWriteProc.running = true
-      }
+      onStreamFinished: root.applyThemeCss(text)
     }
   }
   Process {
@@ -256,9 +337,12 @@ Item {
     // Stopping squeekboard lets oskProc's own exit handler bring it back.
     onExited: if (restartOsk) oskProc.running = false; else oskProc.running = true
   }
+  // Waits for the settings, so squeekboard's first start already has the
+  // look they ask for.
   Timer {
+    id: themeCheck
     interval: 5000
-    running: true
+    running: root.settingsLoaded
     repeat: true
     triggeredOnStart: true
     onTriggered: if (!themeProc.running) themeProc.running = true
@@ -371,7 +455,7 @@ Item {
   }
   Timer {
     interval: 10000
-    running: root.detectedSwitchDevice === ""
+    running: root.detectedSwitchDevice === "" && root.tabletModeSetting === "auto"
     repeat: true
     triggeredOnStart: true
     onTriggered: if (!detectProc.running) detectProc.running = true
@@ -385,7 +469,7 @@ Item {
   }
   Timer {
     interval: 1000
-    running: root.switchDevice !== ""
+    running: root.switchDevice !== "" && root.tabletModeSetting === "auto"
     repeat: true
     triggeredOnStart: true
     onTriggered: if (!tabletModeProc.running) tabletModeProc.running = true
