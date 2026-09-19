@@ -42,13 +42,12 @@ BarWidget {
       root.bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
-  // A portrait lock is never wanted once the hardware keyboard is back.
-  // Driven by the service's signal rather than tabletMode here, which also
-  // drops to false when the service is torn down on reload.
-  Connections {
-    target: root.service
-    function onTabletModeExited() { root.setRotationLocked(false) }
-  }
+  // A lock is never wanted in laptop mode. State-based rather than an event,
+  // so it also holds when the widget attaches after the switch was read;
+  // requires a real reading so a missing service doesn't count as laptop.
+  readonly property bool laptopModeConfirmed: root.service !== null
+    && root.service.tabletModeKnown && !root.service.tabletMode
+  onLaptopModeConfirmedChanged: if (root.laptopModeConfirmed) root.setRotationLocked(false)
 
   // The service may be created after this widget, so retry until it exists.
   Timer {

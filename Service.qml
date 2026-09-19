@@ -24,14 +24,19 @@ Item {
     rotationProc.running = !locked
   }
 
-  signal tabletModeExited()
+  // False until the first switch reading, so "laptop mode" can be told
+  // apart from "not polled yet".
+  property bool tabletModeKnown: false
 
-  // The keyboard toggle is hidden outside tablet mode, so the on-screen
-  // keyboard must be put away here or it would be stuck on screen.
-  onTabletModeChanged: {
-    if (root.tabletMode) return
-    root.setOskVisible(false)
-    root.tabletModeExited()
+  function applySwitchReading(tablet) {
+    var first = !root.tabletModeKnown
+    root.tabletModeKnown = true
+    if (tablet === root.tabletMode && !first) return
+    root.tabletMode = tablet
+    // The keyboard toggle is hidden outside tablet mode, so the keyboard
+    // must be put away here. The first reading counts too: the shell may
+    // (re)start while already in laptop mode with the keyboard up.
+    if (!tablet) root.setOskVisible(false)
   }
 
   function toggleOsk() {
@@ -84,7 +89,7 @@ Item {
   Process {
     id: tabletModeProc
     command: ["evtest", "--query", root.tabletSwitchDevice, "EV_SW", "SW_TABLET_MODE"]
-    onExited: function(exitCode) { root.tabletMode = (exitCode === 10) }
+    onExited: function(exitCode) { root.applySwitchReading(exitCode === 10) }
   }
   Timer {
     interval: 1000
