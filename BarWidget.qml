@@ -68,9 +68,8 @@ BarWidget {
     BarIconButton {
       visible: root.tabletMode
       bar: root.bar
-      text: root.oskVisible ? "󰌌" : "󰌈"
+      text: "󰌌"
       tooltipText: root.oskVisible ? "Hide on-screen keyboard" : "Show on-screen keyboard"
-      active: root.oskVisible
       onPressed: if (root.service) root.service.toggleOsk()
     }
 
