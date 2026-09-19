@@ -41,8 +41,8 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
   `thinkpad_acpi` and others), and an accelerometer for rotation.
 - Packages: `squeekboard`, `evtest`, `python-yaml`, `git`, and
   `iio-hyprland-git` from the AUR.
-- Read access to the tablet-mode switch, which normally means being in the
-  `input` group. The installer checks this.
+- Read access to the tablet-mode switch. If you don't have it, the installer
+  offers to fix it (see [Tablet-mode detection](#tablet-mode-detection)).
 
 ## Tested hardware — feedback wanted
 
@@ -106,6 +106,8 @@ have to live elsewhere. The installer:
 5. Clones and patches Omarchy's overlays (below).
 6. Adds two hooks to `~/.config/omarchy/hooks/post-update.d/` that keep the
    layouts and overlay clones in step after `omarchy update`.
+7. Only if you can't read the tablet-mode switch, and only after asking:
+   installs a udev rule with sudo (see [Tablet-mode detection](#tablet-mode-detection)).
 
 Each of these is undone by the uninstaller.
 
@@ -174,8 +176,18 @@ If tablet mode is never detected:
 - Check the installer's "Looking for a tablet-mode switch" output. No device
   means your driver doesn't report the switch; setting `tabletSwitchDevice`
   won't help then.
-- A device that isn't readable means you need to join its group (usually
-  `input`) and log in again.
+- A device that isn't readable is usually owned by the `input` group. Rather
+  than joining that group, which would let any program you run read every
+  keyboard, the installer offers to install
+  `/etc/udev/rules.d/70-fliparchy-tablet-switch.rules`:
+
+  ```
+  SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{ID_INPUT_KEY}!="1", TAG+="uaccess"
+  ```
+
+  It gives the user logged in at the machine read access to switch devices
+  only (tablet mode, lid, headphone jack), never keyboards, and takes effect
+  without logging out. The uninstaller removes it.
 - Rotation is separate: it needs `iio-sensor-proxy` to see your accelerometer
   with the right orientation, which is handled by your distribution's hardware
   database, not Fliparchy.

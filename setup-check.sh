@@ -33,6 +33,6 @@ done
 
 switch=$("$dir/find-tablet-switch.py" 2>/dev/null)
 if [[ -n $switch && ! -r ${switch%%$'\t'*} ]]; then
-  echo "Can't read the tablet-mode switch; join the '$(stat -c %G "${switch%%$'\t'*}")' group."
+  echo "Can't read the tablet-mode switch; the installer can fix this."
 fi
 exit 0

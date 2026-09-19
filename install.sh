@@ -16,6 +16,13 @@ gtk_css="$HOME/.config/gtk-3.0/gtk.css"
 input_lua="$HOME/.config/hypr/input.lua"
 layouts_hook="$HOME/.config/omarchy/hooks/post-update.d/fliparchy-layouts.hook"
 
+# Lets the person logged in at the machine read switch devices (tablet mode,
+# lid, jacks) without joining the `input` group, which would also expose
+# every keyboard. Must sort before systemd's 73-seat-late.rules, which applies
+# uaccess tags.
+udev_rule_file="/etc/udev/rules.d/70-fliparchy-tablet-switch.rules"
+udev_rule='SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{ID_INPUT_KEY}!="1", TAG+="uaccess"'
+
 # Lines added to the user's config. Each block is identified by its last
 # line; the comment lines above it are removed with it on uninstall.
 gtk_block=(
@@ -105,9 +112,51 @@ check_switch() {
   fi
   local path="${device%%$'\t'*}"
   echo "   found ${device#*$'\t'} at $path"
-  if [[ ! -r $path ]]; then
-    warn "$path isn't readable by $USER, so tablet mode can't be detected."
-    warn "Add yourself to its group and log in again: sudo usermod -aG $(stat -c %G "$path") $USER"
+  [[ -r $path ]] && return
+  warn "$path isn't readable by $USER, so tablet mode can't be detected."
+  offer_udev_rule "$path" && return
+  warn "Alternatively, join its group and log in again (this also exposes your keyboards):"
+  warn "  sudo usermod -aG $(stat -c %G "$path") $USER"
+}
+
+# offer_udev_rule <device>: with permission, install the uaccess rule and
+# re-apply it to the device. Succeeds if the device is readable afterwards.
+offer_udev_rule() {
+  local path="$1"
+  echo "   Fliparchy can install a udev rule giving the logged-in user read access"
+  echo "   to switch devices only (tablet mode, lid, headphone jack; never keyboards):"
+  echo "     $udev_rule_file"
+  echo "     $udev_rule"
+  if [[ ! -t 0 ]]; then
+    warn "not running in a terminal, so not asking; re-run install.sh in one to install it."
+    return 1
+  fi
+  local answer
+  read -r -p "   Install it now with sudo? [y/N] " answer
+  [[ $answer == [yY]* ]] || return 1
+
+  printf '# Installed by Fliparchy: read access to switch devices for the logged-in user.\n%s\n' "$udev_rule" |
+    sudo tee "$udev_rule_file" >/dev/null || return 1
+  sudo udevadm control --reload
+  sudo udevadm trigger --action=change "/sys/class/input/$(basename "$path")"
+  sudo udevadm settle
+  if [[ -r $path ]]; then
+    echo "   installed; $path is readable now"
+  else
+    warn "installed the rule, but $path still isn't readable."
+    return 1
+  fi
+}
+
+remove_udev_rule() {
+  [[ -f $udev_rule_file ]] || return 0
+  echo "   $udev_rule_file needs sudo to remove"
+  if sudo rm -f "$udev_rule_file"; then
+    sudo udevadm control --reload
+    sudo udevadm trigger --action=change --subsystem-match=input
+    echo "   removed"
+  else
+    warn "couldn't remove it; delete it yourself: sudo rm $udev_rule_file"
   fi
 }
 
@@ -208,6 +257,9 @@ uninstall() {
   say "Removing config lines"
   remove_block "$gtk_css" "${gtk_block[@]}"
   remove_block "$input_lua" "${input_block[@]}"
+
+  say "Removing the switch access rule"
+  remove_udev_rule
 
   say "Removing generated files and hooks"
   rm -f "$layouts_hook"
