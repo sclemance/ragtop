@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Hyprland
 import Quickshell.Io
 
 // Headless singleton: the shell creates one of these per session, whereas the
@@ -33,6 +34,13 @@ Item {
     root.tabletModeKnown = true
     if (tablet === root.tabletMode && !first) return
     root.tabletMode = tablet
+    // Read by the patched menu clone (menu-clone.sh) to pick its focus mode.
+    modeWriteProc.command = [
+      "sh", "-c",
+      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/fliparchy-mode.tmp" && mv -f "$d/fliparchy-mode.tmp" "$d/fliparchy-mode"',
+      "--", tablet ? "tablet" : "laptop"
+    ]
+    modeWriteProc.running = true
     // The keyboard toggle is hidden outside tablet mode, so the keyboard
     // must be put away here. The first reading counts too: the shell may
     // (re)start while already in laptop mode with the keyboard up.
@@ -126,6 +134,39 @@ Item {
   }
 
   Process { id: oskToggleProc }
+  Process { id: modeWriteProc }
+
+  // Overlays patched by menu-clone.sh. An open overlay covers the bar, so
+  // the keyboard is brought up with it; with a stock overlay taps on the
+  // keyboard would only close it, so this waits for the patch to exist.
+  readonly property var oskOverlays: ["omarchy-menu"]
+  property bool overlaysPatched: false
+  property bool oskShownForOverlay: false
+
+  Process {
+    id: patchCheckProc
+    command: ["sh", "-c", 'grep -q "id: fliparchyMode" "$HOME/.config/omarchy/plugins/$USER.menu/Menu.qml"']
+    running: true
+    onExited: function(exitCode) { root.overlaysPatched = (exitCode === 0) }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      var name = String(event && event.name ? event.name : "")
+      if (name !== "openlayer" && name !== "closelayer") return
+      if (root.oskOverlays.indexOf(String(event.data || "")) === -1) return
+      if (name === "openlayer") {
+        if (root.overlaysPatched && root.tabletMode && !root.oskVisible) {
+          root.oskShownForOverlay = true
+          root.setOskVisible(true)
+        }
+      } else if (root.oskShownForOverlay) {
+        root.oskShownForOverlay = false
+        root.setOskVisible(false)
+      }
+    }
+  }
 
   // Poll the hardware tablet-mode switch (Lenovo Yoga WMI SW_TABLET_MODE).
   Process {
