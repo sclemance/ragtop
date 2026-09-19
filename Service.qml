@@ -91,6 +91,7 @@ Item {
   function setOskVisible(visible) {
     // Shown straight away; the visibility poll corrects it if it didn't take.
     root.oskVisible = visible
+    if (root.keyboardEngine !== "squeekboard") return
     oskToggleProc.command = [
       "gdbus", "call", "--session",
       "--dest", root.oskDest,
@@ -247,6 +248,21 @@ Item {
     onTriggered: if (!root.rotationLocked) rotationProc.running = true
   }
 
+  // Which on-screen keyboard: squeekboard, or Ragtop's own (Keyboard.qml).
+  // Only one runs; squeekboard is stopped while Ragtop's is chosen.
+  readonly property string keyboardEngine: root.settings["keyboard"] === "ragtop" ? "ragtop" : "squeekboard"
+  // Ragtop's keyboard only: modifiers apply to the next key ("oneshot") or
+  // stay on until tapped again ("sticky").
+  readonly property string modifierMode: root.settings["modifiers"] === "sticky" ? "sticky" : "oneshot"
+  onKeyboardEngineChanged: {
+    root.setOskVisible(false)
+    if (root.keyboardEngine === "squeekboard") root.startSqueekboard()
+    else oskProc.running = false
+  }
+  function startSqueekboard() {
+    if (root.keyboardEngine === "squeekboard") oskProc.running = true
+  }
+
   Process {
     id: oskProc
     command: ["squeekboard"]
@@ -255,7 +271,7 @@ Item {
     environment: ({ SQUEEKBOARD_KEYBOARDSDIR: Quickshell.env("HOME") + "/.local/state/ragtop/keyboards" })
     onExited: oskRestart.start()
   }
-  Timer { id: oskRestart; interval: 3000; onTriggered: oskProc.running = true }
+  Timer { id: oskRestart; interval: 3000; onTriggered: root.startSqueekboard() }
 
   // Settings written by the `ragtop` command (Setup › Tablet in the
   // Omarchy menu), as key=value lines; a missing key keeps its default.
@@ -293,6 +309,7 @@ Item {
   // layout-sync.sh fills it from Hyprland's layouts, active one first, and
   // --restore puts back what was there when the "layout-sync" setting is off.
   readonly property bool layoutSyncEnabled: root.settings["layout-sync"] !== "off"
+  property string lastLayoutName: ""
   onSettingsLoadedChanged: layoutSync.restart()
   onLayoutSyncEnabledChanged: layoutSync.restart()
   Process { id: layoutSyncProc }
@@ -353,7 +370,7 @@ Item {
     var first = !root.themeChecked
     root.themeChecked = true
     if (css === "" || css === root.themeCss) {
-      if (first) oskProc.running = true
+      if (first) root.startSqueekboard()
       return
     }
     root.themeCss = css
@@ -379,7 +396,7 @@ Item {
     id: themeWriteProc
     property bool restartOsk: false
     // Stopping squeekboard lets oskProc's own exit handler bring it back.
-    onExited: if (restartOsk) oskProc.running = false; else oskProc.running = true
+    onExited: if (restartOsk) oskProc.running = false; else root.startSqueekboard()
   }
   // Waits for the settings, so squeekboard's first start already has the
   // look they ask for.
@@ -454,7 +471,23 @@ Item {
     target: Hyprland
     function onRawEvent(event) {
       var name = String(event && event.name ? event.name : "")
-      if (name === "activelayout" || name === "configreloaded") layoutSync.restart()
+      // Hyprland also sends activelayout whenever input switches between
+      // keyboards, including every key from squeekboard, fcitx5 and Ragtop's
+      // helper, so only a real keyboard changing layout counts.
+      var layoutChanged = name === "configreloaded"
+      if (name === "activelayout") {
+        var data = String(event.data || "")
+        var device = data.slice(0, data.indexOf(","))
+        var layout = data.slice(data.indexOf(",") + 1)
+        if (!device.startsWith("hl-virtual-keyboard") && layout !== root.lastLayoutName) {
+          root.lastLayoutName = layout
+          layoutChanged = true
+        }
+      }
+      if (layoutChanged) {
+        layoutSync.restart()
+        root.sendKeys("reload")
+      }
       if (name !== "openlayer" && name !== "closelayer") return
       var ns = String(event.data || "")
       if (root.patchedOverlays.indexOf(ns) === -1) return
@@ -536,9 +569,85 @@ Item {
   }
   Timer {
     interval: 1000
-    running: true
+    running: root.keyboardEngine === "squeekboard"
     repeat: true
     triggeredOnStart: true
     onTriggered: if (!oskVisProc.running) oskVisProc.running = true
+  }
+
+  // ---- Ragtop's own keyboard ------------------------------------------
+
+  // Sends its keys: QML can't be a Wayland virtual keyboard itself.
+  Process {
+    id: keyboardHelper
+    command: ["python3", Qt.resolvedUrl("keyboard-helper.py").toString().replace(/^file:\/\//, "")]
+    running: root.keyboardEngine === "ragtop"
+    stdinEnabled: true
+    onExited: if (root.keyboardEngine === "ragtop") keyboardHelperRestart.start()
+  }
+  Timer {
+    id: keyboardHelperRestart
+    interval: 3000
+    onTriggered: keyboardHelper.running = root.keyboardEngine === "ragtop"
+  }
+
+  // One command per line; see keyboard-helper.py.
+  function sendKeys(command) {
+    if (keyboardHelper.running) keyboardHelper.write(command + "\n")
+  }
+
+  function openSettings() {
+    Quickshell.execDetached(["omarchy", "menu", "summon", "setup.tablet"])
+  }
+
+  KeyboardTheme {
+    id: keyboardTheme
+    backgroundOpacity: ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[root.keyboardTransparency]
+  }
+
+  // On the built-in screen, reserving its space like squeekboard. It never
+  // takes keyboard focus, so typing goes to the window underneath. Created
+  // when shown, so it stacks above the handle.
+  PanelWindow {
+    id: keyboardWindow
+    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    visible: root.keyboardEngine === "ragtop" && root.oskVisible
+
+    WlrLayershell.namespace: "ragtop-keyboard"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Auto
+    anchors { bottom: true; left: true; right: true }
+    implicitHeight: keyboard.implicitHeight
+    color: "transparent"
+
+    Keyboard {
+      id: keyboard
+      anchors.fill: parent
+      service: root
+      theme: keyboardTheme
+    }
+  }
+
+  // omarchy-shell ragtop <function>: for keybindings and scripts.
+  IpcHandler {
+    target: "ragtop"
+
+    function showKeyboard(): string { root.setOskVisible(true); return "ok" }
+    function hideKeyboard(): string { root.setOskVisible(false); return "ok" }
+    function toggleKeyboard(): string { root.toggleOsk(); return "ok" }
+    function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
+    // Presses and releases a key of Ragtop's keyboard by name ("q", "shift",
+    // "ctrl", "enter"...), as a tap would. For testing and automation.
+    function tapKey(key: string): string {
+      if (root.keyboardEngine !== "ragtop" || !keyboardWindow.visible) return "keyboard not shown"
+      keyboard.press(key)
+      keyboard.release(key)
+      return "ok"
+    }
+    function keyboardState(): string {
+      return JSON.stringify({ engine: root.keyboardEngine, visible: root.oskVisible,
+                              page: keyboard.page, mods: keyboard.mods, modifierMode: root.modifierMode })
+    }
   }
 }

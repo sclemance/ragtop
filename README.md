@@ -153,6 +153,30 @@ If you've turned on touch typing for them, the keyboard also comes up on its own
 when you open the Omarchy menu, the emoji or clipboard picker, or a password
 prompt, and goes away when you close it.
 
+## Ragtop's own keyboard (preview)
+
+Instead of squeekboard, Ragtop can show a keyboard of its own
+(**Setup › Tablet › Keyboard › Ragtop**, which needs `python-pywayland`). It's
+drawn by the Omarchy shell in your theme's colours and font, follows the
+Transparency setting, and changes with your theme without restarting. Beyond
+squeekboard it has:
+
+- **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C; the Ctrl turns off by
+  itself. Tap a modifier twice to lock it on. Or pick Sticky under
+  Setup › Tablet › Modifier Keys to have them stay on until tapped again.
+- **Any character** your layout can't type (é on a US layout, emoji) still
+  arrives, and keys type correctly whatever your Hyprland layout is.
+- A settings key that opens Setup › Tablet directly.
+
+The key labels are US English for now. `keyboard-helper.py` sends the keys: it
+registers a Wayland virtual keyboard with the same keymap as your physical
+keyboard, which is also why your SUPER shortcuts work from it. The shell runs
+it only while this keyboard is chosen. For keybindings or scripts:
+
+```bash
+omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
+```
+
 ## Omarchy's overlays
 
 Omarchy's menu, pickers and polkit prompt are full-screen surfaces that take
@@ -224,6 +248,8 @@ the gear key on the on-screen keyboard opens directly:
 | Setting | Default | Where |
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hinge), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
+| On-screen keyboard: Squeekboard, or Ragtop's own (preview) | Squeekboard | Setup › Tablet › Keyboard |
+| Ragtop's keyboard: modifiers One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | Keyboard uses your Hyprland keyboard layout | on | Setup › Tablet › Match Layout |
 | Keyboard styled from the Omarchy theme; off leaves squeekboard's own look | on | Setup › Tablet › Auto Theme |
