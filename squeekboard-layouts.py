@@ -9,7 +9,9 @@ SQUEEKBOARD_KEYBOARDSDIR. Layouts missing there fall back to the built-in ones.
 
 Every view gets a half-height modifier row, like squeekboard's own terminal
 layout; terminal layouts, which already have Ctrl/Alt/Shift, just gain Super.
-The row ends with a gear key that opens Fliparchy's settings: it sends
+Squeekboard's own globe key (left of the space bar) becomes a gear key that
+opens Fliparchy's settings. The globe's layout switcher depends on GNOME
+settings Omarchy doesn't use, so it does nothing there. The gear sends
 XF86Tools, which Fliparchy's installer binds in Hyprland to the Omarchy menu's
 Setup › Tablet (squeekboard keys can't run commands themselves).
 The keys are squeekboard modifiers: tap one on, tap a key, tap it off. For
@@ -39,8 +41,9 @@ SKIP_DIRS = {"number", "pin", "emoji"}
 # layouts already have Tab and arrows, so they only take Esc and Super.
 ESC = ("fl_esc", "Esc", {"keysym": "Escape"})
 SUPER = ("fl_super", "Super", {"modifier": "Mod4"})
-# The Nerd Font cog (md-cog), like the icons in the Omarchy menu.
-SETTINGS = ("fl_settings", "\U000f0493", {"keysym": "XF86Tools"})
+# Replaces squeekboard's globe key; the cog is the Nerd Font md-cog, like the
+# icons in the Omarchy menu.
+SETTINGS_KEY = {"keysym": "XF86Tools", "label": "\U000f0493"}
 ROW_KEYS = [
     ESC,
     ("fl_tab", "Tab", {"keysym": "Tab"}),
@@ -52,7 +55,6 @@ ROW_KEYS = [
     ("fl_up", "↑", {"keysym": "Up"}),
     ("fl_down", "↓", {"keysym": "Down"}),
     ("fl_right", "→", {"keysym": "Right"}),
-    SETTINGS,
 ]
 # Squeekboard uses the outline name as the button's CSS class, so this also
 # lets Fliparchy's theme style the keys.
@@ -100,6 +102,16 @@ def existing_modifier(buttons, modifier):
     return None
 
 
+def replace_globe(buttons):
+    """Turn squeekboard's globe key into Fliparchy's gear, in place."""
+    changed = False
+    for name, button in buttons.items():
+        if isinstance(button, dict) and button.get("action") == "show_prefs":
+            buttons[name] = dict(SETTINGS_KEY, outline=button.get("outline", "default"))
+            changed = True
+    return changed
+
+
 def patch(layout):
     outlines = layout.get("outlines")
     views = layout.get("views")
@@ -107,15 +119,15 @@ def patch(layout):
         return False
     buttons = layout.get("buttons") or {}
     layout["buttons"] = buttons
+    globe = replace_globe(buttons)
 
     alt = existing_modifier(buttons, "Alt")
     if alt:
         # Terminal layouts already have a Ctrl/Alt/Shift row: add Esc at its
-        # start (theirs is only on the function-key view), Super after Alt and
-        # the settings key at its end.
+        # start (theirs is only on the function-key view) and Super after Alt.
         alt_outline = (buttons[alt] or {}).get("outline", "default")
         outlines[MOD_OUTLINE] = dict(outlines[alt_outline])
-        for name, label, sends in (ESC, SUPER, SETTINGS):
+        for name, label, sends in (ESC, SUPER):
             buttons[name] = dict(sends, outline=MOD_OUTLINE, label=label)
         changed = False
         for rows in views.values():
@@ -125,17 +137,16 @@ def patch(layout):
                     continue
                 keys.insert(keys.index(alt) + 1, SUPER[0])
                 keys.insert(0, ESC[0])
-                keys.append(SETTINGS[0])
                 rows[i] = " ".join(keys)
                 changed = True
-        return changed
+        return changed or globe
 
     # Everything else: a new half-height row at the top of each view, as wide
     # as the widest existing row.
     width = widest_row(layout) / len(ROW_KEYS)
     height = float(outlines["default"].get("height", 52)) * ROW_HEIGHT_RATIO
     if width <= 0:
-        return False
+        return globe
     outlines[MOD_OUTLINE] = {"width": round(width, 3), "height": round(height, 3)}
     for name, label, sends in ROW_KEYS:
         buttons[name] = dict(sends, outline=MOD_OUTLINE, label=label)

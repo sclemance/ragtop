@@ -264,6 +264,25 @@ Item {
   }
   readonly property bool autoShowEnabled: root.settings["auto-show"] !== "off"
 
+  // Squeekboard takes its layout from a GNOME setting Omarchy leaves empty;
+  // layout-sync.sh fills it from Hyprland's layouts, active one first, and
+  // --restore puts back what was there when the "layout-sync" setting is off.
+  readonly property bool layoutSyncEnabled: root.settings["layout-sync"] !== "off"
+  onSettingsLoadedChanged: layoutSync.restart()
+  onLayoutSyncEnabledChanged: layoutSync.restart()
+  Process { id: layoutSyncProc }
+  Timer {
+    id: layoutSync
+    interval: 300
+    onTriggered: {
+      if (!root.settingsLoaded) return
+      if (layoutSyncProc.running) { layoutSync.restart(); return }
+      layoutSyncProc.command = ["bash", Qt.resolvedUrl("layout-sync.sh").toString().replace(/^file:\/\//, "")]
+        .concat(root.layoutSyncEnabled ? [] : ["--restore"])
+      layoutSyncProc.running = true
+    }
+  }
+
   // In tablet mode, bring the keyboard up when a text field gets focus. The
   // bridge learns about focus from fcitx5, Omarchy's input method, and prints
   // "show"; hiding stays with the user (see fcitx-osk-bridge.py for why).
@@ -410,6 +429,7 @@ Item {
     target: Hyprland
     function onRawEvent(event) {
       var name = String(event && event.name ? event.name : "")
+      if (name === "activelayout" || name === "configreloaded") layoutSync.restart()
       if (name !== "openlayer" && name !== "closelayer") return
       var ns = String(event.data || "")
       if (root.patchedOverlays.indexOf(ns) === -1) return

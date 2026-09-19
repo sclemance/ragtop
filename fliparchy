@@ -8,6 +8,7 @@
 #        fliparchy overlay status
 #        fliparchy auto-show (enabled | enable | disable | toggle)
 #        fliparchy auto-theme (enabled | enable | disable | toggle)
+#        fliparchy layout-sync (enabled | enable | disable | toggle)
 #        fliparchy tablet-mode (get | is <mode> | set <mode>)
 #        fliparchy transparency (get | is <level> | set <level>)
 # where <overlay> is menu, emojis, clipboard or polkit, <mode> is auto
@@ -25,7 +26,7 @@ conf="$HOME/.local/state/fliparchy/install.conf"
 clones="$repo/overlay-clones.sh"
 settings="$HOME/.config/fliparchy/settings.conf"
 
-usage() { sed -n '4,17p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,18p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 label() {
   case "$1" in
@@ -105,6 +106,8 @@ switch() {
     "auto-show off") notify "The keyboard no longer comes up by itself on text fields." ;;
     "auto-theme on") notify "The keyboard now follows your Omarchy theme." ;;
     "auto-theme off") notify "The keyboard now keeps its own look." ;;
+    "layout-sync on") notify "The keyboard now uses your Hyprland keyboard layout." ;;
+    "layout-sync off") notify "The keyboard no longer follows your Hyprland keyboard layout." ;;
   esac
 }
 
@@ -141,7 +144,7 @@ choice_notice() {
 case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "transparency "*) choice transparency auto "${2:-}" "${3:-}" ;;
-  "auto-show "*|"auto-theme "*) switch "$1" "${2:-}" ;;
+  "auto-show "*|"auto-theme "*|"layout-sync "*) switch "$1" "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;

@@ -23,8 +23,10 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
 - **The keys a desktop needs.** Every keyboard layout gets a slim extra row with
   Esc, Tab, Ctrl, Alt, Super, Shift and arrow keys, without making the keyboard
   taller. The modifiers are toggles: tap Super, tap Return, tap Super again to
-  open a terminal. Your Hyprland SUPER shortcuts work from it. A gear key at
-  the end opens Fliparchy's settings.
+  open a terminal. Your Hyprland SUPER shortcuts work from it.
+- **Settings one tap away.** Squeekboard's globe key, left of the space bar,
+  becomes a gear that opens Fliparchy's settings. The globe's layout switcher
+  relies on GNOME settings Omarchy doesn't use, so it did nothing there.
 - **Window shortcuts panel.** Omarchy windows have no title bars and moving or
   resizing them needs SUPER plus a mouse, so a bar button opens a touch panel
   for focus, swap, close, fullscreen, float, split, pop out, resize, move to
@@ -198,16 +200,24 @@ the gear key on the on-screen keyboard opens directly:
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hinge), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
+| Keyboard uses your Hyprland keyboard layout | on | Setup › Tablet › Match Layout |
 | Keyboard styled from the Omarchy theme; off leaves squeekboard's own look | on | Setup › Tablet › Auto Theme |
 | Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › Transparency (only while Auto Theme is on) |
 | Touch typing in each overlay | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
+
+Match Layout exists because squeekboard takes its layout from GNOME's
+`org.gnome.desktop.input-sources` setting, which Omarchy leaves empty (it sets
+layouts in Hyprland), so squeekboard would otherwise always be US English.
+Fliparchy copies Hyprland's `kb_layout` and `kb_variant` there, with the active
+layout first, and updates it when you switch layouts or reload Hyprland.
+Turning it off, or uninstalling, puts back whatever was there before.
 
 Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
 keyboard background, a transparent bar a fully clear one. The keys themselves
 always stay solid. The handle along the bottom follows the bar the same way.
 
 From a terminal, `./fliparchy <setting> ...` does the same as the menu rows:
-`tablet-mode set auto|on|off`, `auto-show toggle`, `auto-theme toggle`
+`tablet-mode set auto|on|off`, `auto-show toggle`, `layout-sync toggle`, `auto-theme toggle`
 (or `enable`, `disable`) and `transparency set auto|opaque|low|medium|high|full`. Settings other than the overlays are kept in
 `~/.config/fliparchy/settings.conf`, and changes apply straight away.
 
@@ -269,7 +279,7 @@ If tablet mode is never detected:
 ```
 
 This removes any overlay clones you turned on, Fliparchy's rows in the
-Omarchy menu, the config lines and hooks the installer added, the generated files, and the plugin itself (or unlinks it, if it was
+Omarchy menu, restores GNOME's keyboard layout setting, the config lines and hooks the installer added, the generated files, and the plugin itself (or unlinks it, if it was
 linked from a checkout).
 
 ## Credits and licensing

@@ -117,6 +117,10 @@ rows = {
         description="Bring the on-screen keyboard up when a text field gets focus in tablet mode",
         checked=f'"{cmd}" auto-show enabled',
         action=f'"{cmd}" auto-show toggle'),
+    "setup.tablet.layout-sync": dict(icon="\U000f05ca", label="Match Layout",
+        description="Give the on-screen keyboard the same layout as your Hyprland keyboard",
+        checked=f'"{cmd}" layout-sync enabled',
+        action=f'"{cmd}" layout-sync toggle'),
     "setup.tablet.auto-theme": dict(icon="\U000f03d8", label="Auto Theme",
         description="Style the on-screen keyboard from the current Omarchy theme",
         checked=f'"{cmd}" auto-theme enabled',
@@ -370,6 +374,9 @@ uninstall() {
   "$repo/overlay-clones.sh" remove | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
 
   say "Removing config lines"
+  if [[ -f $state_dir/input-sources.orig ]]; then
+    "$repo/layout-sync.sh" --restore && echo "   restored GNOME's keyboard layout setting"
+  fi
   menu_block remove
   remove_block "$gtk_css" "${gtk_block[@]}"
   remove_block "$input_lua" "${input_block[@]}"
