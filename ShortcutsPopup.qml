@@ -54,13 +54,14 @@ PopupCard {
   ]
 
   // One process per tap, so quick repeated taps (focus, resize) aren't dropped.
-  Component {
-    id: dispatchProc
+  // Held in a property: children of a PopupCard become its visual content,
+  // which must be Items.
+  property Component dispatchProc: Component {
     Process { onExited: destroy() }
   }
 
   function dispatch(lua) {
-    var proc = dispatchProc.createObject(popup, { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
+    var proc = popup.dispatchProc.createObject(popup, { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
     if (proc) proc.running = true
   }
 
