@@ -154,6 +154,22 @@ Item {
   }
   Timer { id: oskRestart; interval: 3000; onTriggered: oskProc.running = true }
 
+  // In tablet mode, bring the keyboard up when a text field gets focus. The
+  // bridge learns about focus from fcitx5, Omarchy's input method, and prints
+  // "show"; hiding stays with the user (see fcitx-osk-bridge.py for why).
+  Process {
+    id: focusBridgeProc
+    command: ["python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
+    running: root.tabletMode
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (line === "show" && root.tabletMode && !root.oskVisible) root.setOskVisible(true)
+      }
+    }
+    onExited: if (root.tabletMode) focusBridgeRestart.start()
+  }
+  Timer { id: focusBridgeRestart; interval: 5000; onTriggered: focusBridgeProc.running = root.tabletMode }
+
   // Squeekboard only reads GTK CSS at startup. ~/.config/gtk-3.0/gtk.css
   // imports the file written here, so a theme or font change means rewrite
   // then restart. The first write happens before squeekboard's first start.

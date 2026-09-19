@@ -92,6 +92,7 @@ check_deps() {
   command -v evtest >/dev/null || { missing+=(evtest); hints+=(evtest); }
   command -v git >/dev/null || { missing+=(git); hints+=(git); }
   python3 -c "import yaml" 2>/dev/null || { missing+=(python-yaml); hints+=(python-yaml); }
+  python3 -c "import gi" 2>/dev/null || { missing+=(python-gobject); hints+=(python-gobject); }
   for cmd in omarchy omarchy-shell hyprctl gdbus; do
     command -v "$cmd" >/dev/null || die "$cmd not found; Fliparchy needs Omarchy 4 with Hyprland."
   done

@@ -39,8 +39,9 @@ the Omarchy menu) work by touch. Fold it back and everything returns to normal.
 - A convertible whose kernel driver reports a tablet-mode switch
   (`lenovo-ymc`, `intel-vbtn`, `intel-hid`, `asus-wmi`, `hp-wmi`,
   `thinkpad_acpi` and others), and an accelerometer for rotation.
-- Packages: `squeekboard`, `evtest`, `python-yaml`, `git`, and
-  `iio-hyprland-git` from the AUR.
+- Packages: `squeekboard`, `evtest`, `python-yaml`, `python-gobject`, `git`,
+  and `iio-hyprland-git` from the AUR. Omarchy's `fcitx5` is used to notice
+  text fields (see [Using it](#using-it)).
 - Read access to the tablet-mode switch. If you don't have it, the installer
   offers to fix it (see [Tablet-mode detection](#tablet-mode-detection)).
 
@@ -124,6 +125,15 @@ A slim handle, coloured like the bar, runs along the bottom of the screen in
 tablet mode. Tap it to show the keyboard (it shows a wide ^) and tap it again
 to hide it (a wide v). It reserves its own space, so windows never sit under
 it; with the bar at the bottom, the handle sits just above the bar.
+
+The keyboard also comes up on its own when you tap into a text field, or
+switch to a window that takes typing, like a terminal. Fliparchy learns about
+this from fcitx5, the input method Omarchy already runs, by registering as its
+on-screen keyboard while in tablet mode. It doesn't hide the keyboard when you
+leave a text field: fcitx5's "hide" also fires on every keystroke from the
+on-screen keyboard, so the two can't be told apart. Use the handle.
+Apps that don't talk to an input method (some Electron and Chromium apps)
+won't bring it up.
 
 The keyboard also comes up on its own when you open the Omarchy menu, the emoji
 or clipboard picker, or a password prompt, and goes away when you close it.
