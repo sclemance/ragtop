@@ -68,7 +68,7 @@ def fetch_source(version):
     if not (dest / "data/keyboards").is_dir():
         CACHE.mkdir(parents=True, exist_ok=True)
         shutil.rmtree(dest, ignore_errors=True)
-        subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", f"v{version}", UPSTREAM, str(dest)], check=True)
+        subprocess.run(["git", "-c", "advice.detachedHead=false", "clone", "-q", "--depth", "1", "--branch", f"v{version}", UPSTREAM, str(dest)], check=True)
     return dest
 
 
