@@ -6,15 +6,21 @@ Registers as fcitx5's on-screen keyboard (its "DBus Virtual Keyboard"
 addon) and prints "show" each time fcitx5 asks for it, which it does when a
 text field gains focus. Only runs while in tablet mode.
 
-fcitx5 counts every key it sees, including squeekboard's, as a physical
-keyboard, and then stops asking and sends a "hide". So every "hide" re-arms
+fcitx5 counts every key it sees, including the on-screen keyboard's, as a
+physical keyboard, and then stops asking and sends a "hide". So every "hide" re-arms
 it, and a "hide" can't be told apart from a text field losing focus; it's
 ignored, and hiding is left to the user.
 """
 
+import ctypes
+import signal
 import sys
 
 from gi.repository import Gio, GLib
+
+# End with the shell that started us. Nothing else would tell us it's gone
+# if it exits uncleanly, and a leftover copy would keep running unseen.
+ctypes.CDLL(None).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
 
 NAME = "org.fcitx.Fcitx5.VirtualKeyboard"
 PATH = "/org/fcitx/virtualkeyboard/impanel"

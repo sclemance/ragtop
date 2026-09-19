@@ -12,21 +12,11 @@ if [[ ! -f $conf ]]; then
   exit 0
 fi
 
-for cmd in squeekboard git; do
-  command -v "$cmd" >/dev/null || echo "Package missing: $cmd"
-done
+command -v git >/dev/null || echo "Package missing: git"
 command -v monitor-sensor >/dev/null || echo "Package missing: iio-sensor-proxy"
-python3 -c "import yaml" 2>/dev/null || echo "Package missing: python-yaml"
+python3 -c "import pywayland" 2>/dev/null || echo "Package missing: python-pywayland"
 python3 -c "import gi" 2>/dev/null || echo "Package missing: python-gobject"
 
-grep -qsF "$state/squeekboard.css" "$HOME/.config/gtk-3.0/gtk.css" ||
-  echo "Keyboard theme isn't imported in gtk.css."
-grep -qs 'hl-virtual-keyboard-squeekboard.*resolve_binds_by_sym' "$HOME/.config/hypr/input.lua" ||
-  echo "SUPER shortcuts from the keyboard aren't enabled in input.lua."
-grep -qs 'o.bind("XF86Tools", "Ragtop settings"' "$HOME/.config/hypr/bindings.lua" ||
-  echo "The keyboard's gear key isn't bound in bindings.lua."
-compgen -G "$state/keyboards/*.yaml" >/dev/null ||
-  echo "Keyboard layouts haven't been generated."
 grep -qsF "// Ragtop: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ||
   echo "Ragtop's settings aren't in the Omarchy menu."
 

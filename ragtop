@@ -7,17 +7,13 @@
 #        ragtop overlay toggle <overlay>
 #        ragtop overlay status
 #        ragtop auto-show (enabled | enable | disable | toggle)
-#        ragtop auto-theme (enabled | enable | disable | toggle)
-#        ragtop layout-sync (enabled | enable | disable | toggle)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop transparency (get | is <level> | set <level>)
-#        ragtop keyboard (get | is <keyboard> | set <keyboard>)
 #        ragtop modifiers (get | is <mode> | set <mode>)
 # where <overlay> is menu, emojis, clipboard, polkit or lock, <mode> is auto
-# (follow the hinge's switch), on or off, and <level> is auto (match
-# Omarchy's bar), opaque, low, medium, high or full. <keyboard> is squeekboard
-# or ragtop (Ragtop's own), and the modifiers <mode> (Ragtop's keyboard
-# only) is oneshot or sticky.
+# (follow the hinge's switch), on or off, <level> is auto (match Omarchy's
+# bar), opaque, low, medium, high or full, and the modifiers <mode> is
+# oneshot or sticky.
 #
 # Touch typing in an overlay means replacing Omarchy's own with a patched
 # clone (see overlay-clones.sh), so each one is off until the user turns it on.
@@ -30,7 +26,7 @@ conf="$HOME/.local/state/ragtop/install.conf"
 clones="$repo/overlay-clones.sh"
 settings="$HOME/.config/ragtop/settings.conf"
 
-usage() { sed -n '4,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 label() {
   case "$1" in
@@ -117,10 +113,6 @@ switch() {
   case "$key $value" in
     "auto-show on") notify "The keyboard now comes up by itself on text fields." ;;
     "auto-show off") notify "The keyboard no longer comes up by itself on text fields." ;;
-    "auto-theme on") notify "The keyboard now follows your Omarchy theme." ;;
-    "auto-theme off") notify "The keyboard now keeps its own look." ;;
-    "layout-sync on") notify "The keyboard now uses your Hyprland keyboard layout." ;;
-    "layout-sync off") notify "The keyboard no longer follows your Hyprland keyboard layout." ;;
   esac
 }
 
@@ -150,8 +142,6 @@ choice_notice() {
     "transparency opaque") echo "The keyboard's background is solid." ;;
     "transparency low"|"transparency medium"|"transparency high") echo "The keyboard's background is now $2 transparency." ;;
     "transparency full") echo "The keyboard's background is fully transparent." ;;
-    "keyboard squeekboard") echo "The on-screen keyboard is squeekboard." ;;
-    "keyboard ragtop") echo "The on-screen keyboard is Ragtop's own." ;;
     "modifiers oneshot") echo "Ctrl, Alt, Super and Shift now apply to the next key; tap twice to lock." ;;
     "modifiers sticky") echo "Ctrl, Alt, Super and Shift now stay on until tapped again." ;;
     *) return 1 ;;
@@ -161,15 +151,8 @@ choice_notice() {
 case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "transparency "*) choice transparency auto "${2:-}" "${3:-}" ;;
-  "keyboard "*)
-    if [[ ${2:-} == set && ${3:-} == ragtop ]] && ! python3 -c "import pywayland" 2>/dev/null; then
-      notify "Ragtop's keyboard needs python-pywayland: sudo pacman -S python-pywayland"
-      exit 1
-    fi
-    choice keyboard squeekboard "${2:-}" "${3:-}"
-    ;;
   "modifiers "*) choice modifiers oneshot "${2:-}" "${3:-}" ;;
-  "auto-show "*|"auto-theme "*|"layout-sync "*) switch "$1" "${2:-}" ;;
+  "auto-show "*) switch "$1" "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;

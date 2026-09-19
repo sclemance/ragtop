@@ -2,8 +2,8 @@ import QtQuick
 import qs.Commons
 
 // On-screen keyboard for Omarchy's lock screen in tablet mode. The lock
-// screen is a session lock, which hides every other surface, squeekboard
-// included, so Ragtop's patched clone of it (overlay-clones.sh) loads this
+// screen is a session lock, which hides every other surface, the on-screen
+// keyboard included, so Ragtop's patched clone of it (overlay-clones.sh) loads this
 // inside it and sets `view` to its LockView. Keys edit the password through
 // LockView's own signals, the path typing takes, so checking it is untouched.
 Item {

@@ -17,17 +17,18 @@ everything returns to normal.
 - **Auto-rotation with a lock.** Screen and touch input rotate with the device
   (via `iio-sensor-proxy`). A bar button locks the orientation; the lock is
   remembered, and released automatically when you fold back to laptop mode.
-- **An on-screen keyboard that fits Omarchy.** [Squeekboard](https://gitlab.gnome.org/World/Phosh/squeekboard),
-  styled from your current Omarchy theme's colours and font, restyled
-  automatically when you switch themes. Its background can be see-through,
-  matching the bar's transparency by default.
-- **The keys a desktop needs.** Every keyboard layout gets a slim extra row with
-  Esc, Tab, Ctrl, Alt, Super, Shift and arrow keys, without making the keyboard
-  taller. The modifiers are toggles: tap Super, tap Return, tap Super again to
-  open a terminal. Your Hyprland SUPER shortcuts work from it.
-- **Settings one tap away.** Squeekboard's globe key, left of the space bar,
-  becomes a gear that opens Ragtop's settings. The globe's layout switcher
-  relies on GNOME settings Omarchy doesn't use, so it did nothing there.
+- **An on-screen keyboard that fits Omarchy.** Drawn by the Omarchy shell in
+  your theme's colours and font, and restyled the moment you switch themes. Its
+  background can be see-through, matching the bar's transparency by default.
+- **The keys a desktop needs.** A slim extra row has Esc, Tab, Ctrl, Alt, Super
+  and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C. Your
+  Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
+  terminal.
+- **Your layout, any character.** The letter keys follow your active Hyprland
+  layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), and characters your layout
+  can't type (é on a US layout, emoji) still arrive.
+- **Settings one tap away.** A gear key next to the space bar opens Ragtop's
+  settings.
 - **Window shortcuts panel.** Omarchy windows have no title bars and moving or
   resizing them needs SUPER plus a mouse, so a bar button opens a touch panel
   for focus, swap, close, fullscreen, float, split, pop out, resize, move to
@@ -49,9 +50,10 @@ everything returns to normal.
 - A convertible whose kernel driver reports a tablet-mode switch
   (`lenovo-ymc`, `intel-vbtn`, `intel-hid`, `asus-wmi`, `hp-wmi`,
   `thinkpad_acpi` and others), and an accelerometer for rotation.
-- Packages, all from the official repositories: `squeekboard`,
-  `iio-sensor-proxy`, `python-yaml`, `python-gobject` and `git`. Omarchy's `fcitx5` is used to notice
-  text fields (see [Using it](#using-it)).
+- Two packages Omarchy doesn't install, both from the official repositories:
+  `iio-sensor-proxy` (rotation) and `python-pywayland` (the keyboard). Ragtop
+  also uses `python-gobject`, `git` and `fcitx5`, which come with Omarchy;
+  fcitx5 is how it notices text fields (see [Using it](#using-it)).
 - Read access to the tablet-mode switch. If you don't have it, the installer
   offers to fix it (see [Tablet-mode detection](#tablet-mode-detection)).
 
@@ -104,26 +106,15 @@ Ragtop keeps as much as possible inside its own folder, but a few things
 have to live elsewhere. The installer:
 
 1. Links the plugin into `~/.config/omarchy/plugins/` and adds it to the bar.
-2. Adds one `@import` line to `~/.config/gtk-3.0/gtk.css` for the keyboard's
-   theme. It only matches squeekboard's own widgets, so no other app is
-   affected.
-3. Adds one line to `~/.config/hypr/input.lua` so Hyprland matches keys from
-   squeekboard's virtual keyboard by symbol (`resolve_binds_by_sym`). Without
-   it, SUPER shortcuts typed on the on-screen keyboard do nothing.
-4. Adds one keybinding to `~/.config/hypr/bindings.lua` for the keyboard's gear
-   key. Squeekboard keys can't run commands, so the gear sends the otherwise
-   unused `XF86Tools` key, and the binding opens Setup › Tablet.
-5. Generates keyboard layouts into `~/.local/state/ragtop/keyboards` (see
-   [Licensing](#credits-and-licensing)).
-6. Adds Ragtop's settings to the Omarchy menu, as a marked block at the
+2. Adds Ragtop's settings to the Omarchy menu, as a marked block at the
    top of `~/.config/omarchy/extensions/omarchy-menu.jsonc`.
-7. Adds a hook to `~/.config/omarchy/hooks/post-update.d/` that regenerates
-   the layouts after `omarchy update`.
-8. Only if you can't read the tablet-mode switch, and only after asking:
+3. Only if you can't read the tablet-mode switch, and only after asking:
    installs a udev rule, asking for your password (see [Tablet-mode detection](#tablet-mode-detection)).
 
 Each of these is undone by the uninstaller. The installer doesn't touch
-Omarchy's overlays; that's up to you (below).
+Omarchy's overlays; that's up to you (below). While running, Ragtop keeps
+generated files in `~/.local/state/ragtop` and its settings in
+`~/.config/ragtop`.
 
 ## Using it
 
@@ -153,28 +144,25 @@ If you've turned on touch typing for them, the keyboard also comes up on its own
 when you open the Omarchy menu, the emoji or clipboard picker, or a password
 prompt, and goes away when you close it.
 
-## Ragtop's own keyboard (preview)
+## The keyboard
 
-Instead of squeekboard, Ragtop can show a keyboard of its own
-(**Setup › Tablet › Keyboard › Ragtop**, which needs `python-pywayland`). It's
-drawn by the Omarchy shell in your theme's colours and font, follows the
-Transparency setting, and changes with your theme without restarting. Beyond
-squeekboard it has:
+Ragtop's keyboard is drawn by the Omarchy shell, so it follows your theme's
+colours and font, and the Transparency setting, without restarting. It has:
 
+- **An extra row** of Esc, Tab, Ctrl, Alt, Super and the arrow keys. Held
+  arrows and Backspace repeat.
 - **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C; the Ctrl turns off by
   itself. Tap a modifier twice to lock it on. Or pick Sticky under
   Setup › Tablet › Modifier Keys to have them stay on until tapped again.
-- **Any character** your layout can't type (é on a US layout, emoji) still
-  arrives, and keys type correctly whatever your Hyprland layout is.
-- **Your layout's letters**: the letter keys follow the active Hyprland
-  layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), and the space bar shows its
-  name.
+- **Your layout's letters:** the letter keys follow the active Hyprland
+  layout, and the space bar shows its name.
+- **Any character** your layout can't type still arrives, and every key types
+  what it shows whatever your Hyprland layout is.
 - A settings key that opens Setup › Tablet directly.
 
-`keyboard-helper.py` sends the keys: it
-registers a Wayland virtual keyboard with the same keymap as your physical
-keyboard, which is also why your SUPER shortcuts work from it. The shell runs
-it only while this keyboard is chosen. For keybindings or scripts:
+`keyboard-helper.py` sends the keys: it registers a Wayland virtual keyboard
+with the same keymap as your physical keyboard, which is also why your SUPER
+shortcuts work from it. For keybindings or scripts:
 
 ```bash
 omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
@@ -251,28 +239,20 @@ the gear key on the on-screen keyboard opens directly:
 | Setting | Default | Where |
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hinge), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
-| On-screen keyboard: Squeekboard, or Ragtop's own (preview) | Squeekboard | Setup › Tablet › Keyboard |
-| Ragtop's keyboard: modifiers One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
+| Keyboard modifiers: One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
-| Keyboard uses your Hyprland keyboard layout | on | Setup › Tablet › Match Layout |
-| Keyboard styled from the Omarchy theme; off leaves squeekboard's own look | on | Setup › Tablet › Auto Theme |
-| Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › Transparency (only while Auto Theme is on) |
+| Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › Transparency |
 | Touch typing in each overlay, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
-
-Match Layout exists because squeekboard takes its layout from GNOME's
-`org.gnome.desktop.input-sources` setting, which Omarchy leaves empty (it sets
-layouts in Hyprland), so squeekboard would otherwise always be US English.
-Ragtop copies Hyprland's `kb_layout` and `kb_variant` there, with the active
-layout first, and updates it when you switch layouts or reload Hyprland.
-Turning it off, or uninstalling, puts back whatever was there before.
 
 Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
 keyboard background, a transparent bar a fully clear one. The keys themselves
 always stay solid. The handle along the bottom follows the bar the same way.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
-`tablet-mode set auto|on|off`, `auto-show toggle`, `layout-sync toggle`, `auto-theme toggle`
-(or `enable`, `disable`) and `transparency set auto|opaque|low|medium|high|full`. Settings other than the overlays are kept in
+`tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
+`modifiers set oneshot|sticky` and
+`transparency set auto|opaque|low|medium|high|full`. Settings other than the
+overlays are kept in
 `~/.config/ragtop/settings.conf`, and changes apply straight away.
 
 A couple more live in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
@@ -285,7 +265,8 @@ A couple more live in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
 ## Tablet-mode detection
 
 Ragtop picks the input device that advertises the standard tablet-mode
-switch (`SW_TABLET_MODE`) and polls it once a second. If none exists yet, it
+switch (`SW_TABLET_MODE`) and watches it, so a fold registers immediately.
+If none exists yet, it
 keeps looking every 10 seconds, which covers keyboards that attach later.
 
 If your device has no usable switch, or you want the touch controls with the
@@ -320,11 +301,8 @@ If tablet mode is never detected:
   rescanPlugins`) can keep running previously compiled code.
 - **The bar icons are missing.** Look for a load error:
   `quickshell log -r '*=true' /run/user/$UID/quickshell/by-pid/$(pgrep -f 'quickshell.*omarchy/shell')/log.qslog | grep 'sclemance.ragtop failed'`
-- **The extra keyboard row is missing after a squeekboard upgrade.** Run
-  `./squeekboard-layouts.py`. The post-update hook normally does this.
-- **SUPER shortcuts don't work from the on-screen keyboard.** Check the
-  `resolve_binds_by_sym` line is in `~/.config/hypr/input.lua`, then
-  `hyprctl reload`.
+- **The keyboard doesn't type.** Check that `python-pywayland` is installed:
+  the setup notification says so if it isn't.
 
 ## Uninstall
 
@@ -332,18 +310,17 @@ If tablet mode is never detected:
 ./install.sh uninstall
 ```
 
-This removes any overlay clones you turned on, Ragtop's rows in the
-Omarchy menu, restores GNOME's keyboard layout setting, the config lines and hooks the installer added, the generated files, and the plugin itself (or unlinks it, if it was
-linked from a checkout).
+This removes any overlay clones you turned on, Ragtop's rows in the Omarchy
+menu, the switch access rule, Ragtop's settings and generated files, and the
+plugin itself (or unlinks it, if it was linked from a checkout).
 
 ## Credits and licensing
 
 - The on-demand focus fix for Omarchy's overlays follows
   [Gimbal](https://github.com/mechanicsunlocked/gimbal) (MIT), a tablet mode
   for the Framework Laptop 12.
-- Squeekboard's keyboard layouts are GPL-3.0-or-later. Ragtop doesn't ship
-  modified copies: `squeekboard-layouts.py` downloads the layouts for your
-  installed squeekboard version and adds the extra row locally.
+- `protocols/virtual-keyboard-unstable-v1.xml` is the Wayland virtual keyboard
+  protocol (MIT). Its Python bindings are generated on your machine on first run.
 - Clones of Omarchy's overlays are made on your machine from Omarchy's
   MIT-licensed source.
 - Ragtop itself is released under the [MIT License](LICENSE).

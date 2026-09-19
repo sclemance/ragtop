@@ -1,7 +1,6 @@
 import QtQuick
 
-// Ragtop's own on-screen keyboard, the alternative to squeekboard
-// (Setup › Tablet › Keyboard). It draws the keys and decides what each tap
+// Ragtop's on-screen keyboard. It draws the keys and decides what each tap
 // means; keyboard-helper.py, run by the service, turns that into key events.
 // The letter keys are those of the active Hyprland layout, as the helper
 // reads them from the keymap (US until it reports). Characters go by what

@@ -7,8 +7,10 @@ the state (EVIOCGSW) at start and whenever events were dropped. Exits
 non-zero if the device can't be read or goes away.
 """
 
+import ctypes
 import fcntl
 import os
+import signal
 import struct
 import sys
 
@@ -34,6 +36,9 @@ def report(tablet):
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
+    # End with the shell that started us: otherwise a leftover copy would
+    # only notice at the next fold, when writing fails.
+    ctypes.CDLL(None).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
     try:
         fd = os.open(sys.argv[1], os.O_RDONLY)
         tablet = query(fd)
