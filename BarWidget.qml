@@ -70,6 +70,7 @@ BarWidget {
       bar: root.bar
       text: "󰌌"
       tooltipText: root.oskVisible ? "Hide on-screen keyboard" : "Show on-screen keyboard"
+      active: root.oskVisible
       onPressed: if (root.service) root.service.toggleOsk()
     }
 
