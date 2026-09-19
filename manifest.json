@@ -15,10 +15,10 @@
     "defaultSection": "right",
     "defaults": {
       "rotationLocked": false,
-      "tabletSwitchDevice": "/dev/input/by-path/platform-PNP0C14:07-event"
+      "tabletSwitchDevice": ""
     },
     "schema": [
-      { "key": "tabletSwitchDevice", "type": "string", "label": "Tablet-mode switch device" }
+      { "key": "tabletSwitchDevice", "type": "string", "label": "Tablet-mode switch device (blank to auto-detect)" }
     ]
   }
 }

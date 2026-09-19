@@ -9,7 +9,10 @@ import Quickshell.Io
 Item {
   id: root
 
-  property string tabletSwitchDevice: "/dev/input/by-path/platform-PNP0C14:07-event"
+  // Override from the widget's settings; blank means auto-detect.
+  property string tabletSwitchDevice: ""
+  property string detectedSwitchDevice: ""
+  readonly property string switchDevice: root.tabletSwitchDevice !== "" ? root.tabletSwitchDevice : root.detectedSwitchDevice
   property bool rotationLocked: false
   property bool tabletMode: false
   property bool oskVisible: false
@@ -18,7 +21,7 @@ Item {
   readonly property string oskPath: "/sm/puri/OSK0"
 
   function configure(device, locked) {
-    if (device) root.tabletSwitchDevice = device
+    root.tabletSwitchDevice = device || ""
     root.rotationLocked = locked
     configureFallback.stop()
     // Locking just means "stop the rotation daemon", which freezes the
@@ -184,15 +187,46 @@ Item {
     }
   }
 
-  // Poll the hardware tablet-mode switch (Lenovo Yoga WMI SW_TABLET_MODE).
+  // Find the device reporting SW_TABLET_MODE, whichever driver provides it
+  // (lenovo-ymc, intel-vbtn, intel-hid, asus-wmi, hp-wmi, thinkpad_acpi...):
+  // the one whose switch bitmask ("B: SW=", last word is bits 0-63) has bit 1.
+  // Retried while none is found, e.g. a detachable's keyboard not yet attached.
+  function findSwitchDevice(devices) {
+    var blocks = devices.split(/\n\s*\n/)
+    for (var i = 0; i < blocks.length; i++) {
+      var handler = /^H: Handlers=.*\b(event\d+)\b/m.exec(blocks[i])
+      var sw = /^B: SW=([0-9a-fA-F ]+)$/m.exec(blocks[i])
+      if (!handler || !sw) continue
+      var words = sw[1].trim().split(/\s+/)
+      if (parseInt(words[words.length - 1], 16) & 2) return "/dev/input/" + handler[1]
+    }
+    return ""
+  }
+
+  Process {
+    id: detectProc
+    command: ["cat", "/proc/bus/input/devices"]
+    stdout: StdioCollector {
+      onStreamFinished: root.detectedSwitchDevice = root.findSwitchDevice(text)
+    }
+  }
+  Timer {
+    interval: 10000
+    running: root.detectedSwitchDevice === ""
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: if (!detectProc.running) detectProc.running = true
+  }
+
+  // Poll the tablet-mode switch.
   Process {
     id: tabletModeProc
-    command: ["evtest", "--query", root.tabletSwitchDevice, "EV_SW", "SW_TABLET_MODE"]
+    command: ["evtest", "--query", root.switchDevice, "EV_SW", "SW_TABLET_MODE"]
     onExited: function(exitCode) { root.applySwitchReading(exitCode === 10) }
   }
   Timer {
     interval: 1000
-    running: true
+    running: root.switchDevice !== ""
     repeat: true
     triggeredOnStart: true
     onTriggered: if (!tabletModeProc.running) tabletModeProc.running = true
