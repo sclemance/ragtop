@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "sclemance.tablet-mode",
-  "name": "Tablet Mode",
+  "id": "sclemance.fliparchy",
+  "name": "Fliparchy",
   "version": "1.0.0",
   "author": "sclemance",
   "description": "Convertible tablet support: keeps iio-hyprland (auto screen/touch rotation) and squeekboard (on-screen keyboard) running, and shows a keyboard toggle icon only while the hardware tablet-mode switch is engaged.",
