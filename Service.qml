@@ -136,18 +136,24 @@ Item {
   Process { id: oskToggleProc }
   Process { id: modeWriteProc }
 
-  // Overlays patched by menu-clone.sh. An open overlay covers the bar, so
-  // the keyboard is brought up with it; with a stock overlay taps on the
-  // keyboard would only close it, so this waits for the patch to exist.
-  readonly property var oskOverlays: ["omarchy-menu"]
-  property bool overlaysPatched: false
+  // Namespaces of overlays patched by overlay-clones.sh. An open overlay
+  // covers the bar, so the keyboard is brought up with it; with a stock
+  // overlay taps on the keyboard would only close it, so only patched ones
+  // count.
+  property var patchedOverlays: []
+  property var openOverlays: []
   property bool oskShownForOverlay: false
 
   Process {
     id: patchCheckProc
-    command: ["sh", "-c", 'grep -q "id: fliparchyMode" "$HOME/.config/omarchy/plugins/$USER.menu/Menu.qml"']
+    command: ["sh", "-c",
+      'for p in menu:Menu emojis:Emojis clipboard:Clipboard; do ' +
+      'grep -qs "id: fliparchyMode" "$HOME/.config/omarchy/plugins/$USER.${p%%:*}/${p#*:}.qml" && echo "omarchy-${p%%:*}"; ' +
+      'done; true']
     running: true
-    onExited: function(exitCode) { root.overlaysPatched = (exitCode === 0) }
+    stdout: StdioCollector {
+      onStreamFinished: root.patchedOverlays = text.split("\n").filter(function(s) { return s !== "" })
+    }
   }
 
   Connections {
@@ -155,13 +161,19 @@ Item {
     function onRawEvent(event) {
       var name = String(event && event.name ? event.name : "")
       if (name !== "openlayer" && name !== "closelayer") return
-      if (root.oskOverlays.indexOf(String(event.data || "")) === -1) return
+      var ns = String(event.data || "")
+      if (root.patchedOverlays.indexOf(ns) === -1) return
+      // Tracked as a set so hopping from one overlay to another (menu to
+      // emoji picker) doesn't hide the keyboard when the first one closes.
+      var open = root.openOverlays.filter(function(o) { return o !== ns })
+      if (name === "openlayer") open.push(ns)
+      root.openOverlays = open
       if (name === "openlayer") {
-        if (root.overlaysPatched && root.tabletMode && !root.oskVisible) {
+        if (open.length === 1 && root.tabletMode && !root.oskVisible) {
           root.oskShownForOverlay = true
           root.setOskVisible(true)
         }
-      } else if (root.oskShownForOverlay) {
+      } else if (open.length === 0 && root.oskShownForOverlay) {
         root.oskShownForOverlay = false
         root.setOskVisible(false)
       }
