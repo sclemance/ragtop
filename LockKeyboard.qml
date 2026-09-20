@@ -231,11 +231,23 @@ Item {
       ["letters", "space", ",", "enter"]
     ]
   })
+  // The key back to the letters page names the script rather than a
+  // language: the layout's own first three letters by code point, A B C on a
+  // Latin layout and А Б В on a Cyrillic one.
+  readonly property string lettersLabel: {
+    var all = []
+    root.layoutRows.forEach(function(row) {
+      row.forEach(function(k) { if (all.indexOf(k[0]) === -1) all.push(k[0]) })
+    })
+    all.sort()
+    return all.length >= 3 ? all.slice(0, 3).join("").toUpperCase() : "ABC"
+  }
+
   // Shift, Backspace and Enter carry a drawn icon (LockKeyIcon.qml), so
   // they have no text label.
   readonly property var labels: ({
     "shift": "", "backspace": "", "enter": "",
-    "symbols": "?123", "more": "#+=", "letters": "ABC"
+    "symbols": "?123", "more": "#+=", "letters": root.lettersLabel
   })
   readonly property var widths: ({
     "shift": 1.5, "backspace": 1.5, "symbols": 1.5, "more": 1.5, "letters": 1.5,

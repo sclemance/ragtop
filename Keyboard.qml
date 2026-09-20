@@ -83,11 +83,26 @@ Item {
       ["letters", "settings", "space", ",", "enter"]
     ]
   })
+  // The key back to the letters page names the script, not a language: the
+  // layout's own first three letters, so A B C on a Latin layout and А Б В
+  // on a Cyrillic one. Sorting by code point gets there without a table —
+  // each script's letters are a contiguous run, and the ASCII ones sort
+  // ahead of the accented letters a Latin layout adds. Scripts without case
+  // are unchanged by toUpperCase, which is what they want.
+  readonly property string lettersLabel: {
+    var all = []
+    root.layoutRows.forEach(function(row) {
+      row.forEach(function(k) { if (all.indexOf(k[0]) === -1) all.push(k[0]) })
+    })
+    all.sort()
+    return all.length >= 3 ? all.slice(0, 3).join("").toUpperCase() : "ABC"
+  }
+
   readonly property var labels: ({
     "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super",
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
-    "symbols": "?123", "more": "#+=", "letters": "ABC", "settings": ""
+    "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": ""
   })
   readonly property var widths: ({
     "shift": 1.5, "backspace": 1.5, "symbols": 1.5, "more": 1.5, "letters": 1.5,
