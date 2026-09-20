@@ -19,8 +19,9 @@ commands on stdin, one per line:
   quit
 
 At startup and after each reload it also prints "labels <json>": the active
-layout's name and the characters on its letter keys, row by row, as
-[normal, shifted] pairs, for the keyboard to draw.
+layout's name, the characters on its letter keys, row by row, as
+[normal, shifted] pairs, and the symbols its keys carry, for the keyboard to
+draw.
 
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
 for each command.
@@ -35,6 +36,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Python bindings for the protocols, generated on first run from the XML.
@@ -120,6 +122,13 @@ class XkbLabels:
 
     # The letter rows of a physical keyboard, by xkb key name.
     ROWS = (("AD", 12), ("AC", 11), ("AB", 10))
+    # Every key that carries a printed character, for the symbols below: the
+    # number row and the letter rows, plus the odd ones out around them.
+    ALL_KEYS = (("AE", 12), ("AD", 12), ("AC", 11), ("AB", 10),
+                ("TLDE", 0), ("BKSL", 0), ("LSGT", 0))
+    # Currency that says nothing about the layout: on the keyboard's pages
+    # already, or a generic placeholder nearly every layout carries.
+    COMMON_CURRENCY = "$€£¥¢¤"
 
     def letter_rows(self, keymap_text, group):
         """{"name": layout name, "rows": [[[normal, shifted], ...], ...]}, with
@@ -149,8 +158,44 @@ class XkbLabels:
                     row.append([normal, char(code, 1) or normal.upper()])
             rows.append(row)
         name = lib.xkb_keymap_layout_get_name(keymap, group)
+        symbols = self._symbols(keymap, group, char)
         lib.xkb_keymap_unref(keymap)
-        return {"name": name.decode() if name else "", "rows": rows}
+        return {"name": name.decode() if name else "", "rows": rows, "symbols": symbols}
+
+    def _symbols(self, keymap, group, char):
+        """The symbols this layout puts on its keys, in keyboard order: what
+        a user of it would look for and not find on a US keyboard. Only the
+        first two levels, which is what's printed on the keycaps — the ones
+        above that are much the same on every layout (¹ ² ½ ™ ← →) and say
+        nothing about it. A national currency is the exception: it sits
+        deeper, and it's exactly what that layout's user wants."""
+        lib = self.lib
+        found, currency = [], []
+        for prefix, count in self.ALL_KEYS:
+            names = [prefix] if count == 0 else [f"{prefix}{i:02d}" for i in range(1, count + 1)]
+            for name in names:
+                code = lib.xkb_keymap_key_by_name(keymap, name.encode())
+                if code == 0xFFFFFFFF:
+                    continue
+                for level in range(4):
+                    c = char(code, level)
+                    if not c or c.isspace() or c.isalpha() or not c.isprintable():
+                        continue
+                    kind = unicodedata.category(c)
+                    # Not digits (the keyboard has its own row of those, and a
+                    # script's own digits among the punctuation only confuse
+                    # it) and not combining marks, which need a letter to sit
+                    # on and draw as a stray blob alone on a key.
+                    if kind[0] == "M" or kind == "Nd":
+                        continue
+                    if level < 2 and c not in found:
+                        found.append(c)
+                    elif (unicodedata.category(c) == "Sc" and c not in self.COMMON_CURRENCY
+                          and c not in currency):
+                        currency.append(c)
+        # The keyboard picks what it can use; this is only what the layout
+        # has, bounded so a strange keymap can't flood the line.
+        return (found + [c for c in currency if c not in found])[:48]
 
 
 def xkb_args(names):

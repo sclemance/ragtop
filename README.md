@@ -24,9 +24,9 @@ everything returns to normal.
   and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C. Your
   Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
   terminal.
-- **Your layout, any character.** The letter keys follow your active Hyprland
-  layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), and characters your layout
-  can't type (é on a US layout, emoji) still arrive.
+- **Your layout, any character.** The letter keys and the symbol pages follow
+  your active Hyprland layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), and
+  characters your layout can't type (é on a US layout, emoji) still arrive.
 - **Settings one tap away.** A gear key next to the space bar opens Ragtop's
   settings.
 - **Window shortcuts panel.** Omarchy windows have no title bars and moving or
@@ -174,6 +174,11 @@ colours and font, and the Transparency setting, without restarting. It has:
   Setup › Tablet › Modifier Keys to have them stay on until tapped again.
 - **Your layout's letters:** the letter keys follow the active Hyprland
   layout, and the space bar shows its name.
+- **Your layout's symbols:** the two symbol pages carry the same punctuation
+  whatever you type in, and pick up what your layout adds on top — § and ° on
+  a German keyboard, ¡ and ¿ on a Spanish one, № and ₽ on a Russian one, ₹ on
+  an Indian one. Up to four go in the free slots on the pages' third rows; a
+  US layout adds nothing, so its pages look exactly as they always did.
 - **Any character** your layout can't type still arrives, and every key types
   what it shows whatever your Hyprland layout is.
 - A settings key that opens Setup › Tablet directly.
@@ -359,7 +364,8 @@ The lock screen is different: while it's up, Hyprland shows nothing else at
 all, so no on-screen keyboard can appear over it. Its clone (**Lock Screen**
 in the same menu) keeps Omarchy's lock screen as it is and adds a keyboard of
 its own along the bottom, in tablet mode only: your layout's letters with
-Shift (tap twice for Caps), and two pages of digits and symbols. The keys edit
+Shift (tap twice for Caps), and two pages of digits and symbols, which pick
+up your layout's own symbols the same way the desktop keyboard's do. The keys edit
 the password the same way typing does, and Omarchy checks it as usual. The
 keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
 loads.
@@ -369,8 +375,10 @@ colours, and it's deliberately a separate, self-contained file: it shares no
 code with the desktop keyboard, sends no key events and has no Ctrl, Alt or
 Super, so nothing added to the desktop keyboard reaches the lock screen by
 accident, and there's one short file to review. It learns your layout's letters
-from `$XDG_RUNTIME_DIR/ragtop-layout.json`, which Ragtop's service writes, and
-falls back to US if that's missing or malformed.
+and symbols from `$XDG_RUNTIME_DIR/ragtop-layout.json`, which Ragtop's service
+writes, and falls back to US if that's missing or malformed. What it takes
+from there is data, never code, and it re-checks all of it by its own rules:
+a symbol has to be one printable character or it's dropped.
 
 The screen doesn't rotate while it's locked, with or without this: Omarchy's
 lock screen isn't redrawn for a rotated display, although touches would be

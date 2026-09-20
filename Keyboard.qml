@@ -3,8 +3,9 @@ import QtQuick
 // Ragtop's on-screen keyboard. It draws the keys and decides what each tap
 // means; keyboard-helper.py, run by the service, turns that into key events.
 // The letter keys are those of the active Hyprland layout, as the helper
-// reads them from the keymap (US until it reports). Characters go by what
-// they are, not where they sit, so they type correctly in any layout.
+// reads them from the keymap (US until it reports), and the symbol pages
+// pick up the symbols that layout carries. Characters go by what they are,
+// not where they sit, so they type correctly in any layout.
 Item {
   id: root
 
@@ -37,6 +38,31 @@ Item {
   }
   function letters(row) { return row.map(function(k) { return k[0] }) }
 
+  // The symbol pages, which are the same whatever the layout: every
+  // character here types in any of them, because the helper types by
+  // character rather than by key.
+  readonly property var symbolRows: [
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+    ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""]
+  ]
+  readonly property var moreRows: [
+    ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="],
+    ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "`"]
+  ]
+  readonly property var punctuation: [".", ",", "?", "!", "'"]
+
+  // What the active layout puts on its keys that the pages above don't
+  // have: § and ° on a German keyboard, ¡ and ¿ on a Spanish one, № and ₽
+  // on a Russian one, nothing at all on a US one. The helper reports them
+  // (see keyboard-helper.py); the four that fit go in the two free slots on
+  // each page's third row, which is why those rows are a key short.
+  readonly property var layoutSymbols: root.service.keyLabels && root.service.keyLabels.symbols
+    ? root.service.keyLabels.symbols : []
+  readonly property var pageCharacters: symbolRows[0].concat(symbolRows[1], moreRows[0], moreRows[1], punctuation)
+  readonly property var extraSymbols: layoutSymbols.filter(function(c) {
+    return typeof c === "string" && c.length === 1 && root.pageCharacters.indexOf(c) === -1
+  }).slice(0, 4)
+
   readonly property var pages: ({
     "letters": [
       letters(layoutRows[0]),
@@ -45,15 +71,15 @@ Item {
       ["symbols", "settings", "space", ".", "enter"]
     ],
     "symbols": [
-      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
-      ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""],
-      ["more", ".", ",", "?", "!", "'", "backspace"],
+      symbolRows[0],
+      symbolRows[1],
+      ["more"].concat(punctuation, extraSymbols.slice(0, 2), ["backspace"]),
       ["letters", "settings", "space", ",", "enter"]
     ],
     "more": [
-      ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="],
-      ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "`"],
-      ["symbols", ".", ",", "?", "!", "'", "backspace"],
+      moreRows[0],
+      moreRows[1],
+      ["symbols"].concat(punctuation, extraSymbols.slice(2, 4), ["backspace"]),
       ["letters", "settings", "space", ",", "enter"]
     ]
   })

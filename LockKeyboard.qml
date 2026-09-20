@@ -9,6 +9,9 @@ import qs.Commons
 // keyboard included, so Ragtop's patched clone of it (overlay-clones.sh) loads
 // this inside it and sets `view` to its LockView. Keys edit the password through
 // LockView's own signals, the path typing takes, so checking it is untouched.
+// From the service it takes only data, never code: the active layout's letters
+// and symbols, and the key style's shape and measurements, each re-checked
+// here by this file's own rules.
 //
 // Deliberately separate from Keyboard.qml: it shares no code with it, so
 // nothing added to the desktop keyboard reaches the lock screen unless it's
@@ -37,6 +40,19 @@ Item {
   ]
   property var layoutRows: usRows
   property string layoutName: ""
+  // The symbols the active layout carries that the pages below don't (§ and
+  // ° on a German keyboard, ¡ and ¿ on a Spanish one). Same source, checked
+  // by this file's own rules: single printable characters, nothing that
+  // could pass for a control or run away with the layout.
+  property var layoutSymbols: []
+
+  function cleanSymbols(raw) {
+    if (!Array.isArray(raw)) return []
+    return raw.filter(function(c) {
+      return typeof c === "string" && Array.from(c).length === 1 && c.trim() === c
+        && c.charCodeAt(0) >= 0x20 && c.charCodeAt(0) !== 0x7f
+    }).slice(0, 24)
+  }
 
   function validLayout(layout) {
     if (!layout || !Array.isArray(layout.rows) || layout.rows.length !== 3) return false
@@ -60,8 +76,9 @@ Item {
       var ok = root.validLayout(layout)
       root.layoutRows = ok ? layout.rows : root.usRows
       root.layoutName = ok && typeof layout.name === "string" ? layout.name.slice(0, 40) : ""
+      root.layoutSymbols = ok ? root.cleanSymbols(layout.symbols) : []
     }
-    onLoadFailed: { root.layoutRows = root.usRows; root.layoutName = "" }
+    onLoadFailed: { root.layoutRows = root.usRows; root.layoutName = ""; root.layoutSymbols = [] }
   }
 
   // Each letter's shifted character, e.g. "Ü" for "ü".
@@ -73,7 +90,24 @@ Item {
   function letters(row) { return row.map(function(k) { return k[0] }) }
 
   // Rows of keys; a key is its text, or one of the named keys below. Widths
-  // are in units of a letter key.
+  // are in units of a letter key. The symbol pages are the same in every
+  // layout, and the two free slots on each one's third row take what that
+  // layout adds (see layoutSymbols): a password is typed in characters, so
+  // the ones your keyboard carries have to be reachable here too.
+  readonly property var symbolRows: [
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+    ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""]
+  ]
+  readonly property var moreRows: [
+    ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="],
+    ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "`"]
+  ]
+  readonly property var punctuation: [".", ",", "?", "!", "'"]
+  readonly property var pageCharacters: symbolRows[0].concat(symbolRows[1], moreRows[0], moreRows[1], punctuation)
+  readonly property var extraSymbols: layoutSymbols.filter(function(c) {
+    return root.pageCharacters.indexOf(c) === -1
+  }).slice(0, 4)
+
   readonly property var pages: ({
     "letters": [
       letters(layoutRows[0]),
@@ -82,15 +116,15 @@ Item {
       ["symbols", "space", ".", "enter"]
     ],
     "symbols": [
-      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
-      ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""],
-      ["more", ".", ",", "?", "!", "'", "backspace"],
+      symbolRows[0],
+      symbolRows[1],
+      ["more"].concat(punctuation, extraSymbols.slice(0, 2), ["backspace"]),
       ["letters", "space", ",", "enter"]
     ],
     "more": [
-      ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="],
-      ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "`"],
-      ["symbols", ".", ",", "?", "!", "'", "backspace"],
+      moreRows[0],
+      moreRows[1],
+      ["symbols"].concat(punctuation, extraSymbols.slice(2, 4), ["backspace"]),
       ["letters", "space", ",", "enter"]
     ]
   })
