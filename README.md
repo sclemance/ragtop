@@ -30,22 +30,21 @@ Held upright, the same keyboard fills the width it is given:
 
 ## Which tablets?
 
-Ragtop was written on a convertible, the kind whose screen folds back, and
-that is the shape its wording assumes. Nothing in it is written for that
-shape, though: the only thing that differs between the three kinds of tablet
-is how Ragtop learns it is in tablet mode. Everything after that — rotation,
-the keyboard, the handle, the overlays, the lock screen — needs a touchscreen
-and nothing else.
+A convertible is a convertible whether its keyboard folds away or comes off.
+Both report the same thing — a kernel tablet-mode switch — and Ragtop follows
+either without knowing which it is looking at. That is now two machines: a
+hinge that folds, and a slate that detaches.
 
 | Kind | How it goes | |
 | --- | --- | --- |
-| **Convertible** — the screen folds back (Lenovo Yoga, HP x360, Dell 2-in-1) | The kernel reports a tablet-mode switch when you fold it, and Ragtop follows it. | Tested |
-| **Pure tablet** — no keyboard at all | There is no switch to read, and none is needed: set **Tablet Mode › Always On** once in Setup › Tablet and Ragtop stays in tablet mode for good. The setup will say it found no switch; on a slate that is the right answer, not a fault. | Should work, untested |
-| **Detachable** — a keyboard cover (Surface-style, ThinkPad X12) | Where detaching reports a tablet-mode switch, Ragtop follows it exactly as it follows a hinge — tested on a Surface Book 2, where detaching the slate brings the keyboard up and reattaching puts it away. It keeps looking while no switch is there, so attaching a keyboard later is picked up; where a cover vanishes and reports nothing, **Always On** is the answer again. | Works on the one tested |
+| **Convertible, hinged** — the screen folds back (Lenovo Yoga, HP x360, Dell 2-in-1) | Folding it past the point of no return flips the switch, and Ragtop follows. | Tested — Lenovo 300w Yoga Gen 4 |
+| **Convertible, detachable** — the keyboard comes off (Surface-style, ThinkPad X12) | Detaching flips the same switch, so it behaves exactly as a hinge does. Ragtop keeps looking while no switch is there, so attaching a keyboard later is picked up too. | Tested — Surface Book 2 |
+| **Slate** — no keyboard at all | Nothing to switch, and nothing needed: set **Tablet Mode › Always On** once and Ragtop stays in tablet mode for good. Setup saying it found no switch is the right answer here, not a fault. | Untested — reports welcome |
 
-If you are on a slate or a detachable, [reports are welcome](#tested-hardware--feedback-wanted) — especially
-detachables, where what the kernel reports varies by model, and where the
-answer decides whether Ragtop can follow the hardware or has to be told.
+The only thing any of this decides is *how Ragtop learns it is in tablet
+mode*. Everything after that — rotation, the keyboard, the handle, the
+overlays, the lock screen — is the same on all three and needs a touchscreen
+and nothing else.
 
 ### What it costs to have less
 
@@ -136,14 +135,25 @@ hardware needs the [linux-surface](https://github.com/linux-surface/linux-surfac
 kernel and firmware before its touchscreen works at all; a stock kernel gives
 you a machine that detaches, rotates and runs Ragtop, with nothing to touch it
 with. Worth knowing before you conclude the plugin is broken: check whether a
-touch device exists at all with `hyprctl devices | grep -i touch`. **If you have a convertible or detachable we haven't listed, please
-try it and open an issue**, whether it works or not. It helps to include:
+touch device exists at all with `hyprctl devices | grep -i touch`. **If you have a machine we haven't listed, please try it and open an issue**,
+whether it works or not. Two machines is not a sample.
 
-- your device model,
-- the installer's "Looking for a tablet-mode switch" output,
-- whether folding shows and hides the bar icons,
-- whether the screen and touch input rotate the right way round,
-- anything that didn't work, and what you expected.
+What is most useful to hear about, roughly in order:
+
+1. **Tablet mode.** Does folding or detaching turn it on, and does undoing
+   that turn it off? Include what setup printed under "Looking for a
+   tablet-mode switch" — and say so if it found none, because a machine with
+   no switch is a useful data point too.
+2. **Rotation.** Does the screen follow the device, the right way round, and
+   do taps land where things are drawn? Getting the picture right but the
+   touch rotated is a distinct and interesting failure.
+3. **Everything else, in real use.** The keyboard coming up on a text field,
+   SUPER shortcuts from it, the handle, the window shortcuts, the lock
+   screen, the overlays if you turned any on. Tell us what you were doing,
+   not only what broke.
+
+Plus your device model, and anything that didn't work along with what you
+expected instead.
 
 Reports for detachables (tablets with a keyboard cover) are especially
 welcome, since some signal the keyboard being detached differently.
