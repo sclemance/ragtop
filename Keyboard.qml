@@ -124,6 +124,31 @@ Item {
   // above the keys, so it's clear of the first row.
   readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
 
+  // A row that comes up short is stretched to the keyboard's width by its
+  // own stretchy keys, rather than floating in the middle with a gap at
+  // either end: the space bar on the bottom row, and the wide keys at both
+  // ends of a third row (Shift and Backspace, or a page key and Backspace).
+  // Rows of plain keys — the letters, the digits — are left alone and stay
+  // centred, so the keys keep one size.
+  //
+  // The letter rows only come up short on some layouts — French's bottom row
+  // is six keys (w x c v b n; m sits above it) against eleven on the row
+  // above, so its Shift and Backspace grow to reach the edges — while the
+  // symbol pages' third row is short everywhere, and its page key and
+  // Backspace take the slack on any layout.
+  function stretch(row, widths) {
+    var slack = root.unit * root.rowUnits - widths.reduce(function(a, b) { return a + b }, 0)
+    if (slack <= 1) return widths
+    var space = row.indexOf("space")
+    if (space !== -1) {
+      widths[space] += slack
+    } else if (row.length > 1 && (row[0] in root.widths) && (row[row.length - 1] in root.widths)) {
+      widths[0] += slack / 2
+      widths[widths.length - 1] += slack / 2
+    }
+    return widths
+  }
+
   readonly property var slots: {
     var rows = [root.topRow].concat(root.pages[root.page])
     var gap = root.theme.gap
@@ -134,6 +159,7 @@ Item {
       var widths = row.map(function(k) {
         return i === 0 ? root.unit * root.rowUnits / root.topRow.length : root.unit * (root.widths[k] || 1)
       })
+      if (i > 0) widths = root.stretch(row, widths)
       var h = i === 0 ? root.topRowHeight : root.keyHeight
       var x = (root.width - widths.reduce(function(a, b) { return a + b }, 0)) / 2
       row.forEach(function(k, j) {

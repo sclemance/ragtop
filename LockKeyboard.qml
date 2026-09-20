@@ -188,6 +188,27 @@ Item {
     : style.size === "large" ? Style.spacing.xl : Style.spacing.lg
   readonly property real keyScale: style.size === "compact" ? 0.88 : style.size === "large" ? 1.15 : 1
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
+
+  // How wide a key is, in units, once a short row has been stretched to the
+  // keyboard's width by its own stretchy keys: the space bar, or the wide
+  // keys at both ends of a third row. Rows of plain keys stay centred, so
+  // the letters keep one size. Copied by hand from the desktop keyboard
+  // (Keyboard.qml's stretch), as everything here is. The letter rows come up
+  // short only on some layouts — French's bottom row is six keys against
+  // eleven on the row above — while the symbol pages' third row is short on
+  // any of them.
+  function keyUnits(row, index) {
+    var key = row[index]
+    var base = root.widths[key] || 1
+    var used = row.reduce(function(a, k) { return a + (root.widths[k] || 1) }, 0)
+    var slack = root.rowUnits - used
+    if (slack <= 0.01) return base
+    var space = row.indexOf("space")
+    if (space !== -1) return key === "space" ? base + slack : base
+    if (row.length > 1 && (row[0] in root.widths) && (row[row.length - 1] in root.widths)
+        && (index === 0 || index === row.length - 1)) return base + slack / 2
+    return base
+  }
   readonly property real unit: Math.min((width - 2 * padding) / rowUnits, Math.round(84 * keyScale))
   readonly property real keyHeight: Math.max(Math.round(36 * keyScale),
     Math.min(Math.round(unit * 0.78), Math.round(60 * keyScale)))
@@ -323,6 +344,7 @@ Item {
       model: root.pages[root.page]
 
       Row {
+        id: keyRow
         required property var modelData
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: root.gap
@@ -333,6 +355,7 @@ Item {
           Item {
             id: key
             required property string modelData
+            required property int index
             readonly property bool accent: modelData === "enter" || (modelData === "shift" && root.capsLock)
             readonly property bool latched: modelData === "shift" && root.shift
             readonly property bool special: modelData in root.labels || modelData === "space"
@@ -345,7 +368,7 @@ Item {
             readonly property real depth: Math.min(root.keyDepth, height / 4)
             readonly property real faceY: area.pressed ? depth * 0.6 : 0
             readonly property real faceHeight: height - depth
-            width: root.unit * (root.widths[modelData] || 1) - root.gap
+            width: root.unit * root.keyUnits(keyRow.modelData, index) - root.gap
             height: root.keyHeight
 
             // Angular keys are drawn as a chamfered box; the same path
