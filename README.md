@@ -532,6 +532,31 @@ The keyboard itself is mostly language-agnostic already — its letters, symbols
 and accents come from your active Hyprland layout, and its key glyphs are
 drawn rather than written.
 
+## Versioning and updates
+
+`omarchy plugin update sclemance.ragtop` fast-forwards this checkout to the
+default branch: it shows you the diff first, validates the manifest
+afterwards, and rolls back if that fails. There are no release channels —
+whatever is on the branch is what you get — so the branch is kept shippable
+and every push is, in effect, a release.
+
+The version in `manifest.json` is required — `omarchy plugin validate` refuses
+a manifest without one — but Omarchy itself never shows it: not in
+`omarchy plugin list`, not in its JSON. So it is here for people, in the
+release tags and in bug reports. It is **0.x while Ragtop is unpublished**,
+and says so honestly: the settings file, the `ragtop` command and the rest
+are still moving. The first published release is 1.0.0, tagged, and from
+then on:
+
+| | |
+| --- | --- |
+| **patch** | a fix |
+| **minor** | a new capability, or a changed default |
+| **major** | a break in something you can build a habit or a script on: the keys and values in `settings.conf`, the `ragtop` verbs, the `setup.tablet.*` menu ids, the layer namespaces, the `ragtop` IPC target and its functions, the files in `$XDG_RUNTIME_DIR`, and the installer's flags |
+
+Everything else — the QML, how a key is drawn, what the helper prints to
+itself — is Ragtop's own business and can change in a patch.
+
 ## Credits and licensing
 
 - The on-demand focus fix for Omarchy's overlays follows
