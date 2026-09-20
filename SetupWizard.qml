@@ -38,7 +38,7 @@ Item {
   // Each package, what it's for, and whether it's here. Ragtop runs without
   // any of them; it just does less, and the wording says exactly what less.
   property var deps: [
-    { pkg: "iio-sensor-proxy", need: "Rotation. Without it the screen won't follow the hinge.", ok: false },
+    { pkg: "iio-sensor-proxy", need: "Rotation. Without it the screen won't follow the device.", ok: false },
     { pkg: "python-pywayland", need: "The on-screen keyboard. Without it no keys are sent.", ok: false },
     { pkg: "python-gobject", need: "Noticing text fields, so the keyboard can come up by itself.", ok: false },
     { pkg: "git", need: "Cloning Omarchy's overlays, if you turn any on below.", ok: false }
@@ -332,7 +332,7 @@ Item {
 
       Body {
         width: parent.width
-        text: "Ragtop makes this machine work as a tablet: the screen follows the hinge, "
+        text: "Ragtop makes this machine work as a tablet: the screen follows the device, "
           + "an on-screen keyboard comes up when you need one, and the things that normally "
           + "want a keyboard or a mouse can be done by touch."
       }
@@ -428,10 +428,12 @@ Item {
       Body {
         width: parent.width
         text: parent.noSwitch
-          ? "Ragtop can notice a screen being folded back by reading a tablet-mode "
+          ? "Ragtop can notice a screen being folded back — or a keyboard coming off — by "
+            + "reading a tablet-mode "
             + "switch — an input device the kernel exposes, like a keyboard or a mouse. "
             + "This machine reports none."
-          : "Ragtop knows the screen has been folded back by reading the tablet-mode "
+          : "Ragtop knows the screen has been folded back, or the keyboard taken off, by "
+            + "reading the tablet-mode "
             + "switch — an input device the kernel exposes, like a keyboard or a mouse."
       }
       Body {
@@ -477,9 +479,11 @@ Item {
         width: parent.width
         visible: parent.noSwitch || parent.offering
         text: parent.noSwitch
-          ? "That is ordinary on a tablet with no keyboard — there is no hinge to report. "
+          ? "That is ordinary on a tablet with no keyboard — there is nothing to fold or "
+            + "detach, so nothing to report. "
             + "Tell Ragtop to stay in tablet mode and it will, for good."
-          : "You can also skip it. The rule buys one thing: noticing the hinge by itself. "
+          : "You can also skip it. The rule buys one thing: noticing the fold, or the "
+            + "detach, by itself. "
             + "Rotation, the keyboard and everything else work without it. Set the mode by "
             + "hand instead."
       }

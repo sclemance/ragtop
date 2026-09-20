@@ -21,7 +21,8 @@
 #        ragtop setup                       open setup in the shell
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
-# (follow the hinge's switch), on or off, and the modifiers <mode> is oneshot
+# (follow the hardware switch — folding a hinge or taking the keyboard off),
+# on or off, and the modifiers <mode> is oneshot
 # or sticky.
 #
 # The keyboard's look: <shape> is omarchy (the theme's own corner rounding),
@@ -164,7 +165,7 @@ choice() {
 
 choice_notice() {
   case "$1 $2" in
-    "tablet-mode auto") echo "Tablet mode now follows the hinge." ;;
+    "tablet-mode auto") echo "Tablet mode now follows the hardware: fold the screen back, or take the keyboard off." ;;
     "tablet-mode on") echo "Tablet mode is on until you change it back." ;;
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
     "transparency auto") echo "The keyboard's background now matches the bar's transparency." ;;

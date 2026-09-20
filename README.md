@@ -2,12 +2,13 @@
 
 **Made for convertibles, works for tablets, built for Omarchy.**
 
-Fold the screen back, like a ragtop's roof, and Ragtop switches your
+Fold the screen back, like a ragtop's roof — or take the keyboard off, which
+the hardware reports the same way — and Ragtop switches your
 [Omarchy 4](https://github.com/omacom/omarchy) desktop into a touch-friendly
 mode: the screen rotates with the device, an on-screen keyboard themed like
 the rest of Omarchy is one tap away, and the things that normally need a
 keyboard shortcut or a mouse (moving windows between tiles, closing them,
-typing into the Omarchy menu) work by touch. Fold it back and everything
+typing into the Omarchy menu) work by touch. Put it back and everything
 returns to normal.
 
 ## How it looks
@@ -65,12 +66,13 @@ space until tablet mode turns on.
 
 ## Features
 
-- **Follows the hinge.** Ragtop reads the hardware tablet-mode switch, so
-  tablet features appear only while folded. The switch is auto-detected
-  whichever driver provides it.
+- **Follows the hardware.** Ragtop reads the tablet-mode switch, so tablet
+  features appear when you fold the screen back — or when you take the
+  keyboard off, which a detachable reports the same way. The switch is
+  auto-detected whichever driver provides it.
 - **Auto-rotation with a lock.** Screen and touch input rotate with the device
   (via `iio-sensor-proxy`). A bar button locks the orientation; the lock is
-  remembered, and released automatically when you fold back to laptop mode.
+  remembered, and released automatically on the way back to laptop mode.
 - **An on-screen keyboard that fits Omarchy.** Drawn by the Omarchy shell in
   your theme's colours and font, and restyled the moment you switch themes. Its
   background can be see-through, matching the bar's transparency by default.
@@ -94,7 +96,7 @@ space until tablet mode turns on.
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
   the keyboard up with them, and keep them clear of it. It's off until you turn
   it on, one overlay at a time (see [Omarchy's overlays](#omarchys-overlays)).
-- **Unlock without unfolding, if you want to.** The lock screen hides every
+- **Unlock without putting it back together, if you want to.** The lock screen hides every
   other window, the on-screen keyboard included, so Ragtop can give it a
   keyboard of its own in tablet mode. Also off until you turn it on.
 - **Settings in the Omarchy menu,** under Setup › Tablet.
@@ -503,7 +505,7 @@ orientation it was locked in, and the screen catches up when you unlock.
 The same points apply as for the password prompt, since this is where you type
 your login password: the clone and the keyboard live in your user-writable
 config. Keys light up when tapped, as on any on-screen keyboard, so mind who's
-watching. Try it the first time with the laptop unfolded and Tablet Mode set to
+watching. Try it the first time in laptop mode with Tablet Mode set to
 Always On, so the physical keyboard is there if anything goes wrong.
 
 ## Settings
@@ -513,7 +515,7 @@ the gear key on the on-screen keyboard opens directly:
 
 | Setting | Default | Where |
 | --- | --- | --- |
-| Tablet mode: Automatic (follow the hinge), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
+| Tablet mode: Automatic (follow the hardware — folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard modifiers: One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Presets](#presets)) | Omarchy | Setup › Tablet › Preset |
