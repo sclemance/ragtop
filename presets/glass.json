@@ -2,11 +2,13 @@
   "name": "Glass",
   "shape": "rounded",
   "relief": "flat",
-  "fill": "outline",
+  "fill": "auto",
   "size": "normal",
   "background": "tint",
   "transparency": "high",
+  "key-transparency": "medium",
   "edge": "fade",
   "labels": "normal",
+  "edge-fade": 12,
   "blur": true
 }

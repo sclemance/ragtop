@@ -229,7 +229,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Preset | A saved look; picking one writes the rows below |
 | Key Shape | Omarchy (the theme's own corner rounding), Rounded, Pill, Angular |
 | Key Relief | Flat, or Raised: the key stands on a side, like a keycap |
-| Key Fill | Dark or Light (an opaque key sitting darker or lighter than the keyboard), or Outline (no fill, carried by its edge) |
+| Key Fill | Dark or Light (an opaque key sitting darker or lighter than the keyboard), Automatic (whichever of those your theme has room for — a dark theme has little below its background, a light one little above it, so a fixed choice reads strongly on some themes and barely at all on others), or Outline (no fill, carried by its edge) |
 | Key Size | Compact, Normal, Large — the labels scale with the keys |
 | Key Transparency | Opaque, Low, Medium, High, Full. What shows through is the keyboard's background, so the desktop only shows if that's see-through too |
 | Background | Tint or Gradient |
@@ -434,7 +434,7 @@ the gear key on the on-screen keyboard opens directly:
 | A saved look, which writes the rows below (see [Presets](#presets)) | Omarchy | Setup › Tablet › Preset |
 | Key shape: Omarchy, Rounded, Pill or Angular | Omarchy | Setup › Tablet › Key Shape |
 | Key relief: Flat or Raised | Flat | Setup › Tablet › Key Relief |
-| Keys: Dark, Light or Outline | Light | Setup › Tablet › Key Fill |
+| Keys: Automatic (whichever way your theme has room for), Dark, Light or Outline | Light | Setup › Tablet › Key Fill |
 | Key size: Compact, Normal or Large | Normal | Setup › Tablet › Key Size |
 | Keyboard background: Tint or Gradient | Tint | Setup › Tablet › Background |
 | Keyboard top edge: Border (your Hyprland window border), Fade or None | None | Setup › Tablet › Edge |

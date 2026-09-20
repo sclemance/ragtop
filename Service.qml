@@ -616,7 +616,7 @@ Item {
       keyTransparency: pick("key-transparency", ["opaque", "low", "medium", "high", "full"], "opaque"),
       // Raised keys stand on a side, like a keycap; flat ones don't.
       relief: pick("relief", ["flat", "raised"], "flat"),
-      fill: pick("fill", ["dark", "light", "outline"], "light"),
+      fill: pick("fill", ["auto", "dark", "light", "outline"], "light"),
       size: pick("size", ["compact", "normal", "large"], "normal"),
       background: pick("background", ["tint", "gradient"], "tint"),
       edge: pick("edge", ["border", "fade", "none"], "none"),

@@ -22,7 +22,8 @@ QtObject {
                         borderWidth: "auto", radius: "auto" })
 
   // "dark" or "light" (an opaque key sitting darker or lighter than the
-  // keyboard's background) or "outline" (no fill, carried by its edge).
+  // keyboard's background), "auto" (whichever of those the theme has room
+  // for) or "outline" (no fill, carried by its edge).
   // Both filled kinds are fully opaque, so Key Transparency is the only
   // thing that makes a key see-through.
   readonly property string keyFill: look.fill
@@ -104,6 +105,12 @@ QtObject {
   }
   readonly property color lightKey: stepped(lighterRole, Qt.lighter(solidBase, 1.3))
   readonly property color darkKey: stepped(darkerRole, Qt.darker(solidBase, 1.35))
+  // "auto" takes whichever direction the theme has room for. A dark theme
+  // has little below its background and a light one little above it, so a
+  // fixed choice is strong on half the themes and nearly invisible on the
+  // rest — which is no way to ship a preset.
+  readonly property color autoKey: Math.abs(luminance(lightKey) - luminance(solidBase))
+    >= Math.abs(luminance(darkKey) - luminance(solidBase)) ? lightKey : darkKey
 
   // Omarchy's normal control fill goes over the top, so a key still wears
   // the theme's own control tint.
@@ -111,7 +118,8 @@ QtObject {
   readonly property color keyBase: look.keyFillAlpha !== "auto"
     ? Util.alpha(role(look.keyColor, text), look.keyFillAlpha)
     : keyFill === "outline" ? "transparent"
-    : Qt.tint(role(look.keyColor, keyFill === "dark" ? darkKey : lightKey), themeKey)
+    : Qt.tint(role(look.keyColor, keyFill === "dark" ? darkKey
+                                : keyFill === "light" ? lightKey : autoKey), themeKey)
   property color key: seeThrough(keyBase)
   property color pressedKey: Style.pressedFillFor(text, Color.accent, Color.urgent)
   property color latchedKey: seeThrough(Qt.tint(keyBase, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.45)))

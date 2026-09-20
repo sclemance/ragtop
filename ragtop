@@ -26,7 +26,8 @@
 # The keyboard's look: <shape> is omarchy (the theme's own corner rounding),
 # rounded, pill or angular; <relief> is flat or raised (keys standing on a
 # side, like a keycap); <fill> is dark, light (a key sitting darker or
-# lighter than the keyboard) or outline;
+# lighter than the keyboard), auto (whichever of those your theme has room
+# for) or outline;
 # <size> is compact, normal or large; <background> is tint or gradient;
 # <level> is auto (match Omarchy's bar), opaque, low, medium, high or full
 # for the background, and the same without auto for the keys;
@@ -183,6 +184,7 @@ choice_notice() {
     "shape rounded"|"shape pill"|"shape angular") echo "The keys are now $2." ;;
     "relief flat") echo "The keys are flat." ;;
     "relief raised") echo "The keys now stand on a side, like a keycap." ;;
+    "fill auto") echo "The keys now sit whichever way your theme has room for." ;;
     "fill dark") echo "The keys now sit darker than the keyboard." ;;
     "fill light") echo "The keys now sit lighter than the keyboard." ;;
     "fill outline") echo "The keys have no fill, drawn as outlines." ;;
@@ -225,7 +227,7 @@ path, settings = sys.argv[1:]
 choices = {
     "shape": ["omarchy", "rounded", "pill", "angular"],
     "relief": ["flat", "raised"],
-    "fill": ["dark", "light", "outline"],
+    "fill": ["auto", "dark", "light", "outline"],
     "size": ["compact", "normal", "large"],
     "background": ["tint", "gradient"],
     "transparency": ["auto", "opaque", "low", "medium", "high", "full"],
@@ -262,9 +264,15 @@ for key in colors:
                                or re.fullmatch(r"#[0-9a-fA-F]{6,8}", v)):
         values[key] = v
 
+# A preset is a whole look, not a patch: every setting it doesn't name goes
+# back to its default rather than keeping whatever the last preset left
+# behind. Settings that aren't part of the look — tablet mode, auto-show,
+# the modifiers — are untouched.
+look_keys = set(choices) | set(numbers) | set(colors)
 lines = []
 if os.path.exists(settings):
-    lines = [l for l in open(settings).read().split("\n") if l and l.split("=", 1)[0] not in values]
+    lines = [l for l in open(settings).read().split("\n")
+             if l and l.split("=", 1)[0] not in look_keys]
 lines += [f"{k}={v}" for k, v in sorted(values.items())]
 os.makedirs(os.path.dirname(settings), exist_ok=True)
 open(settings + ".tmp", "w").write("\n".join(lines) + "\n")

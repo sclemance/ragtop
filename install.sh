@@ -119,7 +119,8 @@ rows = {
     "setup.tablet.fill": dict(icon="\U000f0764", label="Key Fill"),
     **{f"setup.tablet.fill.{name}": dict(icon="\U000f0764", label=label,
         checked=f'"{cmd}" fill is {name}', action=f'"{cmd}" fill set {name}')
-       for name, label in (("dark", "Dark"), ("light", "Light"), ("outline", "Outline"))},
+       for name, label in (("auto", "Automatic"), ("dark", "Dark"), ("light", "Light"),
+                           ("outline", "Outline"))},
     "setup.tablet.size": dict(icon="\U000f004c", label="Key Size"),
     **{f"setup.tablet.size.{name}": dict(icon="\U000f004c", label=label,
         checked=f'"{cmd}" size is {name}', action=f'"{cmd}" size set {name}')
@@ -294,7 +295,7 @@ as_root() {
 offer_overlays() {
   say "Touch typing in Omarchy's overlays"
   local on
-  on=$("$repo/overlay-clones.sh" status | sed -n 's/^\([a-z]*\): installed.*/\1/p' | tr '\n' ' ')
+  on=$("$repo/overlay-clones.sh" status | sed -n 's/^\([a-z-]*\): installed.*/\1/p' | tr '\n' ' ')
   on="${on% }"
   if [[ -n $on ]]; then
     echo "   already on for: $on"

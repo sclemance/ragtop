@@ -270,7 +270,7 @@ Item {
     return {
       shape: pick(raw.shape, ["omarchy", "rounded", "pill", "angular"], "omarchy"),
       relief: pick(raw.relief, ["flat", "raised"], "flat"),
-      fill: pick(raw.fill, ["dark", "light", "outline"], "light"),
+      fill: pick(raw.fill, ["auto", "dark", "light", "outline"], "light"),
       keyTransparency: pick(raw.keyTransparency, ["opaque", "low", "medium", "high", "full"], "opaque"),
       size: pick(raw.size, ["compact", "normal", "large"], "normal"),
       labels: pick(raw.labels, ["small", "normal", "large"], "normal"),
@@ -358,9 +358,15 @@ Item {
     return Math.abs(luminance(mixed) - luminance(lockSurface))
       >= Math.abs(luminance(factorColor) - luminance(lockSurface)) ? mixed : factorColor
   }
+  readonly property color lightKeyBase: stepped(lighterRole, Qt.lighter(lockSurface, 1.3))
+  readonly property color darkKeyBase: stepped(darkerRole, Qt.darker(lockSurface, 1.35))
+  // "auto" takes whichever direction the lock screen's own surface has room
+  // for, as the desktop keyboard does.
+  readonly property color autoKeyBase: Math.abs(luminance(lightKeyBase) - luminance(lockSurface))
+    >= Math.abs(luminance(darkKeyBase) - luminance(lockSurface)) ? lightKeyBase : darkKeyBase
   readonly property color keyBase: style.fill === "outline" ? "transparent"
-    : Qt.tint(style.fill === "dark" ? stepped(darkerRole, Qt.darker(lockSurface, 1.35))
-                                    : stepped(lighterRole, Qt.lighter(lockSurface, 1.3)),
+    : Qt.tint(style.fill === "dark" ? darkKeyBase
+              : style.fill === "light" ? lightKeyBase : autoKeyBase,
               themeKeyColor)
   readonly property color keyColor: seeThrough(keyBase)
   readonly property color pressedKeyColor: Style.pressedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
