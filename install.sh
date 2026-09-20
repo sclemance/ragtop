@@ -79,6 +79,7 @@ overlays = [
     ("emojis", "\U000f0785", "Emoji Picker"),
     ("clipboard", "\U000f014c", "Clipboard Picker"),
     ("polkit", "\U000f033e", "Password Prompt"),
+    ("image-picker", "\U000f056c", "Image Picker"),
     ("lock", "\U000f0ddb", "Lock Screen"),
 ]
 rows = {
@@ -301,9 +302,10 @@ offer_overlays() {
     return
   fi
 
-  echo "   Omarchy's menu, its emoji and clipboard pickers, its password prompt and"
-  echo "   its lock screen can't be typed into by touch as they ship. Ragtop can run"
-  echo "   patched clones of them instead, and give the lock screen a keyboard."
+  echo "   Omarchy's menu, its pickers, its password prompt and its lock screen can't"
+  echo "   be worked by touch as they ship. Ragtop can run patched clones of them"
+  echo "   instead: touch typing in each, a keyboard on the lock screen, and arrows"
+  echo "   and a Select button for the theme and background pickers."
   echo "   The catch: a clone is Omarchy's own code — the password prompt and lock"
   echo "   screen included — copied from its root-owned folder into your config,"
   echo "   where anything running as you can rewrite it, and it stops taking"
@@ -341,7 +343,7 @@ offer_overlays() {
 # missing from one that was never wanted. `ragtop` keeps this in step after.
 record_overlays() {
   local on=() o
-  for o in menu emojis clipboard polkit lock; do
+  for o in menu emojis clipboard polkit image-picker lock; do
     "$repo/overlay-clones.sh" installed "$o" && on+=("$o")
   done
   mkdir -p "$state_dir"

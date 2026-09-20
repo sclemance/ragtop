@@ -114,7 +114,6 @@ have to live elsewhere. The installer:
    top of `~/.config/omarchy/extensions/omarchy-menu.jsonc`.
 3. Only if you can't read the tablet-mode switch, and only after asking:
    installs a udev rule, asking for your password (see [Tablet-mode detection](#tablet-mode-detection)).
-
 4. Offers, once and answering No by default, to turn on touch typing in all of
    [Omarchy's overlays](#omarchys-overlays) — its menu, pickers, password
    prompt and lock screen. Say no and nothing of Omarchy's is replaced; you
@@ -284,6 +283,9 @@ before checking anything stacked above it. So a tap on the on-screen keyboard
 lands on the overlay and closes it. This can't be fixed from the keyboard's
 side.
 
+The theme and background pickers (both Omarchy's image picker) have the same
+problem and one of their own: see [The theme and background pickers](#the-theme-and-background-pickers).
+
 Ragtop can replace them with clones (made with Omarchy's own
 `omarchy plugin clone`) that change two lines, and only in tablet mode: they
 take focus *on demand*, which still gets focus when they open and still
@@ -299,7 +301,8 @@ tap an overlay to turn it on or off (✓ means on). The shell restarts to load
 the change. From a terminal, the same thing is:
 
 ```bash
-./ragtop overlay toggle menu        # or: enable, disable; menu, emojis, clipboard, polkit, lock
+./ragtop overlay toggle menu        # or: enable, disable; menu, emojis, clipboard,
+                                    # polkit, image-picker, lock
 ./ragtop overlay status             # which are on, and in sync with Omarchy?
 ```
 
@@ -319,6 +322,36 @@ What turning one on means:
   point above applies to your password. Anything running as you could already
   interfere with your session in other ways, but it's the one to think about
   before turning on.
+
+### The theme and background pickers
+
+Both are Omarchy's image picker (**Image Picker** in the same menu), and it
+isn't a keyboard problem: it shows a carousel of previews, and the keyboard
+covers the very preview you're choosing by. So Ragtop keeps the keyboard off
+it and, with the clone on, puts the four keys the carousel actually listens
+to in a strip along the bottom instead:
+
+```
+   [ ◀ ]   [ Select ]   [ ▶ ]      [ Cancel ]
+```
+
+◀ and ▶ step through the images and repeat if you hold them; Select applies
+the one in the middle; Cancel closes without changing anything. The strip is
+drawn from the keyboard's own theme and reserves its space, so the carousel
+sits above it. The keyboard handle stays, so you can still bring the keyboard
+up to type a filter where the picker takes one.
+
+Without the clone Ragtop can only get out of the way: a stock picker takes
+every touch on the screen, so the strip's own taps would never reach it, and
+even a tap on the keyboard would land on the picker and throw it away. So
+whether or not you turn the clone on, while a picker is open the keyboard
+stays down and the handle goes with it, leaving the carousel's own slices to
+tap: tap one to select it, tap the middle one again to apply.
+
+One cost specific to this clone: Omarchy warms the picker's thumbnails
+through an IPC call that names the built-in plugin directly, so with any
+clone in place that warm-up does nothing and the first open is slower. The
+picker itself opens, works and closes normally.
 
 ### The lock screen
 
@@ -369,7 +402,7 @@ the gear key on the on-screen keyboard opens directly:
 | Keyboard top edge: Border (your Hyprland window border), Fade or None | None | Setup › Tablet › Edge |
 | Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › BG Transparency |
 | Key transparency: Opaque, Low, Medium, High or Full | Opaque | Setup › Tablet › Key Transparency |
-| Touch typing in each overlay, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
+| Touch typing in each overlay, the picker nav strip, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
 
 Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
 keyboard background, a transparent bar a fully clear one. The keys themselves

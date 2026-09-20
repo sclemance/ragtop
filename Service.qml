@@ -103,7 +103,10 @@ Item {
       id: handle
       required property var modelData
       screen: modelData
-      visible: root.tabletMode && root.layerRulesReady
+      // While a stock picker is up every touch reaches the picker, so a tap
+      // on the handle would only throw it away; a cloned picker leaves the
+      // handle usable, for filter typing.
+      visible: root.tabletMode && root.layerRulesReady && (!root.pickerOpen || root.pickerPatched)
 
       // Under an open keyboard the handle takes the keyboard's background
       // and text colours, so the two read as one panel with the handle as
@@ -299,7 +302,8 @@ Item {
     running: root.tabletMode && root.autoShowEnabled
     stdout: SplitParser {
       onRead: function(line) {
-        if (line === "show" && root.tabletMode && root.autoShowEnabled && !root.oskVisible) root.setOskVisible(true)
+        if (line === "show" && root.tabletMode && root.autoShowEnabled && !root.oskVisible && !root.pickerOpen)
+          root.setOskVisible(true)
       }
     }
     onExited: if (root.tabletMode && root.autoShowEnabled) focusBridgeRestart.start()
@@ -364,15 +368,49 @@ Item {
   property var openOverlays: []
   property bool oskShownForOverlay: false
 
+  // Omarchy's theme and background pickers are both its image picker, whose
+  // surface is named for what it does rather than for the plugin.
+  readonly property string pickerNamespace: "omarchy-image-selector"
+  // Whether the picker runs as a Ragtop clone, which is what makes the nav
+  // strip tappable at all; see PickerNav.qml.
+  property bool pickerPatched: false
+
   Process {
     id: patchCheckProc
     command: ["sh", "-c",
       'for p in menu:Menu emojis:Emojis clipboard:Clipboard polkit:PolkitAgent; do ' +
       'grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.${p%%:*}/${p#*:}.qml" && echo "omarchy-${p%%:*}"; ' +
-      'done; true']
+      'done; ' +
+      'grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.image-picker/ImagePicker.qml" && ' +
+      'echo "omarchy-image-selector"; true']
     running: true
     stdout: StdioCollector {
-      onStreamFinished: root.patchedOverlays = text.split("\n").filter(function(s) { return s !== "" })
+      onStreamFinished: {
+        var found = text.split("\n").filter(function(s) { return s !== "" })
+        root.pickerPatched = found.indexOf(root.pickerNamespace) !== -1
+        // The picker is kept out of patchedOverlays: an open overlay brings
+        // the keyboard up, and the picker wants it away (see pickerOpen).
+        root.patchedOverlays = found.filter(function(s) { return s !== root.pickerNamespace })
+      }
+    }
+  }
+
+  // The picker, while it's up. Its carousel is the one overlay the keyboard
+  // hurts rather than helps: it covers the preview the picker exists to
+  // show, and a stock picker takes every touch on the screen, so a tap on
+  // the keyboard reaches the scrim and throws the picker away. Ragtop takes
+  // the keyboard off it and offers PickerNav instead.
+  property bool pickerOpen: false
+  property bool oskHiddenForPicker: false
+  onPickerOpenChanged: {
+    if (root.pickerOpen) {
+      if (root.oskVisible) {
+        root.oskHiddenForPicker = true
+        root.setOskVisible(false)
+      }
+    } else if (root.oskHiddenForPicker) {
+      root.oskHiddenForPicker = false
+      if (root.tabletMode) root.setOskVisible(true)
     }
   }
 
@@ -414,6 +452,10 @@ Item {
 
       if (name !== "openlayer" && name !== "closelayer") return
       var ns = String(event.data || "")
+      if (ns === root.pickerNamespace) {
+        root.pickerOpen = name === "openlayer"
+        return
+      }
       if (root.patchedOverlays.indexOf(ns) === -1) return
       // Tracked as a set so hopping from one overlay to another (menu to
       // emoji picker) doesn't hide the keyboard when the first one closes.
@@ -620,7 +662,8 @@ Item {
   function applyLayerRules() {
     layerRulesProc.command = ["hyprctl", "eval",
       "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
-      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -2 })"]
+      + "hl.layer_rule({ match = { namespace = '^ragtop-picker-nav$' }, order = -2 }) "
+      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -3 })"]
     layerRulesProc.running = true
   }
   Process {
@@ -631,7 +674,7 @@ Item {
 
   function applyBlur() {
     if (!root.blurChecked) { blurCheckProc.running = true; return }
-    var lua = "hl.layer_rule({ match = { namespace = '^ragtop-keyboard(-handle)?$' }, blur = " + root.blurKeyboard
+    var lua = "hl.layer_rule({ match = { namespace = '^ragtop-(keyboard(-handle)?|picker-nav)$' }, blur = " + root.blurKeyboard
       + ", ignore_alpha = 0.3 }) "
     if (!root.globalBlurWasOn) {
       // Ragtop's own blur: on for its layers, off for every window.
@@ -725,6 +768,32 @@ Item {
     }
   }
 
+  // The picker's nav strip, in the keyboard's place while the picker is up.
+  // Only with a cloned picker: a stock one takes every touch on the screen,
+  // so the strip would be there but untappable.
+  PanelWindow {
+    id: pickerNavWindow
+    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    visible: root.tabletMode && root.pickerOpen && root.pickerPatched && root.layerRulesReady
+
+    WlrLayershell.namespace: "ragtop-picker-nav"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // It reserves its space, so the cloned picker centres its carousel above
+    // the strip instead of behind it.
+    exclusionMode: ExclusionMode.Auto
+    anchors { bottom: true; left: true; right: true }
+    implicitHeight: pickerNav.implicitHeight
+    color: "transparent"
+
+    PickerNav {
+      id: pickerNav
+      anchors.fill: parent
+      service: root
+      theme: keyboardTheme
+    }
+  }
+
   // omarchy-shell ragtop <function>: for keybindings and scripts.
   IpcHandler {
     target: "ragtop"
@@ -744,6 +813,21 @@ Item {
     function keyboardState(): string {
       return JSON.stringify({ visible: root.oskVisible,
                               page: keyboard.page, mods: keyboard.mods, modifierMode: root.modifierMode })
+    }
+    // Presses and releases one of the picker nav strip's buttons ("prev",
+    // "select", "next", "cancel"), as a tap would. Only while the strip is
+    // up, so its keys can only ever reach the picker. For testing.
+    function tapPickerNav(button: string): string {
+      if (!pickerNavWindow.visible) return "picker nav not shown"
+      var found = pickerNav.buttons.filter(function(b) { return b.name === button })
+      if (found.length === 0) return "no such button: " + button
+      pickerNav.press(found[0])
+      pickerNav.release(found[0])
+      return "ok"
+    }
+    function pickerState(): string {
+      return JSON.stringify({ open: root.pickerOpen, patched: root.pickerPatched,
+                              nav: pickerNavWindow.visible })
     }
   }
 }

@@ -18,7 +18,8 @@
 #        ragtop key-transparency (get | is <level> | set <level>)
 #        ragtop edge (get | is <edge> | set <edge>)
 #        ragtop preset (list | apply <preset>)
-# where <overlay> is menu, emojis, clipboard, polkit or lock, <mode> is auto
+# where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
+# <mode> is auto
 # (follow the hinge's switch), on or off, and the modifiers <mode> is oneshot
 # or sticky.
 #
@@ -55,8 +56,9 @@ label() {
     emojis) echo "the emoji picker" ;;
     clipboard) echo "the clipboard picker" ;;
     polkit) echo "the password prompt" ;;
+    image-picker) echo "the theme and background pickers" ;;
     lock) echo "the lock screen" ;;
-    *) echo "Unknown overlay: $1 (expected: menu, emojis, clipboard, polkit, lock)" >&2; exit 2 ;;
+    *) echo "Unknown overlay: $1 (expected: menu, emojis, clipboard, polkit, image-picker, lock)" >&2; exit 2 ;;
   esac
 }
 
@@ -64,7 +66,7 @@ label() {
 # clone that went missing from one that was never wanted.
 record() {
   local on=() o
-  for o in menu emojis clipboard polkit lock; do
+  for o in menu emojis clipboard polkit image-picker lock; do
     "$clones" installed "$o" && on+=("$o")
   done
   mkdir -p "$(dirname "$conf")"
@@ -88,6 +90,8 @@ set_overlay() {
     record
     if [[ $overlay == lock ]]; then
       notify "The lock screen now has an on-screen keyboard in tablet mode."
+    elif [[ $overlay == image-picker ]]; then
+      notify "${name^} now have arrows and a Select button in tablet mode."
     else
       notify "Touch typing is on for ${name}."
     fi
@@ -96,6 +100,8 @@ set_overlay() {
     record
     if [[ $overlay == lock ]]; then
       notify "The lock screen no longer has an on-screen keyboard."
+    elif [[ $overlay == image-picker ]]; then
+      notify "${name^} no longer have arrows and a Select button."
     else
       notify "Touch typing is off for ${name}."
     fi

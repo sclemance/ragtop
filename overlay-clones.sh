@@ -1,7 +1,7 @@
 #!/bin/bash
 # Installs, syncs or removes clones of Omarchy's full-screen overlays (the
-# menu, emoji picker, clipboard picker and polkit password prompt) and its
-# lock screen, patched for tablets.
+# menu, emoji picker, clipboard picker, polkit password prompt and image
+# picker) and its lock screen, patched for tablets.
 #
 # While Ragtop reports tablet mode (via $XDG_RUNTIME_DIR/ragtop-mode),
 # each clone:
@@ -27,12 +27,13 @@
 # The polkit and lock clones keep the authentication capability: Omarchy
 # stamps a clone with its source's capabilities via clonedFrom.
 #
-# Usage: overlay-clones.sh [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit|lock ...]
+# Usage: overlay-clones.sh [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit|image-picker|lock ...]
 # `installed` succeeds only if every named overlay has a Ragtop clone.
 set -euo pipefail
 
 # name:entry-file for each supported built-in overlay.
-overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitAgent.qml lock:LockView.qml)
+overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitAgent.qml
+          image-picker:ImagePicker.qml lock:LockView.qml)
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 builtin_root="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins"
@@ -45,6 +46,12 @@ mode_file_view='FileView { id: ragtopMode; property bool tablet: false; path: (Q
 stock_focus='    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive'
 patched_focus="    WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
     $mode_file_view"
+# The image picker holds focus only while it's showing something, so its
+# line carries that condition; the tablet-mode swap goes inside it.
+stock_picker_focus='    WlrLayershell.keyboardFocus: root.opened && root.imagesLoaded ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None'
+patched_picker_focus="    WlrLayershell.keyboardFocus: root.opened && root.imagesLoaded ? (ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive) : WlrKeyboardFocus.None
+    $mode_file_view"
+
 stock_exclusion='    exclusionMode: ExclusionMode.Ignore'
 patched_exclusion='    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore
     exclusiveZone: 0'
@@ -75,6 +82,8 @@ select_overlay() {
   entry="${1#*:}"
   if [[ $name == lock ]]; then
     patch=("$stock_lock_import" "$patched_lock_import" "$stock_lock_view" "$patched_lock_view")
+  elif [[ $name == image-picker ]]; then
+    patch=("$stock_picker_focus" "$patched_picker_focus" "$stock_exclusion" "$patched_exclusion")
   else
     patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion")
   fi
@@ -200,7 +209,7 @@ else
   for want in "$@"; do
     match=""
     for o in "${overlays[@]}"; do [[ ${o%%:*} == "$want" ]] && match="$o"; done
-    [[ -n $match ]] || { echo "Unknown overlay: $want (expected: menu, emojis, clipboard, polkit, lock)" >&2; exit 2; }
+    [[ -n $match ]] || { echo "Unknown overlay: $want (expected: menu, emojis, clipboard, polkit, image-picker, lock)" >&2; exit 2; }
     selected+=("$match")
   done
 fi
@@ -215,7 +224,7 @@ for o in "${selected[@]}"; do
     remove) remove_one || status=1 ;;
     status) status_one ;;
     installed) is_patched || status=1 ;;
-    *) echo "Usage: $0 [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit ...]" >&2; exit 2 ;;
+    *) echo "Usage: $0 [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit|image-picker|lock ...]" >&2; exit 2 ;;
   esac
 done
 

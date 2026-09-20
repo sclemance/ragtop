@@ -258,36 +258,10 @@ Item {
     return keys
   }
 
-  // Flat unless the style's background is a gradient, and fading out at the
-  // top edge if it asks for that (see KeyboardTheme).
-  Rectangle {
-    id: backdrop
+  // The background and top edge, shared with the picker nav strip.
+  KeyboardSurface {
     anchors.fill: parent
-    readonly property real fade: height > 0 ? Math.min(root.theme.edgeFade, height / 3) / height : 0
-    gradient: Gradient {
-      GradientStop { position: 0; color: backdrop.fade > 0 ? root.theme.backgroundClear : root.theme.backgroundTop }
-      GradientStop { position: backdrop.fade; color: root.theme.backgroundTop }
-      GradientStop { position: 1; color: root.theme.background }
-    }
-  }
-
-  // Edge: Border. Hyprland's own window border along the top, so the
-  // keyboard is edged like a tiled window; its colour can be a gradient.
-  Rectangle {
-    visible: root.theme.edgeBorder > 0
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.top: parent.top
-    height: root.theme.edgeBorder
-    color: root.theme.borderColors[0]
-    gradient: root.theme.borderColors.length > 1 ? borderGradient : null
-
-    Gradient {
-      id: borderGradient
-      orientation: Gradient.Horizontal
-      GradientStop { position: 0; color: root.theme.borderColors[0] }
-      GradientStop { position: 1; color: root.theme.borderColors[root.theme.borderColors.length - 1] }
-    }
+    theme: root.theme
   }
 
   Repeater {
