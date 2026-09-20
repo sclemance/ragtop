@@ -21,15 +21,22 @@ Item {
   // The drawn icon's name, for labelKind "drawn" (see KeyIcon.qml).
   property string icon: ""
   property bool pressed: false
+  // Draw the fill at full strength whatever Key Transparency says. The
+  // setting is there to let the desktop show through the keyboard; behind a
+  // key in a long-press popup is the popup's own panel, so being see-through
+  // there would only muddy the letter.
+  property bool opaque: false
 
   readonly property string shape: theme.keyShape
   readonly property bool outlined: theme.keyFill === "outline"
   readonly property bool marked: kind === "accent" || kind === "locked" || kind === "latched"
-  readonly property color fill: pressed ? theme.pressedKey
+  readonly property color tinted: pressed ? theme.pressedKey
     : kind === "accent" || kind === "locked" ? theme.lockedKey
     : kind === "latched" ? theme.latchedKey
     : kind === "special" ? theme.specialKey
     : theme.key
+  readonly property color fill: opaque && tinted.a > 0
+    ? Qt.rgba(tinted.r, tinted.g, tinted.b, 1) : tinted
   readonly property color labelColor: kind === "accent" || kind === "locked" ? theme.accentText
     : kind === "special" ? theme.specialText
     : theme.text

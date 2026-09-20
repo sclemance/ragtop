@@ -508,6 +508,7 @@ Item {
         label: modelData
         labelKind: "char"
         kind: root.popup && index === root.popup.index ? "accent" : "normal"
+        opaque: true
       }
     }
   }

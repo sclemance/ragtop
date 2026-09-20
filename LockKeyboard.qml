@@ -77,8 +77,14 @@ Item {
       root.layoutRows = ok ? layout.rows : root.usRows
       root.layoutName = ok && typeof layout.name === "string" ? layout.name.slice(0, 40) : ""
       root.layoutSymbols = ok ? root.cleanSymbols(layout.symbols) : []
+      root.layoutLetters = ok ? root.cleanSymbols(layout.letters) : []
     }
-    onLoadFailed: { root.layoutRows = root.usRows; root.layoutName = ""; root.layoutSymbols = [] }
+    onLoadFailed: {
+      root.layoutRows = root.usRows
+      root.layoutName = ""
+      root.layoutSymbols = []
+      root.layoutLetters = []
+    }
   }
 
   // Each letter's shifted character, e.g. "Ü" for "ü".
@@ -107,6 +113,103 @@ Item {
   readonly property var extraSymbols: layoutSymbols.filter(function(c) {
     return root.pageCharacters.indexOf(c) === -1
   }).slice(0, 4)
+
+  // Hold a letter for the characters that belong to it, as the desktop
+  // keyboard does and as every phone keyboard does. A password is typed in
+  // characters, and a layout can keep letters off its letter rows entirely —
+  // AZERTY has é, è, ç and à on its number row — so without this they can't
+  // be typed here at all.
+  //
+  // Copied by hand from Keyboard.qml, table and all, because this file shares
+  // no code with it. It shows what is being held, which anyone watching the
+  // screen can see; so does a pressed key, and that is as far as it goes.
+  // There is no trail and never will be: see the note on swipe below.
+  readonly property var variantTable: ({
+    "a": ["à", "â", "á", "ä", "ã", "å", "æ"],
+    "c": ["ç", "ć", "č"],
+    "d": ["ð", "đ"],
+    "e": ["é", "è", "ê", "ë", "ę", "ē"],
+    "g": ["ğ"],
+    "i": ["î", "ï", "ì", "í", "ī", "ı"],
+    "l": ["ł"],
+    "n": ["ñ", "ń", "ň"],
+    "o": ["ô", "ö", "ò", "ó", "õ", "ø", "œ"],
+    "r": ["ř"],
+    "s": ["ß", "š", "ś", "ş"],
+    "t": ["ţ", "þ"],
+    "u": ["û", "ü", "ù", "ú", "ū"],
+    "y": ["ÿ", "ý"],
+    "z": ["ž", "ź", "ż"]
+  })
+  readonly property var variantBase: ({
+    "ß": "s", "æ": "a", "ø": "o", "œ": "o", "ł": "l", "đ": "d", "ð": "d",
+    "ı": "i", "ŋ": "n", "þ": "t", "ħ": "h", "ĸ": "k"
+  })
+  // The layout's own letters, from the same file as its rows and checked the
+  // same way, first behind the letter they decompose to.
+  property var layoutLetters: []
+  readonly property var variantsOf: {
+    var map = {}
+    for (var b in root.variantTable) map[b] = root.variantTable[b].slice()
+    var own = {}
+    root.layoutLetters.forEach(function(c) {
+      var lower = c.toLowerCase()
+      var base = root.variantBase[lower] || lower.normalize("NFD")[0]
+      if (base.length !== 1 || base === lower || base.toLowerCase() === base.toUpperCase()) return
+      if (!(base in own)) own[base] = []
+      if (own[base].indexOf(lower) === -1) own[base].push(lower)
+    })
+    for (var k in own) {
+      map[k] = own[k].concat((map[k] || []).filter(function(c) { return own[k].indexOf(c) === -1 }))
+    }
+    return map
+  }
+
+  function variantsFor(key) {
+    var list = root.variantsOf[key]
+    if (!list || list.length === 0) return []
+    return [key].concat(list).slice(0, 9).map(function(c) { return root.upper ? c.toUpperCase() : c })
+  }
+
+  // The open popup: { key, items, index, x, y, cellWidth, cellHeight }, or
+  // null. A plain object, so changing it means replacing it.
+  property var popup: null
+
+  function openPopup(key, item) {
+    var items = root.variantsFor(key)
+    if (items.length < 2 || !root.typing) return
+    var at = item.mapToItem(root, 0, 0)
+    var cell = Math.max(item.width + root.gap, root.unit * 0.92)
+    var total = items.length * cell
+    var x = total > root.width - 2 * root.padding ? (root.width - total) / 2
+      : Math.min(Math.max(at.x, root.padding), root.width - root.padding - total)
+    root.popup = { key: key, items: items, index: 0, x: x,
+                   y: Math.max(0, at.y - item.height - root.gap),
+                   cellWidth: cell, cellHeight: item.height }
+  }
+
+  // Which cell the finger is on, in this item's coordinates. Sliding well
+  // below the popup takes nothing.
+  function selectAt(x, y) {
+    var p = root.popup
+    if (!p) return
+    var index = -1
+    if (y < p.y + p.cellHeight + root.keyHeight) {
+      index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
+    }
+    if (index === p.index) return
+    var next = Object.assign({}, p)
+    next.index = index
+    root.popup = next
+  }
+
+  function choosePopup() {
+    var p = root.popup
+    root.popup = null
+    if (!p || p.index < 0 || !root.typing) return
+    root.view.wakeRequested()
+    root.type(p.items[p.index])
+  }
 
   readonly property var pages: ({
     "letters": [
@@ -333,6 +436,60 @@ Item {
 
   Timer { id: shiftTap; interval: 400 }
 
+  // The popup, over the rows above the key being held. It draws its own keys
+  // rather than reusing this file's delegate, which is bound to a row model;
+  // the shapes and measurements are the same ones, from the same style.
+  Item {
+    id: popupLayer
+    visible: root.popup !== null
+    z: 10
+    x: root.popup ? root.popup.x : 0
+    y: root.popup ? root.popup.y : 0
+    width: root.popup ? root.popup.items.length * root.popup.cellWidth : 0
+    height: root.popup ? root.popup.cellHeight : 0
+
+    Rectangle {
+      anchors.fill: parent
+      anchors.margins: -root.gap
+      radius: root.keyRadius + root.gap / 2
+      // Opaque, whatever the lock screen's own surface does, so the letters
+      // read against the keys it covers.
+      color: Qt.rgba(Color.lock.background.r, Color.lock.background.g, Color.lock.background.b, 1)
+      border.width: Math.max(1, root.keyBorderWidth)
+      border.color: Color.lock.borderActive
+    }
+
+    Repeater {
+      model: root.popup ? root.popup.items : []
+
+      Rectangle {
+        required property int index
+        required property string modelData
+        readonly property bool chosen: root.popup && index === root.popup.index
+        x: index * (root.popup ? root.popup.cellWidth : 0) + root.gap / 2
+        width: (root.popup ? root.popup.cellWidth : 0) - root.gap
+        height: parent.height
+        radius: root.style.shape === "pill" ? height / 2 : root.keyRadius
+        // Opaque, both of them: Key Transparency is there to let the lock
+        // screen show through the keyboard, and behind a popup key is the
+        // popup's own panel, so all it would do here is muddy the letter.
+        color: chosen ? Color.lock.borderActive : root.keyBase
+        border.width: root.keyBorderWidth
+        border.color: root.style.fill === "outline" ? root.outline : root.keyBorder
+
+        Text {
+          anchors.fill: parent
+          horizontalAlignment: Text.AlignHCenter
+          verticalAlignment: Text.AlignVCenter
+          text: parent.modelData
+          color: parent.chosen ? Color.lock.background : Color.lock.text
+          font.family: Style.font.family
+          font.pixelSize: root.labelSize
+        }
+      }
+    }
+  }
+
   Column {
     id: rows
     anchors.horizontalCenter: parent.horizontalCenter
@@ -473,11 +630,31 @@ Item {
               // middle of the gap and a tap there isn't lost.
               anchors.fill: parent
               anchors.margins: -root.gap / 2
-              onPressed: root.press(key.modelData)
-              // Holding backspace keeps deleting.
-              onPressAndHold: if (key.modelData === "backspace") repeat.start()
-              onReleased: repeat.stop()
-              onCanceled: repeat.stop()
+              // A key with variants types when it lifts instead, so a hold
+              // can still become a popup rather than a letter already typed.
+              readonly property bool holdable: root.variantsFor(key.modelData).length > 1
+              pressAndHoldInterval: 420
+              onPressed: if (!holdable) root.press(key.modelData)
+              // Holding backspace keeps deleting; holding a letter offers the
+              // characters that belong to it.
+              onPressAndHold: {
+                if (key.modelData === "backspace") repeat.start()
+                else if (holdable) root.openPopup(key.modelData, key)
+              }
+              onPositionChanged: function(mouse) {
+                if (root.popup === null) return
+                var at = mapToItem(root, mouse.x, mouse.y)
+                root.selectAt(at.x, at.y)
+              }
+              onReleased: {
+                repeat.stop()
+                if (root.popup !== null) root.choosePopup()
+                else if (holdable) root.press(key.modelData)
+              }
+              onCanceled: {
+                repeat.stop()
+                root.popup = null
+              }
             }
 
             Timer {

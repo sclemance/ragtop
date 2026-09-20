@@ -372,7 +372,11 @@ all, so no on-screen keyboard can appear over it. Its clone (**Lock Screen**
 in the same menu) keeps Omarchy's lock screen as it is and adds a keyboard of
 its own along the bottom, in tablet mode only: your layout's letters with
 Shift (tap twice for Caps), and two pages of digits and symbols, which pick
-up your layout's own symbols the same way the desktop keyboard's do. The keys edit
+up your layout's own symbols the same way the desktop keyboard's do. Holding
+a letter offers its accents there too — a password is typed in characters,
+and on some layouts é or ß is only reachable that way. Its popup is opaque
+whatever your Key Transparency setting is, so the letter you are picking
+stays legible. The keys edit
 the password the same way typing does, and Omarchy checks it as usual. The
 keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
 loads.
