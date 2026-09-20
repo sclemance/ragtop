@@ -1,6 +1,7 @@
 # Ragtop
 
-Tablet mode for convertible laptops running [Omarchy](https://github.com/omacom/omarchy) 4.
+**Built for convertibles, works great with touchscreens, slates and
+detachables.** Tablet mode for [Omarchy](https://github.com/omacom/omarchy) 4.
 
 Fold the screen back, like a ragtop's roof, and Ragtop switches your desktop
 into a touch-friendly mode: the screen rotates with the device, an on-screen
