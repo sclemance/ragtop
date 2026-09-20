@@ -436,9 +436,12 @@ Item {
 
   Timer { id: shiftTap; interval: 400 }
 
-  // The popup, over the rows above the key being held. It draws its own keys
-  // rather than reusing this file's delegate, which is bound to a row model;
-  // the shapes and measurements are the same ones, from the same style.
+  // The popup, over the rows above the key being held: the keys themselves
+  // and nothing else, no panel behind them. They are opaque, which is all
+  // that's needed to read them against the keys they cover. It draws its own
+  // keys rather than reusing this file's delegate, which is bound to a row
+  // model; the shapes and measurements are the same ones, from the same
+  // style.
   Item {
     id: popupLayer
     visible: root.popup !== null
@@ -447,17 +450,6 @@ Item {
     y: root.popup ? root.popup.y : 0
     width: root.popup ? root.popup.items.length * root.popup.cellWidth : 0
     height: root.popup ? root.popup.cellHeight : 0
-
-    Rectangle {
-      anchors.fill: parent
-      anchors.margins: -root.gap
-      radius: root.keyRadius + root.gap / 2
-      // Opaque, whatever the lock screen's own surface does, so the letters
-      // read against the keys it covers.
-      color: Qt.rgba(Color.lock.background.r, Color.lock.background.g, Color.lock.background.b, 1)
-      border.width: Math.max(1, root.keyBorderWidth)
-      border.color: Color.lock.borderActive
-    }
 
     Repeater {
       model: root.popup ? root.popup.items : []
