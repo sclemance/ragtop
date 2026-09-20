@@ -335,9 +335,25 @@ Item {
   // alike, with a little of its accent so it reads as an edge.
   // A raised key's side is part of the key: the face's colour in shadow,
   // fading with it. An outline key has no face colour, so it stays a wash.
+  // Where the face is too dark to hold a shadow the side steps up instead,
+  // as the desktop keyboard's does — on a dark theme a dark key's side is
+  // otherwise the same colour as its face, which is a keycap with no side.
+  property real sideShadow: 0.25
+  property real sideLift: 0.09
+  property real sideMinStep: 0.035
+  property real sideAccent: 0.12
+  function shaded(c) {
+    var down = Qt.tint(c, Qt.rgba(0, 0, 0, sideShadow))
+    return Math.abs(luminance(down) - luminance(c)) >= sideMinStep
+      ? down : Qt.tint(c, Qt.rgba(1, 1, 1, sideLift))
+  }
   readonly property color keySide: seeThrough(style.fill === "outline"
     ? Util.alpha(Qt.tint(Color.lock.text, Util.alpha(Color.lock.borderActive, 0.35)), 0.3)
-    : Qt.tint(Qt.darker(keyBase, 1.35), Util.alpha(Color.lock.borderActive, 0.12)))
+    : Qt.tint(shaded(keyBase), Util.alpha(Color.lock.borderActive, sideAccent)))
+  // A side can't take more than this much of the key; pressing sinks the
+  // face most of the way into it.
+  property real maxDepthFraction: 0.25
+  property real pressSink: 0.6
   // Solid keys sit on the lock screen's own surface colour, subtle ones let
   // it show through, outline keys are carried by their edge alone.
   // How see-through the keys are; what shows through is the lock screen
@@ -543,8 +559,8 @@ Item {
               : latched ? root.seeThrough(root.latchedKeyColor)
               : root.keyColor
             // Keycap: the face sits above the key's side and sinks when pressed.
-            readonly property real depth: Math.min(root.keyDepth, height / 4)
-            readonly property real faceY: area.pressed ? depth * 0.6 : 0
+            readonly property real depth: Math.min(root.keyDepth, height * root.maxDepthFraction)
+            readonly property real faceY: area.pressed ? depth * root.pressSink : 0
             readonly property real faceHeight: height - depth
             width: root.unit * root.keyUnits(keyRow.modelData, index) - root.gap
             height: root.keyHeight

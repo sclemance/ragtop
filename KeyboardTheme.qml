@@ -132,10 +132,29 @@ QtObject {
   // the face's own colour in shadow, with a little accent so it reads as an
   // edge, and it fades with the key so a see-through key stays one object.
   // An outline key has no face colour to shade, so there it stays a wash.
+  //
+  // Shadow is a step towards black, which is what a keycap's side is — but a
+  // face that is already nearly black has no shadow left in it. Measured
+  // across Omarchy's themes, a dark key's side came out less than 3% of
+  // luminance from its face on 14 of 22 of them, and on vantablack the two
+  // were identical: a keycap with no side at all. So where there isn't room
+  // to step down, the side steps up instead. An edge that can't be seen
+  // isn't an edge.
+  property real sideShadow: 0.25    // towards black, where the face has room
+  property real sideLift: 0.09      // towards white, where it hasn't
+  property real sideMinStep: 0.035  // the least difference that still reads as an edge
+  property real sideAccent: 0.12    // enough accent that the edge belongs to the theme
+  property real outlineSideAccent: 0.35
   property real sideStrength: 0.3
+
+  function shaded(c) {
+    var down = Qt.tint(c, Qt.rgba(0, 0, 0, sideShadow))
+    return Math.abs(luminance(down) - luminance(c)) >= sideMinStep
+      ? down : Qt.tint(c, Qt.rgba(1, 1, 1, sideLift))
+  }
   readonly property color sideBase: keyFill === "outline"
-    ? Util.alpha(Qt.tint(text, Util.alpha(Color.accent, 0.35)), sideStrength)
-    : Qt.tint(Qt.darker(keyBase, 1.35), Util.alpha(Color.accent, 0.12))
+    ? Util.alpha(Qt.tint(text, Util.alpha(Color.accent, outlineSideAccent)), sideStrength)
+    : Qt.tint(shaded(keyBase), Util.alpha(Color.accent, sideAccent))
   property color keySide: seeThrough(sideBase)
 
   // Key borders, from the same control states.
@@ -158,6 +177,10 @@ QtObject {
     : keyShape === "angular" ? 0
     : Style.space(8)
   property real keyDepth: raised ? Style.space(look.depth) : 0
+  // A side can't take more than this much of the key, or the face has
+  // nowhere left to sit; pressing sinks the face most of the way into it.
+  property real maxDepthFraction: 0.25
+  property real pressSink: 0.6
   property real keyChamfer: Style.space(look.chamfer)
 
   // Density steps through Omarchy's spacing tokens and scales the keys.

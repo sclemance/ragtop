@@ -42,9 +42,9 @@ Item {
     : theme.text
 
   // A raised key's face sits above its side and sinks into it when pressed.
-  readonly property real depth: Math.min(theme.keyDepth, height / 4)
+  readonly property real depth: Math.min(theme.keyDepth, height * theme.maxDepthFraction)
   // The face, where the label goes: the whole key but for a keycap's side.
-  readonly property real faceY: pressed ? depth * 0.6 : 0
+  readonly property real faceY: pressed ? depth * theme.pressSink : 0
   readonly property real faceHeight: height - depth
 
   // Angular keys are drawn as a chamfered box; the same path serves the
