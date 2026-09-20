@@ -146,11 +146,22 @@ welcome, since some signal the keyboard being detached differently.
 
 ```bash
 omarchy plugin add https://github.com/sclemance/ragtop.git --enable
-~/.config/omarchy/plugins/sclemance.ragtop/install.sh
 ```
 
-Or clone it anywhere and run `./install.sh`; it links the checkout into
-Omarchy's plugin folder.
+That is the whole of it: Ragtop notices it hasn't been set up and opens its
+setup in the shell, which is where the rest happens.
+
+Two packages come from Arch's own repositories and Ragtop can't install them
+for you — the setup names them, and this is the line:
+
+```bash
+sudo pacman -S --needed iio-sensor-proxy python-pywayland
+```
+
+If you'd rather do it in a terminal, or you're working on a checkout of your
+own, `./install.sh` does the same things and links the checkout into Omarchy's
+plugin folder. It takes `--yes`, `--no-restart`, `--overlays` and
+`--no-overlays` for unattended runs.
 
 ### Setup without a terminal
 
