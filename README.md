@@ -497,7 +497,10 @@ plugin itself (or unlinks it, if it was linked from a checkout).
 ## Language
 
 Ragtop is English-only, and so is Omarchy: the shell has no translation layer
-yet, and the proposals for one are still open. [LOCALIZATION.md](LOCALIZATION.md)
+yet, and the proposals for one are still open. That's worth fixing one day —
+in 2026 localization isn't as hard as it used to be, and Linux is for
+everyone, not just English speakers — so the point for now is to not get in
+the way of it. [LOCALIZATION.md](LOCALIZATION.md)
 records where that stands, which of Ragtop's strings are prose and which are
 protocol that must never be translated, and what would change here once a
 standard settles.

@@ -1,5 +1,20 @@
 # Localization
 
+## Why care
+
+Because in 2026, localization isn't as hard as it used to be, and Linux is for
+everyone, not just English speakers.
+
+The machinery is already on the disk. A stock Omarchy machine carries 250
+locale directories and the catalogs to go with them: pacman speaks 43
+languages on it, systemd 53, GTK 117. Every one of those projects solved this
+with tools that ship in the base system. What's missing in Omarchy's case
+isn't technology, it's a decision — and a decision can arrive any time, which
+is exactly why a plugin written today shouldn't make it harder to act on.
+
+So this is not a file about translating Ragtop. It is about not standing in
+the way of the day someone does.
+
 Ragtop is English-only, deliberately, and will stay that way until Omarchy
 decides how it wants to do this. That is not a shrug: there are things a
 plugin has to get right *before* a translation layer exists, because they are
