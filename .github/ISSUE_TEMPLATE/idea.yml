@@ -3,6 +3,12 @@ description: Something Ragtop should do, or should do differently
 title: "[idea] "
 labels: ["idea"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Being in beta is the reason to send this now rather than later. What is
+        awkward to use is as worth reporting as what is broken, and easier to
+        change while the shape is still moving.
   - type: textarea
     id: idea
     attributes:
