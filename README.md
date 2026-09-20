@@ -145,7 +145,7 @@ welcome, since some signal the keyboard being detached differently.
 ## Install
 
 ```bash
-omarchy plugin add <repository-url>
+omarchy plugin add https://github.com/sclemance/ragtop.git --enable
 ~/.config/omarchy/plugins/sclemance.ragtop/install.sh
 ```
 
