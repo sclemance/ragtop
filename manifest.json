@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sclemance.ragtop",
   "name": "Ragtop",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "author": "Stan Clemance",
   "description": "Tablet mode for Omarchy on convertibles, slates and detachables: rotation that follows the hinge, a themed on-screen keyboard that speaks your keyboard layout, and window management by touch. Run install.sh after adding.",
   "kinds": ["bar-widget", "service"],

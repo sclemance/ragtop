@@ -95,6 +95,15 @@ Item {
       onStreamFinished: root.ruleLines = text.split("\n").filter(function(s) { return s !== "" })
     }
   }
+  // Tablet mode by hand, for a machine with no switch or no rule.
+  property string manualMode: ""
+  function setManualMode(mode) {
+    root.manualMode = mode
+    modeProc.command = ["bash", root.script("ragtop"), "tablet-mode", "set", mode]
+    modeProc.running = true
+  }
+  Process { id: modeProc }
+
   Process {
     id: ruleInstallProc
     command: ["bash", root.script("udev-rule.sh"), "install"]
@@ -412,14 +421,22 @@ Item {
     Column {
       spacing: Style.space(10)
 
+      readonly property bool offering: root.switchState === "unreadable"
+        || root.switchState === "installed-but-unreadable"
+      readonly property bool noSwitch: root.switchState === "no-switch"
+
       Body {
         width: parent.width
-        text: "Ragtop knows the screen has been folded back by reading the tablet-mode "
-          + "switch — an input device the kernel exposes, like a keyboard or a mouse."
+        text: parent.noSwitch
+          ? "Ragtop can notice a screen being folded back by reading a tablet-mode "
+            + "switch — an input device the kernel exposes, like a keyboard or a mouse. "
+            + "This machine reports none."
+          : "Ragtop knows the screen has been folded back by reading the tablet-mode "
+            + "switch — an input device the kernel exposes, like a keyboard or a mouse."
       }
       Body {
         width: parent.width
-        visible: root.switchState === "unreadable" || root.switchState === "installed-but-unreadable"
+        visible: parent.offering
         text: "Only root can read it here. This rule tags switch devices — tablet mode, the "
           + "lid, the headphone jack — so whoever is logged in at the machine can read them. "
           + "Keyboards are excluded, which is the difference between this and joining the "
@@ -427,23 +444,11 @@ Item {
       }
       Mono {
         width: parent.width
-        visible: root.ruleLines.length > 1
+        visible: parent.offering && root.ruleLines.length > 1
         text: root.ruleLines.join("\n")
       }
-      Body {
-        width: parent.width
-        visible: root.switchState === "readable"
-        text: "The switch is readable already — nothing to do here."
-      }
-      Body {
-        width: parent.width
-        visible: root.switchState === "no-switch"
-        text: "No tablet-mode switch on this machine. On a slate that is normal: set "
-          + "Tablet Mode to Always On in Setup › Tablet afterwards. On a detachable, "
-          + "attaching the keyboard may add one, and Ragtop keeps looking."
-      }
       Button {
-        visible: root.switchState === "unreadable" || root.switchState === "installed-but-unreadable"
+        visible: parent.offering
         text: root.installingRule ? "Waiting for your password…" : "Install the rule"
         bordered: true
         foreground: Color.accent
@@ -454,8 +459,53 @@ Item {
       }
       Note {
         width: parent.width
-        visible: root.switchState === "unreadable" || root.switchState === "installed-but-unreadable"
+        visible: parent.offering
         text: "Omarchy's password prompt will ask for your password (polkit, not sudo)."
+      }
+
+      Body {
+        width: parent.width
+        visible: root.switchState === "readable"
+        text: "The switch is readable already — nothing to do here."
+      }
+
+      // A slate has no hinge to report, and a convertible whose switch stays
+      // unreadable is no worse off than one: the rule buys automatic
+      // switching and nothing else. Rotation, the keyboard and the overlays
+      // don't go through it.
+      Body {
+        width: parent.width
+        visible: parent.noSwitch || parent.offering
+        text: parent.noSwitch
+          ? "That is ordinary on a tablet with no keyboard — there is no hinge to report. "
+            + "Tell Ragtop to stay in tablet mode and it will, for good."
+          : "You can also skip it. The rule buys one thing: noticing the hinge by itself. "
+            + "Rotation, the keyboard and everything else work without it. Set the mode by "
+            + "hand instead."
+      }
+      Row {
+        spacing: Style.space(8)
+        visible: parent.noSwitch || parent.offering
+
+        Button {
+          text: root.manualMode === "on" ? "Tablet mode: always on ✓" : "Stay in tablet mode"
+          bordered: true
+          foreground: root.manualMode === "on" ? Color.accent : Color.popups.text
+          onClicked: root.setManualMode("on")
+        }
+        Button {
+          text: root.manualMode === "off" ? "Tablet mode: always off ✓" : "Stay in laptop mode"
+          bordered: true
+          foreground: root.manualMode === "off" ? Color.accent : Color.popups.text
+          onClicked: root.setManualMode("off")
+        }
+      }
+      Note {
+        width: parent.width
+        visible: parent.noSwitch || parent.offering
+        text: "Either way it is a setting, not a decision: Setup › Tablet › Tablet Mode "
+          + "changes it whenever you like. A detachable that reports a switch when its "
+          + "keyboard comes off will be picked up on its own."
       }
     }
   }

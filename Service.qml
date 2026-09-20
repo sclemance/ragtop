@@ -27,7 +27,7 @@ Item {
     // Locking just means "stop watching the orientation", which freezes the
     // display at whatever orientation it's currently in.
     if (locked) { orientationSettle.stop(); lockRecheck.stop() }
-    rotationProc.running = !locked
+    rotationProc.running = !locked && root.rotationAvailable
   }
 
   // False until tablet mode is first decided, so "laptop mode" can be told
@@ -169,7 +169,7 @@ Item {
     id: configureFallback
     interval: 2000
     running: true
-    onTriggered: rotationProc.running = !root.rotationLocked
+    onTriggered: rotationProc.running = !root.rotationLocked && root.rotationAvailable
   }
 
   // Orientation comes from iio-sensor-proxy, through its monitor-sensor
@@ -180,6 +180,23 @@ Item {
   property string appliedOrientation: ""
   readonly property var orientationTransforms:
     ({ "normal": 0, "left-up": 1, "bottom-up": 2, "right-up": 3 })
+
+  // Rotation needs iio-sensor-proxy, which Omarchy doesn't ship. Without it
+  // there is nothing to watch and nothing to restart: a machine with no
+  // accelerometer, or one where the package was never installed, would
+  // otherwise respawn a missing command every three seconds for as long as
+  // the shell runs. The setup steps say what's missing; this just stops
+  // asking.
+  property bool rotationAvailable: true
+  Process {
+    id: sensorCheckProc
+    running: true
+    command: ["sh", "-c", "command -v monitor-sensor >/dev/null"]
+    onExited: function(code) {
+      root.rotationAvailable = code === 0
+      if (root.rotationAvailable) rotationProc.running = !root.rotationLocked
+    }
+  }
 
   Process {
     id: rotationProc
@@ -196,7 +213,7 @@ Item {
         orientationSettle.restart()
       }
     }
-    onExited: if (!root.rotationLocked) rotationRestart.start()
+    onExited: if (!root.rotationLocked && root.rotationAvailable) rotationRestart.start()
   }
   Timer {
     id: orientationSettle
@@ -254,7 +271,7 @@ Item {
   Timer {
     id: rotationRestart
     interval: 3000
-    onTriggered: if (!root.rotationLocked) rotationProc.running = true
+    onTriggered: if (!root.rotationLocked && root.rotationAvailable) rotationProc.running = true
   }
 
   // Settings written by the `ragtop` command (Setup › Tablet in the

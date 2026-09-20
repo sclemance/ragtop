@@ -49,6 +49,23 @@ If you are on a slate or a detachable, [reports are welcome](#tested-hardware--f
 detachables, where what the kernel reports varies by model, and where the
 answer decides whether Ragtop can follow the hardware or has to be told.
 
+### What it costs to have less
+
+Nothing here is all-or-nothing. Each missing piece takes away exactly one
+thing:
+
+| Missing | What stops | What still works |
+| --- | --- | --- |
+| A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
+| An accelerometer, or `iio-sensor-proxy` | The screen following the device; the rotation-lock button has nothing to lock | The keyboard, the handle, tablet mode, the overlays |
+| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, the shortcuts panel, the picker strip |
+| `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
+| A touchscreen | Touch, obviously — but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
+
+A plain laptop with none of the above is not a failure case either: Ragtop
+stays out of the way, the bar icons never appear, and nothing reserves screen
+space until tablet mode turns on.
+
 ## Features
 
 - **Follows the hinge.** Ragtop reads the hardware tablet-mode switch, so
@@ -87,16 +104,22 @@ answer decides whether Ragtop can follow the hardware or has to be told.
 
 ## Requirements
 
-- Omarchy 4 (Hyprland 0.56+, the Omarchy shell).
-- A convertible whose kernel driver reports a tablet-mode switch
-  (`lenovo-ymc`, `intel-vbtn`, `intel-hid`, `asus-wmi`, `hp-wmi`,
-  `thinkpad_acpi` and others), and an accelerometer for rotation.
-- Two packages Omarchy doesn't install, both from the official repositories:
-  `iio-sensor-proxy` (rotation) and `python-pywayland` (the keyboard). Ragtop
-  also uses `python-gobject`, `git` and `fcitx5`, which come with Omarchy;
-  fcitx5 is how it notices text fields (see [Using it](#using-it)).
-- Read access to the tablet-mode switch. If you don't have it, the installer
-  offers to fix it (see [Tablet-mode detection](#tablet-mode-detection)).
+Only one thing is actually required: **Omarchy 4** (Hyprland 0.56+, the
+Omarchy shell). Everything else buys a piece of Ragtop, and Ragtop runs
+without any of it — it just does less, and the setup steps say which less.
+
+| For | You need | Without it |
+| --- | --- | --- |
+| The on-screen keyboard | `python-pywayland` (official repositories) | No keys are sent; everything else still works |
+| Rotation following the device | `iio-sensor-proxy` (official repositories), and an accelerometer | The screen stays where it is; rotation lock is moot |
+| The keyboard coming up on text fields | `python-gobject`, and fcitx5 (which Omarchy ships) | Bring it up yourself with the handle |
+| **Automatic** tablet mode | A kernel driver that reports a tablet-mode switch (`lenovo-ymc`, `intel-vbtn`, `intel-hid`, `asus-wmi`, `hp-wmi`, `thinkpad_acpi`…), and read access to it | Set **Tablet Mode › Always On** and Ragtop stays in tablet mode — which is the right answer on a slate anyway |
+| Touch typing in Omarchy's overlays | `git`, to copy them | They behave as they ship |
+
+Read access to the switch is a udev rule the setup offers to install, with
+your password, through Omarchy's own prompt (see
+[Tablet-mode detection](#tablet-mode-detection)). It is worth having on a
+convertible and pointless on a slate.
 
 ## Tested hardware — feedback wanted
 
