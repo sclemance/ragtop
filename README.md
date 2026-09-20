@@ -131,9 +131,23 @@ omarchy plugin add <repository-url>
 Or clone it anywhere and run `./install.sh`; it links the checkout into
 Omarchy's plugin folder.
 
-If you enable Ragtop without running the installer, or something it set up
-goes missing later, Ragtop shows a "Ragtop needs setup" notification
-after the shell starts. Click it to run the installer in a terminal.
+### Setup without a terminal
+
+The first time Ragtop runs on a machine nothing has been set up on, it opens
+**setup in the shell** instead: a short series of steps that says what it is
+about to touch, checks the packages it needs, offers the switch access rule
+through Omarchy's own password prompt, and lets you pick which of Omarchy's
+overlays to patch — each with a switch, and one that turns them all on.
+
+It writes exactly what `install.sh` writes, through the same scripts, so a
+machine set up either way ends up the same. Re-open it any time from
+**Setup › Tablet › Run Setup**, or with `./ragtop setup`; it reflects what is
+already on the machine, so you can use it to turn overlays on and off later.
+
+The one thing it cannot do is install packages: it names what is missing, says
+what each is for, and hands you the `pacman` line. If something Ragtop set up
+goes missing later, a "Ragtop needs setup" notification says what, and opens
+the same steps.
 
 The installer can be re-run safely. Options:
 
@@ -154,7 +168,9 @@ have to live elsewhere. The installer:
 2. Adds Ragtop's settings to the Omarchy menu, as a marked block at the
    top of `~/.config/omarchy/extensions/omarchy-menu.jsonc`.
 3. Only if you can't read the tablet-mode switch, and only after asking:
-   installs a udev rule, asking for your password (see [Tablet-mode detection](#tablet-mode-detection)).
+   installs a udev rule, asking for your password through Omarchy's polkit
+   prompt (see [Tablet-mode detection](#tablet-mode-detection)). The rule and
+   everything that runs as root live in `udev-rule.sh`.
 4. Offers, once and answering No by default, to turn on touch typing in all of
    [Omarchy's overlays](#omarchys-overlays) — its menu, pickers, password
    prompt and lock screen. Say no and nothing of Omarchy's is replaced; you
@@ -564,7 +580,9 @@ and every push is, in effect, a release.
 The version in `manifest.json` is required — `omarchy plugin validate` refuses
 a manifest without one — but Omarchy itself never shows it: not in
 `omarchy plugin list`, not in its JSON. So it is here for people, in the
-release tags and in bug reports. It is **0.x while Ragtop is unpublished**,
+release tags and in bug reports. Ragtop is **in beta**: it runs a machine every day, but it hasn't been
+published yet and the settings are still moving. The version is **0.x while
+that is true**,
 and says so honestly: the settings file, the `ragtop` command and the rest
 are still moving. The first published release is 1.0.0, tagged, and from
 then on:

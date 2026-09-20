@@ -334,14 +334,18 @@ Item {
 
   function offerSetup(problems) {
     if (problems.length === 0) return
+    // Never set up on this machine: open setup rather than describe it.
+    if (problems.indexOf("The installer hasn't been run yet.") !== -1) {
+      root.openSetup()
+      return
+    }
     var shown = problems.slice(0, 3)
     if (problems.length > 3) shown.push("…and " + (problems.length - 3) + " more.")
     setupNotifyProc.command = [
       "omarchy-notification-send", "-g", "󰌌",
       "Ragtop needs setup",
-      shown.join("\n") + "\nClick to run the installer.",
-      "--exec", "omarchy-launch-floating-terminal-with-presentation",
-      "'" + root.installScript.replace(/'/g, "'\\''") + "'"
+      shown.join("\n") + "\nClick to fix it.",
+      "--exec", "omarchy-shell", "ragtop", "openSetup"
     ]
     setupNotifyProc.running = true
   }
@@ -830,6 +834,34 @@ Item {
     }
   }
 
+  // Setup, in the shell rather than in a terminal (SetupWizard.qml). Opened
+  // by `ragtop setup`, by the setup notification, and by itself the first
+  // time Ragtop runs on a machine the installer has never been run on.
+  property bool setupOpen: false
+  function openSetup() { root.setupOpen = true }
+
+  PanelWindow {
+    id: setupWindow
+    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    visible: root.setupOpen
+
+    WlrLayershell.namespace: "ragtop-setup"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    exclusionMode: ExclusionMode.Ignore
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
+
+    Loader {
+      anchors.fill: parent
+      active: root.setupOpen
+      sourceComponent: SetupWizard {
+        service: root
+        onFinished: root.setupOpen = false
+      }
+    }
+  }
+
   // omarchy-shell ragtop <function>: for keybindings and scripts.
   IpcHandler {
     target: "ragtop"
@@ -838,6 +870,8 @@ Item {
     function hideKeyboard(): string { root.setOskVisible(false); return "ok" }
     function toggleKeyboard(): string { root.toggleOsk(); return "ok" }
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
+    function openSetup(): string { root.openSetup(); return "ok" }
+    function closeSetup(): string { root.setupOpen = false; return "ok" }
     // Presses and releases a key of the keyboard by name ("q", "shift",
     // "ctrl", "enter"...), as a tap would. For testing and automation.
     function tapKey(key: string): string {

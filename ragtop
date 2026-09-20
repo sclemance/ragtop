@@ -18,6 +18,7 @@
 #        ragtop key-transparency (get | is <level> | set <level>)
 #        ragtop edge (get | is <edge> | set <edge>)
 #        ragtop preset (list | apply <preset>)
+#        ragtop setup                       open setup in the shell
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
 # (follow the hinge's switch), on or off, and the modifiers <mode> is oneshot
@@ -311,5 +312,6 @@ case "${1:-} ${2:-}" in
     if "$clones" installed "$3"; then set_overlay "$3" 0; else set_overlay "$3" 1; fi
     ;;
   "overlay status") "$clones" status ;;
+  "setup "*|"setup") omarchy-shell ragtop openSetup >/dev/null ;;
   *) usage ;;
 esac
