@@ -99,6 +99,10 @@ The installer can be re-run safely. Options:
 | Option | Effect |
 | --- | --- |
 | `--no-restart` | Don't restart the Omarchy shell at the end. |
+| `--yes` | Don't ask anything; take the offer. Touch typing in Omarchy's overlays is the exception — it replaces part of Omarchy, so it stays off unless you ask for it. |
+| `--no-udev` | Leave the switch access rule alone, installing or removing. |
+| `--overlays` | Turn touch typing on in all of [Omarchy's overlays](#omarchys-overlays), without asking. |
+| `--no-overlays` | Leave it off, without asking. |
 
 ### What the installer changes
 
@@ -111,8 +115,13 @@ have to live elsewhere. The installer:
 3. Only if you can't read the tablet-mode switch, and only after asking:
    installs a udev rule, asking for your password (see [Tablet-mode detection](#tablet-mode-detection)).
 
-Each of these is undone by the uninstaller. The installer doesn't touch
-Omarchy's overlays; that's up to you (below). While running, Ragtop keeps
+4. Offers, once and answering No by default, to turn on touch typing in all of
+   [Omarchy's overlays](#omarchys-overlays) — its menu, pickers, password
+   prompt and lock screen. Say no and nothing of Omarchy's is replaced; you
+   can turn them on one at a time later.
+
+Each of these is undone by the uninstaller, which removes the overlay clones
+whether the installer or the menu turned them on. While running, Ragtop keeps
 generated files in `~/.local/state/ragtop` and its settings in
 `~/.config/ragtop`.
 
@@ -283,7 +292,9 @@ sit above it. In laptop mode they behave exactly as shipped; on-demand focus
 there could let a window under the mouse on another monitor take focus away.
 
 Replacing part of Omarchy is your call, so each clone is off until you turn it
-on. In the Omarchy menu, go to **Setup › Tablet › System Overlays** and
+on. The installer offers all of them once, with the trade-off below and No as
+the default answer. Afterwards, in the Omarchy menu, go to
+**Setup › Tablet › System Overlays** and
 tap an overlay to turn it on or off (✓ means on). The shell restarts to load
 the change. From a terminal, the same thing is:
 

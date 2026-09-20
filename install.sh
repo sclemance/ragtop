@@ -3,13 +3,18 @@
 # removes them again. Safe to re-run: each step checks before it changes
 # anything.
 #
-# Usage: install.sh [--no-restart] [--yes] [--no-udev]
+# Usage: install.sh [--no-restart] [--yes] [--no-udev] [--overlays|--no-overlays]
 #        install.sh uninstall [--no-restart] [--yes] [--no-udev]
 #
-#   --no-restart  don't restart the Omarchy shell at the end
-#   --yes         don't ask anything; take the offer (the switch access rule
-#                 still needs your password, in Omarchy's polkit dialog)
-#   --no-udev     leave the switch access rule alone, installing or removing
+#   --no-restart   don't restart the Omarchy shell at the end
+#   --yes          don't ask anything; take the offer (the switch access rule
+#                  still needs your password, in Omarchy's polkit dialog).
+#                  Touch typing in Omarchy's overlays is the exception: it
+#                  replaces part of Omarchy, so it stays off unless asked for.
+#   --no-udev      leave the switch access rule alone, installing or removing
+#   --overlays     turn touch typing on in all of Omarchy's overlays, without
+#                  asking; the uninstaller removes them either way
+#   --no-overlays  leave it off, without asking
 set -euo pipefail
 
 repo="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
@@ -29,6 +34,9 @@ udev_rule='SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{
 # Set from the flags; see the usage text.
 assume_yes=0
 skip_udev=0
+# "ask", or "on"/"off" from --overlays/--no-overlays.
+overlays_choice=ask
+overlays_enabled=0
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -278,6 +286,73 @@ as_root() {
   fi
 }
 
+# Touch typing in Omarchy's own overlays means running patched clones of them
+# from the user's config, so it's the one thing the installer asks about that
+# changes Omarchy itself: offered once, off unless taken, and changeable per
+# overlay afterwards in Setup › Tablet › System Overlays.
+offer_overlays() {
+  say "Touch typing in Omarchy's overlays"
+  local on
+  on=$("$repo/overlay-clones.sh" status | sed -n 's/^\([a-z]*\): installed.*/\1/p' | tr '\n' ' ')
+  on="${on% }"
+  if [[ -n $on ]]; then
+    echo "   already on for: $on"
+    echo "   Change it per overlay in Setup › Tablet › System Overlays."
+    return
+  fi
+
+  echo "   Omarchy's menu, its emoji and clipboard pickers, its password prompt and"
+  echo "   its lock screen can't be typed into by touch as they ship. Ragtop can run"
+  echo "   patched clones of them instead, and give the lock screen a keyboard."
+  echo "   The catch: a clone is Omarchy's own code — the password prompt and lock"
+  echo "   screen included — copied from its root-owned folder into your config,"
+  echo "   where anything running as you can rewrite it, and it stops taking"
+  echo "   Omarchy's updates directly (a hook re-clones it after each update)."
+  echo "   Leave this off if in doubt: you can turn each overlay on later in"
+  echo "   Setup › Tablet › System Overlays. See 'Omarchy's overlays' in the README."
+
+  case "$overlays_choice" in
+    on) echo "   turning all of them on (--overlays)" ;;
+    off) echo "   left off (--no-overlays)"; return ;;
+    *)
+      if (( assume_yes )); then
+        echo "   left off; pass --overlays to turn them all on without asking"
+        return
+      fi
+      if [[ ! -t 0 ]]; then
+        echo "   left off; not running in a terminal, so not asking"
+        return
+      fi
+      local answer
+      read -r -p "   Turn all of them on now? [y/N] " answer
+      if [[ $answer != [yY]* ]]; then
+        echo "   left off"
+        return
+      fi
+      ;;
+  esac
+
+  "$repo/overlay-clones.sh" install | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
+  overlays_enabled=1
+  record_overlays
+}
+
+# Which overlays are on, for setup-check.sh: it tells a clone that went
+# missing from one that was never wanted. `ragtop` keeps this in step after.
+record_overlays() {
+  local on=() o
+  for o in menu emojis clipboard polkit lock; do
+    "$repo/overlay-clones.sh" installed "$o" && on+=("$o")
+  done
+  mkdir -p "$state_dir"
+  local conf="$state_dir/install.conf"
+  if [[ -f $conf ]] && grep -q '^overlays=' "$conf"; then
+    sed -i "s/^overlays=.*/overlays=${on[*]}/" "$conf"
+  else
+    printf 'overlays=%s\n' "${on[*]}" >>"$conf"
+  fi
+}
+
 link_plugin() {
   say "Installing the plugin"
   if [[ $(realpath "$plugin_dir" 2>/dev/null) == "$repo" ]]; then
@@ -319,6 +394,8 @@ install() {
       --no-restart) restart=0 ;;
       --yes) assume_yes=1 ;;
       --no-udev) skip_udev=1 ;;
+      --overlays) overlays_choice=on ;;
+      --no-overlays) overlays_choice=off ;;
       *) die "unknown option: $arg" ;;
     esac
   done
@@ -330,16 +407,15 @@ install() {
   say "Adding Ragtop's settings to the Omarchy menu (Setup › Tablet)"
   menu_block add || warn "couldn't edit ${menu_file/#$HOME/\~}; Ragtop's settings won't be in the menu."
 
-  # Touch typing in Omarchy's overlays swaps in patched clones, so it stays
-  # off until the user turns it on; `ragtop` records which ones are on.
-  if [[ $("$repo/ragtop" overlay status) != *": installed"* ]]; then
-    echo "   Touch typing in Omarchy's menu, pickers and password prompt is off. Turn it on per"
-    echo "   overlay in Setup › Tablet › System Overlays."
-  fi
   mkdir -p "$state_dir"
   [[ -f $state_dir/install.conf ]] || printf 'overlays=\n' >"$state_dir/install.conf"
+  offer_overlays
 
-  (( restart )) && restart_shell
+  if (( restart )); then
+    restart_shell
+  elif (( overlays_enabled )); then
+    warn "the clones load when the shell restarts: omarchy-restart-shell"
+  fi
   say "Done. Ragtop's icons appear in the bar in tablet mode."
 }
 
@@ -384,6 +460,6 @@ uninstall() {
 
 case "${1:-}" in
   uninstall) shift; uninstall "$@" ;;
-  -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) install "$@" ;;
 esac
