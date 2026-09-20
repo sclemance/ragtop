@@ -3,8 +3,13 @@
 # removes them again. Safe to re-run: each step checks before it changes
 # anything.
 #
-# Usage: install.sh [--no-restart]
-#        install.sh uninstall [--no-restart]
+# Usage: install.sh [--no-restart] [--yes] [--no-udev]
+#        install.sh uninstall [--no-restart] [--yes] [--no-udev]
+#
+#   --no-restart  don't restart the Omarchy shell at the end
+#   --yes         don't ask anything; take the offer (the switch access rule
+#                 still needs your password, in Omarchy's polkit dialog)
+#   --no-udev     leave the switch access rule alone, installing or removing
 set -euo pipefail
 
 repo="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
@@ -20,6 +25,10 @@ menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 # uaccess tags.
 udev_rule_file="/etc/udev/rules.d/70-ragtop-tablet-switch.rules"
 udev_rule='SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{ID_INPUT_KEY}!="1", TAG+="uaccess"'
+
+# Set from the flags; see the usage text.
+assume_yes=0
+skip_udev=0
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -212,13 +221,19 @@ offer_udev_rule() {
   echo "   to switch devices only (tablet mode, lid, headphone jack; never keyboards):"
   echo "     $udev_rule_file"
   echo "     $udev_rule"
-  if [[ ! -t 0 ]]; then
-    warn "not running in a terminal, so not asking; re-run install.sh in one to install it."
+  if (( skip_udev )); then
+    echo "   left alone (--no-udev)"
     return 1
   fi
-  local answer
-  read -r -p "   Install it now? You'll be asked for your password. [y/N] " answer
-  [[ $answer == [yY]* ]] || return 1
+  if (( ! assume_yes )); then
+    if [[ ! -t 0 ]]; then
+      warn "not running in a terminal, so not asking; re-run install.sh in one, or pass --yes."
+      return 1
+    fi
+    local answer
+    read -r -p "   Install it now? You'll be asked for your password. [y/N] " answer
+    [[ $answer == [yY]* ]] || return 1
+  fi
 
   as_root '
     printf "# Installed by Ragtop: read access to switch devices for the logged-in user.\n%s\n" "$1" >"$2"
@@ -235,6 +250,10 @@ offer_udev_rule() {
 }
 
 remove_udev_rule() {
+  if (( skip_udev )); then
+    echo "   left alone (--no-udev)"
+    return 0
+  fi
   [[ -f $udev_rule_file ]] || return 0
   echo "   removing $udev_rule_file needs your password"
   if as_root '
@@ -282,6 +301,12 @@ link_plugin() {
   fi
 }
 
+# Everything Ragtop generates outside its own folder.
+remove_files() {
+  rm -rf "$state_dir" "$HOME/.config/ragtop"
+  rm -f "${XDG_RUNTIME_DIR:-/tmp}"/ragtop-*.json "${XDG_RUNTIME_DIR:-/tmp}/ragtop-mode"
+}
+
 restart_shell() {
   say "Restarting the Omarchy shell"
   omarchy-restart-shell
@@ -292,6 +317,8 @@ install() {
   for arg in "$@"; do
     case "$arg" in
       --no-restart) restart=0 ;;
+      --yes) assume_yes=1 ;;
+      --no-udev) skip_udev=1 ;;
       *) die "unknown option: $arg" ;;
     esac
   done
@@ -321,6 +348,8 @@ uninstall() {
   for arg in "$@"; do
     case "$arg" in
       --no-restart) restart=0 ;;
+      --yes) assume_yes=1 ;;
+      --no-udev) skip_udev=1 ;;
       *) die "unknown option: $arg" ;;
     esac
   done
@@ -335,8 +364,7 @@ uninstall() {
   remove_udev_rule
 
   say "Removing generated files"
-  rm -rf "$state_dir" "$HOME/.config/ragtop"
-  rm -f "${XDG_RUNTIME_DIR:-/tmp}/ragtop-mode"
+  remove_files
 
   say "Removing the plugin"
   if plugin_enabled; then omarchy plugin disable "$id" >/dev/null && echo "   disabled"; fi
@@ -346,12 +374,16 @@ uninstall() {
     echo "   left ${plugin_dir/#$HOME/\~} in place (remove it with: omarchy plugin remove $id)"
   fi
 
-  (( restart )) && restart_shell
+  if (( restart )); then
+    restart_shell
+    # The shell that was running kept writing these until it went down.
+    remove_files
+  fi
   say "Ragtop removed."
 }
 
 case "${1:-}" in
   uninstall) shift; uninstall "$@" ;;
-  -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) install "$@" ;;
 esac
