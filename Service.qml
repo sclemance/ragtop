@@ -708,6 +708,29 @@ Item {
   // Omarchy's screensaver, while it's up: its window address, or "".
   property string screensaverAddress: ""
 
+  // Window events only tell us about a screensaver that starts while the
+  // shell is running, so ask once at startup as well — restarting the shell
+  // with the screensaver already up is the ordinary case while working on
+  // Ragtop, not a corner one.
+  Process {
+    id: screensaverCheckProc
+    running: true
+    command: ["hyprctl", "clients", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var found = JSON.parse(text).filter(function(c) { return c["class"] === "org.omarchy.screensaver" })
+          // hyprctl writes an address as 0x589cf9091790 and the window
+          // events as 589cf9091790. Keep the events' spelling, or closewindow
+          // never matches and the catcher stays up over a screensaver that
+          // has already gone, swallowing every tap.
+          if (found.length > 0 && root.screensaverAddress === "")
+            root.screensaverAddress = String(found[0].address).replace(/^0x/, "")
+        } catch (e) {}
+      }
+    }
+  }
+
   // Ending the screensaver by touch.
   //
   // Omarchy's screensaver is a fullscreen terminal (org.omarchy.screensaver)
@@ -725,8 +748,7 @@ Item {
   // It is deliberately specific to Omarchy's screensaver: it matches that
   // window class, and it relies on that screensaver quitting on any key.
   // Another screensaver wouldn't be recognised, and might not quit on Escape
-  // even if it were. It also only notices a screensaver that opens while the
-  // shell is running, not one already up when the shell (re)starts.
+  // even if it were.
   PanelWindow {
     screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
     visible: root.tabletMode && root.screensaverAddress !== "" && root.layerRulesReady
