@@ -393,9 +393,9 @@ its own along the bottom, in tablet mode only: your layout's letters with
 Shift (tap twice for Caps), and two pages of digits and symbols, which pick
 up your layout's own symbols the same way the desktop keyboard's do. Holding
 a letter offers its accents there too — a password is typed in characters,
-and on some layouts é or ß is only reachable that way. Its popup keys are opaque
-whatever your Key Transparency setting is, so the letter you are picking
-stays legible; there is nothing behind them but the keys they cover. The keys edit
+and on some layouts é or ß is only reachable that way. Its popup sits on a card of
+its own, opaque whatever your Key Transparency setting is, so the letter you
+are picking stays legible against the keys it covers. The keys edit
 the password the same way typing does, and Omarchy checks it as usual. The
 keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
 loads.

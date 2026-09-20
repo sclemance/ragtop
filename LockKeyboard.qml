@@ -436,12 +436,14 @@ Item {
 
   Timer { id: shiftTap; interval: 400 }
 
-  // The popup, over the rows above the key being held: the keys themselves
-  // and nothing else, no panel behind them. They are opaque, which is all
-  // that's needed to read them against the keys they cover. It draws its own
-  // keys rather than reusing this file's delegate, which is bound to a row
-  // model; the shapes and measurements are the same ones, from the same
-  // style.
+  // The popup, over the rows above the key being held: the letters on a card
+  // of their own, so it reads as one thing lifted off the keyboard rather
+  // than a few keys floating over it. Card and keys are both opaque — what
+  // is behind them is the keyboard, and Key Transparency is for showing the
+  // lock screen through the keyboard, not the keyboard through itself. It
+  // draws its own keys rather than reusing this file's delegate, which is
+  // bound to a row model; the shapes and measurements are the same ones,
+  // from the same style.
   Item {
     id: popupLayer
     visible: root.popup !== null
@@ -450,6 +452,15 @@ Item {
     y: root.popup ? root.popup.y : 0
     width: root.popup ? root.popup.items.length * root.popup.cellWidth : 0
     height: root.popup ? root.popup.cellHeight : 0
+
+    Rectangle {
+      anchors.fill: parent
+      anchors.margins: -root.gap
+      radius: root.keyRadius + root.gap / 2
+      color: Qt.rgba(Color.lock.background.r, Color.lock.background.g, Color.lock.background.b, 1)
+      border.width: Math.max(1, root.keyBorderWidth)
+      border.color: Color.lock.borderActive
+    }
 
     Repeater {
       model: root.popup ? root.popup.items : []
