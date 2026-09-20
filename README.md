@@ -9,6 +9,25 @@ normally need a keyboard shortcut or a mouse (moving windows between tiles,
 closing them, typing into the Omarchy menu) work by touch. Fold it back and
 everything returns to normal.
 
+## Which tablets?
+
+Ragtop was written on a convertible, the kind whose screen folds back, and
+that is the shape its wording assumes. Nothing in it is written for that
+shape, though: the only thing that differs between the three kinds of tablet
+is how Ragtop learns it is in tablet mode. Everything after that — rotation,
+the keyboard, the handle, the overlays, the lock screen — needs a touchscreen
+and nothing else.
+
+| Kind | How it goes | |
+| --- | --- | --- |
+| **Convertible** — the screen folds back (Lenovo Yoga, HP x360, Dell 2-in-1) | The kernel reports a tablet-mode switch when you fold it, and Ragtop follows it. | Tested |
+| **Pure tablet** — no keyboard at all | There is no switch to read, and none is needed: set **Tablet Mode › Always On** once in Setup › Tablet and Ragtop stays in tablet mode for good. The installer will say it found no switch; on a slate that is the right answer, not a fault. | Should work, untested |
+| **Detachable** — a keyboard cover (Surface-style, ThinkPad X12) | Depends on the cover. Where detaching it reports a tablet-mode switch, Ragtop follows that exactly as it follows a hinge, and it keeps looking for the switch while none is there, so attaching the keyboard later is picked up. Where the cover simply vanishes and reports nothing, Ragtop cannot tell, and **Always On** is the answer again. | Partly, untested |
+
+If you are on a slate or a detachable, [reports are welcome](#tested-hardware--feedback-wanted) — especially
+detachables, where what the kernel reports varies by model, and where the
+answer decides whether Ragtop can follow the hardware or has to be told.
+
 ## Features
 
 - **Follows the hinge.** Ragtop reads the hardware tablet-mode switch, so

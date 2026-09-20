@@ -523,7 +523,13 @@ Item {
         if (line === "tablet" || line === "laptop") root.applySwitchReading(line === "tablet")
       }
     }
-    onExited: if (root.watchSwitch) tabletModeRestart.start()
+    // The watcher exits when its device goes away, which on a detachable can
+    // mean the keyboard was taken off. Look for a switch again rather than
+    // retrying a path that may no longer be there.
+    onExited: {
+      if (root.tabletSwitchDevice === "" && !detectProc.running) detectProc.running = true
+      if (root.watchSwitch) tabletModeRestart.start()
+    }
   }
   Timer {
     id: tabletModeRestart
