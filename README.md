@@ -1,14 +1,14 @@
 # Ragtop
 
-**Built for convertibles, works great with touchscreens, slates and
-detachables.** Tablet mode for [Omarchy](https://github.com/omacom/omarchy) 4.
+**Made for convertibles, works for tablets, built for Omarchy.**
 
-Fold the screen back, like a ragtop's roof, and Ragtop switches your desktop
-into a touch-friendly mode: the screen rotates with the device, an on-screen
-keyboard themed like the rest of Omarchy is one tap away, and the things that
-normally need a keyboard shortcut or a mouse (moving windows between tiles,
-closing them, typing into the Omarchy menu) work by touch. Fold it back and
-everything returns to normal.
+Fold the screen back, like a ragtop's roof, and Ragtop switches your
+[Omarchy 4](https://github.com/omacom/omarchy) desktop into a touch-friendly
+mode: the screen rotates with the device, an on-screen keyboard themed like
+the rest of Omarchy is one tap away, and the things that normally need a
+keyboard shortcut or a mouse (moving windows between tiles, closing them,
+typing into the Omarchy menu) work by touch. Fold it back and everything
+returns to normal.
 
 ## How it looks
 
