@@ -9,6 +9,27 @@ normally need a keyboard shortcut or a mouse (moving windows between tiles,
 closing them, typing into the Omarchy menu) work by touch. Fold it back and
 everything returns to normal.
 
+## How it looks
+
+The keyboard takes its colours from your Omarchy theme and its letters from
+your Hyprland layout, so it matches whatever you already run. The look is
+yours to change (see [Presets](#presets)); these are four of the ones it
+ships with.
+
+| | |
+| --- | --- |
+| ![Omarchy preset on the Osaka Jade theme](screenshots/omarchy-osaka-jade.jpg) | ![Glass preset on Tokyo Night, German layout](screenshots/glass-tokyo-night.jpg) |
+| **Omarchy** on Osaka Jade — the shipped look, following the theme | **Glass** on Tokyo Night — see-through keys over a blurred desktop, QWERTZ |
+| ![Typewriter preset on Catppuccin Latte, French layout](screenshots/typewriter-catppuccin-latte.jpg) | ![The lock screen's keyboard on Rose Pine](screenshots/lock-screen-rose-pine.jpg) |
+| **Typewriter** on Catppuccin Latte — raised keycaps, AZERTY with its short bottom row filled out | **The lock screen's own keyboard** on Rose Pine, in the lock screen's palette |
+
+Held upright, the same keyboard fills the width it is given:
+
+| | | |
+| --- | --- | --- |
+| ![Holding a letter for its accents](screenshots/portrait-accents-osaka-jade.jpg) | ![Industrial preset on Gruvbox with a Russian layout](screenshots/portrait-industrial-gruvbox.jpg) | ![The nav strip under the background picker](screenshots/portrait-picker-nav.jpg) |
+| Hold a letter for its accents | **Industrial** on Gruvbox, Cyrillic — twelve keys to the row | Choosing a background by touch, with the picker's own strip |
+
 ## Which tablets?
 
 Ragtop was written on a convertible, the kind whose screen folds back, and
