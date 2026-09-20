@@ -146,6 +146,14 @@ If you've turned on touch typing for them, the keyboard also comes up on its own
 when you open the Omarchy menu, the emoji or clipboard picker, or a password
 prompt, and goes away when you close it.
 
+**Tapping the screen ends the screensaver.** Omarchy's screensaver is a
+fullscreen terminal that quits when it reads a key, which a touchscreen never
+sends it, so folded up there was no way to dismiss it but to open the laptop
+and press a key. In tablet mode Ragtop covers it with a transparent catcher
+and turns a tap into that key press. It's specific to Omarchy's own
+screensaver (the `org.omarchy.screensaver` window), and only to one that
+starts while the shell is running.
+
 ## The keyboard
 
 Ragtop's keyboard is drawn by the Omarchy shell, so it follows your theme's

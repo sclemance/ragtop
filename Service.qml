@@ -103,7 +103,7 @@ Item {
       id: handle
       required property var modelData
       screen: modelData
-      visible: root.tabletMode
+      visible: root.tabletMode && root.layerRulesReady
 
       // Under an open keyboard the handle takes the keyboard's background
       // and text colours, so the two read as one panel with the handle as
@@ -397,7 +397,21 @@ Item {
         }
       }
       if (layoutChanged) root.sendKeys("reload")
-      if (name === "configreloaded" && root.blurKeyboard) root.applyBlur()
+      if (name === "configreloaded") {
+        // A reload drops runtime rules, and the surfaces re-map with it.
+        root.layerRulesReady = false
+        root.applyLayerRules()
+        if (root.blurKeyboard) root.applyBlur()
+      }
+      // Omarchy's screensaver, watched by window class; see the catcher
+      // below for what Ragtop does about it.
+      if (name === "openwindow") {
+        var fields = String(event.data || "").split(",")
+        if (fields.length >= 3 && fields[2] === "org.omarchy.screensaver") root.screensaverAddress = fields[0]
+      } else if (name === "closewindow") {
+        if (String(event.data || "").trim() === root.screensaverAddress) root.screensaverAddress = ""
+      }
+
       if (name !== "openlayer" && name !== "closelayer") return
       var ns = String(event.data || "")
       if (root.patchedOverlays.indexOf(ns) === -1) return
@@ -455,7 +469,10 @@ Item {
   onWatchSwitchChanged: tabletModeProc.running = root.watchSwitch
   // A different device: stop, and onExited starts it again on the new one.
   onSwitchDeviceChanged: if (tabletModeProc.running) tabletModeProc.running = false
-  Component.onCompleted: tabletModeProc.running = root.watchSwitch
+  Component.onCompleted: {
+    tabletModeProc.running = root.watchSwitch
+    applyLayerRules()
+  }
   Process {
     id: tabletModeProc
     command: ["python3", Qt.resolvedUrl("tablet-switch.py").toString().replace(/^file:\/\//, ""), root.switchDevice]
@@ -592,6 +609,26 @@ Item {
     }
   }
 
+  // Layers reserving the same screen edge are laid out in the order
+  // Hyprland arranged them, which is whichever mapped first — so a bar
+  // moved to the bottom after the handle exists would end up between the
+  // handle and the keyboard. These orders pin the arrangement instead: the
+  // bar keeps the edge, the handle sits above it, the keyboard above that.
+  // Runtime only, so nothing is written to the Hyprland config; a config
+  // reload drops them, and they are set again then.
+  property bool layerRulesReady: false
+  function applyLayerRules() {
+    layerRulesProc.command = ["hyprctl", "eval",
+      "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
+      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -2 })"]
+    layerRulesProc.running = true
+  }
+  Process {
+    id: layerRulesProc
+    // The surfaces wait for the rules, so they map in the right order.
+    onExited: root.layerRulesReady = true
+  }
+
   function applyBlur() {
     if (!root.blurChecked) { blurCheckProc.running = true; return }
     var lua = "hl.layer_rule({ match = { namespace = '^ragtop-keyboard(-handle)?$' }, blur = " + root.blurKeyboard
@@ -619,13 +656,52 @@ Item {
   }
   Process { id: styleWriteProc }
 
+  // Omarchy's screensaver, while it's up: its window address, or "".
+  property string screensaverAddress: ""
+
+  // Ending the screensaver by touch.
+  //
+  // Omarchy's screensaver is a fullscreen terminal (org.omarchy.screensaver)
+  // running ttfx, which quits when its terminal reads a character or when it
+  // loses focus. A touchscreen gives it neither: a terminal ignores touch,
+  // and tapping a fullscreen window doesn't move focus. So in tablet mode
+  // the screen stays covered until a key is pressed — no use on a folded
+  // laptop.
+  //
+  // This catcher is a transparent overlay that exists only while that window
+  // does. It takes no keyboard focus, so the screensaver's terminal stays
+  // focused and receives the key Ragtop sends when the catcher is tapped,
+  // which is exactly what pressing a key by hand does.
+  //
+  // It is deliberately specific to Omarchy's screensaver: it matches that
+  // window class, and it relies on that screensaver quitting on any key.
+  // Another screensaver wouldn't be recognised, and might not quit on Escape
+  // even if it were. It also only notices a screensaver that opens while the
+  // shell is running, not one already up when the shell (re)starts.
+  PanelWindow {
+    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    visible: root.tabletMode && root.screensaverAddress !== "" && root.layerRulesReady
+
+    WlrLayershell.namespace: "ragtop-screensaver-catcher"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
+
+    MouseArea {
+      anchors.fill: parent
+      onPressed: root.sendKeys("key Escape")
+    }
+  }
+
   // On the built-in screen, reserving its space so windows move up out of
   // its way. It never takes keyboard focus, so typing goes to the window
   // underneath. Created when shown, so it stacks above the handle.
   PanelWindow {
     id: keyboardWindow
     screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
-    visible: root.oskVisible
+    visible: root.oskVisible && root.layerRulesReady
 
     WlrLayershell.namespace: "ragtop-keyboard"
     WlrLayershell.layer: WlrLayer.Top

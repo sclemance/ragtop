@@ -94,8 +94,10 @@ Item {
       ["letters", "space", ",", "enter"]
     ]
   })
+  // Shift, Backspace and Enter carry a drawn icon (LockKeyIcon.qml), so
+  // they have no text label.
   readonly property var labels: ({
-    "shift": "⇧", "backspace": "⌫", "enter": "⏎",
+    "shift": "", "backspace": "", "enter": "",
     "symbols": "?123", "more": "#+=", "letters": "ABC"
   })
   readonly property var widths: ({
@@ -219,7 +221,7 @@ Item {
     : style.labels === "large" ? Style.font.display : Style.font.iconLarge)
   readonly property var iconKeys: ["shift", "backspace", "enter"]
   function labelKind(key) {
-    if (iconKeys.indexOf(key) !== -1) return "icon"
+    if (iconKeys.indexOf(key) !== -1) return "drawn"
     return root.label(key).length > 1 ? "word" : "char"
   }
 
@@ -374,22 +376,38 @@ Item {
               }
             }
 
+            // The label's size on Omarchy's scales, kept inside the key.
+            readonly property string kind: root.labelKind(modelData)
+            readonly property color labelColor: accent ? Color.background
+              : special ? root.specialTextColor
+              : Color.lock.text
+            readonly property int labelPixelSize: Math.min(
+              kind === "drawn" ? root.iconSize : kind === "word" ? root.wordSize : root.labelSize,
+              Math.round(faceHeight * 0.62))
+
             Text {
+              visible: key.kind !== "drawn"
               y: key.faceY
               width: key.width
               height: key.faceHeight
               horizontalAlignment: Text.AlignHCenter
               verticalAlignment: Text.AlignVCenter
               text: root.label(key.modelData)
-              color: key.accent ? Color.background
-                : key.special ? root.specialTextColor
-                : Color.lock.text
+              color: key.labelColor
               font.family: Style.font.family
-              // Omarchy's type scale, kept inside the key.
-              font.pixelSize: Math.min(root.labelKind(key.modelData) === "icon" ? root.iconSize
-                  : root.labelKind(key.modelData) === "word" ? root.wordSize
-                  : root.labelSize,
-                Math.round(key.faceHeight * 0.62))
+              font.pixelSize: key.labelPixelSize
+            }
+
+            LockKeyIcon {
+              visible: key.kind === "drawn"
+              y: key.faceY + (key.faceHeight - height) / 2
+              x: (key.width - width) / 2
+              height: Math.round(key.labelPixelSize * 1.2)
+              // Wider than tall for Enter's long arrow.
+              width: Math.min(implicitWidth, key.width - root.gap)
+              name: key.modelData
+              color: key.labelColor
+              filled: key.modelData === "shift" && root.capsLock
             }
 
             MouseArea {

@@ -5,7 +5,7 @@
   "fill": "light",
   "size": "normal",
   "background": "gradient",
-  "transparency": "medium",
+  "transparency": "low",
   "edge": "border",
   "labels": "large",
   "depth": 6,
