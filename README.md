@@ -40,8 +40,8 @@ and nothing else.
 | Kind | How it goes | |
 | --- | --- | --- |
 | **Convertible** — the screen folds back (Lenovo Yoga, HP x360, Dell 2-in-1) | The kernel reports a tablet-mode switch when you fold it, and Ragtop follows it. | Tested |
-| **Pure tablet** — no keyboard at all | There is no switch to read, and none is needed: set **Tablet Mode › Always On** once in Setup › Tablet and Ragtop stays in tablet mode for good. The installer will say it found no switch; on a slate that is the right answer, not a fault. | Should work, untested |
-| **Detachable** — a keyboard cover (Surface-style, ThinkPad X12) | Depends on the cover. Where detaching it reports a tablet-mode switch, Ragtop follows that exactly as it follows a hinge, and it keeps looking for the switch while none is there, so attaching the keyboard later is picked up. Where the cover simply vanishes and reports nothing, Ragtop cannot tell, and **Always On** is the answer again. | Partly, untested |
+| **Pure tablet** — no keyboard at all | There is no switch to read, and none is needed: set **Tablet Mode › Always On** once in Setup › Tablet and Ragtop stays in tablet mode for good. The setup will say it found no switch; on a slate that is the right answer, not a fault. | Should work, untested |
+| **Detachable** — a keyboard cover (Surface-style, ThinkPad X12) | Where detaching reports a tablet-mode switch, Ragtop follows it exactly as it follows a hinge — tested on a Surface Book 2, where detaching the slate brings the keyboard up and reattaching puts it away. It keeps looking while no switch is there, so attaching a keyboard later is picked up; where a cover vanishes and reports nothing, **Always On** is the answer again. | Works on the one tested |
 
 If you are on a slate or a detachable, [reports are welcome](#tested-hardware--feedback-wanted) — especially
 detachables, where what the kernel reports varies by model, and where the
@@ -121,16 +121,22 @@ convertible and pointless on a slate.
 
 ## Tested hardware — feedback wanted
 
-Ragtop has so far been tested on one machine:
+Ragtop has been tested on these:
 
-| Device | Tablet-mode driver | Status |
+| Device | Shape | Status |
 | --- | --- | --- |
-| Lenovo 300w Yoga Gen 4 | `lenovo-ymc` | Works |
+| Lenovo 300w Yoga Gen 4 | Convertible | Works. Folding switches modes, rotation follows the device |
+| Microsoft Surface Book 2 | Detachable | Tablet mode and rotation work: **detaching the slate turns the keyboard on exactly as folding a hinge does**, reattaching turns it off, and rotation is correct. Touch itself doesn't work on this machine — see below |
 
-Nothing in Ragtop is written for that model: the tablet-mode switch is
-auto-detected, and rotation comes from the standard accelerometer stack. It
-should work on other convertibles whose kernel reports the switch, but that's
-untested. **If you have a convertible or detachable we haven't listed, please
+Nothing in Ragtop is written for either model: the tablet-mode switch is
+auto-detected, and rotation comes from the standard accelerometer stack.
+
+**On a Surface, touch is the machine's problem, not Ragtop's.** Surface
+hardware needs the [linux-surface](https://github.com/linux-surface/linux-surface)
+kernel and firmware before its touchscreen works at all; a stock kernel gives
+you a machine that detaches, rotates and runs Ragtop, with nothing to touch it
+with. Worth knowing before you conclude the plugin is broken: check whether a
+touch device exists at all with `hyprctl devices | grep -i touch`. **If you have a convertible or detachable we haven't listed, please
 try it and open an issue**, whether it works or not. It helps to include:
 
 - your device model,

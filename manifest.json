@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sclemance.ragtop",
   "name": "Ragtop",
-  "version": "0.35.2",
+  "version": "0.35.3",
   "author": "Stan Clemance",
   "description": "Made for convertibles, works for tablets, built for Omarchy: rotation that follows the hinge, a themed on-screen keyboard that speaks your layout, and window management by touch. Setup runs in the shell.",
   "kinds": ["bar-widget", "service"],
