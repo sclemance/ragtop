@@ -25,8 +25,9 @@ everything returns to normal.
   Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
   terminal.
 - **Your layout, any character.** The letter keys and the symbol pages follow
-  your active Hyprland layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), and
-  characters your layout can't type (é on a US layout, emoji) still arrive.
+  your active Hyprland layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), accents
+  are a long press away, and characters your layout can't type (é on a US
+  layout, emoji) still arrive.
 - **Settings one tap away.** A gear key next to the space bar opens Ragtop's
   settings.
 - **Window shortcuts panel.** Omarchy windows have no title bars and moving or
@@ -174,6 +175,12 @@ colours and font, and the Transparency setting, without restarting. It has:
   Setup › Tablet › Modifier Keys to have them stay on until tapped again.
 - **Your layout's letters:** the letter keys follow the active Hyprland
   layout, and the space bar shows its name.
+- **Hold a letter for its accents:** e gives é è ê ë, c gives ç, s gives ß.
+  Slide onto the one you want and let go; let go where you started for the
+  plain letter, or slide off the popup to take nothing. The letters your own
+  layout carries come first — on AZERTY, which keeps é, è, ç and à on its
+  number row where the letter rows can't reach them, this is the only way to
+  type them.
 - **Your layout's symbols:** the two symbol pages carry the same punctuation
   whatever you type in, and pick up what your layout adds on top — § and ° on
   a German keyboard, ¡ and ¿ on a Spanish one, № and ₽ on a Russian one, ₹ on

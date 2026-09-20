@@ -109,6 +109,70 @@ Item {
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right"]
 
+  // Hold a letter to reach the characters that belong to it, as every phone
+  // keyboard does. Ragtop needs it more than most: the letter rows are the
+  // three rows of a physical keyboard, and a layout can keep letters
+  // elsewhere — AZERTY has é, è, ç and à on its number row — so without
+  // this a French user can't type them at all.
+  readonly property var variantTable: ({
+    "a": ["à", "â", "á", "ä", "ã", "å", "æ"],
+    "c": ["ç", "ć", "č"],
+    "d": ["ð", "đ"],
+    "e": ["é", "è", "ê", "ë", "ę", "ē"],
+    "g": ["ğ"],
+    "i": ["î", "ï", "ì", "í", "ī", "ı"],
+    "l": ["ł"],
+    "n": ["ñ", "ń", "ň"],
+    "o": ["ô", "ö", "ò", "ó", "õ", "ø", "œ"],
+    "r": ["ř"],
+    "s": ["ß", "š", "ś", "ş"],
+    "t": ["ţ", "þ"],
+    "u": ["û", "ü", "ù", "ú", "ū"],
+    "y": ["ÿ", "ý"],
+    "z": ["ž", "ź", "ż"]
+  })
+  // Letters that don't decompose to the key they belong under.
+  readonly property var variantBase: ({
+    "ß": "s", "æ": "a", "ø": "o", "œ": "o", "ł": "l", "đ": "d", "ð": "d",
+    "ı": "i", "ŋ": "n", "þ": "t", "ħ": "h", "ĸ": "k"
+  })
+  // Letters the active layout types that its letter rows don't carry, from
+  // the helper: they go first behind their own base letter, ahead of the
+  // table's, since they're the ones that layout's user actually wants.
+  readonly property var layoutLetters: root.service.keyLabels && root.service.keyLabels.letters
+    ? root.service.keyLabels.letters : []
+  readonly property var variantsOf: {
+    var map = {}
+    for (var base in root.variantTable) map[base] = root.variantTable[base].slice()
+    var own = {}
+    root.layoutLetters.forEach(function(c) {
+      if (typeof c !== "string" || c.length < 1) return
+      var lower = c.toLowerCase()
+      var base = root.variantBase[lower] || lower.normalize("NFD")[0]
+      // The letter it decomposes to, whatever the script: ё belongs behind
+      // Cyrillic е as é does behind e. Anything that decomposes to itself
+      // is no letter's variant — µ, º and ª come through the keymap as
+      // letters but belong to nothing.
+      if (base.length !== 1 || base === lower || base.toLowerCase() === base.toUpperCase()) return
+      if (!(base in own)) own[base] = []
+      if (own[base].indexOf(lower) === -1) own[base].push(lower)
+    })
+    // The layout's own come first, in the order it has them, then the rest
+    // of the table.
+    for (var b in own) {
+      map[b] = own[b].concat((map[b] || []).filter(function(c) { return own[b].indexOf(c) === -1 }))
+    }
+    return map
+  }
+
+  // What a hold on this key offers: the key itself first, then its
+  // variants, in the case the keyboard is currently typing.
+  function variantsFor(key) {
+    var list = root.variantsOf[key]
+    if (!list || list.length === 0) return []
+    return [key].concat(list).slice(0, 9).map(function(c) { return root.upper ? c.toUpperCase() : c })
+  }
+
   // Sized so the longest row fits; layouts differ (10 to 12 letter keys).
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
   readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, Math.round(84 * theme.keyScale))
@@ -302,6 +366,79 @@ Item {
     }
   }
 
+  // A hold in progress: the finger that started it and the key under it,
+  // until the timer turns it into a popup or the finger lifts and it turns
+  // out to have been a tap.
+  property int pendingPoint: -1
+  property string pendingKey: ""
+  property real pendingX: 0
+  property real pendingY: 0
+  Timer { id: holdTimer; interval: 420; onTriggered: root.openPopup() }
+
+  // The open popup: { key, items, pointId, index, x, y, cellWidth,
+  // cellHeight }, or null. It's a plain object, so changing it means
+  // replacing it. Only one at a time, as on a phone.
+  property var popup: null
+
+  function startHold(point, key) {
+    root.pendingPoint = point.pointId
+    root.pendingKey = key
+    root.pendingX = point.x
+    root.pendingY = point.y
+    holdTimer.restart()
+  }
+
+  function endHold() {
+    holdTimer.stop()
+    root.pendingPoint = -1
+    root.pendingKey = ""
+  }
+
+  // The popup sits above its key, its first cell over the key so the finger
+  // starts on the letter it's already holding, and it slides along the row
+  // to stay on the keyboard. Where it can't fit at all it's centred.
+  function openPopup() {
+    var key = root.pendingKey
+    var items = root.variantsFor(key)
+    if (items.length < 2 || root.pendingPoint === -1) return
+    var slot = null
+    for (var i = 0; i < root.slots.length; i++) if (root.slots[i].key === key) { slot = root.slots[i]; break }
+    if (!slot) return
+    var cell = Math.max(slot.width + root.theme.gap, root.unit * 0.92)
+    var total = items.length * cell
+    var room = root.width - 2 * root.theme.padding
+    var x = total > room ? (root.width - total) / 2
+      : Math.min(Math.max(slot.x, root.theme.padding), root.width - root.theme.padding - total)
+    root.popup = { key: key, items: items, pointId: root.pendingPoint, index: 0,
+                   x: x, y: Math.max(0, slot.y - slot.height - root.theme.gap),
+                   cellWidth: cell, cellHeight: slot.height }
+    root.selectAt(root.pendingX, root.pendingY)
+  }
+
+  // Which cell the finger is on. Sliding well below the popup takes
+  // nothing, the way letting go somewhere else cancels on a phone.
+  function selectAt(x, y) {
+    var p = root.popup
+    if (!p) return
+    var index = -1
+    if (y < p.y + p.cellHeight + root.keyHeight) {
+      index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
+    }
+    if (index === p.index) return
+    var next = Object.assign({}, p)
+    next.index = index
+    root.popup = next
+  }
+
+  function choosePopup() {
+    var p = root.popup
+    root.popup = null
+    root.endHold()
+    if (!p || p.index < 0) return
+    root.service.sendKeys("type " + p.items[p.index])
+    root.afterKey()
+  }
+
   // Keys held down by a finger (or the mouse), as touch point id -> key.
   property var held: ({})
   readonly property var heldKeys: {
@@ -334,6 +471,47 @@ Item {
     }
   }
 
+  // The popup, drawn over the rows above its key. It takes no touches of
+  // its own: the finger that opened it is still down on the keyboard's own
+  // touch layer, which follows it (see selectAt).
+  Item {
+    id: popupLayer
+    visible: root.popup !== null
+    z: 10
+    x: root.popup ? root.popup.x : 0
+    y: root.popup ? root.popup.y : 0
+    width: root.popup ? root.popup.items.length * root.popup.cellWidth : 0
+    height: root.popup ? root.popup.cellHeight : 0
+
+    // Its own panel, opaque whatever the keyboard's transparency, and edged
+    // in the theme's accent so it reads as something floating over the keys
+    // rather than another row of them.
+    Rectangle {
+      anchors.fill: parent
+      anchors.margins: -root.theme.gap
+      radius: root.theme.keyRadius + root.theme.gap / 2
+      color: root.theme.solidBase
+      border.width: Math.max(1, root.theme.keyBorderWidth)
+      border.color: root.theme.accent
+    }
+
+    Repeater {
+      model: root.popup ? root.popup.items : []
+
+      KeyboardKey {
+        required property int index
+        required property string modelData
+        theme: root.theme
+        x: index * (root.popup ? root.popup.cellWidth : 0) + root.theme.gap / 2
+        width: (root.popup ? root.popup.cellWidth : 0) - root.theme.gap
+        height: parent.height
+        label: modelData
+        labelKind: "char"
+        kind: root.popup && index === root.popup.index ? "accent" : "normal"
+      }
+    }
+  }
+
   // One touch layer for the whole keyboard: each finger picks its key when
   // it comes down and keeps it until it lifts, however it moves. Several
   // fingers can be down at once, e.g. the next key tapped before the last
@@ -344,24 +522,49 @@ Item {
       var next = Object.assign({}, root.held)
       var pressed = []
       points.forEach(function(p) {
+        // While a popup is open the other fingers wait their turn.
+        if (root.popup !== null || root.pendingPoint !== -1) return
         var key = root.keyAt(p.x, p.y)
         if (key === null) return
         next[p.pointId] = key
-        pressed.push(key)
+        // A key with variants types on release instead, so a hold can turn
+        // into a popup rather than a letter that's already been typed.
+        if (root.variantsFor(key).length > 1) root.startHold(p, key)
+        else pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
     }
+    onUpdated: function(points) { points.forEach(root.moved) }
     onReleased: function(points) { root.lift(points) }
     onCanceled: function(points) { root.lift(points) }
+  }
+
+  function moved(point) {
+    if (root.popup !== null && point.pointId === root.popup.pointId) {
+      root.selectAt(point.x, point.y)
+      return
+    }
+    // A finger that wanders off the key it came down on was never holding
+    // it: the key still types when it lifts, as it always has.
+    if (point.pointId !== root.pendingPoint) return
+    if (Math.abs(point.x - root.pendingX) + Math.abs(point.y - root.pendingY) > root.unit * 0.4)
+      holdTimer.stop()
   }
 
   function lift(points) {
     var next = Object.assign({}, root.held)
     var lifted = []
     points.forEach(function(p) {
-      if (!(p.pointId in next)) return
-      lifted.push(next[p.pointId])
+      if (root.popup !== null && p.pointId === root.popup.pointId) {
+        root.choosePopup()
+      } else if (p.pointId === root.pendingPoint) {
+        var key = root.pendingKey
+        root.endHold()
+        root.press(key)  // a tap after all
+      } else if (p.pointId in next) {
+        lifted.push(next[p.pointId])
+      }
       delete next[p.pointId]
     })
     root.held = next

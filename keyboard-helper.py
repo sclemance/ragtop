@@ -20,8 +20,8 @@ commands on stdin, one per line:
 
 At startup and after each reload it also prints "labels <json>": the active
 layout's name, the characters on its letter keys, row by row, as
-[normal, shifted] pairs, and the symbols its keys carry, for the keyboard to
-draw.
+[normal, shifted] pairs, the symbols its keys carry, and any letters of its
+own that those rows don't reach, for the keyboard to draw.
 
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
 for each command.
@@ -159,8 +159,33 @@ class XkbLabels:
             rows.append(row)
         name = lib.xkb_keymap_layout_get_name(keymap, group)
         symbols = self._symbols(keymap, group, char)
+        letters = self._stray_letters(keymap, char, rows)
         lib.xkb_keymap_unref(keymap)
-        return {"name": name.decode() if name else "", "rows": rows, "symbols": symbols}
+        return {"name": name.decode() if name else "", "rows": rows,
+                "symbols": symbols, "letters": letters}
+
+    def _stray_letters(self, keymap, char, rows):
+        """Letters this layout types that its three letter rows don't carry:
+        AZERTY keeps é, è, ç and à on the number row, a German keyboard ß.
+        The keyboard puts them behind the letter they belong to, where a
+        long press reaches them."""
+        lib = self.lib
+        on_rows = {c.lower() for row in rows for pair in row for c in pair}
+        out = []
+        for prefix, count in self.ALL_KEYS:
+            names = [prefix] if count == 0 else [f"{prefix}{i:02d}" for i in range(1, count + 1)]
+            for name in names:
+                code = lib.xkb_keymap_key_by_name(keymap, name.encode())
+                if code == 0xFFFFFFFF:
+                    continue
+                for level in range(2):
+                    c = char(code, level)
+                    if not c or not c.isalpha():
+                        continue
+                    c = c.lower()
+                    if c not in on_rows and c not in out:
+                        out.append(c)
+        return out[:12]
 
     def _symbols(self, keymap, group, char):
         """The symbols this layout puts on its keys, in keyboard order: what
