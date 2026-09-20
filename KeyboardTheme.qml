@@ -71,6 +71,12 @@ QtObject {
   property real edgeBorder: edgeStyle === "border" ? Math.max(0, Border.top(borderSpec)) : 0
   property color backgroundClear: Qt.rgba(backgroundTop.r, backgroundTop.g, backgroundTop.b, 0)
 
+  // Whether the background is actually drawn. Fully clear (Setup › Tablet ›
+  // BG Transparency › Full) hides nothing, so taps off the keys can reach
+  // what is behind the keyboard; any visible background does hide it, and
+  // then the keyboard keeps those taps to itself.
+  readonly property bool backgroundVisible: Math.max(background.a, backgroundTop.a) > 0.01
+
   // How see-through the keys are (Setup › Tablet › Key Transparency). What
   // shows through is the keyboard's own background; the desktop only shows
   // if that is see-through too.

@@ -122,9 +122,8 @@ Item {
     ? slots[slots.length - 1].y + slots[slots.length - 1].height : 0
 
   // How far the keys reach across. On a wide screen the keyboard spans the
-  // whole width while the keys stay a comfortable size, and the margins
-  // either side are not the keyboard's business: the service uses this to
-  // let taps there fall through to whatever is underneath.
+  // whole width while the keys stay a comfortable size, leaving a margin
+  // either side of the keys that is not aimed at the keyboard.
   readonly property real keysLeft: slots.reduce(function(a, s) { return Math.min(a, s.x) }, root.width)
   readonly property real keysRight: slots.reduce(function(a, s) { return Math.max(a, s.x + s.width) }, 0)
 
@@ -135,7 +134,13 @@ Item {
     y: 0
     height: root.height
   }
-  readonly property Item touchArea: keysBounds
+  // What the surface takes touches on (the service masks it to this): you
+  // can only touch through the keyboard where it isn't there. With a drawn
+  // background the whole surface takes them, so a tap in the margins does
+  // nothing rather than reaching a window the background hides; when the
+  // background is fully clear there is nothing to hide, and the margins
+  // pass taps through — tapping away from a menu closes it.
+  readonly property Item touchArea: root.theme.backgroundVisible ? root : keysBounds
 
   implicitHeight: slotsBottom + theme.padding
 

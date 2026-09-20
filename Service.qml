@@ -703,9 +703,10 @@ Item {
     screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
     visible: root.oskVisible && root.layerRulesReady
 
-    // Only the keys take touches. On a wide screen the margins either side
-    // of them pass taps through to the window underneath, so tapping away
-    // from a menu closes it instead of typing.
+    // Where the keyboard takes touches (see Keyboard's touchArea): the whole
+    // surface while it draws a background, and only the keys' own extent
+    // when that background is fully clear, so a tap can reach the window
+    // underneath exactly where the keyboard doesn't cover it.
     mask: Region { item: keyboard.touchArea }
 
     WlrLayershell.namespace: "ragtop-keyboard"
