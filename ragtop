@@ -8,16 +8,33 @@
 #        ragtop overlay status
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
-#        ragtop transparency (get | is <level> | set <level>)
 #        ragtop modifiers (get | is <mode> | set <mode>)
-#        ragtop key-style (get | is <style> | set <style> | list)
+#        ragtop shape (get | is <shape> | set <shape>)
+#        ragtop relief (get | is <relief> | set <relief>)
+#        ragtop fill (get | is <fill> | set <fill>)
+#        ragtop size (get | is <size> | set <size>)
 #        ragtop background (get | is <background> | set <background>)
+#        ragtop transparency (get | is <level> | set <level>)
+#        ragtop key-transparency (get | is <level> | set <level>)
+#        ragtop edge (get | is <edge> | set <edge>)
+#        ragtop preset (list | apply <preset>)
 # where <overlay> is menu, emojis, clipboard, polkit or lock, <mode> is auto
-# (follow the hinge's switch), on or off, <level> is auto (match Omarchy's
-# bar), opaque, low, medium, high or full, and the modifiers <mode> is
-# oneshot or sticky. <style> names a style file in ~/.config/ragtop/styles/
-# or Ragtop's styles/ (rounded, rectangle, pill, outline, keycap, angular),
-# and <background> is style (the style's own), tint, blur or gradient.
+# (follow the hinge's switch), on or off, and the modifiers <mode> is oneshot
+# or sticky.
+#
+# The keyboard's look: <shape> is omarchy (the theme's own corner rounding),
+# rounded, pill or angular; <relief> is flat or raised (keys standing on a
+# side, like a keycap); <fill> is dark, light (a key sitting darker or
+# lighter than the keyboard) or outline;
+# <size> is compact, normal or large; <background> is tint or gradient;
+# <level> is auto (match Omarchy's bar), opaque, low, medium, high or full
+# for the background, and the same without auto for the keys;
+# <edge> is border (the theme's window border), fade or none.
+#
+# A preset is a JSON file of those same settings, in ~/.config/ragtop/presets/
+# or Ragtop's presets/. Applying one writes its values into settings.conf, so
+# afterwards every setting shows what's actually in effect; nothing stays
+# hidden in the file.
 #
 # Touch typing in an overlay means replacing Omarchy's own with a patched
 # clone (see overlay-clones.sh), so each one is off until the user turns it on.
@@ -30,7 +47,7 @@ conf="$HOME/.local/state/ragtop/install.conf"
 clones="$repo/overlay-clones.sh"
 settings="$HOME/.config/ragtop/settings.conf"
 
-usage() { sed -n '4,21p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,29p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 label() {
   case "$1" in
@@ -146,61 +163,131 @@ choice_notice() {
     "transparency opaque") echo "The keyboard's background is solid." ;;
     "transparency low"|"transparency medium"|"transparency high") echo "The keyboard's background is now $2 transparency." ;;
     "transparency full") echo "The keyboard's background is fully transparent." ;;
+    "key-transparency opaque") echo "The keys are solid." ;;
+    "key-transparency low"|"key-transparency medium"|"key-transparency high") echo "The keys are now $2 transparency." ;;
+    "key-transparency full") echo "The keys are fully transparent." ;;
     "modifiers oneshot") echo "Ctrl, Alt, Super and Shift now apply to the next key; tap twice to lock." ;;
     "modifiers sticky") echo "Ctrl, Alt, Super and Shift now stay on until tapped again." ;;
-    "background style") echo "The keyboard's background now follows its key style." ;;
     "background tint") echo "The keyboard's background is a flat tint." ;;
-    "background blur")
-      if hyprctl getoption decoration:blur:enabled 2>/dev/null | grep -q 'bool: true'; then
-        echo "The keyboard's background now blurs what's behind it."
-      else
-        echo "Blur needs Hyprland's blur turned on (decoration.blur.enabled in your Hyprland config); until then it looks like Tint."
-      fi
-      ;;
     "background gradient") echo "The keyboard's background is a gradient." ;;
+    "edge border") echo "The keyboard's top edge now has the same border as your tiled windows." ;;
+    "edge fade") echo "The keyboard's background now fades out at its top edge." ;;
+    "edge none") echo "The keyboard's top edge is now a hard edge." ;;
+    "shape omarchy") echo "The keys now follow your theme's corner rounding." ;;
+    "shape rounded"|"shape pill"|"shape angular") echo "The keys are now $2." ;;
+    "relief flat") echo "The keys are flat." ;;
+    "relief raised") echo "The keys now stand on a side, like a keycap." ;;
+    "fill dark") echo "The keys now sit darker than the keyboard." ;;
+    "fill light") echo "The keys now sit lighter than the keyboard." ;;
+    "fill outline") echo "The keys have no fill, drawn as outlines." ;;
+    "size compact") echo "The keys are now compact." ;;
+    "size normal") echo "The keys are back to their normal size." ;;
+    "size large") echo "The keys are now large." ;;
+    "labels small"|"labels normal"|"labels large") echo "The key labels are now $2." ;;
     *) return 1 ;;
   esac
 }
 
-# Key styles: the user's own in ~/.config/ragtop/styles/ win over Ragtop's.
-style_file() {
+# Presets: the user's own in ~/.config/ragtop/presets/ win over Ragtop's.
+preset_file() {
   [[ $1 =~ ^[a-z0-9-]{1,32}$ ]] || return 1
   local f
-  for f in "$HOME/.config/ragtop/styles/$1.json" "$repo/styles/$1.json"; do
+  for f in "$HOME/.config/ragtop/presets/$1.json" "$repo/presets/$1.json"; do
     [[ -f $f ]] && { echo "$f"; return 0; }
   done
   return 1
 }
 
-styles() {
+# Omarchy's own look first, then the rest by name.
+presets() {
   local f
-  for f in "$HOME/.config/ragtop/styles/"*.json "$repo/styles/"*.json; do
+  for f in "$HOME/.config/ragtop/presets/"*.json "$repo/presets/"*.json; do
     [[ -f $f ]] && basename "$f" .json
-  done | sort -u
+  done | sort -u | sed '/^omarchy$/d' | sed '1i omarchy'
 }
 
-# A style's display name, from its file's "name", else the file name.
-style_name() {
-  python3 -c 'import json, sys
+# apply_preset <name>: write the preset's settings into settings.conf, so
+# what the menu shows is what the keyboard does.
+apply_preset() {
+  local file name
+  file=$(preset_file "$1") || { echo "No preset named '$1'. Available: $(presets | tr '\n' ' ')" >&2; exit 2; }
+  name=$(python3 - "$file" "$settings" <<'EOF'
+import json, os, re, sys
+
+path, settings = sys.argv[1:]
+# Only these keys, only these values: a preset can't smuggle anything else in.
+choices = {
+    "shape": ["omarchy", "rounded", "pill", "angular"],
+    "relief": ["flat", "raised"],
+    "fill": ["dark", "light", "outline"],
+    "size": ["compact", "normal", "large"],
+    "background": ["tint", "gradient"],
+    "transparency": ["auto", "opaque", "low", "medium", "high", "full"],
+    "key-transparency": ["opaque", "low", "medium", "high", "full"],
+    "edge": ["border", "fade", "none"],
+    "labels": ["small", "normal", "large"],
+    "blur": ["on", "off"],
+}
+numbers = {"depth": (0, 10), "chamfer": (0, 20), "edge-fade": (0, 24),
+           "key-fill-alpha": (0, 1), "border-width": (0, 4), "radius": (0, 30)}
+colors = ("key-color", "label-color")
+
 try:
-    name = json.load(open(sys.argv[1])).get("name")
+    raw = json.load(open(path))
 except Exception:
-    name = None
-print(name if isinstance(name, str) and name.strip() else sys.argv[2])' "$(style_file "$1")" "$1"
+    sys.exit("preset isn't valid JSON")
+if not isinstance(raw, dict):
+    sys.exit("preset isn't a JSON object")
+
+values = {}
+for key, allowed in choices.items():
+    v = raw.get(key)
+    if isinstance(v, bool) and key == "blur":
+        v = "on" if v else "off"
+    if isinstance(v, str) and v in allowed:
+        values[key] = v
+for key, (low, high) in numbers.items():
+    v = raw.get(key)
+    if isinstance(v, (int, float)) and low <= v <= high:
+        values[key] = str(round(v, 3))
+for key in colors:
+    v = raw.get(key)
+    if isinstance(v, str) and (v in ("foreground", "background", "accent", "urgent")
+                               or re.fullmatch(r"#[0-9a-fA-F]{6,8}", v)):
+        values[key] = v
+
+lines = []
+if os.path.exists(settings):
+    lines = [l for l in open(settings).read().split("\n") if l and l.split("=", 1)[0] not in values]
+lines += [f"{k}={v}" for k, v in sorted(values.items())]
+os.makedirs(os.path.dirname(settings), exist_ok=True)
+open(settings + ".tmp", "w").write("\n".join(lines) + "\n")
+os.replace(settings + ".tmp", settings)
+
+label = raw.get("name")
+print(label if isinstance(label, str) and label.strip() else os.path.basename(path)[:-5])
+EOF
+  ) || exit 2
+  put preset "$1"
+  notify "The keyboard now looks like $name."
 }
 
 case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "transparency "*) choice transparency auto "${2:-}" "${3:-}" ;;
+  "key-transparency "*) choice key-transparency opaque "${2:-}" "${3:-}" ;;
   "modifiers "*) choice modifiers oneshot "${2:-}" "${3:-}" ;;
-  "background "*) choice background style "${2:-}" "${3:-}" ;;
-  "key-style list") styles ;;
-  "key-style set")
-    style_file "${3:-}" >/dev/null || { echo "No key style named '${3:-}'. Available: $(styles | tr '\n' ' ')" >&2; exit 2; }
-    put key-style "$3"
-    notify "The keyboard's keys are now $(style_name "$3")."
-    ;;
-  "key-style "*) choice key-style rounded "${2:-}" "${3:-}" ;;
+  "background "*) choice background tint "${2:-}" "${3:-}" ;;
+  "edge "*) choice edge none "${2:-}" "${3:-}" ;;
+  "shape "*) choice shape omarchy "${2:-}" "${3:-}" ;;
+  "relief "*) choice relief flat "${2:-}" "${3:-}" ;;
+  "fill "*) choice fill light "${2:-}" "${3:-}" ;;
+  "size "*) choice size normal "${2:-}" "${3:-}" ;;
+  "labels "*) choice labels normal "${2:-}" "${3:-}" ;;
+  "preset list") presets ;;
+  "preset get") get preset omarchy ;;
+  "preset is") [[ -n ${3:-} ]] || usage; [[ $(get preset omarchy) == "$3" ]] ;;
+  "preset apply") [[ -n ${3:-} ]] || usage; apply_preset "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;

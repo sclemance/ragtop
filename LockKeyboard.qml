@@ -113,15 +113,21 @@ Item {
     function num(value, low, high, fallback) {
       return typeof value === "number" && isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback
     }
-    var shapes = ["rounded", "rectangle", "pill", "outline", "keycap", "angular"]
+    function pick(value, allowed, fallback) {
+      return allowed.indexOf(value) !== -1 ? value : fallback
+    }
     return {
-      shape: shapes.indexOf(raw.shape) !== -1 ? raw.shape : "rounded",
-      radius: typeof raw.radius === "number" ? num(raw.radius, 0, 30, "auto") : "auto",
-      border: num(raw.border, 0, 4, 1),
-      gap: Math.round(num(raw.gap, 2, 14, 6)),
-      labelScale: num(raw.labelScale, 0.6, 1.6, 1),
+      shape: pick(raw.shape, ["omarchy", "rounded", "pill", "angular"], "omarchy"),
+      relief: pick(raw.relief, ["flat", "raised"], "flat"),
+      fill: pick(raw.fill, ["dark", "light", "outline"], "light"),
+      keyTransparency: pick(raw.keyTransparency, ["opaque", "low", "medium", "high", "full"], "opaque"),
+      size: pick(raw.size, ["compact", "normal", "large"], "normal"),
+      labels: pick(raw.labels, ["small", "normal", "large"], "normal"),
       depth: num(raw.depth, 0, 10, 4),
-      chamfer: num(raw.chamfer, 0, 20, 8)
+      chamfer: num(raw.chamfer, 0, 20, 8),
+      // Off-theme sizes; colours are left to the lock screen's own palette.
+      borderWidth: typeof raw.borderWidth === "number" ? num(raw.borderWidth, 0, 4, "auto") : "auto",
+      radius: typeof raw.radius === "number" ? num(raw.radius, 0, 30, "auto") : "auto"
     }
   }
 
@@ -138,20 +144,84 @@ Item {
     onLoadFailed: root.style = root.cleanStyle(null)
   }
 
-  // Sized as the desktop keyboard is, so the longest row fits.
-  readonly property int gap: style.gap
-  readonly property int padding: 8
+  // Sized as the desktop keyboard is, on Omarchy's spacing scale, stepped
+  // by the style's density.
+  readonly property int gap: style.size === "compact" ? Style.spacing.sm
+    : style.size === "large" ? Style.spacing.lg : Style.spacing.md
+  readonly property int padding: style.size === "compact" ? Style.spacing.md
+    : style.size === "large" ? Style.spacing.xl : Style.spacing.lg
+  readonly property real keyScale: style.size === "compact" ? 0.88 : style.size === "large" ? 1.15 : 1
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
-  readonly property real unit: Math.min((width - 2 * padding) / rowUnits, 84)
-  readonly property real keyHeight: Math.max(40, Math.min(Math.round(unit * 0.78), 60))
+  readonly property real unit: Math.min((width - 2 * padding) / rowUnits, Math.round(84 * keyScale))
+  readonly property real keyHeight: Math.max(Math.round(36 * keyScale),
+    Math.min(Math.round(unit * 0.78), Math.round(60 * keyScale)))
 
-  // The desktop keyboard's key fills, made from the lock screen's colours.
-  readonly property color keyColor: Qt.tint(Color.lock.background, Util.alpha(Color.lock.text, 0.10))
-  readonly property color specialKeyColor: Qt.tint(Color.lock.background, Util.alpha(Color.lock.text, 0.05))
-  readonly property color keyBorder: Util.alpha(Color.lock.text, 0.12)
+  // Omarchy's shared control states, in the lock screen's own colours.
+  readonly property color themeKeyColor: Style.normalFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  // A raised key's side: a translucent wash towards the lock screen's text
+  // colour, which contrasts with its surface on dark and light themes
+  // alike, with a little of its accent so it reads as an edge.
+  // A raised key's side is part of the key: the face's colour in shadow,
+  // fading with it. An outline key has no face colour, so it stays a wash.
+  readonly property color keySide: seeThrough(style.fill === "outline"
+    ? Util.alpha(Qt.tint(Color.lock.text, Util.alpha(Color.lock.borderActive, 0.35)), 0.3)
+    : Qt.tint(Qt.darker(keyBase, 1.35), Util.alpha(Color.lock.borderActive, 0.12)))
+  // Solid keys sit on the lock screen's own surface colour, subtle ones let
+  // it show through, outline keys are carried by their edge alone.
+  // How see-through the keys are; what shows through is the lock screen
+  // behind them.
+  readonly property real keyOpacity:
+    ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[style.keyTransparency]
+  function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
+
+  // A key sits darker or lighter than the lock screen's own surface; where
+  // that surface already is the theme's darkest or lightest colour, the
+  // step is taken from the surface itself.
+  function luminance(c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b }
+  readonly property color lockSurface: Qt.rgba(Color.lock.background.r, Color.lock.background.g, Color.lock.background.b, 1)
+  readonly property color lighterRole: luminance(Color.lock.text) > luminance(lockSurface) ? Color.lock.text : lockSurface
+  readonly property color darkerRole: luminance(Color.lock.text) > luminance(lockSurface) ? lockSurface : Color.lock.text
+  function stepped(role, factorColor) {
+    var mixed = Qt.tint(lockSurface, Util.alpha(role, 0.14))
+    return Math.abs(luminance(mixed) - luminance(lockSurface))
+      >= Math.abs(luminance(factorColor) - luminance(lockSurface)) ? mixed : factorColor
+  }
+  readonly property color keyBase: style.fill === "outline" ? "transparent"
+    : Qt.tint(style.fill === "dark" ? stepped(darkerRole, Qt.darker(lockSurface, 1.35))
+                                    : stepped(lighterRole, Qt.lighter(lockSurface, 1.3)),
+              themeKeyColor)
+  readonly property color keyColor: seeThrough(keyBase)
+  readonly property color pressedKeyColor: Style.pressedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  readonly property color latchedKeyColor: Style.selectedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  readonly property color specialTextColor: Color.lock.placeholder
+  readonly property var keyBorderSpec: Border.controlSpec("normal", Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  readonly property color keyBorder: Border.color(keyBorderSpec)
+  readonly property real keyBorderWidth: style.borderWidth !== "auto" ? Style.space(style.borderWidth)
+    // An outline key is its edge, so it always keeps one.
+    : style.fill === "outline" ? Math.max(1, Border.top(keyBorderSpec))
+    : Border.top(keyBorderSpec)
   // The Outline shape's edges, which carry the key on their own.
   readonly property color outline: Util.alpha(Color.lock.text, 0.45)
-  readonly property real keyRadius: style.radius === "auto" ? Math.max(Style.cornerRadius, 6) : style.radius
+  readonly property real keyRadius: style.radius !== "auto" ? Style.space(style.radius)
+    : style.shape === "omarchy" ? Style.cornerRadius
+    : style.shape === "angular" ? 0
+    : Style.space(8)
+  readonly property real keyDepth: style.relief === "raised" ? Style.space(style.depth) : 0
+  readonly property real keyChamfer: Style.space(style.chamfer)
+  // Labels on Omarchy's scales, growing with the keys; glyph keys take its
+  // icon scale.
+  function labelPx(size) { return Math.max(8, Math.round(size * keyScale)) }
+  readonly property int labelSize: labelPx(style.labels === "small" ? Style.font.heading
+    : style.labels === "large" ? Style.font.displayLarge : Style.font.display)
+  readonly property int wordSize: labelPx(style.labels === "small" ? Style.font.bodySmall
+    : style.labels === "large" ? Style.font.heading : Style.font.title)
+  readonly property int iconSize: labelPx(style.labels === "small" ? Style.font.iconSmall
+    : style.labels === "large" ? Style.font.display : Style.font.iconLarge)
+  readonly property var iconKeys: ["shift", "backspace", "enter"]
+  function labelKind(key) {
+    if (iconKeys.indexOf(key) !== -1) return "icon"
+    return root.label(key).length > 1 ? "word" : "char"
+  }
 
   implicitHeight: rows.implicitHeight + 2 * padding + 12
   opacity: typing ? 1 : 0.5
@@ -231,60 +301,76 @@ Item {
             readonly property bool latched: modelData === "shift" && root.shift
             readonly property bool special: modelData in root.labels || modelData === "space"
             readonly property string shape: root.style.shape
-            readonly property color fill: area.pressed ? Color.lock.selection
-              : accent ? Color.lock.borderActive
-              : latched ? Color.lock.selection
-              : special ? root.specialKeyColor
+            readonly property color fill: area.pressed ? root.pressedKeyColor
+              : accent ? root.seeThrough(Color.lock.borderActive)
+              : latched ? root.seeThrough(root.latchedKeyColor)
               : root.keyColor
             // Keycap: the face sits above the key's side and sinks when pressed.
-            readonly property real depth: shape === "keycap" ? Math.min(root.style.depth, height / 4) : 0
+            readonly property real depth: Math.min(root.keyDepth, height / 4)
             readonly property real faceY: area.pressed ? depth * 0.6 : 0
             readonly property real faceHeight: height - depth
             width: root.unit * (root.widths[modelData] || 1) - root.gap
             height: root.keyHeight
 
-            // Keycap: the key's side, showing below the face.
-            Rectangle {
-              visible: key.shape === "keycap"
-              anchors.fill: parent
-              radius: root.keyRadius
-              color: Qt.darker(key.fill, 1.6)
+            // Angular keys are drawn as a chamfered box; the same path
+            // serves the face and the side, so a raised angular key keeps
+            // its cut corners.
+            readonly property real chamfer: Math.min(root.keyChamfer, width / 3, height / 3)
+            function chamferPath(top, boxHeight) {
+              var c = chamfer, w = width, bottom = top + boxHeight
+              return "M " + c + " " + top + " L " + (w - c) + " " + top
+                + " L " + w + " " + (top + c) + " L " + w + " " + (bottom - c)
+                + " L " + (w - c) + " " + bottom + " L " + c + " " + bottom
+                + " L 0 " + (bottom - c) + " L 0 " + (top + c) + " Z"
             }
 
-            // Every shape but Angular.
+            // A raised key's side, only ever below the face.
+            Rectangle {
+              visible: key.depth > 0 && key.shape !== "angular"
+              y: key.faceY
+              width: key.width
+              height: key.height - key.faceY
+              radius: key.shape === "pill" ? height / 2 : root.keyRadius
+              color: root.keySide
+            }
+
+            Shape {
+              visible: key.depth > 0 && key.shape === "angular"
+              anchors.fill: parent
+              preferredRendererType: Shape.CurveRenderer
+
+              ShapePath {
+                fillColor: root.keySide
+                strokeWidth: 0
+                strokeColor: "transparent"
+                PathSvg { path: key.chamferPath(key.faceY, key.height - key.faceY) }
+              }
+            }
+
+            // The face, in every shape but Angular.
             Rectangle {
               visible: key.shape !== "angular"
               y: key.faceY
               width: key.width
               height: key.faceHeight
-              radius: key.shape === "rectangle" ? 0 : key.shape === "pill" ? height / 2 : root.keyRadius
-              // Outline keys are just their edges unless pressed or marked.
-              color: key.shape === "outline" && !area.pressed && !key.accent && !key.latched ? "transparent" : key.fill
-              border.width: root.style.border
-              border.color: key.shape === "outline" ? root.outline : root.keyBorder
+              radius: key.shape === "pill" ? height / 2 : root.keyRadius
+              color: key.fill
+              border.width: root.keyBorderWidth
+              border.color: root.style.fill === "outline" ? root.outline : root.keyBorder
             }
 
             // Angular: the corners cut off.
             Shape {
-              id: angular
               visible: key.shape === "angular"
               anchors.fill: parent
               preferredRendererType: Shape.CurveRenderer
-              readonly property real c: Math.min(root.style.chamfer, key.width / 3, key.height / 3)
 
               ShapePath {
                 fillColor: key.fill
-                strokeColor: root.keyBorder
-                strokeWidth: root.style.border
+                strokeColor: root.style.fill === "outline" ? root.outline : root.keyBorder
+                strokeWidth: root.keyBorderWidth
                 joinStyle: ShapePath.MiterJoin
-                PathPolyline {
-                  path: [
-                    Qt.point(angular.c, 0), Qt.point(key.width - angular.c, 0),
-                    Qt.point(key.width, angular.c), Qt.point(key.width, key.height - angular.c),
-                    Qt.point(key.width - angular.c, key.height), Qt.point(angular.c, key.height),
-                    Qt.point(0, key.height - angular.c), Qt.point(0, angular.c), Qt.point(angular.c, 0)
-                  ]
-                }
+                PathSvg { path: key.chamferPath(key.faceY, key.faceHeight) }
               }
             }
 
@@ -295,11 +381,15 @@ Item {
               horizontalAlignment: Text.AlignHCenter
               verticalAlignment: Text.AlignVCenter
               text: root.label(key.modelData)
-              color: key.accent ? Color.background : Color.lock.text
+              color: key.accent ? Color.background
+                : key.special ? root.specialTextColor
+                : Color.lock.text
               font.family: Style.font.family
-              // Short labels (a letter) larger than words like "?123".
-              font.pixelSize: Math.round(Math.min(key.faceHeight * 0.42, 26) * root.style.labelScale
-                * (text.length > 1 ? 0.75 : 1.25))
+              // Omarchy's type scale, kept inside the key.
+              font.pixelSize: Math.min(root.labelKind(key.modelData) === "icon" ? root.iconSize
+                  : root.labelKind(key.modelData) === "word" ? root.wordSize
+                  : root.labelSize,
+                Math.round(key.faceHeight * 0.62))
             }
 
             MouseArea {

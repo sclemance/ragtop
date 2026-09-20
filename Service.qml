@@ -523,95 +523,97 @@ Item {
   KeyboardTheme {
     id: keyboardTheme
     backgroundOpacity: ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[root.keyboardTransparency]
-    style: root.keyboardStyle
+    look: root.look
   }
 
-  // ---- Keyboard styles --------------------------------------------------
+  // ---- The keyboard's look ---------------------------------------------
 
-  // Setup › Tablet › Key Style: a style file's name, looked up in
-  // ~/.config/ragtop/styles/ first, then in Ragtop's styles/. Style files
-  // are data only, never code, and every value is checked by cleanStyle.
-  readonly property string styleName: /^[a-z0-9-]{1,32}$/.test(root.settings["key-style"] || "")
-    ? root.settings["key-style"] : "rounded"
-  // Setup › Tablet › Background: tint, blur or gradient with any key style,
-  // or "style" for the style file's own.
-  readonly property string backgroundSetting:
-    ["tint", "blur", "gradient"].indexOf(root.settings["background"]) !== -1 ? root.settings["background"] : "style"
-
-  // The style files' text, "" while missing.
-  property string userStyleText: ""
-  property string builtinStyleText: ""
-  FileView {
-    path: Quickshell.env("HOME") + "/.config/ragtop/styles/" + root.styleName + ".json"
-    watchChanges: true
-    printErrors: false
-    onFileChanged: reload()
-    onLoaded: root.userStyleText = text()
-    onLoadFailed: root.userStyleText = ""
-  }
-  FileView {
-    path: Qt.resolvedUrl("styles/" + root.styleName + ".json").toString().replace(/^file:\/\//, "")
-    printErrors: false
-    onLoaded: root.builtinStyleText = text()
-    onLoadFailed: root.builtinStyleText = ""
-  }
-
-  readonly property var keyboardStyle: {
-    var style = root.cleanStyle(null)
-    var sources = [root.userStyleText, root.builtinStyleText]
-    for (var i = 0; i < sources.length; i++) {
-      var raw = null
-      try { raw = JSON.parse(sources[i]) } catch (e) {}
-      if (raw && typeof raw === "object") { style = root.cleanStyle(raw); break }
+  // Every part of the look is a setting (Setup › Tablet), so what the menu
+  // shows is what the keyboard does. Presets are files that write these
+  // settings; see the `ragtop` command. Values are checked here too, since
+  // settings.conf is a plain file anyone can edit.
+  readonly property var look: {
+    function pick(key, allowed, fallback) {
+      return allowed.indexOf(root.settings[key]) !== -1 ? root.settings[key] : fallback
     }
-    if (root.backgroundSetting !== "style") style.background = root.backgroundSetting
-    return style
-  }
-
-  // A style with every field present and within bounds; anything missing,
-  // unknown or out of range gets its default.
-  function cleanStyle(raw) {
-    raw = raw && typeof raw === "object" ? raw : {}
-    function num(value, low, high, fallback) {
-      return typeof value === "number" && isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback
+    function num(key, low, high, fallback) {
+      var value = Number(root.settings[key])
+      return isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback
     }
-    function pick(value, allowed, fallback) {
-      return allowed.indexOf(value) !== -1 ? value : fallback
+    function color(key) {
+      var value = String(root.settings[key] || "")
+      return ["foreground", "background", "accent", "urgent"].indexOf(value) !== -1
+        || /^#[0-9a-fA-F]{6,8}$/.test(value) ? value : ""
     }
     return {
-      shape: pick(raw.shape, ["rounded", "rectangle", "pill", "outline", "keycap", "angular"], "rounded"),
-      // A number of pixels, or "auto" for Omarchy's own corner radius.
-      radius: raw.radius === undefined || raw.radius === "auto" ? "auto" : num(raw.radius, 0, 30, "auto"),
-      border: num(raw.border, 0, 4, 1),
-      gap: Math.round(num(raw.gap, 2, 14, 6)),
-      labelScale: num(raw.labelScale, 0.6, 1.6, 1),
-      depth: num(raw.depth, 0, 10, 4),
-      chamfer: num(raw.chamfer, 0, 20, 8),
-      background: pick(raw.background, ["tint", "blur", "gradient"], "tint")
+      shape: pick("shape", ["omarchy", "rounded", "pill", "angular"], "omarchy"),
+      // How see-through the keys are, over the keyboard's background.
+      keyTransparency: pick("key-transparency", ["opaque", "low", "medium", "high", "full"], "opaque"),
+      // Raised keys stand on a side, like a keycap; flat ones don't.
+      relief: pick("relief", ["flat", "raised"], "flat"),
+      fill: pick("fill", ["dark", "light", "outline"], "light"),
+      size: pick("size", ["compact", "normal", "large"], "normal"),
+      background: pick("background", ["tint", "gradient"], "tint"),
+      edge: pick("edge", ["border", "fade", "none"], "none"),
+      labels: pick("labels", ["small", "normal", "large"], "normal"),
+      depth: num("depth", 0, 10, 4),
+      chamfer: num("chamfer", 0, 20, 8),
+      edgeFade: num("edge-fade", 0, 24, 8),
+      // Off-theme: set, and that part stops following the Omarchy theme.
+      keyColor: color("key-color"),
+      labelColor: color("label-color"),
+      keyFillAlpha: root.settings["key-fill-alpha"] === undefined ? "auto" : num("key-fill-alpha", 0, 1, "auto"),
+      borderWidth: root.settings["border-width"] === undefined ? "auto" : num("border-width", 0, 4, "auto"),
+      radius: root.settings["radius"] === undefined ? "auto" : num("radius", 0, 30, "auto")
     }
   }
 
-  // Blur: Hyprland blurs what's behind the keyboard and its handle (so the
-  // two still match while it's open). Set at runtime, so Ragtop never edits
-  // the Hyprland config; a config reload drops it, so it's set again then.
-  // It only shows if the user has Hyprland's blur turned on: Ragtop leaves
-  // that alone, since it would blur see-through windows too.
-  readonly property bool blurKeyboard: root.keyboardStyle.background === "blur"
+  // Blur behind the keyboard and its handle, so the two match. Hyprland
+  // blurs nothing unless its global blur is on, and that would blur
+  // see-through windows too — so when Ragtop turns it on, it also tells
+  // Hyprland to leave every window alone, and only the keyboard blurs.
+  // Nothing is written to the Hyprland config: `hyprctl reload` clears it.
+  readonly property bool blurKeyboard: root.settings["blur"] === "on"
+  // Whether Hyprland's global blur was already on, i.e. the user's own
+  // choice, which Ragtop leaves alone.
+  property bool globalBlurWasOn: false
+  property bool blurChecked: false
   onBlurKeyboardChanged: root.applyBlur()
+
+  Process {
+    id: blurCheckProc
+    command: ["hyprctl", "getoption", "-j", "decoration:blur:enabled"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.globalBlurWasOn = JSON.parse(text()).int === 1 || JSON.parse(text()).bool === true } catch (e) {}
+        root.blurChecked = true
+        root.applyBlur()
+      }
+    }
+  }
+
   function applyBlur() {
-    blurProc.command = ["hyprctl", "eval",
-      "hl.layer_rule({ match = { namespace = '^ragtop-keyboard(-handle)?$' }, blur = " + root.blurKeyboard + " })"]
+    if (!root.blurChecked) { blurCheckProc.running = true; return }
+    var lua = "hl.layer_rule({ match = { namespace = '^ragtop-keyboard(-handle)?$' }, blur = " + root.blurKeyboard
+      + ", ignore_alpha = 0.3 }) "
+    if (!root.globalBlurWasOn) {
+      // Ragtop's own blur: on for its layers, off for every window.
+      lua += "hl.config({ decoration = { blur = { enabled = " + root.blurKeyboard + " } } }) "
+      if (root.blurKeyboard) lua += "hl.window_rule({ match = { class = '.*' }, no_blur = true }) "
+    }
+    blurProc.command = ["hyprctl", "eval", lua]
     blurProc.running = true
   }
   Process { id: blurProc }
 
-  // The checked style, for the lock screen's keyboard, which can't reach
-  // this service and takes only the shape and measurements from it.
-  onKeyboardStyleChanged: {
+  // The look, for the lock screen's keyboard, which can't reach this
+  // service and takes only the shape and measurements from it.
+  onLookChanged: root.writeStyleForLock()
+  function writeStyleForLock() {
     styleWriteProc.command = [
       "sh", "-c",
       'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-style.json.tmp" && mv -f "$d/ragtop-style.json.tmp" "$d/ragtop-style.json"',
-      "--", JSON.stringify(root.keyboardStyle)
+      "--", JSON.stringify(root.look)
     ]
     styleWriteProc.running = true
   }

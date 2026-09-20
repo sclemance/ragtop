@@ -1,0 +1,13 @@
+{
+  "name": "Typewriter",
+  "shape": "pill",
+  "relief": "raised",
+  "fill": "light",
+  "size": "large",
+  "background": "tint",
+  "transparency": "opaque",
+  "edge": "border",
+  "labels": "large",
+  "depth": 6,
+  "blur": false
+}

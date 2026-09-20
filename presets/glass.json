@@ -1,0 +1,12 @@
+{
+  "name": "Glass",
+  "shape": "rounded",
+  "relief": "flat",
+  "fill": "outline",
+  "size": "normal",
+  "background": "tint",
+  "transparency": "high",
+  "edge": "fade",
+  "labels": "normal",
+  "blur": true
+}

@@ -38,6 +38,25 @@ start = "  // Ragtop: tablet settings. Added by Ragtop's installer; removed by i
 end = "  // End of Ragtop's tablet settings."
 cmd = "$HOME/.config/omarchy/plugins/sclemance.ragtop/ragtop"
 
+# The presets Ragtop ships, plus the user's own; a user file with the same
+# name wins. Omarchy's own look first, then the rest by name.
+preset_dirs = [os.path.join(os.path.dirname(cmd.replace("$HOME", os.path.expanduser("~"))), "presets"),
+               os.path.expanduser("~/.config/ragtop/presets")]
+preset_labels = {}
+for d in preset_dirs:
+    if not os.path.isdir(d):
+        continue
+    for f in sorted(os.listdir(d)):
+        if not f.endswith(".json"):
+            continue
+        name = f[:-5]
+        try:
+            label = json.load(open(os.path.join(d, f))).get("name")
+        except Exception:
+            label = None
+        preset_labels[name] = label if isinstance(label, str) and label.strip() else name
+presets = sorted(preset_labels.items(), key=lambda row: (row[0] != "omarchy", row[0]))
+
 overlays = [
     ("menu", "\U000f035c", "Omarchy Menu"),
     ("emojis", "\U000f0785", "Emoji Picker"),
@@ -48,59 +67,68 @@ overlays = [
 rows = {
     "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "ragtop"],
                         when=f'[[ -x "{cmd}" ]]'),
-    "setup.tablet.mode": dict(icon="\U000f04f6", label="Tablet Mode",
-        description="Follow the hinge, or keep tablet mode on or off"),
+    # Behaviour.
+    "setup.tablet.mode": dict(icon="\U000f04f6", label="Tablet Mode"),
     "setup.tablet.mode.auto": dict(icon="\U000f006a", label="Automatic",
-        description="Tablet mode when the screen is folded back",
         checked=f'"{cmd}" tablet-mode is auto', action=f'"{cmd}" tablet-mode set auto'),
     "setup.tablet.mode.on": dict(icon="\U000f04f6", label="Always On",
-        description="Tablet controls in laptop mode too",
         checked=f'"{cmd}" tablet-mode is on', action=f'"{cmd}" tablet-mode set on'),
     "setup.tablet.mode.off": dict(icon="\U000f0322", label="Always Off",
-        description="Never switch to tablet mode",
         checked=f'"{cmd}" tablet-mode is off', action=f'"{cmd}" tablet-mode set off'),
     "setup.tablet.auto-show": dict(icon="\U000f030c", label="Auto Keyboard",
-        description="Bring the on-screen keyboard up when a text field gets focus in tablet mode",
         checked=f'"{cmd}" auto-show enabled',
         action=f'"{cmd}" auto-show toggle'),
-    "setup.tablet.modifiers": dict(icon="\U000f0634", label="Modifier Keys",
-        description="How Ctrl, Alt, Super and Shift behave on the on-screen keyboard"),
+    "setup.tablet.modifiers": dict(icon="\U000f0634", label="Modifier Keys"),
     "setup.tablet.modifiers.oneshot": dict(icon="\U000f0634", label="One-Shot",
-        description="Apply to the next key only; tap twice to lock",
         checked=f'"{cmd}" modifiers is oneshot', action=f'"{cmd}" modifiers set oneshot'),
     "setup.tablet.modifiers.sticky": dict(icon="\U000f0634", label="Sticky",
-        description="Stay on until tapped again",
         checked=f'"{cmd}" modifiers is sticky', action=f'"{cmd}" modifiers set sticky'),
-    "setup.tablet.key-style": dict(icon="\U000f0831", label="Key Style",
-        description="The shape of the on-screen keyboard's keys"),
-    **{f"setup.tablet.key-style.{name}": dict(icon="\U000f0831", label=label,
-        checked=f'"{cmd}" key-style is {name}', action=f'"{cmd}" key-style set {name}')
-       for name, label in (("rounded", "Rounded"), ("rectangle", "Rectangle"), ("pill", "Pill"),
-                           ("outline", "Outline"), ("keycap", "Keycap"), ("angular", "Angular"))},
-    "setup.tablet.background": dict(icon="\U000f06a0", label="Background",
-        description="Tint, blur or gradient behind the on-screen keyboard's keys; blur needs Hyprland's blur turned on"),
+    # Appearance. A preset writes the settings below, so what the menu
+    # shows is always what the keyboard does.
+    "setup.tablet.preset": dict(icon="\U000f03d8", label="Preset"),
+    **{f"setup.tablet.preset.{name}": dict(icon="\U000f03d8", label=label,
+        checked=f'"{cmd}" preset is {name}', action=f'"{cmd}" preset apply {name}')
+       for name, label in presets},
+    "setup.tablet.shape": dict(icon="\U000f0831", label="Key Shape"),
+    **{f"setup.tablet.shape.{name}": dict(icon="\U000f0831", label=label,
+        checked=f'"{cmd}" shape is {name}', action=f'"{cmd}" shape set {name}')
+       for name, label in (("omarchy", "Omarchy"), ("rounded", "Rounded"), ("pill", "Pill"),
+                           ("angular", "Angular"))},
+    "setup.tablet.relief": dict(icon="\U000f0764", label="Key Relief"),
+    **{f"setup.tablet.relief.{name}": dict(icon="\U000f0764", label=label,
+        checked=f'"{cmd}" relief is {name}', action=f'"{cmd}" relief set {name}')
+       for name, label in (("flat", "Flat"), ("raised", "Raised"))},
+    "setup.tablet.fill": dict(icon="\U000f0764", label="Key Fill"),
+    **{f"setup.tablet.fill.{name}": dict(icon="\U000f0764", label=label,
+        checked=f'"{cmd}" fill is {name}', action=f'"{cmd}" fill set {name}')
+       for name, label in (("dark", "Dark"), ("light", "Light"), ("outline", "Outline"))},
+    "setup.tablet.size": dict(icon="\U000f004c", label="Key Size"),
+    **{f"setup.tablet.size.{name}": dict(icon="\U000f004c", label=label,
+        checked=f'"{cmd}" size is {name}', action=f'"{cmd}" size set {name}')
+       for name, label in (("compact", "Compact"), ("normal", "Normal"), ("large", "Large"))},
+    "setup.tablet.key-transparency": dict(icon="\U000f1853", label="Key Transparency"),
+    **{f"setup.tablet.key-transparency.{level}": dict(icon="\U000f1853", label=label,
+        checked=f'"{cmd}" key-transparency is {level}', action=f'"{cmd}" key-transparency set {level}')
+       for level, label in (("opaque", "Opaque"), ("low", "Low"), ("medium", "Medium"),
+                            ("high", "High"), ("full", "Full"))},
+    "setup.tablet.background": dict(icon="\U000f06a0", label="Background"),
     **{f"setup.tablet.background.{name}": dict(icon="\U000f06a0", label=label,
         checked=f'"{cmd}" background is {name}', action=f'"{cmd}" background set {name}')
-       for name, label in (("style", "From Style"), ("tint", "Tint"), ("blur", "Blur"),
-                           ("gradient", "Gradient"))},
-    "setup.tablet.transparency": dict(icon="\U000f1853", label="Transparency",
-        description="Let the desktop show through the on-screen keyboard's background"),
+       for name, label in (("tint", "Tint"), ("gradient", "Gradient"))},
+    "setup.tablet.transparency": dict(icon="\U000f1853", label="BG Transparency"),
     **{f"setup.tablet.transparency.{level}": dict(icon="\U000f1853", label=label,
         checked=f'"{cmd}" transparency is {level}', action=f'"{cmd}" transparency set {level}')
        for level, label in (("auto", "Match Bar"), ("opaque", "Opaque"), ("low", "Low"),
                             ("medium", "Medium"), ("high", "High"), ("full", "Full"))},
-    "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays",
-        description="Let the on-screen keyboard type into Omarchy's full-screen overlays in tablet mode"),
+    "setup.tablet.edge": dict(icon="\U000f08a6", label="Edge"),
+    **{f"setup.tablet.edge.{name}": dict(icon="\U000f08a6", label=label,
+        checked=f'"{cmd}" edge is {name}', action=f'"{cmd}" edge set {name}')
+       for name, label in (("border", "Border"), ("fade", "Fade"), ("none", "None"))},
+    "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
 }
 for name, icon, label in overlays:
     rows[f"setup.tablet.overlays.{name}"] = dict(
         icon=icon, label=label,
-        description={
-            "polkit": "Replaces Omarchy's password prompt with a patched copy that doesn't hold "
-                      "the keyboard to itself in tablet mode",
-            "lock": "Replaces Omarchy's lock screen with a patched copy that has an on-screen "
-                    "keyboard in tablet mode",
-        }.get(name, f"Replaces Omarchy's {label.lower()} with a patched copy"),
         checked=f'"{cmd}" overlay enabled {name}',
         action=f'"{cmd}" overlay toggle {name}')
 block = [start] + [f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," for k, v in rows.items()] + [end]

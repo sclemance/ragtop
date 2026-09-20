@@ -170,42 +170,94 @@ shortcuts work from it. For keybindings or scripts:
 omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 ```
 
-### Key styles
+### The keyboard's look
 
-**Setup › Tablet › Key Style** picks the keys' shape: Rounded (the default),
-Rectangle, Pill, Outline, Keycap or Angular. **Setup › Tablet › Background**
-picks what's behind them with any shape: a flat Tint, Blur, or a Gradient
-towards your theme's accent; From Style uses the style's own. Colours always
-come from your Omarchy theme, and whatever a key looks like, a touch goes to
-the nearest key, so no shape makes keys harder to hit.
+Ragtop follows your Omarchy theme: colours, type scale, spacing and borders
+all come from the theme's own tokens, so switching themes restyles the
+keyboard with it. The settings only say *how* to use them, and each one is a
+row in the Omarchy menu under **Setup › Tablet**:
 
-Blur is done by Hyprland, which Omarchy ships with blur turned off. Ragtop
-doesn't turn it on, since that would also blur your see-through windows:
-Blur shows once you've enabled `decoration.blur.enabled` in your Hyprland
-config, and looks like Tint until then.
+| Row | Choices |
+| --- | --- |
+| Preset | A saved look; picking one writes the rows below |
+| Key Shape | Omarchy (the theme's own corner rounding), Rounded, Pill, Angular |
+| Key Relief | Flat, or Raised: the key stands on a side, like a keycap |
+| Key Fill | Dark or Light (an opaque key sitting darker or lighter than the keyboard), or Outline (no fill, carried by its edge) |
+| Key Size | Compact, Normal, Large — the labels scale with the keys |
+| Key Transparency | Opaque, Low, Medium, High, Full. What shows through is the keyboard's background, so the desktop only shows if that's see-through too |
+| Background | Tint or Gradient |
+| BG Transparency | The keyboard's background: Match Bar, Opaque, Low, Medium, High, Full |
+| Edge | Border, Fade or None, for the keyboard's top edge |
 
-A style is a small JSON file of settings, never code. Ragtop's are in
-`styles/`; put your own in `~/.config/ragtop/styles/<name>.json` (a file with
-a built-in's name replaces it) and pick it with `./ragtop key-style set <name>`:
+Whatever a key looks like, a touch goes to the nearest key, so no shape
+makes keys harder to hit.
+
+**Edge** sets how the keyboard's top edge meets the desktop. Border gives it
+the same border your tiled windows have, taken from the Omarchy theme itself
+(the shell's own active-window border spec), so it follows a theme switch
+live, gradients included. Fade fades the background out over `edge-fade`
+pixels. None leaves a hard edge.
+
+### Presets
+
+A preset is a small JSON file of those same settings, never code. Applying
+one **writes its values into your settings**, so afterwards every menu row
+shows what the keyboard is actually doing — a preset is a starting point,
+not a layer that overrides you.
+
+Ragtop's are in `presets/` (Omarchy, Soft, Typewriter, Glass); put your own
+in `~/.config/ragtop/presets/<name>.json` and apply it from the menu or with
+`./ragtop preset apply <name>`:
 
 ```json
-{ "name": "Chunky", "shape": "keycap", "depth": 7, "radius": 10, "gap": 8, "labelScale": 1.1 }
+{
+  "name": "Chunky",
+  "shape": "rounded",
+  "relief": "raised",
+  "fill": "light",
+  "size": "large",
+  "background": "tint",
+  "transparency": "opaque",
+  "edge": "border",
+  "labels": "large",
+  "depth": 6
+}
 ```
+
+Besides the menu rows, a preset can set the details that don't deserve one:
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `shape` | `rounded`, `rectangle`, `pill`, `outline`, `keycap`, `angular` | `rounded` |
-| `radius` | corner radius in pixels, 0–30, or `"auto"` for Omarchy's | `"auto"` |
-| `border` | border width, 0–4 | 1 |
-| `gap` | space between keys, 2–14 | 6 |
-| `labelScale` | label size, 0.6–1.6 | 1 |
-| `depth` | Keycap: how far the key's side shows, 0–10 | 4 |
+| `labels` | label size on Omarchy's type scale: `small`, `normal`, `large` | `normal` |
+| `depth` | Raised keys: how far the key's side shows, 0–10 | 4 |
 | `chamfer` | Angular: how much of each corner is cut, 0–20 | 8 |
-| `background` | `tint`, `blur`, `gradient` | `tint` |
+| `edge-fade` | pixels the background fades over with Edge set to Fade, 0–24 | 8 |
+| `blur` | blur what's behind the keyboard (see below) | `false` |
 
-Anything missing, unknown or out of range falls back to its default. The lock
-screen's keyboard takes the shape and measurements from the style too, but
-never the background.
+To leave the theme behind for one part of the look, a preset can also set
+these outright. Only what you set stops following the theme:
+
+| Field | Values |
+| --- | --- |
+| `key-color`, `label-color` | a palette role (`foreground`, `background`, `accent`, `urgent`) or a hex colour |
+| `key-fill-alpha` | 0–1, how strong the key fill is |
+| `border-width` | 0–4 |
+| `radius` | corner radius in pixels, 0–30 |
+
+Anything missing, unknown or out of range is ignored, so a stray file can't
+break the keyboard. All of this lands in `~/.config/ragtop/settings.conf`,
+which you can also edit directly.
+
+**Blur** is Hyprland's, and Omarchy ships with it turned off. A preset with
+`"blur": true` turns it on at runtime, for Ragtop's keyboard and its handle
+only: Hyprland is told to leave every window unblurred, so your see-through
+terminals stay as they are. Turning blur off again restores it, and nothing
+is written to your Hyprland config, so `hyprctl reload` clears it either
+way. If you have blur on yourself, Ragtop leaves your setup alone and just
+blurs behind its keyboard.
+
+The lock screen's keyboard takes the shape, fill and measurements too,
+checked again by its own code, but never the colours or the background.
 
 ## Omarchy's overlays
 
@@ -289,9 +341,15 @@ the gear key on the on-screen keyboard opens directly:
 | Tablet mode: Automatic (follow the hinge), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard modifiers: One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
-| Key shape: Rounded, Rectangle, Pill, Outline, Keycap or Angular (see [Key styles](#key-styles)) | Rounded | Setup › Tablet › Key Style |
-| Keyboard background: From Style, Tint, Blur or Gradient | From Style | Setup › Tablet › Background |
-| Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › Transparency |
+| A saved look, which writes the rows below (see [Presets](#presets)) | Omarchy | Setup › Tablet › Preset |
+| Key shape: Omarchy, Rounded, Pill or Angular | Omarchy | Setup › Tablet › Key Shape |
+| Key relief: Flat or Raised | Flat | Setup › Tablet › Key Relief |
+| Keys: Dark, Light or Outline | Light | Setup › Tablet › Key Fill |
+| Key size: Compact, Normal or Large | Normal | Setup › Tablet › Key Size |
+| Keyboard background: Tint or Gradient | Tint | Setup › Tablet › Background |
+| Keyboard top edge: Border (your Hyprland window border), Fade or None | None | Setup › Tablet › Edge |
+| Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › BG Transparency |
+| Key transparency: Opaque, Low, Medium, High or Full | Opaque | Setup › Tablet › Key Transparency |
 | Touch typing in each overlay, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
 
 Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
@@ -301,8 +359,11 @@ while the keyboard is closed, and the keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`modifiers set oneshot|sticky`, `key-style set <name>` (`key-style list` shows
-them), `background set style|tint|blur|gradient` and
+`modifiers set oneshot|sticky`, `background set tint|gradient`, `edge set border|fade|none`,
+`shape set omarchy|rounded|pill|angular`, `relief set flat|raised`,
+`fill set dark|light|outline`, `key-transparency set opaque|low|medium|high|full`,
+`size set compact|normal|large`, `preset apply <name>` (`preset list` shows
+them) and
 `transparency set auto|opaque|low|medium|high|full`. Settings other than the
 overlays are kept in
 `~/.config/ragtop/settings.conf`, and changes apply straight away.

@@ -1,0 +1,13 @@
+{
+  "name": "Soft",
+  "shape": "rounded",
+  "relief": "flat",
+  "fill": "light",
+  "size": "normal",
+  "background": "gradient",
+  "transparency": "medium",
+  "edge": "fade",
+  "labels": "normal",
+  "edge-fade": 16,
+  "blur": false
+}

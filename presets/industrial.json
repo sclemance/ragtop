@@ -1,0 +1,13 @@
+{
+  "name": "Industrial",
+  "shape": "angular",
+  "relief": "raised",
+  "fill": "light",
+  "size": "normal",
+  "background": "gradient",
+  "transparency": "medium",
+  "edge": "border",
+  "labels": "large",
+  "depth": 6,
+  "blur": false
+}

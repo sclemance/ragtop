@@ -1,0 +1,12 @@
+{
+  "name": "Omarchy",
+  "shape": "omarchy",
+  "relief": "flat",
+  "fill": "light",
+  "size": "normal",
+  "background": "tint",
+  "transparency": "auto",
+  "edge": "none",
+  "labels": "normal",
+  "blur": false
+}

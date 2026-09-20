@@ -59,9 +59,9 @@ Item {
   })
   readonly property var labels: ({
     "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super",
-    "left": "←", "up": "↑", "down": "↓", "right": "→",
-    "shift": "⇧", "backspace": "⌫", "enter": "⏎", "space": "",
-    "symbols": "?123", "more": "#+=", "letters": "ABC", "settings": String.fromCodePoint(0xf0493)
+    "left": "", "up": "", "down": "", "right": "",
+    "shift": "", "backspace": "", "enter": "", "space": "",
+    "symbols": "?123", "more": "#+=", "letters": "ABC", "settings": ""
   })
   readonly property var widths: ({
     "shift": 1.5, "backspace": 1.5, "symbols": 1.5, "more": 1.5, "letters": 1.5,
@@ -72,24 +72,37 @@ Item {
     "esc": "Escape", "tab": "Tab", "left": "Left", "up": "Up", "down": "Down", "right": "Right",
     "backspace": "BackSpace", "enter": "Return", "space": "space"
   })
+  // Keys Ragtop draws an icon for (KeyIcon.qml) instead of a label, so they
+  // don't depend on the font carrying a glyph and scale with the keys.
+  readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace", "enter", "settings"]
+  function labelKind(key) {
+    if (iconKeys.indexOf(key) !== -1) return "drawn"
+    return root.label(key).length > 1 ? "word" : "char"
+  }
+
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right"]
 
   // Sized so the longest row fits; layouts differ (10 to 12 letter keys).
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
-  readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, 84)
-  readonly property real keyHeight: Math.max(40, Math.min(Math.round(unit * 0.78), 60))
+  readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, Math.round(84 * theme.keyScale))
+  readonly property real keyHeight: Math.max(Math.round(36 * theme.keyScale),
+    Math.min(Math.round(unit * 0.78), Math.round(60 * theme.keyScale)))
   readonly property real topRowHeight: Math.round(keyHeight * 0.62)
 
   // Where each key sits: { key, x, y, width, height } for every key of the
   // top row and the current page, rows centred. A key's slot is this
   // rectangle; how it's drawn inside is up to KeyboardKey.qml, and never
   // affects which key a touch means.
+  // A soft or bordered top edge (Setup › Tablet › Edge) gets its own space
+  // above the keys, so it's clear of the first row.
+  readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
+
   readonly property var slots: {
     var rows = [root.topRow].concat(root.pages[root.page])
     var gap = root.theme.gap
     var out = []
-    var y = root.theme.padding
+    var y = root.topPadding
     rows.forEach(function(row, i) {
       // The top row spreads its keys over the full width.
       var widths = row.map(function(k) {
@@ -222,12 +235,35 @@ Item {
     return keys
   }
 
-  // Flat unless the style's background is a gradient (see KeyboardTheme).
+  // Flat unless the style's background is a gradient, and fading out at the
+  // top edge if it asks for that (see KeyboardTheme).
   Rectangle {
+    id: backdrop
     anchors.fill: parent
+    readonly property real fade: height > 0 ? Math.min(root.theme.edgeFade, height / 3) / height : 0
     gradient: Gradient {
-      GradientStop { position: 0; color: root.theme.backgroundTop }
+      GradientStop { position: 0; color: backdrop.fade > 0 ? root.theme.backgroundClear : root.theme.backgroundTop }
+      GradientStop { position: backdrop.fade; color: root.theme.backgroundTop }
       GradientStop { position: 1; color: root.theme.background }
+    }
+  }
+
+  // Edge: Border. Hyprland's own window border along the top, so the
+  // keyboard is edged like a tiled window; its colour can be a gradient.
+  Rectangle {
+    visible: root.theme.edgeBorder > 0
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: parent.top
+    height: root.theme.edgeBorder
+    color: root.theme.borderColors[0]
+    gradient: root.theme.borderColors.length > 1 ? borderGradient : null
+
+    Gradient {
+      id: borderGradient
+      orientation: Gradient.Horizontal
+      GradientStop { position: 0; color: root.theme.borderColors[0] }
+      GradientStop { position: 1; color: root.theme.borderColors[root.theme.borderColors.length - 1] }
     }
   }
 
@@ -243,6 +279,8 @@ Item {
       height: modelData.height
       label: root.label(modelData.key)
       kind: root.kind(modelData.key)
+      labelKind: root.labelKind(modelData.key)
+      icon: root.iconKeys.indexOf(modelData.key) !== -1 ? modelData.key : ""
       pressed: modelData.key in root.heldKeys
     }
   }
