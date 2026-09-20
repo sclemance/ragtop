@@ -1,0 +1,38 @@
+name: Bug report
+description: Something works wrongly on a machine where Ragtop otherwise runs
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to bring it about
+      description: The shortest sequence you know of that shows it.
+  - type: input
+    id: device
+    attributes:
+      label: Machine and versions
+      placeholder: Surface Book 2 — detachable · Ragtop 0.35.6 · Omarchy 4.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: state
+    attributes:
+      label: What Ragtop thinks is going on
+      description: |
+        Whatever of these is relevant — none is required, and no output is
+        sensitive:
+
+        ```bash
+        ./ragtop tablet-mode get          # what mode it believes it is in
+        ./ragtop overlay status           # which overlays are patched
+        cat $XDG_RUNTIME_DIR/ragtop-mode  # tablet or laptop, as the clones see it
+        hyprctl layers | grep ragtop      # which of its surfaces are up
+        ```
+      render: shell

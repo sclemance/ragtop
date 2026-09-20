@@ -1,0 +1,19 @@
+name: Idea
+description: Something Ragtop should do, or should do differently
+title: "[idea] "
+labels: ["idea"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you'd like
+      description: >
+        What you were trying to do matters more than the feature you have in
+        mind for it — the second is easier to design once the first is clear.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Machine you use Ragtop on
+      placeholder: Surface Book 2 — detachable

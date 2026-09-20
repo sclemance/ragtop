@@ -1,0 +1,51 @@
+name: Hardware report
+description: Tell us how Ragtop went on your machine — whether it worked or not
+title: "[hardware] "
+labels: ["hardware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two machines is not a sample. A report that it *worked* is as useful as
+        one that it didn't, and "it found no tablet-mode switch" is a result,
+        not a failure to report.
+  - type: input
+    id: device
+    attributes:
+      label: Machine
+      description: Model, and whether the keyboard folds away or comes off.
+      placeholder: Lenovo 300w Yoga Gen 4 — hinge / Surface Book 2 — detachable / slate
+    validations:
+      required: true
+  - type: textarea
+    id: tablet-mode
+    attributes:
+      label: Tablet mode
+      description: >
+        Does folding the screen back, or taking the keyboard off, turn it on —
+        and does undoing that turn it off? Paste what setup said under
+        "Looking for a tablet-mode switch", including if it found none.
+    validations:
+      required: true
+  - type: textarea
+    id: rotation
+    attributes:
+      label: Rotation
+      description: >
+        Does the screen follow the device, the right way round? Do taps land
+        where things are drawn? A picture that rotates while touch doesn't is
+        its own distinct bug — say so if that's what you see.
+  - type: textarea
+    id: rest
+    attributes:
+      label: Everything else, in use
+      description: >
+        The keyboard coming up on a text field, SUPER shortcuts from it, the
+        handle, the window shortcuts, the lock screen, any overlays you turned
+        on. Tell us what you were doing, not only what broke.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Ragtop's version from manifest.json, and `omarchy version`.
+      placeholder: Ragtop 0.35.6, Omarchy 4.0.0

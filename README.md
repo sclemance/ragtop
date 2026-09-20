@@ -138,7 +138,9 @@ kernel and firmware before its touchscreen works at all; a stock kernel gives
 you a machine that detaches, rotates and runs Ragtop, with nothing to touch it
 with. Worth knowing before you conclude the plugin is broken: check whether a
 touch device exists at all with `hyprctl devices | grep -i touch`. **If you have a machine we haven't listed, please try it and open an issue**,
-whether it works or not. Two machines is not a sample.
+whether it works or not. Two machines is not a sample. There is a
+[hardware report form](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)
+that asks for exactly this.
 
 What is most useful to hear about, roughly in order:
 
@@ -630,8 +632,9 @@ and every push is, in effect, a release.
 The version in `manifest.json` is required — `omarchy plugin validate` refuses
 a manifest without one — but Omarchy itself never shows it: not in
 `omarchy plugin list`, not in its JSON. So it is here for people, in the
-release tags and in bug reports. Ragtop is **in beta**: it runs a machine every day, but it hasn't been
-published yet and the settings are still moving. The version is **0.x while
+release tags and in bug reports. Ragtop is **in beta**: it runs two machines every day, but the settings are
+still moving and it wants strangers to break it. Bugs and hardware reports
+are the point of this stage; feature ideas are welcome once it is boring. The version is **0.x while
 that is true**,
 and says so honestly: the settings file, the `ragtop` command and the rest
 are still moving. The first published release is 1.0.0, tagged, and from
