@@ -121,6 +121,22 @@ Item {
   readonly property real slotsBottom: slots.length > 0
     ? slots[slots.length - 1].y + slots[slots.length - 1].height : 0
 
+  // How far the keys reach across. On a wide screen the keyboard spans the
+  // whole width while the keys stay a comfortable size, and the margins
+  // either side are not the keyboard's business: the service uses this to
+  // let taps there fall through to whatever is underneath.
+  readonly property real keysLeft: slots.reduce(function(a, s) { return Math.min(a, s.x) }, root.width)
+  readonly property real keysRight: slots.reduce(function(a, s) { return Math.max(a, s.x + s.width) }, 0)
+
+  Item {
+    id: keysBounds
+    x: Math.max(0, root.keysLeft - root.theme.gap)
+    width: Math.min(root.width - x, root.keysRight - root.keysLeft + 2 * root.theme.gap)
+    y: 0
+    height: root.height
+  }
+  readonly property Item touchArea: keysBounds
+
   implicitHeight: slotsBottom + theme.padding
 
   // The key a touch at (x, y) means: the one whose slot is nearest, so a
@@ -136,7 +152,9 @@ Item {
       var d = dx * dx + dy * dy
       if (d < bestDist) { bestDist = d; best = s.key }
     }
-    return best
+    // Only near a key: a touch well past the ends of the rows isn't aimed
+    // at the keyboard at all.
+    return bestDist <= Math.pow(root.unit * 0.75, 2) ? best : null
   }
 
   function label(key) {
