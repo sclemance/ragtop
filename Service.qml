@@ -283,12 +283,37 @@ Item {
   // on by the bar widget; the keyboard handle and, by default, the keyboard's
   // background follow it.
   property bool barTransparent: false
+  // Both files below are watched — settings.conf by this service, and the
+  // mode file by every patched overlay clone. A watcher on a path that does
+  // not exist yet never learns that it appeared: on a machine where Ragtop
+  // had never run, the first setting written went unnoticed until the shell
+  // was restarted, which is how it was found (Tablet Mode set to Always On,
+  // and no handle until a reboot). Create both before anything looks.
+  Process {
+    id: ensureFilesProc
+    running: true
+    command: ["sh", "-c",
+      'mkdir -p "$HOME/.config/ragtop"; : >> "$HOME/.config/ragtop/settings.conf"; ' +
+      'd="${XDG_RUNTIME_DIR:-/tmp}"; [ -e "$d/ragtop-mode" ] || printf "laptop\n" > "$d/ragtop-mode"']
+  }
+
+  // And if it goes missing while running, keep asking: a watcher that has
+  // lost its file stays lost otherwise.
+  Timer {
+    id: settingsRetry
+    interval: 3000
+    repeat: true
+    onTriggered: settingsFile.reload()
+  }
+
   FileView {
+    id: settingsFile
     path: Quickshell.env("HOME") + "/.config/ragtop/settings.conf"
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
     onLoaded: {
+      settingsRetry.stop()
       var parsed = {}
       text().split("\n").forEach(function(line) {
         var eq = line.indexOf("=")
@@ -302,6 +327,7 @@ Item {
       root.settings = ({})
       root.settingsLoaded = true
       root.updateTabletMode()
+      settingsRetry.start()
     }
   }
   readonly property bool autoShowEnabled: root.settings["auto-show"] !== "off"
