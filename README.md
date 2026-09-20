@@ -494,6 +494,18 @@ This removes any overlay clones you turned on, Ragtop's rows in the Omarchy
 menu, the switch access rule, Ragtop's settings and generated files, and the
 plugin itself (or unlinks it, if it was linked from a checkout).
 
+## Language
+
+Ragtop is English-only, and so is Omarchy: the shell has no translation layer
+yet, and the proposals for one are still open. [LOCALIZATION.md](LOCALIZATION.md)
+records where that stands, which of Ragtop's strings are prose and which are
+protocol that must never be translated, and what would change here once a
+standard settles.
+
+The keyboard itself is mostly language-agnostic already — its letters, symbols
+and accents come from your active Hyprland layout, and its key glyphs are
+drawn rather than written.
+
 ## Credits and licensing
 
 - The on-demand focus fix for Omarchy's overlays follows
