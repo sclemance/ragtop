@@ -79,6 +79,48 @@ Two details of that mechanism are worth knowing if this is ever revisited:
   word already in the table translates itself. Ragtop's labels (`Key Shape`,
   `Auto Keyboard`, `System Overlays`…) are not in anyone's table.
 
+## What the rest of Linux does
+
+Arch has no framework for this, because it has no interface of its own to
+translate — it ships the plumbing and every package brings its own catalog:
+`/etc/locale.gen` → `locale-gen` → `/etc/locale.conf`, `localectl`, and
+`/usr/share/locale`. That last one is not empty on an Omarchy machine. On the
+laptop this was written on, with only `en_US.UTF-8` generated: **250 locale
+directories**, pacman translated into 43 languages, systemd 53,
+xkeyboard-config 46, GTK 117, `iso_3166-1` 159.
+
+The ecosystem's answer, in layers:
+
+1. **GNU gettext** is the standard — `.pot`/`.po`/`.mo`, keyed on the English
+   source string, looked up through `LANGUAGE`/`LC_MESSAGES`. Everything
+   above uses it, and it covers **shell scripts** too (`gettext.sh`,
+   `eval_gettext`). `gettext`, `msgfmt` and `xgettext` are already installed.
+2. **Qt and QML** use `qsTr()` with `.ts`/`.qm`, built by `lupdate` and
+   `lrelease` (`qt6-tools`, not installed by default here). This is the fork
+   Omarchy is stuck at: [#12345](https://github.com/omacom/omarchy/issues/12345)
+   measured that no working gettext→Qt catalog bridge exists, which is why
+   [#8765](https://github.com/omacom/omarchy/pull/8765) builds a QML catalog
+   by hand instead of reusing the ecosystem's.
+3. **Data files** are localized by suffixed keys, not by a runtime:
+   `Name=Files` / `Name[de]=Dateien`, as `.desktop` and AppStream do. That is
+   the closest thing to a standard for a data-driven menu like Omarchy's
+   JSONC, and it needs no translation layer at all.
+4. **Names of things** — languages, countries, keyboard layouts — are already
+   translated by `iso-codes` and `xkeyboard-config`. Never retype them.
+
+Two consequences for Ragtop, one taken and one not:
+
+- **The space bar's layout name is localized** (`keyboard-helper.py`,
+  `localized_layout_name`). The keymap spells it `German`; the name goes
+  through xkeyboard-config's own catalog, so a German desktop reads
+  `Deutsch`, a French one `Allemand`, a Japanese one `ドイツ語`. No table of
+  Ragtop's own, nothing to keep up to date, and it works today whatever
+  upstream decides. With an English session it returns what it was given.
+- **Ragtop's Bash half could use gettext now** — the `ragtop` CLI's
+  notifications, the installer's prose — with no dependency on the unresolved
+  QML question. It doesn't, because a half-translated plugin is worse than an
+  English one, but that half is unblocked whenever the rest is.
+
 ## Rule 1: prose and protocol are different things
 
 The most expensive lesson in the upstream thread is that translating an
@@ -152,7 +194,7 @@ Most of the keyboard doesn't need translating, because it isn't words:
 | `Esc`, `Tab`, `Ctrl`, `Alt`, `Super` | Leave them. Physical keyboards print these in English in most of the world, and a translated `Ctrl` would be less recognisable, not more |
 | `?123`, `#+=` | Symbols, effectively |
 | **`ABC`** | The one genuinely Latin-centric label: the key back to the letters page says `ABC` whatever script you type. GBoard shows `АБВ` on Cyrillic. Ragtop already knows the layout's letters, so this could be derived rather than translated |
-| The space bar's layout name | Comes from the keymap (`xkb_keymap_layout_get_name`), which spells it in English — `German`, not `Deutsch` |
+| The space bar's layout name | Done: the keymap spells it `German`, and it goes through xkeyboard-config's catalog to reach `Deutsch` (see above) |
 | `Select`, `Cancel` on the picker strip | Two words, the only prose drawn on a Ragtop surface |
 | Menu labels and notifications | The bulk of it, and the part a language pack would reach first |
 

@@ -29,6 +29,7 @@ for each command.
 
 import ctypes
 import ctypes.util
+import gettext
 import json
 import os
 import re
@@ -77,6 +78,22 @@ PRESSED, RELEASED = 1, 0
 # above 255 would be plentiful, but clients don't receive them.
 MAX_KEYCODE = 255
 PRINTABLE_ASCII = [chr(c) for c in range(0x20, 0x7f)]
+
+
+def localized_layout_name(name):
+    """The layout's name in the user's language, out of xkeyboard-config's own
+    catalog — the same translations the rest of the desktop reads, so nothing
+    here has to be translated or kept up to date. With an English locale, or
+    no catalog installed, it returns what it was given.
+
+    Display only: this is the label on the space bar. Nothing reads it back."""
+    if not name:
+        return name
+    try:
+        catalog = gettext.translation("xkeyboard-config", "/usr/share/locale", fallback=True)
+        return catalog.gettext(name)
+    except OSError:
+        return name
 
 
 def hyprland_layout():
@@ -161,8 +178,8 @@ class XkbLabels:
         symbols = self._symbols(keymap, group, char)
         letters = self._stray_letters(keymap, char, rows)
         lib.xkb_keymap_unref(keymap)
-        return {"name": name.decode() if name else "", "rows": rows,
-                "symbols": symbols, "letters": letters}
+        return {"name": localized_layout_name(name.decode() if name else ""),
+                "rows": rows, "symbols": symbols, "letters": letters}
 
     def _stray_letters(self, keymap, char, rows):
         """Letters this layout types that its three letter rows don't carry:
