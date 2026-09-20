@@ -440,6 +440,14 @@ Item {
         root.layerRulesReady = false
         root.applyLayerRules()
         if (root.blurKeyboard) root.applyBlur()
+        // It drops the rotation with them: the transform is a runtime value,
+        // so the display returns to whatever the config says while the device
+        // is still lying where it was. The sensor has nothing new to report,
+        // so nothing would put it back until the machine was physically
+        // moved — which is how this was found, switching themes on a tablet
+        // held upright. Forget what was applied and apply it again.
+        root.appliedOrientation = ""
+        root.applyOrientation(root.pendingOrientation)
       }
       // Omarchy's screensaver, watched by window class; see the catcher
       // below for what Ragtop does about it.
