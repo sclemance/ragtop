@@ -169,48 +169,61 @@ Item {
   })
   readonly property bool overlaysChange: overlaysToAdd.length > 0 || overlaysToDrop.length > 0
 
-  // Applying is done in a session of its own, and records that the machine
-  // is set up before it touches any overlay.
+  // Applying hands the work to a transient systemd unit, and lets go.
   //
-  // Cloning an overlay replaces one of Omarchy's own plugins, and the shell
-  // reloads its plugins when that happens — which takes this service, this
-  // window, and any child process of it down with it. Run the work under
-  // setsid and it survives that; write install.conf first and a service that
-  // comes back mid-way knows setup has happened, instead of greeting the
-  // user with step one again while the rest of the work is still running.
+  // Copying an overlay replaces one of Omarchy's own plugins, and the shell
+  // reloads its plugins when that happens — taking this service, this window,
+  // and any child process of it down mid-sentence. That is exactly what
+  // happened on the first machine this was tried on: the menu and the emoji
+  // picker were copied, the shell reloaded, and the rest of the work died
+  // with it, leaving nothing recorded. A session of its own was not enough,
+  // because the shell still owned the process that started it.
+  //
+  // So the work goes to `systemd-run --user`, which outlives the shell
+  // entirely, and it reports for itself when it is done rather than relying
+  // on a window that may no longer exist.
   function apply() {
     root.applying = true
     root.applyError = ""
     var ids = function(list) { return list.map(function(o) { return o.id }).join(" ") }
-    var parts = ['"$1" add',
+    var menu = root.script("menu-block.sh")
+    var clones = root.script("overlay-clones.sh")
+    var steps = ['"' + menu + '" add',
                  'mkdir -p "$HOME/.local/state/ragtop"',
                  'printf "overlays=%s\\n" "' + ids(root.chosenOverlays)
                    + '" > "$HOME/.local/state/ragtop/install.conf"']
-    if (root.overlaysToAdd.length > 0) parts.push('"$2" install ' + ids(root.overlaysToAdd))
-    if (root.overlaysToDrop.length > 0) parts.push('"$2" remove ' + ids(root.overlaysToDrop))
-    // Whatever happened to the clones, install.conf ends up describing what
-    // is actually on the machine rather than what was asked for.
-    parts.push('on=""; for o in menu emojis clipboard polkit image-picker lock; do ' +
-               '"$2" installed "$o" && on="$on $o"; done; ' +
+    if (root.overlaysToAdd.length > 0) steps.push('"' + clones + '" install ' + ids(root.overlaysToAdd))
+    if (root.overlaysToDrop.length > 0) steps.push('"' + clones + '" remove ' + ids(root.overlaysToDrop))
+    // However the copies went, the record describes the machine as it is.
+    steps.push('on=""; for o in menu emojis clipboard polkit image-picker lock; do ' +
+               '"' + clones + '" installed "$o" && on="$on $o"; done; ' +
                'printf "overlays=%s\\n" "${on# }" > "$HOME/.local/state/ragtop/install.conf"')
-    applyProc.command = ["setsid", "-w", "bash", "-c", parts.join("; "), "--",
-                         root.script("menu-block.sh"), root.script("overlay-clones.sh")]
+    if (root.overlaysChange) {
+      // Say what happened, since the window that asked may be gone by now.
+      steps.push('missing=""; for o in ' + ids(root.overlaysToAdd) + '; do ' +
+                 '"' + clones + '" installed "$o" || missing="$missing $o"; done; ' +
+                 'if [ -n "$missing" ]; then omarchy-notification-send -g 󰌌 "Ragtop setup" ' +
+                 '"Set up, but these overlays could not be copied:$missing. Run Setup again to retry."; ' +
+                 'else omarchy-notification-send -g 󰌌 "Ragtop" "Setup is done."; fi')
+      steps.push('omarchy-restart-shell')
+    }
+    applyProc.command = ["systemd-run", "--user", "--quiet", "--collect",
+                         "--unit", "ragtop-setup-apply", "bash", "-c", steps.join("; ")]
     applyProc.running = true
   }
 
   Process {
     id: applyProc
     stderr: StdioCollector { onStreamFinished: root.applyError = text.trim() }
+    // This only reports whether the work was handed over, not how it went:
+    // the unit outlives this window on purpose, and says for itself when it
+    // is finished. Nothing was turned on or off means nothing restarts, so
+    // there is nothing to wait for either.
     onExited: function(code) {
       root.applying = false
-      if (code !== 0) return
-      // Clones are only picked up when the shell starts; the settings rows
-      // are read live, so a restart is only needed if any were turned on.
-      if (root.overlaysChange) restartProc.running = true
-      else root.finished()
+      if (code === 0) root.finished()
     }
   }
-  Process { id: restartProc; command: ["omarchy-restart-shell"] }
 
   // ---- the panel --------------------------------------------------------
 
