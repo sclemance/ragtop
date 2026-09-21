@@ -72,7 +72,7 @@ Item {
   Process {
     id: copyProc
     command: ["sh", "-c", "printf '%s' \"$1\" | wl-copy", "--",
-      "sudo pacman -S --needed " + root.missingDeps.map(function(d) { return d.pkg }).join(" ")]
+      "omarchy pkg add " + root.missingDeps.map(function(d) { return d.pkg }).join(" ")]
   }
 
   // ---- the tablet-mode switch -------------------------------------------
@@ -403,7 +403,7 @@ Item {
       Mono {
         width: parent.width
         visible: root.missingDeps.length > 0
-        text: "sudo pacman -S --needed " + root.missingDeps.map(function(d) { return d.pkg }).join(" ")
+        text: "omarchy pkg add " + root.missingDeps.map(function(d) { return d.pkg }).join(" ")
       }
       Row {
         spacing: Style.space(8)

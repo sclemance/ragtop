@@ -175,7 +175,7 @@ Two packages come from Arch's own repositories and Ragtop can't install them
 for you — the setup names them, and this is the line:
 
 ```bash
-sudo pacman -S --needed iio-sensor-proxy python-pywayland
+omarchy pkg add iio-sensor-proxy python-pywayland
 ```
 
 If you'd rather do it in a terminal, or you're working on a checkout of your
@@ -197,7 +197,7 @@ machine set up either way ends up the same. Re-open it any time from
 already on the machine, so you can use it to turn overlays on and off later.
 
 The one thing it cannot do is install packages: it names what is missing, says
-what each is for, and hands you the `pacman` line. If something Ragtop set up
+what each is for, and hands you the one-line `omarchy pkg add`. If something Ragtop set up
 goes missing later, a "Ragtop needs setup" notification says what, and opens
 the same steps.
 

@@ -19,7 +19,7 @@ command -v git >/dev/null || missing+=(git)
 command -v monitor-sensor >/dev/null || missing+=(iio-sensor-proxy)
 python3 -c "import pywayland" 2>/dev/null || missing+=(python-pywayland)
 python3 -c "import gi" 2>/dev/null || missing+=(python-gobject)
-(( ${#missing[@]} )) && echo "Missing packages. Run: sudo pacman -S --needed ${missing[*]}"
+(( ${#missing[@]} )) && echo "Missing packages. Run: omarchy pkg add ${missing[*]}"
 
 grep -qsF "// Ragtop: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ||
   echo "Ragtop's settings aren't in the Omarchy menu."
