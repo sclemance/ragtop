@@ -169,17 +169,31 @@ Item {
   })
   readonly property bool overlaysChange: overlaysToAdd.length > 0 || overlaysToDrop.length > 0
 
+  // Applying is done in a session of its own, and records that the machine
+  // is set up before it touches any overlay.
+  //
+  // Cloning an overlay replaces one of Omarchy's own plugins, and the shell
+  // reloads its plugins when that happens — which takes this service, this
+  // window, and any child process of it down with it. Run the work under
+  // setsid and it survives that; write install.conf first and a service that
+  // comes back mid-way knows setup has happened, instead of greeting the
+  // user with step one again while the rest of the work is still running.
   function apply() {
     root.applying = true
     root.applyError = ""
     var ids = function(list) { return list.map(function(o) { return o.id }).join(" ") }
-    var parts = ['"$1" add']
+    var parts = ['"$1" add',
+                 'mkdir -p "$HOME/.local/state/ragtop"',
+                 'printf "overlays=%s\\n" "' + ids(root.chosenOverlays)
+                   + '" > "$HOME/.local/state/ragtop/install.conf"']
     if (root.overlaysToAdd.length > 0) parts.push('"$2" install ' + ids(root.overlaysToAdd))
     if (root.overlaysToDrop.length > 0) parts.push('"$2" remove ' + ids(root.overlaysToDrop))
-    parts.push('mkdir -p "$HOME/.local/state/ragtop"')
-    parts.push('printf "overlays=%s\\n" "' + ids(root.chosenOverlays)
-               + '" > "$HOME/.local/state/ragtop/install.conf"')
-    applyProc.command = ["bash", "-c", parts.join(" && "), "--",
+    // Whatever happened to the clones, install.conf ends up describing what
+    // is actually on the machine rather than what was asked for.
+    parts.push('on=""; for o in menu emojis clipboard polkit image-picker lock; do ' +
+               '"$2" installed "$o" && on="$on $o"; done; ' +
+               'printf "overlays=%s\\n" "${on# }" > "$HOME/.local/state/ragtop/install.conf"')
+    applyProc.command = ["setsid", "-w", "bash", "-c", parts.join("; "), "--",
                          root.script("menu-block.sh"), root.script("overlay-clones.sh")]
     applyProc.running = true
   }
