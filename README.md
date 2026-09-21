@@ -449,7 +449,7 @@ What turning one on means:
 
 ### The menu's Apps list
 
-Omarchy 4.0.0.alpha doesn't give a third-party menu plugin its application
+Omarchy 4 (checked on 4.0.4) doesn't give a third-party menu plugin its application
 library. The plugin's manifest reaches the shell's plugin API through an
 `Instantiator`, and after that round trip `Array.isArray(manifest.kinds)` is
 false, so the shell decides the plugin isn't a menu and builds it without one.

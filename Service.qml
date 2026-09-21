@@ -422,9 +422,18 @@ Item {
   // would leave a clone on an old patch until Omarchy itself moved. Re-sync
   // at startup as well: an overlay already in step costs a hash, an overlay
   // that isn't gets re-cloned and says so.
+  //
+  // Through systemd-run, because re-cloning isn't atomic: it removes the
+  // clone, makes a new one and patches it. The shell reloads this plugin
+  // whenever its files change -- which is exactly what updating Ragtop does
+  // -- and that kills any process the plugin owns. Killed between the clone
+  // and the patch, it would leave an unpatched clone behind, which is how
+  // this was found.
   Process {
     id: overlaySyncProc
-    command: ["bash", Qt.resolvedUrl("overlay-clones.sh").toString().replace(/^file:\/\//, ""), "sync"]
+    command: ["systemd-run", "--user", "--quiet", "--collect",
+              "--unit", "ragtop-overlay-sync",
+              "bash", Qt.resolvedUrl("overlay-clones.sh").toString().replace(/^file:\/\//, ""), "sync"]
   }
   Timer {
     interval: 12000

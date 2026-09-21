@@ -22,7 +22,7 @@ much harder to retrofit than to preserve. This file records where things
 stand upstream, what Ragtop already does right, and the two rules to keep
 following.
 
-Last checked against upstream: **2026-09-20**, Omarchy 4.0.0.alpha.
+Last checked against upstream: **2026-09-20**, Omarchy 4.0.4.
 
 ## Ragtop's position
 

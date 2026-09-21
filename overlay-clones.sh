@@ -37,7 +37,7 @@ overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitA
 
 # Bumped whenever the patches below change, so `sync` re-clones a clone that
 # was made by an older Ragtop even though Omarchy's own file hasn't moved.
-patch_revision=2
+patch_revision=3
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 builtin_root="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins"
@@ -60,7 +60,7 @@ stock_exclusion='    exclusionMode: ExclusionMode.Ignore'
 patched_exclusion='    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore
     exclusiveZone: 0'
 
-# Omarchy 4.0.0.alpha hands a third-party menu no application library, so a
+# Omarchy 4 (checked on 4.0.4) hands a third-party menu no application library, so a
 # cloned menu's Apps submenu comes up empty. Its manifest reaches
 # pluginShellFor() through an Instantiator, and that round-trip leaves
 # Array.isArray(manifest.kinds) false, so manifestHasKind(manifest, "menu")
@@ -69,7 +69,7 @@ patched_exclusion='    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal :
 # self-contained — and drop back to the injected one the day it arrives.
 stock_menu_apps='  readonly property var appLibrary: root.shell ? root.shell.appLibrary : null'
 patched_menu_apps=$(cat <<'MENU_APPS'
-  // Ragtop: Omarchy 4.0.0.alpha builds this plugin's appLibrary as null (the
+  // Ragtop: Omarchy 4 builds this plugin's appLibrary as null (the
   // manifest reaches pluginShellFor() through an Instantiator, where
   // Array.isArray(kinds) goes false), so Apps would be empty. Load Omarchy's
   // own AppLibrary rather than reimplement it, and prefer the injected one
@@ -82,6 +82,11 @@ patched_menu_apps=$(cat <<'MENU_APPS'
   }
 MENU_APPS
 )
+
+# Patched text earlier revisions wrote. `revert` strips these as well, so a
+# clone made by an older Ragtop is still recognised as ours and gets
+# re-patched instead of refused. Revision 2 named an Omarchy version here.
+legacy_menu_apps=${patched_menu_apps/Omarchy 4 builds/Omarchy 4.0.0.alpha builds}
 
 stock_lock_import='import qs.Ui'
 patched_lock_import='import qs.Ui
@@ -103,15 +108,19 @@ patched_lock_view="    $mode_file_view
       id: inputField"
 
 # Per-overlay paths and patch (stock/patched text pairs), set by select_overlay.
-name="" entry="" clone_id="" clone_dir="" builtin_dir="" base_file="" patch=()
+# `legacy` holds pairs that only ever get reverted: text this script used to
+# write and no longer does.
+name="" entry="" clone_id="" clone_dir="" builtin_dir="" base_file="" progress_file="" patch=() legacy=()
 select_overlay() {
   name="${1%%:*}"
   entry="${1#*:}"
+  legacy=()
   if [[ $name == lock ]]; then
     patch=("$stock_lock_import" "$patched_lock_import" "$stock_lock_view" "$patched_lock_view")
   elif [[ $name == menu ]]; then
     patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion"
            "$stock_menu_apps" "$patched_menu_apps")
+    legacy=("$stock_menu_apps" "$legacy_menu_apps")
   elif [[ $name == image-picker ]]; then
     patch=("$stock_picker_focus" "$patched_picker_focus" "$stock_exclusion" "$patched_exclusion")
   else
@@ -121,11 +130,18 @@ select_overlay() {
   clone_dir="$plugins_dir/$clone_id"
   builtin_dir="$builtin_root/$name"
   base_file="$clone_dir/.ragtop-base"
+  # Cloning and patching are two steps; this says the first has happened and
+  # the second hasn't, so an interrupted run leaves something recognisable
+  # rather than a clone nobody can tell from one of the user's own. It lives
+  # outside the clone, which the next clone command replaces wholesale.
+  progress_file="$plugins_dir/.ragtop-cloning-$name"
 }
 
 # replace <file> <apply|revert>
 replace() {
-  python3 - "$1" "$2" "${patch[@]}" <<'EOF'
+  local -a pairs=("${patch[@]}")
+  if [[ $2 == revert ]]; then pairs+=("${legacy[@]}"); fi
+  python3 - "$1" "$2" "${pairs[@]}" <<'EOF'
 import sys
 path, direction, *pairs = sys.argv[1:]
 text = open(path).read()
@@ -189,21 +205,35 @@ install_hook() {
 
 install_one() {
   if [[ -d $clone_dir ]] && ! is_patched; then
-    echo "$clone_dir exists but isn't Ragtop's; leaving it alone." >&2
-    return 1
+    if [[ ! -f $progress_file ]]; then
+      echo "$clone_dir exists but isn't Ragtop's; leaving it alone." >&2
+      return 1
+    fi
+    # Ours, cloned but never patched, by a run that was cut short. Start over.
+    omarchy plugin remove "$clone_id" --yes >/dev/null
   fi
   if is_patched; then
     echo "$clone_id is already patched."
     return
   fi
+  : >"$progress_file"
   omarchy plugin clone "omarchy.$name" >/dev/null
   write_base
   replace "$clone_dir/$entry" apply
+  rm -f "$progress_file"
   echo "Cloned and patched $clone_id."
 }
 
 sync_one() {
-  if ! is_patched; then return; fi
+  if ! is_patched; then
+    # Nothing to sync unless an earlier run left a clone half-made.
+    if [[ -f $progress_file ]]; then
+      install_one >/dev/null
+      echo "Finished an interrupted $clone_id clone."
+      synced=1
+    fi
+    return
+  fi
   if in_sync; then
     echo "$clone_id matches the built-in; nothing to sync."
     return
@@ -234,6 +264,7 @@ remove_one() {
     return 1
   else
     omarchy plugin remove "$clone_id" --yes >/dev/null
+    rm -f "$progress_file"
     echo "Removed $clone_id."
   fi
 }
