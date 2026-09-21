@@ -266,14 +266,17 @@ uninstall() {
     esac
   done
 
+  # The password prompt comes first, because the polkit agent that shows it
+  # may be one of the clones about to be removed: taking those away first
+  # leaves pkexec with nothing to ask with, and the rule stays behind.
+  say "Removing the switch access rule"
+  remove_udev_rule
+
   say "Removing overlay clones"
   "$repo/overlay-clones.sh" remove | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
 
   say "Removing Ragtop's settings from the Omarchy menu"
   menu_block remove
-
-  say "Removing the switch access rule"
-  remove_udev_rule
 
   say "Removing generated files"
   remove_files
