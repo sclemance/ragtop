@@ -61,7 +61,9 @@ check_deps() {
   done
   if (( ${#missing[@]} )); then
     # A list of package names is a task; a command is an answer.
-    warn "missing: ${missing[*]}"
+    # Name the packages, not the commands that are missing: "monitor-sensor"
+    # is not something anybody can install.
+    warn "missing: ${hints[*]}"
     echo "   Install them with Omarchy's own helper, which checks each one landed:"
     echo
     echo "     omarchy pkg add ${hints[*]}"
