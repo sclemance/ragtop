@@ -61,12 +61,24 @@ case "${1:-}" in
     echo "readable"
     ;;
   remove)
-    [[ -f $rule_file ]] || exit 0
+    # Taking the rule away does not take back the access it granted. The rule
+    # tags switch devices `uaccess`, and logind answers that tag by putting an
+    # ACL on the device for whoever is logged in. Remove the rule and the tag
+    # stops being applied — but the ACL already on the device stays, so the
+    # switch goes on being readable until the machine reboots. Drop it here,
+    # or uninstalling only looks like it worked.
+    path=$(switch_path)
     as_root '
-      rm -f "$1"
-      udevadm control --reload
-      udevadm trigger --action=change --subsystem-match=input
-    ' "$rule_file"
+      [ -f "$1" ] && rm -f "$1"
+      if command -v udevadm >/dev/null; then
+        udevadm control --reload
+        udevadm trigger --action=change --subsystem-match=input
+      fi
+      if [ -n "$2" ] && [ -e "$2" ] && command -v setfacl >/dev/null; then
+        setfacl -x "user:$3" "$2" 2>/dev/null
+      fi
+      exit 0
+    ' "$rule_file" "$path" "${USER:-$(id -un)}"
     ;;
   *)
     echo "Usage: $0 status|rule|install|remove" >&2; exit 2 ;;
