@@ -60,7 +60,13 @@ check_deps() {
     command -v "$cmd" >/dev/null || die "$cmd not found; Ragtop needs Omarchy 4 with Hyprland."
   done
   if (( ${#missing[@]} )); then
-    die "missing ${missing[*]}. Install: ${hints[*]}"
+    # A list of package names is a task; a command is an answer.
+    warn "missing: ${missing[*]}"
+    echo "   Install them with:"
+    echo
+    echo "     sudo pacman -S --needed ${hints[*]}"
+    echo
+    die "then run this again."
   fi
   echo "   all present"
 }
