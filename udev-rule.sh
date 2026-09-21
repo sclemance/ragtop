@@ -75,7 +75,15 @@ case "${1:-}" in
         udevadm trigger --action=change --subsystem-match=input
       fi
       if [ -n "$2" ] && [ -e "$2" ] && command -v setfacl >/dev/null; then
-        setfacl -x "user:$3" "$2" 2>/dev/null
+        # Only take the access back if nothing else wants the device tagged.
+        # CURRENT_TAGS is what applies now, with our rule already gone: if
+        # uaccess is still among them, some other rule is asking for it and
+        # the ACL is not ours to remove.
+        tags=$(udevadm info --query=property --name="$2" 2>/dev/null | sed -n "s/^CURRENT_TAGS=//p")
+        case "$tags" in
+          *uaccess*) echo "something else still tags $2 uaccess; leaving its access alone" ;;
+          *) setfacl -x "user:$3" "$2" 2>/dev/null ;;
+        esac
       fi
       exit 0
     ' "$rule_file" "$path" "${USER:-$(id -un)}"
