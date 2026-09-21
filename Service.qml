@@ -197,6 +197,16 @@ Item {
       if (root.rotationAvailable) rotationProc.running = !root.rotationLocked
     }
   }
+  // Someone who installs the package is owed rotation without restarting the
+  // shell for it — that is the whole point of setup naming what is missing.
+  // Checking once at startup left it dead until the next restart, so keep
+  // looking while it is absent. One `command -v` a minute costs nothing.
+  Timer {
+    interval: 60000
+    repeat: true
+    running: !root.rotationAvailable
+    onTriggered: if (!sensorCheckProc.running) sensorCheckProc.running = true
+  }
 
   Process {
     id: rotationProc
@@ -893,7 +903,12 @@ Item {
   }
   Process {
     id: setupTerminalProc
-    onExited: root.openSetup()
+    onExited: {
+      // Whatever was installed in there, notice it now rather than in a
+      // minute: setup is about to ask the same question.
+      if (!sensorCheckProc.running) sensorCheckProc.running = true
+      root.openSetup()
+    }
   }
 
   PanelWindow {
