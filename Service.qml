@@ -883,6 +883,19 @@ Item {
   property bool setupOpen: false
   function openSetup() { root.setupOpen = true }
 
+  // Run something in Omarchy's floating terminal with setup out of the way,
+  // and bring setup back when it finishes. Setup cannot simply sit there: it
+  // covers the screen, and the terminal would open behind it.
+  function runSetupTerminal(command) {
+    root.setupOpen = false
+    setupTerminalProc.command = ["omarchy-launch-floating-terminal-with-presentation", command]
+    setupTerminalProc.running = true
+  }
+  Process {
+    id: setupTerminalProc
+    onExited: root.openSetup()
+  }
+
   PanelWindow {
     id: setupWindow
     screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
@@ -894,8 +907,12 @@ Item {
     exclusionMode: ExclusionMode.Ignore
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
+    // Only the card takes input; the dimmed rest of the screen stays usable,
+    // so a terminal can be reached while setup is open.
+    mask: Region { item: setupLoader.item ? setupLoader.item.card : null }
 
     Loader {
+      id: setupLoader
       anchors.fill: parent
       active: root.setupOpen
       sourceComponent: SetupWizard {

@@ -69,6 +69,14 @@ Item {
     }
   }
 
+  // Omarchy's own floating terminal, with the command already in it. Setup
+  // steps aside while it runs and comes back when it is done, so the check
+  // that follows sees what was installed.
+  function installInTerminal() {
+    root.service.runSetupTerminal("omarchy pkg add "
+      + root.missingDeps.map(function(d) { return d.pkg }).join(" "))
+  }
+
   Process {
     id: copyProc
     command: ["sh", "-c", "printf '%s' \"$1\" | wl-copy", "--",
@@ -208,14 +216,19 @@ Item {
 
   // ---- the panel --------------------------------------------------------
 
+  // The dimming is drawn over the whole screen but takes no input: the
+  // service masks this surface to the card alone. A step that tells you to
+  // run a command somewhere else should not also be the thing stopping you
+  // from reaching a terminal.
   Rectangle {
     anchors.fill: parent
     color: Util.alpha(Color.background, 0.7)
-    MouseArea { anchors.fill: parent; onClicked: {} }
   }
 
+  readonly property Item card: cardSurface
+
   BorderSurface {
-    id: card
+    id: cardSurface
     anchors.centerIn: parent
     // Heights flow one way: the body asks for what it needs, the card gives
     // it what the screen allows, and the scroller takes what's left. Sizing
@@ -234,8 +247,8 @@ Item {
     Column {
       id: content
       anchors.fill: parent
-      anchors.margins: card.padding
-      spacing: card.gap
+      anchors.margins: cardSurface.padding
+      spacing: cardSurface.gap
 
       // Title, and where you are.
       Item {
@@ -264,7 +277,7 @@ Item {
 
       Flickable {
         width: parent.width
-        height: card.height - 2 * card.padding - card.chrome
+        height: cardSurface.height - 2 * cardSurface.padding - cardSurface.chrome
         contentHeight: body.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -412,6 +425,13 @@ Item {
           bordered: true
           foreground: Color.popups.text
           onClicked: root.checkDeps()
+        }
+        Button {
+          visible: root.missingDeps.length > 0
+          text: "Install in a terminal"
+          bordered: true
+          foreground: Color.accent
+          onClicked: root.installInTerminal()
         }
         Button {
           visible: root.missingDeps.length > 0
