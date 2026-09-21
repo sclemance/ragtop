@@ -35,6 +35,10 @@ set -euo pipefail
 overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitAgent.qml
           image-picker:ImagePicker.qml lock:LockView.qml)
 
+# Bumped whenever the patches below change, so `sync` re-clones a clone that
+# was made by an older Ragtop even though Omarchy's own file hasn't moved.
+patch_revision=2
+
 plugins_dir="$HOME/.config/omarchy/plugins"
 builtin_root="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins"
 hook_file="$HOME/.config/omarchy/hooks/post-update.d/ragtop-overlay-sync.hook"
@@ -55,6 +59,29 @@ patched_picker_focus="    WlrLayershell.keyboardFocus: root.opened && root.image
 stock_exclusion='    exclusionMode: ExclusionMode.Ignore'
 patched_exclusion='    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore
     exclusiveZone: 0'
+
+# Omarchy 4.0.0.alpha hands a third-party menu no application library, so a
+# cloned menu's Apps submenu comes up empty. Its manifest reaches
+# pluginShellFor() through an Instantiator, and that round-trip leaves
+# Array.isArray(manifest.kinds) false, so manifestHasKind(manifest, "menu")
+# fails and PluginShellApi.appLibrary is built as null. Load Omarchy's own
+# AppLibrary.qml instead — the same file the shell itself uses, which is
+# self-contained — and drop back to the injected one the day it arrives.
+stock_menu_apps='  readonly property var appLibrary: root.shell ? root.shell.appLibrary : null'
+patched_menu_apps=$(cat <<'MENU_APPS'
+  // Ragtop: Omarchy 4.0.0.alpha builds this plugin's appLibrary as null (the
+  // manifest reaches pluginShellFor() through an Instantiator, where
+  // Array.isArray(kinds) goes false), so Apps would be empty. Load Omarchy's
+  // own AppLibrary rather than reimplement it, and prefer the injected one
+  // as soon as there is one. Costs one extra icon scan while it is in use.
+  readonly property var appLibrary: root.shell && root.shell.appLibrary ? root.shell.appLibrary : ragtopAppLibrary.item
+  Loader {
+    id: ragtopAppLibrary
+    active: !(root.shell && root.shell.appLibrary)
+    source: "file://" + root.omarchyPath + "/shell/services/AppLibrary.qml"
+  }
+MENU_APPS
+)
 
 stock_lock_import='import qs.Ui'
 patched_lock_import='import qs.Ui
@@ -82,6 +109,9 @@ select_overlay() {
   entry="${1#*:}"
   if [[ $name == lock ]]; then
     patch=("$stock_lock_import" "$patched_lock_import" "$stock_lock_view" "$patched_lock_view")
+  elif [[ $name == menu ]]; then
+    patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion"
+           "$stock_menu_apps" "$patched_menu_apps")
   elif [[ $name == image-picker ]]; then
     patch=("$stock_picker_focus" "$patched_picker_focus" "$stock_exclusion" "$patched_exclusion")
   else
@@ -101,7 +131,12 @@ path, direction, *pairs = sys.argv[1:]
 text = open(path).read()
 for stock, patched in zip(pairs[0::2], pairs[1::2]):
     old, new = (stock, patched) if direction == "apply" else (patched, stock)
-    if text.count(old) != 1:
+    found = text.count(old)
+    # Reverting tolerates a patch that isn't there: a clone made by an older
+    # Ragtop carries fewer of them, and what is absent needs no undoing.
+    if found == 0 and direction == "revert":
+        continue
+    if found != 1:
         sys.exit(f"expected exactly one occurrence of:\n{old}\nin {path}")
     text = text.replace(old, new, 1)
 open(path, "w").write(text)
@@ -126,12 +161,20 @@ clone_unpatched_hash() {
 
 is_patched() { [[ -f $clone_dir/$entry ]] && grep -q 'id: ragtopMode' "$clone_dir/$entry"; }
 
+# .ragtop-base records what the clone was made from: the built-in's hash on
+# the first line, the revision of the patches applied to it on the second.
+write_base() { { dir_hash "$clone_dir"; echo "$patch_revision"; } >"$base_file"; }
+base_hash() { head -n1 "$base_file" 2>/dev/null; }
+base_revision() { sed -n 2p "$base_file" 2>/dev/null; }
+
 # True when nobody but us changed the clone since it was made.
 clone_is_ours() {
-  is_patched && [[ -f $base_file ]] && [[ $(clone_unpatched_hash) == "$(cat "$base_file")" ]]
+  is_patched && [[ -f $base_file ]] && [[ $(clone_unpatched_hash) == "$(base_hash)" ]]
 }
 
-in_sync() { [[ $(dir_hash "$builtin_dir") == "$(cat "$base_file" 2>/dev/null)" ]]; }
+built_in_unchanged() { [[ $(dir_hash "$builtin_dir") == "$(base_hash)" ]]; }
+patches_current() { [[ $patch_revision == "$(base_revision)" ]]; }
+in_sync() { built_in_unchanged && patches_current; }
 
 notify() {
   command -v omarchy-notification-send >/dev/null &&
@@ -154,7 +197,7 @@ install_one() {
     return
   fi
   omarchy plugin clone "omarchy.$name" >/dev/null
-  dir_hash "$clone_dir" >"$base_file"
+  write_base
   replace "$clone_dir/$entry" apply
   echo "Cloned and patched $clone_id."
 }
@@ -165,14 +208,21 @@ sync_one() {
     echo "$clone_id matches the built-in; nothing to sync."
     return
   fi
+  # Either Omarchy's own file moved or Ragtop's patches did. Both are fixed by
+  # re-cloning, and neither justifies throwing away someone else's edits.
+  local changed="The built-in $name changed" done_msg="Re-cloned $clone_id from the updated built-in."
+  if built_in_unchanged; then
+    changed="Ragtop's $name patches changed"
+    done_msg="Re-patched $clone_id for this version of Ragtop."
+  fi
   if ! clone_is_ours; then
-    echo "The built-in $name changed, but $clone_id has edits besides Ragtop's; not replacing it." >&2
-    notify "Omarchy's $name was updated, but your clone has other edits, so it wasn't resynced."
+    echo "$changed, but $clone_id has edits besides Ragtop's; not replacing it." >&2
+    notify "Your $name clone has edits of its own, so it wasn't resynced."
     return 1
   fi
   omarchy plugin remove "$clone_id" --yes >/dev/null
   install_one >/dev/null
-  echo "Re-cloned $clone_id from the updated built-in."
+  echo "$done_msg"
   synced=1
 }
 
@@ -193,6 +243,8 @@ status_one() {
     echo "$name: not installed"
   elif in_sync; then
     echo "$name: installed, in sync with the built-in"
+  elif built_in_unchanged; then
+    echo "$name: installed, Ragtop's patches have changed (run: $self sync)"
   else
     echo "$name: installed, built-in has changed (run: $self sync)"
   fi
@@ -234,7 +286,7 @@ case "$command" in
     echo "Run omarchy-restart-shell to load the clones."
     ;;
   sync)
-    (( synced )) && notify "Overlay clones updated to match Omarchy. Restart the shell to load them."
+    (( synced )) && notify "Overlay clones updated. Restart the shell to load them."
     ;;
   remove)
     # Only drop the hook once no clones are left for it to keep in step.

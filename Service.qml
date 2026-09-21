@@ -417,6 +417,21 @@ Item {
     onTriggered: setupCheckProc.running = true
   }
 
+  // Ragtop's own patches to the overlay clones change between versions, and
+  // updating a plugin fires no Omarchy post-update hook, so the hook alone
+  // would leave a clone on an old patch until Omarchy itself moved. Re-sync
+  // at startup as well: an overlay already in step costs a hash, an overlay
+  // that isn't gets re-cloned and says so.
+  Process {
+    id: overlaySyncProc
+    command: ["bash", Qt.resolvedUrl("overlay-clones.sh").toString().replace(/^file:\/\//, ""), "sync"]
+  }
+  Timer {
+    interval: 12000
+    running: true
+    onTriggered: overlaySyncProc.running = true
+  }
+
   // Namespaces of overlays patched by overlay-clones.sh. An open overlay
   // covers the bar, so the keyboard is brought up with it; with a stock
   // overlay taps on the keyboard would only close it, so only patched ones
@@ -801,9 +816,13 @@ Item {
   // Omarchy's screensaver is a fullscreen terminal (org.omarchy.screensaver)
   // running ttfx, which quits when its terminal reads a character or when it
   // loses focus. A touchscreen gives it neither: a terminal ignores touch,
-  // and tapping a fullscreen window doesn't move focus. So in tablet mode
-  // the screen stays covered until a key is pressed — no use on a folded
-  // laptop.
+  // and tapping a fullscreen window doesn't move focus. So the screen stays
+  // covered until a key is pressed — no use on a folded laptop, and no use
+  // either on an open one that someone reaches for by the screen.
+  //
+  // The catcher isn't limited to tablet mode. A touchscreen is a touchscreen
+  // whichever way the hinge is, the tap works the same in both, and a
+  // machine with no touchscreen simply never taps it.
   //
   // This catcher is a transparent overlay that exists only while that window
   // does. It takes no keyboard focus, so the screensaver's terminal stays
@@ -816,7 +835,7 @@ Item {
   // even if it were.
   PanelWindow {
     screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
-    visible: root.tabletMode && root.screensaverAddress !== "" && root.layerRulesReady
+    visible: root.screensaverAddress !== "" && root.layerRulesReady
 
     WlrLayershell.namespace: "ragtop-screensaver-catcher"
     WlrLayershell.layer: WlrLayer.Overlay

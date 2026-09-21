@@ -266,10 +266,11 @@ prompt, and goes away when you close it.
 **Tapping the screen ends the screensaver.** Omarchy's screensaver is a
 fullscreen terminal that quits when it reads a key, which a touchscreen never
 sends it, so folded up there was no way to dismiss it but to open the laptop
-and press a key. In tablet mode Ragtop covers it with a transparent catcher
-and turns a tap into that key press. It's specific to Omarchy's own
-screensaver (the `org.omarchy.screensaver` window), and only to one that
-starts while the shell is running.
+and press a key. Ragtop covers it with a transparent catcher and turns a tap
+into that key press. This one isn't limited to tablet mode — a touchscreen is
+a touchscreen whichever way the hinge is, and reaching for the screen of an
+open laptop should work too. It's specific to Omarchy's own screensaver (the
+`org.omarchy.screensaver` window).
 
 ## The keyboard
 
@@ -412,6 +413,8 @@ take focus *on demand*, which still gets focus when they open and still
 receives typed keys, and they respect the keyboard's reserved space so they
 sit above it. In laptop mode they behave exactly as shipped; on-demand focus
 there could let a window under the mouse on another monitor take focus away.
+The menu's clone carries one more change, for a reason that has nothing to do
+with touch: see [The menu's Apps list](#the-menus-apps-list).
 
 Replacing part of Omarchy is your call, so each clone is off until you turn it
 on. The installer offers all of them once, with the trade-off below and No as
@@ -424,6 +427,7 @@ the change. From a terminal, the same thing is:
 ./ragtop overlay toggle menu        # or: enable, disable; menu, emojis, clipboard,
                                     # polkit, image-picker, lock
 ./ragtop overlay status             # which are on, and in sync with Omarchy?
+./ragtop overlay sync               # re-clone any that Omarchy or Ragtop moved on from
 ```
 
 What turning one on means:
@@ -442,6 +446,22 @@ What turning one on means:
   point above applies to your password. Anything running as you could already
   interfere with your session in other ways, but it's the one to think about
   before turning on.
+
+### The menu's Apps list
+
+Omarchy 4.0.0.alpha doesn't give a third-party menu plugin its application
+library. The plugin's manifest reaches the shell's plugin API through an
+`Instantiator`, and after that round trip `Array.isArray(manifest.kinds)` is
+false, so the shell decides the plugin isn't a menu and builds it without one.
+Omarchy's own menu is unaffected, because it gets the shell itself. Any cloned
+menu, Ragtop's or anyone's, comes up with **Apps** empty.
+
+So the menu clone carries a third change: when the shell hands it no
+application library, it loads Omarchy's own `AppLibrary.qml` — the same file
+the shell uses, which stands on its own — and goes back to the one the shell
+provides the moment there is one. Apps, its icons and launching all work the
+way they do in Omarchy's menu; the only cost while the fallback is in use is
+one extra icon scan.
 
 ### The theme and background pickers
 

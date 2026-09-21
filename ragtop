@@ -6,6 +6,7 @@
 #        ragtop overlay disable <overlay>
 #        ragtop overlay toggle <overlay>
 #        ragtop overlay status
+#        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop modifiers (get | is <mode> | set <mode>)
@@ -313,6 +314,7 @@ case "${1:-} ${2:-}" in
     if "$clones" installed "$3"; then set_overlay "$3" 0; else set_overlay "$3" 1; fi
     ;;
   "overlay status") "$clones" status ;;
+  "overlay sync") shift 2; "$clones" sync "$@" ;;
   "setup "*|"setup") omarchy-shell ragtop openSetup >/dev/null ;;
   *) usage ;;
 esac
