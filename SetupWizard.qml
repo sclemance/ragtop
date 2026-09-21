@@ -186,29 +186,10 @@ Item {
     root.applying = true
     root.applyError = ""
     var ids = function(list) { return list.map(function(o) { return o.id }).join(" ") }
-    var menu = root.script("menu-block.sh")
-    var clones = root.script("overlay-clones.sh")
-    var steps = ['"' + menu + '" add',
-                 'mkdir -p "$HOME/.local/state/ragtop"',
-                 'printf "overlays=%s\\n" "' + ids(root.chosenOverlays)
-                   + '" > "$HOME/.local/state/ragtop/install.conf"']
-    if (root.overlaysToAdd.length > 0) steps.push('"' + clones + '" install ' + ids(root.overlaysToAdd))
-    if (root.overlaysToDrop.length > 0) steps.push('"' + clones + '" remove ' + ids(root.overlaysToDrop))
-    // However the copies went, the record describes the machine as it is.
-    steps.push('on=""; for o in menu emojis clipboard polkit image-picker lock; do ' +
-               '"' + clones + '" installed "$o" && on="$on $o"; done; ' +
-               'printf "overlays=%s\\n" "${on# }" > "$HOME/.local/state/ragtop/install.conf"')
-    if (root.overlaysChange) {
-      // Say what happened, since the window that asked may be gone by now.
-      steps.push('missing=""; for o in ' + ids(root.overlaysToAdd) + '; do ' +
-                 '"' + clones + '" installed "$o" || missing="$missing $o"; done; ' +
-                 'if [ -n "$missing" ]; then omarchy-notification-send -g 󰌌 "Ragtop setup" ' +
-                 '"Set up, but these overlays could not be copied:$missing. Run Setup again to retry."; ' +
-                 'else omarchy-notification-send -g 󰌌 "Ragtop" "Setup is done."; fi')
-      steps.push('omarchy-restart-shell')
-    }
     applyProc.command = ["systemd-run", "--user", "--quiet", "--collect",
-                         "--unit", "ragtop-setup-apply", "bash", "-c", steps.join("; ")]
+                         "--unit", "ragtop-setup-apply",
+                         "bash", root.script("setup-apply.sh"),
+                         ids(root.overlaysToAdd), ids(root.overlaysToDrop), ids(root.chosenOverlays)]
     applyProc.running = true
   }
 
