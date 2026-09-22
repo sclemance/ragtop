@@ -18,7 +18,7 @@
 #        ragtop transparency (get | is <level> | set <level>)
 #        ragtop key-transparency (get | is <level> | set <level>)
 #        ragtop edge (get | is <edge> | set <edge>)
-#        ragtop preset (list | apply <preset>)
+#        ragtop theme (list | apply <theme>)
 #        ragtop setup                       open setup in the shell
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
@@ -36,10 +36,12 @@
 # for the background, and the same without auto for the keys;
 # <edge> is border (the theme's window border), fade or none.
 #
-# A preset is a JSON file of those same settings, in ~/.config/ragtop/presets/
-# or Ragtop's presets/. Applying one writes its values into settings.conf, so
-# afterwards every setting shows what's actually in effect; nothing stays
-# hidden in the file.
+# A theme is a TOML file of those same settings, laid out the way Omarchy
+# lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
+# ~/.config/ragtop/themes/<slug>/ragtop.toml for your own, where yours wins.
+# It sets the keyboard's form. Its colours keep coming from the Omarchy theme.
+# Applying one writes its values into settings.conf, so afterwards every
+# setting shows what is actually in effect and nothing stays hidden in a file.
 #
 # Touch typing in an overlay means replacing Omarchy's own with a patched
 # clone (see overlay-clones.sh), so each one is off until the user turns it on.
@@ -199,34 +201,35 @@ choice_notice() {
   esac
 }
 
-# Presets: the user's own in ~/.config/ragtop/presets/ win over Ragtop's.
-preset_file() {
+# Themes: the user's own in ~/.config/ragtop/themes/ win over Ragtop's, the
+# same two places Omarchy looks for its own themes.
+theme_file() {
   [[ $1 =~ ^[a-z0-9-]{1,32}$ ]] || return 1
   local f
-  for f in "$HOME/.config/ragtop/presets/$1.json" "$repo/presets/$1.json"; do
+  for f in "$HOME/.config/ragtop/themes/$1/ragtop.toml" "$repo/themes/$1/ragtop.toml"; do
     [[ -f $f ]] && { echo "$f"; return 0; }
   done
   return 1
 }
 
 # Omarchy's own look first, then the rest by name.
-presets() {
-  local f
-  for f in "$HOME/.config/ragtop/presets/"*.json "$repo/presets/"*.json; do
-    [[ -f $f ]] && basename "$f" .json
+themes() {
+  local d
+  for d in "$HOME/.config/ragtop/themes/"*/ "$repo/themes/"*/; do
+    [[ -f "$d/ragtop.toml" ]] && basename "$d"
   done | sort -u | sed '/^omarchy$/d' | sed '1i omarchy'
 }
 
-# apply_preset <name>: write the preset's settings into settings.conf, so
-# what the menu shows is what the keyboard does.
-apply_preset() {
+# apply_theme <name>: write the theme's settings into settings.conf, so what
+# the menu shows is what the keyboard does.
+apply_theme() {
   local file name
-  file=$(preset_file "$1") || { echo "No preset named '$1'. Available: $(presets | tr '\n' ' ')" >&2; exit 2; }
+  file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; exit 2; }
   name=$(python3 - "$file" "$settings" <<'EOF'
-import json, os, re, sys
+import os, re, sys, tomllib
 
 path, settings = sys.argv[1:]
-# Only these keys, only these values: a preset can't smuggle anything else in.
+# Only these keys, only these values: a theme can't smuggle anything else in.
 choices = {
     "shape": ["omarchy", "rounded", "pill", "angular"],
     "relief": ["flat", "raised"],
@@ -245,11 +248,9 @@ numbers = {"depth": (0, 10), "chamfer": (0, 20), "edge-fade": (0, 24),
 colors = ("key-color", "label-color")
 
 try:
-    raw = json.load(open(path))
+    raw = tomllib.load(open(path, "rb"))
 except Exception:
-    sys.exit("preset isn't valid JSON")
-if not isinstance(raw, dict):
-    sys.exit("preset isn't a JSON object")
+    sys.exit("theme isn't valid TOML")
 
 values = {}
 for key, allowed in choices.items():
@@ -268,8 +269,8 @@ for key in colors:
                                or re.fullmatch(r"#[0-9a-fA-F]{6,8}", v)):
         values[key] = v
 
-# A preset is a whole look, not a patch: every setting it doesn't name goes
-# back to its default rather than keeping whatever the last preset left
+# A theme is a whole look, not a patch: every setting it doesn't name goes
+# back to its default rather than keeping whatever the last theme left
 # behind. Settings that aren't part of the look — tablet mode, auto-show,
 # the modifiers — are untouched.
 look_keys = set(choices) | set(numbers) | set(colors)
@@ -286,7 +287,7 @@ label = raw.get("name")
 print(label if isinstance(label, str) and label.strip() else os.path.basename(path)[:-5])
 EOF
   ) || exit 2
-  put preset "$1"
+  put theme "$1"
   notify "The keyboard now looks like $name."
 }
 
@@ -302,10 +303,10 @@ case "${1:-} ${2:-}" in
   "fill "*) choice fill light "${2:-}" "${3:-}" ;;
   "size "*) choice size normal "${2:-}" "${3:-}" ;;
   "labels "*) choice labels normal "${2:-}" "${3:-}" ;;
-  "preset list") presets ;;
-  "preset get") get preset omarchy ;;
-  "preset is") [[ -n ${3:-} ]] || usage; [[ $(get preset omarchy) == "$3" ]] ;;
-  "preset apply") [[ -n ${3:-} ]] || usage; apply_preset "$3" ;;
+  "theme list") themes ;;
+  "theme get") get theme omarchy ;;
+  "theme is") [[ -n ${3:-} ]] || usage; [[ $(get theme omarchy) == "$3" ]] ;;
+  "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;

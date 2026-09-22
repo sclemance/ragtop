@@ -13,30 +13,31 @@ case "${1:-}" in
 esac
 
 python3 - "$1" "$menu_file" <<'EOF'
-import json, os, sys
+import json, os, sys, tomllib
 action, path = sys.argv[1:]
 start = "  // Ragtop: tablet settings. Added by Ragtop's installer; removed by its uninstaller."
 end = "  // End of Ragtop's tablet settings."
 cmd = "$HOME/.config/omarchy/plugins/sclemance.ragtop/ragtop"
 
-# The presets Ragtop ships, plus the user's own; a user file with the same
-# name wins. Omarchy's own look first, then the rest by name.
-preset_dirs = [os.path.join(os.path.dirname(cmd.replace("$HOME", os.path.expanduser("~"))), "presets"),
-               os.path.expanduser("~/.config/ragtop/presets")]
-preset_labels = {}
-for d in preset_dirs:
+# The themes Ragtop ships, plus the user's own, laid out as Omarchy lays its
+# themes out: <slug>/ragtop.toml, and the user's own wins by slug. Omarchy's
+# own look first, then the rest by name.
+theme_dirs = [os.path.join(os.path.dirname(cmd.replace("$HOME", os.path.expanduser("~"))), "themes"),
+              os.path.expanduser("~/.config/ragtop/themes")]
+theme_labels = {}
+for d in theme_dirs:
     if not os.path.isdir(d):
         continue
-    for f in sorted(os.listdir(d)):
-        if not f.endswith(".json"):
+    for slug in sorted(os.listdir(d)):
+        theme_path = os.path.join(d, slug, "ragtop.toml")
+        if not os.path.isfile(theme_path):
             continue
-        name = f[:-5]
         try:
-            label = json.load(open(os.path.join(d, f))).get("name")
+            label = tomllib.load(open(theme_path, "rb")).get("name")
         except Exception:
             label = None
-        preset_labels[name] = label if isinstance(label, str) and label.strip() else name
-presets = sorted(preset_labels.items(), key=lambda row: (row[0] != "omarchy", row[0]))
+        theme_labels[slug] = label if isinstance(label, str) and label.strip() else slug
+themes = sorted(theme_labels.items(), key=lambda row: (row[0] != "omarchy", row[0]))
 
 overlays = [
     ("menu", "\U000f035c", "Omarchy Menu"),
@@ -65,12 +66,12 @@ rows = {
         checked=f'"{cmd}" modifiers is oneshot', action=f'"{cmd}" modifiers set oneshot'),
     "setup.tablet.modifiers.sticky": dict(icon="\U000f0634", label="Sticky",
         checked=f'"{cmd}" modifiers is sticky', action=f'"{cmd}" modifiers set sticky'),
-    # Appearance. A preset writes the settings below, so what the menu
+    # Appearance. A theme writes the settings below, so what the menu
     # shows is always what the keyboard does.
-    "setup.tablet.preset": dict(icon="\U000f03d8", label="Preset"),
-    **{f"setup.tablet.preset.{name}": dict(icon="\U000f03d8", label=label,
-        checked=f'"{cmd}" preset is {name}', action=f'"{cmd}" preset apply {name}')
-       for name, label in presets},
+    "setup.tablet.theme": dict(icon="\U000f03d8", label="Theme"),
+    **{f"setup.tablet.theme.{name}": dict(icon="\U000f03d8", label=label,
+        checked=f'"{cmd}" theme is {name}', action=f'"{cmd}" theme apply {name}')
+       for name, label in themes},
     "setup.tablet.shape": dict(icon="\U000f0831", label="Key Shape"),
     **{f"setup.tablet.shape.{name}": dict(icon="\U000f0831", label=label,
         checked=f'"{cmd}" shape is {name}', action=f'"{cmd}" shape set {name}')

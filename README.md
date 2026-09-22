@@ -15,11 +15,11 @@ returns to normal.
 
 The keyboard takes its colours from your Omarchy theme and its letters from
 your Hyprland layout, so it matches whatever you already run. The look is
-yours to change (see [Presets](#presets)).
+yours to change (see [Themes](#themes)).
 
 | | | |
 | --- | --- | --- |
-| ![Glass preset on Tokyo Night, German layout](screenshots/glass-tokyo-night.jpg) | ![Typewriter preset on Catppuccin Latte, French layout](screenshots/typewriter-catppuccin-latte.jpg) | ![The lock screen's keyboard on Rose Pine](screenshots/lock-screen-rose-pine.jpg) |
+| ![Glass theme on Tokyo Night, German layout](screenshots/glass-tokyo-night.jpg) | ![Typewriter theme on Catppuccin Latte, French layout](screenshots/typewriter-catppuccin-latte.jpg) | ![The lock screen's keyboard on Rose Pine](screenshots/lock-screen-rose-pine.jpg) |
 | **Glass** on Tokyo Night — see-through keys over a blurred desktop, QWERTZ | **Typewriter** on Catppuccin Latte — raised keycaps, AZERTY with its short bottom row filled out | **The lock screen's own keyboard**, in the lock screen's palette |
 
 Held upright, the same keyboard fills the width it is given:
@@ -316,7 +316,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 
 | Row | Choices |
 | --- | --- |
-| Preset | A saved look; picking one writes the rows below |
+| Theme | A saved look; picking one writes the rows below |
 | Key Shape | Omarchy (the theme's own corner rounding), Rounded, Pill, Angular |
 | Key Relief | Flat, or Raised: the key stands on a side, like a keycap |
 | Key Fill | Dark or Light (an opaque key sitting darker or lighter than the keyboard), Automatic (whichever of those your theme has room for — a dark theme has little below its background, a light one little above it, so a fixed choice reads strongly on some themes and barely at all on others), or Outline (no fill, carried by its edge) |
@@ -335,33 +335,37 @@ the same border your tiled windows have, taken from the Omarchy theme itself
 live, gradients included. Fade fades the background out over `edge-fade`
 pixels. None leaves a hard edge.
 
-### Presets
+### Themes
 
-A preset is a small JSON file of those same settings, never code. Applying
-one **writes its values into your settings**, so afterwards every menu row
-shows what the keyboard is actually doing — a preset is a starting point,
-not a layer that overrides you.
+A Ragtop theme is a small TOML file of those same settings, never code. It
+sets the keyboard's **form**. Its colours keep coming from your Omarchy
+theme, which is why any Ragtop theme looks right on any Omarchy one.
 
-Ragtop's are in `presets/` (Omarchy, Soft, Typewriter, Glass); put your own
-in `~/.config/ragtop/presets/<name>.json` and apply it from the menu or with
-`./ragtop preset apply <name>`:
+Applying one **writes its values into your settings**, so afterwards every
+menu row shows what the keyboard is actually doing. A theme is a starting
+point, not a layer that overrides you.
 
-```json
-{
-  "name": "Chunky",
-  "shape": "rounded",
-  "relief": "raised",
-  "fill": "light",
-  "size": "large",
-  "background": "tint",
-  "transparency": "opaque",
-  "edge": "border",
-  "labels": "large",
-  "depth": 6
-}
+They are laid out the way Omarchy lays out its own themes, in the same two
+places, and yours wins where the names match. Ragtop's are in
+`themes/<name>/ragtop.toml` (Omarchy, Soft, Typewriter, Glass, Industrial).
+Put your own in `~/.config/ragtop/themes/<name>/ragtop.toml` and apply it
+from the menu or with `./ragtop theme apply <name>`:
+
+```toml
+name = "Chunky"
+
+shape = "rounded"
+relief = "raised"
+fill = "light"
+size = "large"
+background = "tint"
+transparency = "opaque"
+edge = "border"
+labels = "large"
+depth = 6
 ```
 
-Besides the menu rows, a preset can set the details that don't deserve one:
+Besides the menu rows, a theme can set the details that don't deserve one:
 
 | Field | Values | Default |
 | --- | --- | --- |
@@ -372,8 +376,8 @@ Besides the menu rows, a preset can set the details that don't deserve one:
 | `special-keys` | how the keys that type nothing sit against the letters: `darker`, `lighter`, `off` | `darker` |
 | `blur` | blur what's behind the keyboard (see below) | `false` |
 
-To leave the theme behind for one part of the look, a preset can also set
-these outright. Only what you set stops following the theme:
+To leave the Omarchy theme behind for one part of the look, a Ragtop theme
+can also set these outright. Only what you set stops following it:
 
 | Field | Values |
 | --- | --- |
@@ -386,8 +390,8 @@ Anything missing, unknown or out of range is ignored, so a stray file can't
 break the keyboard. All of this lands in `~/.config/ragtop/settings.conf`,
 which you can also edit directly.
 
-**Blur** is Hyprland's, and Omarchy ships with it turned off. A preset with
-`"blur": true` turns it on at runtime, for Ragtop's keyboard and its handle
+**Blur** is Hyprland's, and Omarchy ships with it turned off. A theme with
+`blur = true` turns it on at runtime, for Ragtop's keyboard and its handle
 only: Hyprland is told to leave every window unblurred, so your see-through
 terminals stay as they are. Turning blur off again restores it, and nothing
 is written to your Hyprland config, so `hyprctl reload` clears it either
@@ -541,7 +545,7 @@ the gear key on the on-screen keyboard opens directly:
 | Tablet mode: Automatic (follow the hardware — folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard modifiers: One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
-| A saved look, which writes the rows below (see [Presets](#presets)) | Omarchy | Setup › Tablet › Preset |
+| A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key shape: Omarchy, Rounded, Pill or Angular | Omarchy | Setup › Tablet › Key Shape |
 | Key relief: Flat or Raised | Flat | Setup › Tablet › Key Relief |
 | Keys: Automatic (whichever way your theme has room for), Dark, Light or Outline | Light | Setup › Tablet › Key Fill |
@@ -562,7 +566,7 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `modifiers set oneshot|sticky`, `background set tint|gradient`, `edge set border|fade|none`,
 `shape set omarchy|rounded|pill|angular`, `relief set flat|raised`,
 `fill set dark|light|outline`, `key-transparency set opaque|low|medium|high|full`,
-`size set compact|normal|large`, `preset apply <name>` (`preset list` shows
+`size set compact|normal|large`, `theme apply <name>` (`theme list` shows
 them) and
 `transparency set auto|opaque|low|medium|high|full`. Settings other than the
 overlays are kept in

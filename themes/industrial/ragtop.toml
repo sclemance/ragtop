@@ -1,0 +1,14 @@
+name = "Industrial"
+
+shape = "angular"
+relief = "raised"
+fill = "auto"
+size = "normal"
+background = "gradient"
+transparency = "low"
+key-transparency = "opaque"
+edge = "border"
+labels = "large"
+depth = 6
+chamfer = 12
+blur = false

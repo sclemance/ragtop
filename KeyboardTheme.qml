@@ -108,7 +108,7 @@ QtObject {
   // "auto" takes whichever direction the theme has room for. A dark theme
   // has little below its background and a light one little above it, so a
   // fixed choice is strong on half the themes and nearly invisible on the
-  // rest — which is no way to ship a preset.
+  // rest — which is no way to ship a theme.
   readonly property color autoKey: Math.abs(luminance(lightKey) - luminance(solidBase))
     >= Math.abs(luminance(darkKey) - luminance(solidBase)) ? lightKey : darkKey
 
@@ -145,7 +145,7 @@ QtObject {
   // moves away from the panel and needs no floor. The base's alpha is put
   // back, so these keys are no more solid than the letters at any Key
   // Transparency.
-  // Which way, and whether at all, is the preset's to say (special-keys).
+  // Which way, and whether at all, is the Ragtop theme's to say (special-keys).
   // Off leaves them the letters' own shade, where the quieter label is the
   // only thing setting them apart, which is how the keyboard looked before.
   readonly property string specialStep: look.specialKeys
@@ -208,7 +208,7 @@ QtObject {
   property color outline: Util.alpha(text, 0.45)
 
   // "omarchy" (the theme's own corner rounding, as windows have),
-  // "rounded", "pill" or "angular"; a preset can pin a radius instead.
+  // "rounded", "pill" or "angular"; a Ragtop theme can pin a radius instead.
   property string keyShape: look.shape
   // Raised keys stand on a side, as a keycap does, whatever their shape.
   readonly property bool raised: look.relief === "raised"
