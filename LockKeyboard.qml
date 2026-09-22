@@ -443,10 +443,13 @@ Item {
     root.view.wakeRequested()
     switch (key) {
     case "shift":
-      // A second tap soon after the first locks capitals on.
+      // Off, then on for the next character, then locked, then off, as the
+      // main keyboard's modifiers go. A tap while it is on locks it however
+      // long it comes after the first, because shift only lives until the
+      // next character (see type) and so a tap can only mean lock.
       if (root.capsLock) { root.capsLock = false; root.shift = false }
-      else if (root.shift && shiftTap.running) { root.capsLock = true; root.shift = false }
-      else { root.shift = !root.shift; shiftTap.restart() }
+      else if (root.shift) { root.capsLock = true; root.shift = false }
+      else root.shift = true
       break
     case "backspace":
       root.view.passwordTextEdited(root.view.passwordText.slice(0, -1))
@@ -470,8 +473,6 @@ Item {
       root.type(root.upper ? root.shifted(key) : key)
     }
   }
-
-  Timer { id: shiftTap; interval: 400 }
 
   // The popup, over the rows above the key being held: the letters on a card
   // of their own, so it reads as one thing lifted off the keyboard rather

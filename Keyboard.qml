@@ -397,22 +397,25 @@ Item {
     mods = next
   }
 
+  // Off, then latched for the next key, then locked, then off again. The
+  // second tap locks however long it comes after the first, because a latch
+  // only lives until the next key is sent (afterKey), and a tap on another
+  // modifier is not a key. So "tapped again while still latched" says all a
+  // timer used to say, without asking anyone to be quick about it: Super,
+  // Shift, Super locks Super, and the B that follows launches the browser,
+  // drops the latched Shift and leaves Super on.
   function tapModifier(name) {
     var state = mods[name]
     if (!oneShot) {
       setMod(name, state === "off" ? "locked" : "off")
     } else if (state === "off") {
       setMod(name, "latched")
-      doubleTap.name = name
-      doubleTap.restart()
-    } else if (state === "latched" && doubleTap.running && doubleTap.name === name) {
-      setMod(name, "locked")  // a quick second tap locks it on
+    } else if (state === "latched") {
+      setMod(name, "locked")
     } else {
       setMod(name, "off")
     }
   }
-
-  Timer { id: doubleTap; interval: 400; property string name: "" }
 
   function press(key) {
     if (key in mods) { tapModifier(key); return }

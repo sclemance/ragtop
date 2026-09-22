@@ -32,7 +32,6 @@ Item {
 
   readonly property string shape: theme.keyShape
   readonly property bool outlined: theme.keyFill === "outline"
-  readonly property bool marked: kind === "accent" || kind === "locked" || kind === "latched"
   readonly property color tinted: pressed ? theme.pressedKey
     : kind === "accent" || kind === "locked" ? theme.lockedKey
     : kind === "latched" ? theme.latchedKey
