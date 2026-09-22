@@ -791,6 +791,17 @@ Item {
   }
   Process { id: themeApplyProc }
 
+  // A machine that upgraded in place still has the previous version's
+  // settings and menu rows. Nothing else runs on an update: the only hook
+  // Ragtop installs is the overlay re-sync, and that is opt-in per overlay,
+  // so this is the one path that fires however the plugin arrived. It says
+  // nothing and writes nothing when there is nothing to do.
+  Process {
+    id: migrateProc
+    running: true
+    command: ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""), "migrate"]
+  }
+
   // Switch to one of the layouts Hyprland has configured, by its index.
   // Hyprland owns the layout, so this asks rather than imposes: nothing is
   // written to anyone's config, and the switch is the same one a keybinding

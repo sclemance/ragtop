@@ -175,6 +175,97 @@ choice_notice() {
   esac
 }
 
+# migrate: bring a machine set up by an older Ragtop up to date, and say
+# nothing when there is nothing to do. It runs at every shell start, so it
+# has to be both idempotent and quiet.
+#
+# 0.39 renamed presets to themes, moved them from a file to a directory,
+# turned three settings from words into numbers, and dropped menu rows whose
+# commands no longer exist. None of that reaches a machine that upgrades in
+# place: the settings file keeps words where numbers are expected and falls
+# back to defaults, a user's own presets stop being found, and the menu keeps
+# rows calling verbs this version does not answer.
+migrate() {
+  python3 - "$settings" "$HOME/.config/ragtop" "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" <<'PYEOF'
+import json, os, re, sys
+
+settings_path, config_dir, menu_path = sys.argv[1:]
+TRANS = {"opaque": 0, "low": 15, "medium": 30, "high": 50, "full": 100, "auto": 0}
+SIZE = {"compact": 88, "normal": 100, "large": 115}
+did = []
+
+# Words that are numbers now, and keys that were renamed or retired.
+if os.path.exists(settings_path):
+    out, changed = [], False
+    for line in open(settings_path).read().split("\n"):
+        if "=" not in line:
+            if line:
+                out.append(line)
+            continue
+        key, value = line.split("=", 1)
+        if key in ("transparency", "key-transparency") and value in TRANS:
+            value, changed = str(TRANS[value]), True
+        elif key == "size" and value in SIZE:
+            value, changed = str(SIZE[value]), True
+        elif key == "preset":
+            key, changed = "theme", True
+        elif key == "modifiers":
+            changed = True
+            continue
+        out.append("%s=%s" % (key, value))
+    if changed:
+        open(settings_path + ".tmp", "w").write("\n".join(out) + "\n")
+        os.replace(settings_path + ".tmp", settings_path)
+        did.append("settings")
+
+# A preset of their own becomes a theme of their own. The original is left
+# where it is, so this cannot lose anyone's work, and an existing theme of
+# the same name is never overwritten.
+presets = os.path.join(config_dir, "presets")
+if os.path.isdir(presets):
+    for name in sorted(os.listdir(presets)):
+        if not name.endswith(".json"):
+            continue
+        slug = name[:-5]
+        target_dir = os.path.join(config_dir, "themes", slug)
+        target = os.path.join(target_dir, "ragtop.toml")
+        if os.path.exists(target):
+            continue
+        try:
+            raw = json.load(open(os.path.join(presets, name)))
+        except Exception:
+            continue
+        if not isinstance(raw, dict):
+            continue
+        rows = []
+        for key, value in raw.items():
+            if key in ("transparency", "key-transparency") and value in TRANS:
+                value = TRANS[value]
+            elif key == "size" and value in SIZE:
+                value = SIZE[value]
+            if isinstance(value, bool):
+                rows.append("%s = %s" % (key, "true" if value else "false"))
+            elif isinstance(value, (int, float)):
+                rows.append("%s = %s" % (key, value))
+            elif isinstance(value, str):
+                rows.append('%s = "%s"' % (key, value.replace('"', '\\"')))
+        if not rows:
+            continue
+        os.makedirs(target_dir, exist_ok=True)
+        open(target, "w").write("\n".join(rows) + "\n")
+        did.append("theme:" + slug)
+
+# Menu rows whose commands are gone. Reported only when one is really there,
+# so the menu file is not rewritten on every start.
+if os.path.exists(menu_path):
+    stale = r'"setup\.tablet\.(preset|shape|relief|fill|background|edge|modifiers|transparency|key-transparency|size)[."]'
+    if re.search(stale, open(menu_path).read()):
+        did.append("menu")
+
+print(" ".join(did))
+PYEOF
+}
+
 # Themes: the user's own in ~/.config/ragtop/themes/ win over Ragtop's, the
 # same two places Omarchy looks for its own themes.
 theme_file() {
@@ -286,6 +377,16 @@ case "${1:-} ${2:-}" in
     ;;
   "overlay status") "$clones" status ;;
   "overlay sync") shift 2; "$clones" sync "$@" ;;
+  "migrate "*|"migrate")
+    changed=$(migrate)
+    case " $changed " in
+      *" menu "*|*" menu") "$repo/menu-block.sh" add >/dev/null ;;
+    esac
+    if [[ -n $changed ]]; then
+      notify "Ragtop brought your settings up to date for this version."
+      echo "$changed"
+    fi
+    ;;
   "setup "*|"setup") omarchy-shell ragtop openSetup >/dev/null ;;
   *) usage ;;
 esac

@@ -716,6 +716,27 @@ The keyboard itself is mostly language-agnostic already — its letters, symbols
 and accents come from your active Hyprland layout, and its key glyphs are
 drawn rather than written.
 
+## Upgrading from an older Ragtop
+
+0.39 renamed presets to themes and moved them from `presets/<name>.json` to
+`themes/<name>/ragtop.toml`, turned key size and the two transparencies from
+words into numbers, and changed which rows live in the menu. A machine that
+upgrades in place is brought up to date the first time the shell starts
+afterwards, and told so once:
+
+- **Settings** keep their meaning. `transparency=high` becomes `50`,
+  `size=large` becomes `115`, `preset=` becomes `theme=`, and the modifier
+  mode setting is dropped, since one-shot now locks on a second tap.
+- **Your own presets** in `~/.config/ragtop/presets/` become themes in
+  `~/.config/ragtop/themes/<name>/ragtop.toml`, converted as above. The
+  originals are left where they are, and a theme you already have of the same
+  name is never overwritten.
+- **The menu** is rewritten, because the old rows call commands this version
+  no longer answers.
+
+None of it runs twice. If you would rather do it by hand, `./ragtop migrate`
+is the same thing.
+
 ## Versioning and updates
 
 `omarchy plugin update sclemance.ragtop` fast-forwards this checkout to the
