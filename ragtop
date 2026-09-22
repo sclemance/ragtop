@@ -20,9 +20,9 @@
 # What a key looks like is a Ragtop theme's to say, so shape, relief, fill,
 # background, edge and both transparencies have no verb here and no menu
 # row. Whether the keyboard has a background at all follows Omarchy's bar,
-# which a double tap on it toggles. What is left is <adjust>, smaller,
-# regular or larger, which sizes the keys against whatever the theme asked
-# for and is never written by applying one.
+# which a double tap on it toggles. What is left is <adjust>, one of
+# smallest, smaller, regular, larger or largest, which sizes the keys
+# against whatever the theme asked for and is never written by applying one.
 #
 # A theme is a TOML file of those same settings, laid out the way Omarchy
 # lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
@@ -148,7 +148,10 @@ choice() {
       local notice
       notice=$(choice_notice "$key" "${4:-}") || usage
       put "$key" "$4"
-      notify "$notice"
+      # A setting with nothing to say says nothing. Key size is dragged on a
+      # slider with the keyboard resizing under it, so the change announces
+      # itself and a notification per step is just noise.
+      if [[ -n $notice ]]; then notify "$notice"; fi
       ;;
     *) usage ;;
   esac
@@ -159,9 +162,8 @@ choice_notice() {
     "tablet-mode auto") echo "Tablet mode now follows the hardware: fold the screen back, or take the keyboard off." ;;
     "tablet-mode on") echo "Tablet mode is on until you change it back." ;;
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
-    "size-adjust smaller") echo "The keys are smaller than this theme asks for." ;;
-    "size-adjust regular") echo "The keys are the size this theme asks for." ;;
-    "size-adjust larger") echo "The keys are larger than this theme asks for." ;;
+    "size-adjust smallest"|"size-adjust smaller"|"size-adjust regular"\
+      |"size-adjust larger"|"size-adjust largest") echo "" ;;
     "labels small"|"labels normal"|"labels large") echo "The key labels are now $2." ;;
     *) return 1 ;;
   esac

@@ -672,6 +672,85 @@ Item {
     Quickshell.execDetached(["omarchy", "menu", "summon", "setup.tablet"])
   }
 
+  // The keyboard's tools page asks for these. Rotation lock is kept by the
+  // bar widget, inline on its own shell.json entry, so the keyboard asks the
+  // widget rather than reaching for a file it does not own.
+  // Asks for a state rather than a flip: there is one bar widget per screen
+  // and all of them hear this, and setRotationLocked is idempotent while a
+  // flip repeated by a second screen would undo the first.
+  // Ragtop's controls, on their own surface above the keyboard. They go away
+  // with it, so they can never be left floating over nothing.
+  property bool toolsOpen: false
+  onOskVisibleChanged: if (!root.oskVisible) root.toolsOpen = false
+
+
+  signal rotationLockRequested(bool locked)
+  function toggleRotationLock() { root.rotationLockRequested(!root.rotationLocked) }
+
+  // Key size against whatever the theme asked for, stepped rather than set,
+  // so the keyboard needs no argument-taking IPC to offer it.
+  readonly property var sizeSteps: ["smallest", "smaller", "regular", "larger", "largest"]
+  function stepSize(by) {
+    var at = root.sizeSteps.indexOf(root.look.sizeAdjust)
+    root.setSize((at < 0 ? 2 : at) + by)
+  }
+  // Dragging the slider asks for a size faster than a process can write one,
+  // and reassigning a Process that is still running drops the write. So the
+  // latest ask is held and sent when the last one finishes, which coalesces
+  // a drag into a couple of writes and guarantees the value under the finger
+  // when it lifts is the one that lands.
+  property string pendingSize: ""
+  function setSize(index) {
+    var next = root.sizeSteps[Math.max(0, Math.min(root.sizeSteps.length - 1, index))]
+    if (!next || next === root.look.sizeAdjust) return
+    root.pendingSize = next
+    root.flushSize()
+  }
+  function flushSize() {
+    if (sizeStepProc.running || root.pendingSize === "") return
+    var next = root.pendingSize
+    root.pendingSize = ""
+    sizeStepProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                            "size-adjust", "set", next]
+    sizeStepProc.running = true
+  }
+  Process { id: sizeStepProc; onExited: root.flushSize() }
+
+  // Whether the keyboard comes up by itself on a text field. It belongs
+  // beside the other things you change while holding the machine, since the
+  // moment you want it off is the moment it has just appeared over what you
+  // were reading.
+  function toggleAutoShow() {
+    autoShowProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                            "auto-show", "toggle"]
+    autoShowProc.running = true
+  }
+  Process { id: autoShowProc }
+
+  // The themes there are to step through, by slug. Read once, since a theme
+  // arriving in the folder mid-session is not worth watching a directory for,
+  // and which one is on is already in settings.
+  property var themeList: []
+  readonly property string currentTheme: root.settings["theme"] || "omarchy"
+  Process {
+    id: themeListProc
+    running: true
+    command: ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""), "theme", "list"]
+    stdout: StdioCollector {
+      onStreamFinished: root.themeList = text.split("\n").filter(function(n) { return n !== "" })
+    }
+  }
+  function stepTheme(by) {
+    if (root.themeList.length === 0) return
+    var at = root.themeList.indexOf(root.currentTheme)
+    var count = root.themeList.length
+    var next = root.themeList[(((at < 0 ? 0 : at) + by) % count + count) % count]
+    themeApplyProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                              "theme", "apply", next]
+    themeApplyProc.running = true
+  }
+  Process { id: themeApplyProc }
+
   // Switch to one of the layouts Hyprland has configured, by its index.
   // Hyprland owns the layout, so this asks rather than imposes: nothing is
   // written to anyone's config, and the switch is the same one a keybinding
@@ -721,7 +800,7 @@ Item {
       // top of it that is the user's alone. A theme cannot write size-adjust,
       // so how big the keys are for these eyes survives changing theme.
       size: num("size", 60, 160, 100),
-      sizeAdjust: pick("size-adjust", ["smaller", "regular", "larger"], "regular"),
+      sizeAdjust: pick("size-adjust", root.sizeSteps, "regular"),
       background: pick("background", ["tint", "gradient"], "tint"),
       edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),
@@ -773,7 +852,8 @@ Item {
   property bool layerRulesReady: false
   function applyLayerRules() {
     layerRulesProc.command = ["hyprctl", "eval",
-      "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
+      "hl.layer_rule({ match = { namespace = '^ragtop-tools$' }, order = 1 }) "
+      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-picker-nav$' }, order = -2 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -3 })"]
     layerRulesProc.running = true
@@ -903,6 +983,42 @@ Item {
       anchors.fill: parent
       service: root
       theme: keyboardTheme
+    }
+  }
+
+  // Ragtop's controls are a tile of their own. One window, not two: a
+  // full-screen sheet behind it to catch the dismissing tap took the input
+  // for itself, so nothing on the tile could be touched and every tap closed
+  // it. The keyboard puts them away instead, which needs no second surface.
+  //
+  // The tile is anchored to the top of the screen only, with a fixed size.
+  // Nothing it shares an edge with can resize it, which is the whole point:
+  // when this window respected the keyboard's exclusive zone, every step of
+  // the size slider resized the keyboard, resized this, and cancelled the
+  // touch that was dragging it.
+  PanelWindow {
+    id: toolsWindow
+    screen: keyboardWindow.screen
+    visible: root.oskVisible && root.toolsOpen && root.layerRulesReady
+
+    WlrLayershell.namespace: "ragtop-tools"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // Reserves nothing of its own, but sits below Omarchy's bar rather than
+    // under it. Anchored to one edge, so its size is its own.
+    exclusionMode: ExclusionMode.Normal
+    exclusiveZone: 0
+    anchors { top: true }
+    implicitWidth: 470
+    implicitHeight: 172
+    margins.top: 22
+    color: "transparent"
+
+    ToolsPanel {
+      anchors.fill: parent
+      service: root
+      theme: keyboardTheme
+      onDismissed: root.toolsOpen = false
     }
   }
 

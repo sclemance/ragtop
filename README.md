@@ -318,7 +318,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Row | Choices |
 | --- | --- |
 | Theme | The keyboard's whole look, from a theme file |
-| Key Size | Smaller, Regular, Larger — against whatever size the theme asks for, and the labels scale with the keys |
+| Key Size | Smallest, Smaller, Regular, Larger, Largest — against whatever size the theme asks for, and the labels scale with the keys |
 
 What a key looks like — its shape, relief, fill, how see-through it is, the
 background behind it and the top edge — belongs to the theme, so it is set in
@@ -555,7 +555,7 @@ the gear key on the on-screen keyboard opens directly:
 | Tablet mode: Automatic (follow the hardware — folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
-| Key size against the theme's: Smaller, Regular or Larger | Regular | Setup › Tablet › Key Size |
+| Key size against the theme's, in five steps from Smallest to Largest | Regular | Setup › Tablet › Key Size |
 | Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
 | Whether the keyboard has a background | follows the bar | double-tap Omarchy's bar |
 | Touch typing in each overlay, the picker nav strip, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
@@ -568,7 +568,7 @@ keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`size-adjust set smaller|regular|larger`, and
+`size-adjust set smallest|smaller|regular|larger|largest`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
 overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
 straight away. The rest of the look has no verb, because it is the theme's

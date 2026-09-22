@@ -74,7 +74,9 @@ rows = {
     "setup.tablet.size-adjust": dict(icon="\U000f004c", label="Key Size"),
     **{f"setup.tablet.size-adjust.{name}": dict(icon="\U000f004c", label=label,
         checked=f'"{cmd}" size-adjust is {name}', action=f'"{cmd}" size-adjust set {name}')
-       for name, label in (("smaller", "Smaller"), ("regular", "Regular"), ("larger", "Larger"))},
+       for name, label in (("smallest", "Smallest"), ("smaller", "Smaller"),
+                           ("regular", "Regular"), ("larger", "Larger"),
+                           ("largest", "Largest"))},
     "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),

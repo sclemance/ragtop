@@ -242,8 +242,12 @@ Item {
   // Sized so the longest row fits. Layouts differ, 10 to 12 letter keys.
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
   readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, Math.round(84 * theme.keyScale))
-  readonly property real keyHeight: Math.max(Math.round(36 * theme.keyScale),
-    Math.min(Math.round(unit * 0.78), Math.round(60 * theme.keyScale)))
+  // Height follows the size setting, not the width a key happens to get. On
+  // a narrow screen the width is spent long before the ladder runs out, so
+  // pinning height to it made Larger and Largest render identically to
+  // Regular. The cap against `unit` only stops a key becoming a tall ribbon.
+  readonly property real keyHeight: Math.max(30,
+    Math.min(Math.round(60 * theme.keyScale), Math.round(unit * 1.4)))
   readonly property real topRowHeight: Math.round(keyHeight * 0.62)
 
   // Where each key sits: { key, x, y, width, height } for every key of the
@@ -370,6 +374,7 @@ Item {
   // character is drawn as a letter, and one that acts on the next key or on
   // the keyboard itself is drawn apart from them.
   function kind(key) {
+    if (key === "settings" && root.service.toolsOpen) return "locked"
     if (key in mods) return mods[key] === "locked" ? "locked" : mods[key] === "latched" ? "latched" : "special"
     if (key === "enter") return "accent"
     // The space bar goes with them rather than with the letters, though it
@@ -427,7 +432,10 @@ Item {
       page = key
       return
     case "settings":
-      service.openSettings()
+      // Ragtop's controls come up over the keyboard rather than in place of
+      // it, so the keys stay under them while you change how they look. The
+      // gear stays where it is and reads as held down while they are open.
+      root.service.toolsOpen = !root.service.toolsOpen
       return
     }
     if (holdable.indexOf(key) !== -1) {
@@ -634,6 +642,14 @@ Item {
       var next = Object.assign({}, root.held)
       var pressed = []
       points.forEach(function(p) {
+        // While the controls are up, a touch on the keyboard puts them away
+        // rather than typing. That is the tap-outside-to-dismiss, done from
+        // the surface the finger is already on instead of a sheet over
+        // everything, which would take the tile's own touches with it.
+        if (root.service.toolsOpen) {
+          root.service.toolsOpen = false
+          return
+        }
         // While a popup is open the other fingers wait their turn.
         if (root.popup !== null || root.pendingPoint !== -1) return
         var key = root.keyAt(p.x, p.y)

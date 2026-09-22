@@ -15,16 +15,24 @@ BarWidget {
   function close() { root.shortcutsOpen = false }
   onTabletModeChanged: if (!root.tabletMode) root.close()
 
-  // Stay visible while locked, even outside tablet mode, so a rotation that
-  // was locked in portrait can always be unlocked from the bar.
-  visible: root.tabletMode || root.rotationLocked
+  // Always there. Rotation follows the sensor whether or not the machine is
+  // folded, so a screen can start turning with the keyboard attached, and the
+  // one control that stops it should not be somewhere you have to fold the
+  // machine to reach.
+  visible: true
   implicitWidth: grid.implicitWidth
   implicitHeight: grid.implicitHeight
 
   function pushConfig() {
     if (root.service) root.service.configure(root.tabletSwitchDevice, root.rotationLocked)
   }
-  onServiceChanged: { pushConfig(); pushBarTransparent() }
+  onServiceChanged: {
+    pushConfig()
+    pushBarTransparent()
+    // The keyboard's tools page has a rotation lock key. The lock is kept
+    // here, so the keyboard asks and this answers.
+    if (root.service) root.service.rotationLockRequested.connect(root.setRotationLocked)
+  }
 
   // The bar keeps `transparent` live on the object it hands widgets.
   readonly property bool barTransparent: root.bar ? root.bar.transparent === true : false

@@ -306,7 +306,8 @@ Item {
   readonly property real keyScale: {
     var base = Number(style.size)
     if (!isFinite(base)) base = 100
-    var nudge = style.sizeAdjust === "smaller" ? 0.88 : style.sizeAdjust === "larger" ? 1.15 : 1
+    var nudge = ({ "smallest": 0.78, "smaller": 0.88, "regular": 1,
+                   "larger": 1.15, "largest": 1.3 })[style.sizeAdjust] || 1
     return Math.max(0.6, Math.min(1.6, base / 100 * nudge))
   }
   readonly property string density: keyScale < 0.95 ? "compact"
@@ -338,8 +339,9 @@ Item {
     return base
   }
   readonly property real unit: Math.min((width - 2 * padding) / rowUnits, Math.round(84 * keyScale))
-  readonly property real keyHeight: Math.max(Math.round(36 * keyScale),
-    Math.min(Math.round(unit * 0.78), Math.round(60 * keyScale)))
+  // As the desktop keyboard works it out, and for the same reason.
+  readonly property real keyHeight: Math.max(30,
+    Math.min(Math.round(60 * keyScale), Math.round(unit * 1.4)))
 
   // Omarchy's shared control states, in the lock screen's own colours.
   readonly property color themeKeyColor: Style.normalFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
