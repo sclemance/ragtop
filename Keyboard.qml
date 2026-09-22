@@ -395,6 +395,14 @@ Item {
   // replacing it. Only one at a time, as on a phone.
   property var popup: null
 
+  // As high as a popup can sit: where the card it is drawn on begins at the
+  // same place the keys do. The card reaches theme.gap past the popup on
+  // every side, so a popup at the very top of the keyboard puts the card's
+  // top border outside the surface, where it is cut off. The extra row is
+  // shorter than a letter key, so a popup for the top letter row always
+  // asks to go higher than the keyboard reaches and always lands here.
+  readonly property real popupTop: root.topPadding + root.theme.gap
+
   function startHold(point, key) {
     root.pendingPoint = point.pointId
     root.pendingKey = key
@@ -425,7 +433,7 @@ Item {
     var x = total > room ? (root.width - total) / 2
       : Math.min(Math.max(slot.x, root.theme.padding), root.width - root.theme.padding - total)
     root.popup = { key: key, items: items, pointId: root.pendingPoint, index: 0,
-                   x: x, y: Math.max(0, slot.y - slot.height - root.theme.gap),
+                   x: x, y: Math.max(root.popupTop, slot.y - slot.height - root.theme.gap),
                    cellWidth: cell, cellHeight: slot.height }
     root.selectAt(root.pendingX, root.pendingY)
   }
