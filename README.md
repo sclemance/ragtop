@@ -369,6 +369,7 @@ Besides the menu rows, a preset can set the details that don't deserve one:
 | `depth` | Raised keys: how far the key's side shows, 0–10 | 4 |
 | `chamfer` | Angular: how much of each corner is cut, 0–20 | 8 |
 | `edge-fade` | pixels the background fades over with Edge set to Fade, 0–24 | 8 |
+| `special-keys` | how the keys that type nothing sit against the letters: `darker`, `lighter`, `off` | `darker` |
 | `blur` | blur what's behind the keyboard (see below) | `false` |
 
 To leave the theme behind for one part of the look, a preset can also set

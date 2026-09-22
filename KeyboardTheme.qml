@@ -145,12 +145,22 @@ QtObject {
   // moves away from the panel and needs no floor. The base's alpha is put
   // back, so these keys are no more solid than the letters at any Key
   // Transparency.
+  // Which way, and whether at all, is the preset's to say (special-keys).
+  // Off leaves them the letters' own shade, where the quieter label is the
+  // only thing setting them apart, which is how the keyboard looked before.
+  readonly property string specialStep: look.specialKeys
   readonly property color specialBase: {
-    if (keyBase.a === 0) return keyBase
-    var target = Qt.darker(keyBase, 1.45)
-    if (luminance(keyBase) > luminance(solidBase)) {
+    if (keyBase.a === 0 || specialStep === "off") return keyBase
+    var up = specialStep === "lighter"
+    var target = up ? Qt.lighter(keyBase, 1.45) : Qt.darker(keyBase, 1.45)
+    // A step must not take a key into the panel it sits on. Going down, that
+    // is a risk where the keys are already above the panel, as a dark theme
+    // has them. Going up, where they are below it. Either way the step stops
+    // halfway rather than crossing.
+    if (up === (luminance(keyBase) < luminance(solidBase))) {
       var halfway = Qt.tint(keyBase, Util.alpha(solidBase, 0.5))
-      if (luminance(target) < luminance(halfway)) target = halfway
+      if (up ? luminance(target) > luminance(halfway) : luminance(target) < luminance(halfway))
+        target = halfway
     }
     return Qt.rgba(target.r, target.g, target.b, keyBase.a)
   }

@@ -237,6 +237,7 @@ choices = {
     "key-transparency": ["opaque", "low", "medium", "high", "full"],
     "edge": ["border", "fade", "none"],
     "labels": ["small", "normal", "large"],
+    "special-keys": ["off", "darker", "lighter"],
     "blur": ["on", "off"],
 }
 numbers = {"depth": (0, 10), "chamfer": (0, 20), "edge-fade": (0, 24),

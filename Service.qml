@@ -721,6 +721,8 @@ Item {
       background: pick("background", ["tint", "gradient"], "tint"),
       edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),
+      // How far the keys that produce no character sit from the letters.
+      specialKeys: pick("special-keys", ["off", "darker", "lighter"], "darker"),
       depth: num("depth", 0, 10, 4),
       chamfer: num("chamfer", 0, 20, 8),
       edgeFade: num("edge-fade", 0, 24, 8),
