@@ -966,6 +966,15 @@ Item {
   }
 
   // omarchy-shell ragtop <function>: for keybindings and scripts.
+  //
+  // Nothing here sends a key. Each function flips a state the user can flip
+  // by hand or returns a status string, and none of them takes an argument.
+  // Keys come from a touch on a key: Keyboard.qml's press() and release()
+  // are called from its own touch handlers and nowhere else. tapKey and
+  // tapPickerNav used to be here, to drive the keyboard from a shell while
+  // developing, but anything that can call this socket could then type into
+  // the focused window. Drive the keyboard with a real tap instead, or the
+  // helper's --dry-run.
   IpcHandler {
     target: "ragtop"
 
@@ -975,28 +984,11 @@ Item {
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
     function openSetup(): string { root.openSetup(); return "ok" }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
-    // Presses and releases a key of the keyboard by name ("q", "shift",
-    // "ctrl", "enter"...), as a tap would. For testing and automation.
-    function tapKey(key: string): string {
-      if (!keyboardWindow.visible) return "keyboard not shown"
-      keyboard.press(key)
-      keyboard.release(key)
-      return "ok"
-    }
+    // What the keyboard and the picker are doing, for scripts and for a bug
+    // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {
       return JSON.stringify({ visible: root.oskVisible,
                               page: keyboard.page, mods: keyboard.mods, modifierMode: root.modifierMode })
-    }
-    // Presses and releases one of the picker nav strip's buttons ("prev",
-    // "select", "next", "cancel"), as a tap would. Only while the strip is
-    // up, so its keys can only ever reach the picker. For testing.
-    function tapPickerNav(button: string): string {
-      if (!pickerNavWindow.visible) return "picker nav not shown"
-      var found = pickerNav.buttons.filter(function(b) { return b.name === button })
-      if (found.length === 0) return "no such button: " + button
-      pickerNav.press(found[0])
-      pickerNav.release(found[0])
-      return "ok"
     }
     function pickerState(): string {
       return JSON.stringify({ open: root.pickerOpen, patched: root.pickerPatched,
