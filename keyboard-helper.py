@@ -20,8 +20,10 @@ commands on stdin, one per line:
 
 At startup and after each reload it also prints "labels <json>": the active
 layout's name, the characters on its letter keys, row by row, as
-[normal, shifted] pairs, the symbols its keys carry, and any letters of its
-own that those rows don't reach, for the keyboard to draw.
+[normal, shifted, altgr, shift+altgr], the symbols its keys carry, and any
+letters of its own that those rows don't reach, for the keyboard to draw. The
+two AltGr levels are empty strings where the layout has nothing there. It also
+names every layout Hyprland has configured, and which of them is active.
 
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
 for each command.
@@ -134,6 +136,8 @@ class XkbLabels:
         lib.xkb_keysym_to_utf32.argtypes = [ctypes.c_uint32]
         lib.xkb_keymap_layout_get_name.restype = ctypes.c_char_p
         lib.xkb_keymap_layout_get_name.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        lib.xkb_keymap_num_layouts.restype = ctypes.c_uint32
+        lib.xkb_keymap_num_layouts.argtypes = [ctypes.c_void_p]
         self.lib = lib
         self.context = lib.xkb_context_new(0)
 
@@ -148,9 +152,11 @@ class XkbLabels:
     COMMON_CURRENCY = "$€£¥¢¤"
 
     def letter_rows(self, keymap_text, group):
-        """{"name": layout name, "rows": [[[normal, shifted], ...], ...]}, with
-        the keys that type letters; punctuation keys are left to the
-        keyboard's symbol pages."""
+        """{"name": layout name, "rows": [[[normal, shifted, altgr, both], ...],
+        ...]}, with the keys that type letters. Punctuation keys are left to
+        the keyboard's symbol pages. The two AltGr levels are what a physical
+        keycap prints in its corner, and are empty where the layout puts
+        nothing at that level."""
         lib = self.lib
         keymap = lib.xkb_keymap_new_from_string(self.context, keymap_text.encode(), 1, 0)
         if not keymap:
@@ -163,6 +169,16 @@ class XkbLabels:
             u = lib.xkb_keysym_to_utf32(syms[0])
             return chr(u) if u else ""
 
+        def deeper(code, level):
+            """A key's AltGr character, or "" when there is nothing a cap can
+            print there: no character at all, a dead key (which reports none
+            of its own), or a combining mark, which needs a letter to sit on
+            and draws as a blob by itself."""
+            c = char(code, level)
+            if not c or not c.isprintable() or c.isspace() or unicodedata.category(c)[0] == "M":
+                return ""
+            return c
+
         rows = []
         for prefix, count in self.ROWS:
             row = []
@@ -172,14 +188,22 @@ class XkbLabels:
                     continue
                 normal = char(code, 0)
                 if normal.isalpha():
-                    row.append([normal, char(code, 1) or normal.upper()])
+                    row.append([normal, char(code, 1) or normal.upper(),
+                                deeper(code, 2), deeper(code, 3)])
             rows.append(row)
         name = lib.xkb_keymap_layout_get_name(keymap, group)
         symbols = self._symbols(keymap, group, char)
         letters = self._stray_letters(keymap, char, rows)
+        # Every layout Hyprland has configured, in its order, so the keyboard
+        # can offer the others. One entry means there is nothing to switch to.
+        layouts = []
+        for g in range(lib.xkb_keymap_num_layouts(keymap)):
+            other = lib.xkb_keymap_layout_get_name(keymap, g)
+            layouts.append(localized_layout_name(other.decode() if other else ""))
         lib.xkb_keymap_unref(keymap)
         return {"name": localized_layout_name(name.decode() if name else ""),
-                "rows": rows, "symbols": symbols, "letters": letters}
+                "rows": rows, "symbols": symbols, "letters": letters,
+                "layouts": layouts, "active": group}
 
     def _stray_letters(self, keymap, char, rows):
         """Letters this layout types that its three letter rows don't carry:
@@ -187,7 +211,7 @@ class XkbLabels:
         The keyboard puts them behind the letter they belong to, where a
         long press reaches them."""
         lib = self.lib
-        on_rows = {c.lower() for row in rows for pair in row for c in pair}
+        on_rows = {c.lower() for row in rows for pair in row for c in pair[:2]}
         out = []
         for prefix, count in self.ALL_KEYS:
             names = [prefix] if count == 0 else [f"{prefix}{i:02d}" for i in range(1, count + 1)]
@@ -291,16 +315,29 @@ class Keymap:
                 return self.lookups[key]
         cmd = [f"{XKB}/xkbcli-how-to-type", *xkb_args(self.names)] + (["--keysym"] if keysym else []) + [target]
         out = subprocess.run(cmd, capture_output=True, text=True).stdout.split("=== Access via Compose")[0]
-        best = None
+        best = fallback = None
+        # A named key like BackSpace, Return or space is the same key in every
+        # layout, and how-to-type says so once, under the first one. Asking
+        # only for lines from the active group therefore finds nothing for
+        # them as soon as the active layout is not the first configured one,
+        # which left every one of those keys dead on a second layout. Those
+        # may take a line from any group. A character never may: the same
+        # keycode types something else in each group.
+        shared = keysym and len(target) > 1
         for line in out.splitlines():
             m = re.match(r"\s*(\d+)\s+\S+\s+(\d+)\s+.*?\[\s*(.*?)\s*\]\s*$", line)
-            if not m or int(m.group(2)) - 1 != self.group:
+            if not m:
                 continue
             mods = {HOW_TO_TYPE_MODS.get(x, x.lower()) for x in m.group(3).split()} - {None}
             if "lock" in mods:
                 continue  # Caps Lock levels duplicate Shift ones
-            if best is None or len(mods) < len(best[1]):
-                best = (int(m.group(1)) - 8, mods)
+            candidate = (int(m.group(1)) - 8, mods)
+            if int(m.group(2)) - 1 == self.group:
+                if best is None or len(mods) < len(best[1]):
+                    best = candidate
+            elif shared and (fallback is None or len(mods) < len(fallback[1])):
+                fallback = candidate
+        best = best if best is not None else fallback
         with self.lock:
             self.lookups[key] = best
         return best

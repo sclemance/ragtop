@@ -16,19 +16,33 @@ Item {
   property string tabletSwitchDevice: ""
   property string detectedSwitchDevice: ""
   readonly property string switchDevice: root.tabletSwitchDevice !== "" ? root.tabletSwitchDevice : root.detectedSwitchDevice
-  property bool rotationLocked: false
+  // Locked, unlocked, or automatic, which means rotate while the machine is
+  // folded and hold still while it is a laptop. A machine whose switch is
+  // never found is not a laptop, it is unknown, and Automatic rotates there
+  // rather than freezing a slate that has no switch to report with. Automatic is what the old
+  // pair of states was reaching for when it force unlocked on unfolding: a
+  // screen that turns in your hands but not while it is sat on a desk.
+  readonly property string rotationMode: ["locked", "unlocked", "auto"]
+    .indexOf(root.settings["rotation"]) !== -1 ? root.settings["rotation"] : "auto"
+  readonly property bool rotationLocked: root.rotationMode === "locked"
+    || (root.rotationMode === "auto" && root.tabletModeKnown && !root.tabletMode)
   property bool tabletMode: false
   property bool oskVisible: false
 
-  function configure(device, locked) {
+  function configure(device) {
     root.tabletSwitchDevice = device || ""
-    root.rotationLocked = locked
     configureFallback.stop()
-    // Locking just means "stop watching the orientation", which freezes the
-    // display at whatever orientation it's currently in.
-    if (locked) { orientationSettle.stop(); lockRecheck.stop() }
-    rotationProc.running = !locked && root.rotationAvailable
+    root.applyRotationLock()
   }
+
+  // Locking just means "stop watching the orientation", which freezes the
+  // display at whatever orientation it is in. Automatic reaches this too,
+  // every time the machine is folded or unfolded.
+  function applyRotationLock() {
+    if (root.rotationLocked) { orientationSettle.stop(); lockRecheck.stop() }
+    rotationProc.running = !root.rotationLocked && root.rotationAvailable
+  }
+  onRotationLockedChanged: root.applyRotationLock()
 
   // False until tablet mode is first decided, so "laptop mode" can be told
   // apart from "not decided yet".
@@ -343,7 +357,6 @@ Item {
   readonly property bool autoShowEnabled: root.settings["auto-show"] !== "off"
   // Modifiers apply to the next key ("oneshot") or stay on until tapped
   // again ("sticky").
-  readonly property string modifierMode: root.settings["modifiers"] === "sticky" ? "sticky" : "oneshot"
 
   // In tablet mode, bring the keyboard up when a text field gets focus. The
   // bridge learns about focus from fcitx5, Omarchy's input method, and prints
@@ -367,14 +380,13 @@ Item {
     onTriggered: focusBridgeProc.running = root.tabletMode && root.autoShowEnabled
   }
 
-  // The keyboard's background transparency. "auto" follows Omarchy's bar
-  // transparency (Style › Bar › Transparency), which is either fully clear
-  // or solid.
-  readonly property string keyboardTransparency: {
-    var level = root.settings["transparency"]
-    if (["opaque", "low", "medium", "high", "full"].indexOf(level) !== -1) return level
-    return root.barTransparent ? "full" : "opaque"
-  }
+  // Whether the keyboard has a background at all is Omarchy's call, not a
+  // setting of ours: double-tapping the bar makes it transparent, and the
+  // keyboard's background goes with it, so the keys float over the desktop
+  // the way the bar does. With the bar solid, the background is whatever the
+  // theme asked for.
+  readonly property real backgroundOpacity: root.barTransparent
+    ? 0 : 1 - root.look.transparency / 100
 
   Process { id: modeWriteProc }
 
@@ -674,9 +686,126 @@ Item {
     Quickshell.execDetached(["omarchy", "menu", "summon", "setup.tablet"])
   }
 
+  // What the controls tile asks for. Rotation is kept by the bar widget,
+  // inline on its own shell.json entry, so the tile asks the widget rather
+  // than reaching for a file it does not own.
+  // Asks for a state rather than a step: there is one bar widget per screen
+  // and every one of them hears this, so setRotationMode settling on the
+  // named mode is safe where cycling would have each screen advance it again
+  // and land somewhere nobody asked for.
+  // Ragtop's controls, on their own surface above the keyboard. They go away
+  // with it, so they can never be left floating over nothing.
+  property bool toolsOpen: false
+  onOskVisibleChanged: if (!root.oskVisible) root.toolsOpen = false
+
+
+  readonly property var rotationModes: ["auto", "locked", "unlocked"]
+  // Written here, to the same file as everything else. The bar widget used
+  // to own this on its own shell.json entry, which meant the tile, the IPC
+  // and the bar button all did nothing on a bar with no Ragtop widget on it.
+  function setRotationMode(mode) {
+    if (root.rotationModes.indexOf(mode) === -1 || rotationModeProc.running) return
+    rotationModeProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                                "rotation", "set", mode]
+    rotationModeProc.running = true
+  }
+  Process { id: rotationModeProc }
+
+  // Key size against whatever the theme asked for, stepped rather than set,
+  // so the keyboard needs no argument-taking IPC to offer it.
+  readonly property var sizeSteps: ["smallest", "smaller", "regular", "larger", "largest"]
+  // What each step does to the theme's size, defined here and nowhere else.
+  // Both keyboards draw from it, the lock screen's through the style file,
+  // because a second copy is how Smallest and Largest came to do nothing.
+  readonly property var sizeNudges: ({ "smallest": 0.78, "smaller": 0.88, "regular": 1,
+                                       "larger": 1.15, "largest": 1.3 })
+  function stepSize(by) {
+    var at = root.sizeSteps.indexOf(root.look.sizeAdjust)
+    root.setSize((at < 0 ? 2 : at) + by)
+  }
+  // Dragging the slider asks for a size faster than a process can write one,
+  // and reassigning a Process that is still running drops the write. So the
+  // latest ask is held and sent when the last one finishes, which coalesces
+  // a drag into a couple of writes and guarantees the value under the finger
+  // when it lifts is the one that lands.
+  property string pendingSize: ""
+  property string lastAskedSize: ""
+  function setSize(index) {
+    var next = root.sizeSteps[Math.max(0, Math.min(root.sizeSteps.length - 1, index))]
+    if (!next) return
+    // Against what was last asked for, not what has settled. The settled
+    // value lags a drag, so dragging away and back again used to look like
+    // no change at all and leave the handle somewhere the keyboard was not.
+    var current = root.lastAskedSize !== "" ? root.lastAskedSize : root.look.sizeAdjust
+    if (next === current) return
+    root.lastAskedSize = next
+    root.pendingSize = next
+    root.flushSize()
+  }
+  function flushSize() {
+    if (sizeStepProc.running || root.pendingSize === "") return
+    var next = root.pendingSize
+    root.pendingSize = ""
+    sizeStepProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                            "size-adjust", "set", next]
+    sizeStepProc.running = true
+  }
+  Process { id: sizeStepProc; onExited: root.flushSize() }
+
+  // Whether the keyboard comes up by itself on a text field. It belongs
+  // beside the other things you change while holding the machine, since the
+  // moment you want it off is the moment it has just appeared over what you
+  // were reading.
+  function toggleAutoShow() {
+    if (autoShowProc.running) return   // a second tap mid-write would be lost
+    autoShowProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                            "auto-show", "toggle"]
+    autoShowProc.running = true
+  }
+  Process { id: autoShowProc }
+
+  // The themes there are to step through, by slug. Read once, since a theme
+  // arriving in the folder mid-session is not worth watching a directory for,
+  // and which one is on is already in settings.
+  property var themeList: []
+  readonly property string currentTheme: root.settings["theme"] || "omarchy"
+  Process {
+    id: themeListProc
+    running: true
+    command: ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""), "theme", "list"]
+    stdout: StdioCollector {
+      onStreamFinished: root.themeList = text.split("\n").filter(function(n) { return n !== "" })
+    }
+  }
+  function stepTheme(by) {
+    // Until the write lands, currentTheme still names the old one, so a
+    // second tap would both compute the same answer and be dropped for
+    // reassigning a running process. Two taps would move one theme, or none.
+    if (root.themeList.length === 0 || themeApplyProc.running) return
+    var at = root.themeList.indexOf(root.currentTheme)
+    var count = root.themeList.length
+    var next = root.themeList[(((at < 0 ? 0 : at) + by) % count + count) % count]
+    themeApplyProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                              "theme", "apply", next]
+    themeApplyProc.running = true
+  }
+  Process { id: themeApplyProc }
+
+  // Switch to one of the layouts Hyprland has configured, by its index.
+  // Hyprland owns the layout, so this asks rather than imposes: nothing is
+  // written to anyone's config, and the switch is the same one a keybinding
+  // would do. It emits activelayout, which is already what tells the helper
+  // to re-read the keymap, so the keys and their labels follow on their own.
+  function switchLayout(index) {
+    if (switchLayoutProc.running) return
+    switchLayoutProc.command = ["hyprctl", "switchxkblayout", "all", String(index)]
+    switchLayoutProc.running = true
+  }
+  Process { id: switchLayoutProc }
+
   KeyboardTheme {
     id: keyboardTheme
-    backgroundOpacity: ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[root.keyboardTransparency]
+    backgroundOpacity: root.backgroundOpacity
     look: root.look
   }
 
@@ -701,15 +830,24 @@ Item {
     }
     return {
       shape: pick("shape", ["omarchy", "rounded", "pill", "angular"], "omarchy"),
-      // How see-through the keys are, over the keyboard's background.
-      keyTransparency: pick("key-transparency", ["opaque", "low", "medium", "high", "full"], "opaque"),
+      // How see-through the keys are over the keyboard's background, and the
+      // background over the desktop. 0 is solid and 100 is gone.
+      keyTransparency: num("key-transparency", 0, 100, 0),
+      transparency: num("transparency", 0, 100, 0),
       // Raised keys stand on a side, like a keycap; flat ones don't.
       relief: pick("relief", ["flat", "raised"], "flat"),
       fill: pick("fill", ["auto", "dark", "light", "outline"], "light"),
-      size: pick("size", ["compact", "normal", "large"], "normal"),
+      // The theme's key size, as a percentage of the usual, and the nudge on
+      // top of it that is the user's alone. A theme cannot write size-adjust,
+      // so how big the keys are for these eyes survives changing theme.
+      size: num("size", 60, 160, 100),
+      sizeAdjust: pick("size-adjust", root.sizeSteps, "regular"),
+      sizeNudge: root.sizeNudges[pick("size-adjust", root.sizeSteps, "regular")] || 1,
       background: pick("background", ["tint", "gradient"], "tint"),
       edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),
+      // How far the keys that produce no character sit from the letters.
+      specialKeys: pick("special-keys", ["off", "darker", "lighter"], "darker"),
       depth: num("depth", 0, 10, 4),
       chamfer: num("chamfer", 0, 20, 8),
       edgeFade: num("edge-fade", 0, 24, 8),
@@ -756,7 +894,8 @@ Item {
   property bool layerRulesReady: false
   function applyLayerRules() {
     layerRulesProc.command = ["hyprctl", "eval",
-      "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
+      "hl.layer_rule({ match = { namespace = '^ragtop-tools$' }, order = 1 }) "
+      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-picker-nav$' }, order = -2 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -3 })"]
     layerRulesProc.running = true
@@ -889,6 +1028,42 @@ Item {
     }
   }
 
+  // Ragtop's controls are a tile of their own. One window, not two: a
+  // full-screen sheet behind it to catch the dismissing tap took the input
+  // for itself, so nothing on the tile could be touched and every tap closed
+  // it. The keyboard puts them away instead, which needs no second surface.
+  //
+  // The tile is anchored to the top of the screen only, with a fixed size.
+  // Nothing it shares an edge with can resize it, which is the whole point:
+  // when this window respected the keyboard's exclusive zone, every step of
+  // the size slider resized the keyboard, resized this, and cancelled the
+  // touch that was dragging it.
+  PanelWindow {
+    id: toolsWindow
+    screen: keyboardWindow.screen
+    visible: root.oskVisible && root.toolsOpen && root.layerRulesReady
+
+    WlrLayershell.namespace: "ragtop-tools"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // Reserves nothing of its own, but sits below Omarchy's bar rather than
+    // under it. Anchored to one edge, so its size is its own.
+    exclusionMode: ExclusionMode.Normal
+    exclusiveZone: 0
+    anchors { top: true }
+    implicitWidth: 520
+    implicitHeight: 258
+    margins.top: 22
+    color: "transparent"
+
+    ToolsPanel {
+      anchors.fill: parent
+      service: root
+      theme: keyboardTheme
+      onDismissed: root.toolsOpen = false
+    }
+  }
+
   // The picker's nav strip, in the keyboard's place while the picker is up.
   // Only with a cloned picker: a stock one takes every touch on the screen,
   // so the strip would be there but untappable.
@@ -983,12 +1158,27 @@ Item {
     function toggleKeyboard(): string { root.toggleOsk(); return "ok" }
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
     function openSetup(): string { root.openSetup(); return "ok" }
+    // The things worth binding a key to, and every one of them takes no
+    // argument, so nothing on this socket can be handed a value to act on.
+    function toggleControls(): string {
+      if (!root.oskVisible) root.setOskVisible(true)
+      root.toolsOpen = !root.toolsOpen
+      return "ok"
+    }
+    function cycleRotation(): string {
+      var order = root.rotationModes
+      root.setRotationMode(order[(order.indexOf(root.rotationMode) + 1) % order.length])
+      return root.rotationMode
+    }
+    function growKeyboard(): string { root.stepSize(1); return "ok" }
+    function shrinkKeyboard(): string { root.stepSize(-1); return "ok" }
+    function rotationState(): string { return root.rotationMode }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {
       return JSON.stringify({ visible: root.oskVisible,
-                              page: keyboard.page, mods: keyboard.mods, modifierMode: root.modifierMode })
+                              page: keyboard.page, mods: keyboard.mods })
     }
     function pickerState(): string {
       return JSON.stringify({ open: root.pickerOpen, patched: root.pickerPatched,

@@ -9,37 +9,30 @@
 #        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
-#        ragtop modifiers (get | is <mode> | set <mode>)
-#        ragtop shape (get | is <shape> | set <shape>)
-#        ragtop relief (get | is <relief> | set <relief>)
-#        ragtop fill (get | is <fill> | set <fill>)
-#        ragtop size (get | is <size> | set <size>)
-#        ragtop background (get | is <background> | set <background>)
-#        ragtop transparency (get | is <level> | set <level>)
-#        ragtop key-transparency (get | is <level> | set <level>)
-#        ragtop edge (get | is <edge> | set <edge>)
-#        ragtop preset (list | apply <preset>)
+#        ragtop size-adjust (get | is <adjust> | set <adjust>)
+#        ragtop rotation (get | is <mode> | set <mode>)
+#        ragtop theme (list | apply <theme>)
 #        ragtop setup                       open setup in the shell
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
 # (follow the hardware switch — folding a hinge or taking the keyboard off),
-# on or off, and the modifiers <mode> is oneshot
-# or sticky.
+# on or off.
 #
-# The keyboard's look: <shape> is omarchy (the theme's own corner rounding),
-# rounded, pill or angular; <relief> is flat or raised (keys standing on a
-# side, like a keycap); <fill> is dark, light (a key sitting darker or
-# lighter than the keyboard), auto (whichever of those your theme has room
-# for) or outline;
-# <size> is compact, normal or large; <background> is tint or gradient;
-# <level> is auto (match Omarchy's bar), opaque, low, medium, high or full
-# for the background, and the same without auto for the keys;
-# <edge> is border (the theme's window border), fade or none.
+# What a key looks like is a Ragtop theme's to say, so shape, relief, fill,
+# background, edge and both transparencies have no verb here and no menu
+# row. Whether the keyboard has a background at all follows Omarchy's bar,
+# which a double tap on it toggles. What is left is <adjust>, one of
+# smallest, smaller, regular, larger or largest, which sizes the keys
+# against whatever the theme asked for and is never written by applying one.
+# Rotation <mode> is locked, unlocked, or auto, which turns the screen while
+# the machine is folded and holds it still while it is a laptop.
 #
-# A preset is a JSON file of those same settings, in ~/.config/ragtop/presets/
-# or Ragtop's presets/. Applying one writes its values into settings.conf, so
-# afterwards every setting shows what's actually in effect; nothing stays
-# hidden in the file.
+# A theme is a TOML file of those same settings, laid out the way Omarchy
+# lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
+# ~/.config/ragtop/themes/<slug>/ragtop.toml for your own, where yours wins.
+# It sets the keyboard's form. Its colours keep coming from the Omarchy theme.
+# Applying one writes its values into settings.conf, so afterwards every
+# setting shows what is actually in effect and nothing stays hidden in a file.
 #
 # Touch typing in an overlay means replacing Omarchy's own with a patched
 # clone (see overlay-clones.sh), so each one is off until the user turns it on.
@@ -158,7 +151,10 @@ choice() {
       local notice
       notice=$(choice_notice "$key" "${4:-}") || usage
       put "$key" "$4"
-      notify "$notice"
+      # A setting with nothing to say says nothing. Key size is dragged on a
+      # slider with the keyboard resizing under it, so the change announces
+      # itself and a notification per step is just noise.
+      if [[ -n $notice ]]; then notify "$notice"; fi
       ;;
     *) usage ;;
   esac
@@ -169,86 +165,67 @@ choice_notice() {
     "tablet-mode auto") echo "Tablet mode now follows the hardware: fold the screen back, or take the keyboard off." ;;
     "tablet-mode on") echo "Tablet mode is on until you change it back." ;;
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
-    "transparency auto") echo "The keyboard's background now matches the bar's transparency." ;;
-    "transparency opaque") echo "The keyboard's background is solid." ;;
-    "transparency low"|"transparency medium"|"transparency high") echo "The keyboard's background is now $2 transparency." ;;
-    "transparency full") echo "The keyboard's background is fully transparent." ;;
-    "key-transparency opaque") echo "The keys are solid." ;;
-    "key-transparency low"|"key-transparency medium"|"key-transparency high") echo "The keys are now $2 transparency." ;;
-    "key-transparency full") echo "The keys are fully transparent." ;;
-    "modifiers oneshot") echo "Ctrl, Alt, Super and Shift now apply to the next key; tap twice to lock." ;;
-    "modifiers sticky") echo "Ctrl, Alt, Super and Shift now stay on until tapped again." ;;
-    "background tint") echo "The keyboard's background is a flat tint." ;;
-    "background gradient") echo "The keyboard's background is a gradient." ;;
-    "edge border") echo "The keyboard's top edge now has the same border as your tiled windows." ;;
-    "edge fade") echo "The keyboard's background now fades out at its top edge." ;;
-    "edge none") echo "The keyboard's top edge is now a hard edge." ;;
-    "shape omarchy") echo "The keys now follow your theme's corner rounding." ;;
-    "shape rounded"|"shape pill"|"shape angular") echo "The keys are now $2." ;;
-    "relief flat") echo "The keys are flat." ;;
-    "relief raised") echo "The keys now stand on a side, like a keycap." ;;
-    "fill auto") echo "The keys now sit whichever way your theme has room for." ;;
-    "fill dark") echo "The keys now sit darker than the keyboard." ;;
-    "fill light") echo "The keys now sit lighter than the keyboard." ;;
-    "fill outline") echo "The keys have no fill, drawn as outlines." ;;
-    "size compact") echo "The keys are now compact." ;;
-    "size normal") echo "The keys are back to their normal size." ;;
-    "size large") echo "The keys are now large." ;;
+    "size-adjust smallest"|"size-adjust smaller"|"size-adjust regular"\
+      |"size-adjust larger"|"size-adjust largest") echo "" ;;
+    "rotation locked") echo "The screen will not rotate." ;;
+    "rotation unlocked") echo "The screen follows the sensor." ;;
+    "rotation auto") echo "The screen rotates while the machine is folded." ;;
     "labels small"|"labels normal"|"labels large") echo "The key labels are now $2." ;;
     *) return 1 ;;
   esac
 }
 
-# Presets: the user's own in ~/.config/ragtop/presets/ win over Ragtop's.
-preset_file() {
+# Themes: the user's own in ~/.config/ragtop/themes/ win over Ragtop's, the
+# same two places Omarchy looks for its own themes.
+theme_file() {
   [[ $1 =~ ^[a-z0-9-]{1,32}$ ]] || return 1
   local f
-  for f in "$HOME/.config/ragtop/presets/$1.json" "$repo/presets/$1.json"; do
+  for f in "$HOME/.config/ragtop/themes/$1/ragtop.toml" "$repo/themes/$1/ragtop.toml"; do
     [[ -f $f ]] && { echo "$f"; return 0; }
   done
   return 1
 }
 
 # Omarchy's own look first, then the rest by name.
-presets() {
-  local f
-  for f in "$HOME/.config/ragtop/presets/"*.json "$repo/presets/"*.json; do
-    [[ -f $f ]] && basename "$f" .json
+themes() {
+  local d
+  for d in "$HOME/.config/ragtop/themes/"*/ "$repo/themes/"*/; do
+    [[ -f "$d/ragtop.toml" ]] && basename "$d"
   done | sort -u | sed '/^omarchy$/d' | sed '1i omarchy'
 }
 
-# apply_preset <name>: write the preset's settings into settings.conf, so
-# what the menu shows is what the keyboard does.
-apply_preset() {
+# apply_theme <name>: write the theme's settings into settings.conf, so what
+# the menu shows is what the keyboard does.
+apply_theme() {
   local file name
-  file=$(preset_file "$1") || { echo "No preset named '$1'. Available: $(presets | tr '\n' ' ')" >&2; exit 2; }
+  file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; exit 2; }
   name=$(python3 - "$file" "$settings" <<'EOF'
-import json, os, re, sys
+import os, re, sys, tomllib
 
 path, settings = sys.argv[1:]
-# Only these keys, only these values: a preset can't smuggle anything else in.
+# Only these keys, only these values: a theme can't smuggle anything else in.
 choices = {
     "shape": ["omarchy", "rounded", "pill", "angular"],
     "relief": ["flat", "raised"],
     "fill": ["auto", "dark", "light", "outline"],
-    "size": ["compact", "normal", "large"],
+
     "background": ["tint", "gradient"],
-    "transparency": ["auto", "opaque", "low", "medium", "high", "full"],
-    "key-transparency": ["opaque", "low", "medium", "high", "full"],
+
     "edge": ["border", "fade", "none"],
     "labels": ["small", "normal", "large"],
+    "special-keys": ["off", "darker", "lighter"],
     "blur": ["on", "off"],
 }
 numbers = {"depth": (0, 10), "chamfer": (0, 20), "edge-fade": (0, 24),
-           "key-fill-alpha": (0, 1), "border-width": (0, 4), "radius": (0, 30)}
+           "key-fill-alpha": (0, 1), "border-width": (0, 4), "radius": (0, 30),
+           # 0 is solid and 100 is gone. Size is a percentage of the usual.
+           "transparency": (0, 100), "key-transparency": (0, 100), "size": (60, 160)}
 colors = ("key-color", "label-color")
 
 try:
-    raw = json.load(open(path))
+    raw = tomllib.load(open(path, "rb"))
 except Exception:
-    sys.exit("preset isn't valid JSON")
-if not isinstance(raw, dict):
-    sys.exit("preset isn't a JSON object")
+    sys.exit("theme isn't valid TOML")
 
 values = {}
 for key, allowed in choices.items():
@@ -267,10 +244,10 @@ for key in colors:
                                or re.fullmatch(r"#[0-9a-fA-F]{6,8}", v)):
         values[key] = v
 
-# A preset is a whole look, not a patch: every setting it doesn't name goes
-# back to its default rather than keeping whatever the last preset left
-# behind. Settings that aren't part of the look — tablet mode, auto-show,
-# the modifiers — are untouched.
+# A theme is a whole look, not a patch: every setting it doesn't name goes
+# back to its default rather than keeping whatever the last theme left
+# behind. Settings that aren't part of the look, tablet mode and auto-show,
+# are untouched.
 look_keys = set(choices) | set(numbers) | set(colors)
 lines = []
 if os.path.exists(settings):
@@ -282,29 +259,23 @@ open(settings + ".tmp", "w").write("\n".join(lines) + "\n")
 os.replace(settings + ".tmp", settings)
 
 label = raw.get("name")
-print(label if isinstance(label, str) and label.strip() else os.path.basename(path)[:-5])
+print(label if isinstance(label, str) and label.strip()
+      else os.path.basename(os.path.dirname(path)))
 EOF
   ) || exit 2
-  put preset "$1"
+  put theme "$1"
   notify "The keyboard now looks like $name."
 }
 
 case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
-  "transparency "*) choice transparency auto "${2:-}" "${3:-}" ;;
-  "key-transparency "*) choice key-transparency opaque "${2:-}" "${3:-}" ;;
-  "modifiers "*) choice modifiers oneshot "${2:-}" "${3:-}" ;;
-  "background "*) choice background tint "${2:-}" "${3:-}" ;;
-  "edge "*) choice edge none "${2:-}" "${3:-}" ;;
-  "shape "*) choice shape omarchy "${2:-}" "${3:-}" ;;
-  "relief "*) choice relief flat "${2:-}" "${3:-}" ;;
-  "fill "*) choice fill light "${2:-}" "${3:-}" ;;
-  "size "*) choice size normal "${2:-}" "${3:-}" ;;
+  "size-adjust "*) choice size-adjust regular "${2:-}" "${3:-}" ;;
+  "rotation "*) choice rotation auto "${2:-}" "${3:-}" ;;
   "labels "*) choice labels normal "${2:-}" "${3:-}" ;;
-  "preset list") presets ;;
-  "preset get") get preset omarchy ;;
-  "preset is") [[ -n ${3:-} ]] || usage; [[ $(get preset omarchy) == "$3" ]] ;;
-  "preset apply") [[ -n ${3:-} ]] || usage; apply_preset "$3" ;;
+  "theme list") themes ;;
+  "theme get") get theme omarchy ;;
+  "theme is") [[ -n ${3:-} ]] || usage; [[ $(get theme omarchy) == "$3" ]] ;;
+  "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;

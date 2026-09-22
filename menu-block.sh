@@ -13,30 +13,31 @@ case "${1:-}" in
 esac
 
 python3 - "$1" "$menu_file" <<'EOF'
-import json, os, sys
+import json, os, sys, tomllib
 action, path = sys.argv[1:]
 start = "  // Ragtop: tablet settings. Added by Ragtop's installer; removed by its uninstaller."
 end = "  // End of Ragtop's tablet settings."
 cmd = "$HOME/.config/omarchy/plugins/sclemance.ragtop/ragtop"
 
-# The presets Ragtop ships, plus the user's own; a user file with the same
-# name wins. Omarchy's own look first, then the rest by name.
-preset_dirs = [os.path.join(os.path.dirname(cmd.replace("$HOME", os.path.expanduser("~"))), "presets"),
-               os.path.expanduser("~/.config/ragtop/presets")]
-preset_labels = {}
-for d in preset_dirs:
+# The themes Ragtop ships, plus the user's own, laid out as Omarchy lays its
+# themes out: <slug>/ragtop.toml, and the user's own wins by slug. Omarchy's
+# own look first, then the rest by name.
+theme_dirs = [os.path.join(os.path.dirname(cmd.replace("$HOME", os.path.expanduser("~"))), "themes"),
+              os.path.expanduser("~/.config/ragtop/themes")]
+theme_labels = {}
+for d in theme_dirs:
     if not os.path.isdir(d):
         continue
-    for f in sorted(os.listdir(d)):
-        if not f.endswith(".json"):
+    for slug in sorted(os.listdir(d)):
+        theme_path = os.path.join(d, slug, "ragtop.toml")
+        if not os.path.isfile(theme_path):
             continue
-        name = f[:-5]
         try:
-            label = json.load(open(os.path.join(d, f))).get("name")
+            label = tomllib.load(open(theme_path, "rb")).get("name")
         except Exception:
             label = None
-        preset_labels[name] = label if isinstance(label, str) and label.strip() else name
-presets = sorted(preset_labels.items(), key=lambda row: (row[0] != "omarchy", row[0]))
+        theme_labels[slug] = label if isinstance(label, str) and label.strip() else slug
+themes = sorted(theme_labels.items(), key=lambda row: (row[0] != "omarchy", row[0]))
 
 overlays = [
     ("menu", "\U000f035c", "Omarchy Menu"),
@@ -60,53 +61,22 @@ rows = {
     "setup.tablet.auto-show": dict(icon="\U000f030c", label="Auto Keyboard",
         checked=f'"{cmd}" auto-show enabled',
         action=f'"{cmd}" auto-show toggle'),
-    "setup.tablet.modifiers": dict(icon="\U000f0634", label="Modifier Keys"),
-    "setup.tablet.modifiers.oneshot": dict(icon="\U000f0634", label="One-Shot",
-        checked=f'"{cmd}" modifiers is oneshot', action=f'"{cmd}" modifiers set oneshot'),
-    "setup.tablet.modifiers.sticky": dict(icon="\U000f0634", label="Sticky",
-        checked=f'"{cmd}" modifiers is sticky', action=f'"{cmd}" modifiers set sticky'),
-    # Appearance. A preset writes the settings below, so what the menu
+    # Appearance. A theme writes the settings below, so what the menu
     # shows is always what the keyboard does.
-    "setup.tablet.preset": dict(icon="\U000f03d8", label="Preset"),
-    **{f"setup.tablet.preset.{name}": dict(icon="\U000f03d8", label=label,
-        checked=f'"{cmd}" preset is {name}', action=f'"{cmd}" preset apply {name}')
-       for name, label in presets},
-    "setup.tablet.shape": dict(icon="\U000f0831", label="Key Shape"),
-    **{f"setup.tablet.shape.{name}": dict(icon="\U000f0831", label=label,
-        checked=f'"{cmd}" shape is {name}', action=f'"{cmd}" shape set {name}')
-       for name, label in (("omarchy", "Omarchy"), ("rounded", "Rounded"), ("pill", "Pill"),
-                           ("angular", "Angular"))},
-    "setup.tablet.relief": dict(icon="\U000f0764", label="Key Relief"),
-    **{f"setup.tablet.relief.{name}": dict(icon="\U000f0764", label=label,
-        checked=f'"{cmd}" relief is {name}', action=f'"{cmd}" relief set {name}')
-       for name, label in (("flat", "Flat"), ("raised", "Raised"))},
-    "setup.tablet.fill": dict(icon="\U000f0764", label="Key Fill"),
-    **{f"setup.tablet.fill.{name}": dict(icon="\U000f0764", label=label,
-        checked=f'"{cmd}" fill is {name}', action=f'"{cmd}" fill set {name}')
-       for name, label in (("auto", "Automatic"), ("dark", "Dark"), ("light", "Light"),
-                           ("outline", "Outline"))},
-    "setup.tablet.size": dict(icon="\U000f004c", label="Key Size"),
-    **{f"setup.tablet.size.{name}": dict(icon="\U000f004c", label=label,
-        checked=f'"{cmd}" size is {name}', action=f'"{cmd}" size set {name}')
-       for name, label in (("compact", "Compact"), ("normal", "Normal"), ("large", "Large"))},
-    "setup.tablet.key-transparency": dict(icon="\U000f1853", label="Key Transparency"),
-    **{f"setup.tablet.key-transparency.{level}": dict(icon="\U000f1853", label=label,
-        checked=f'"{cmd}" key-transparency is {level}', action=f'"{cmd}" key-transparency set {level}')
-       for level, label in (("opaque", "Opaque"), ("low", "Low"), ("medium", "Medium"),
-                            ("high", "High"), ("full", "Full"))},
-    "setup.tablet.background": dict(icon="\U000f06a0", label="Background"),
-    **{f"setup.tablet.background.{name}": dict(icon="\U000f06a0", label=label,
-        checked=f'"{cmd}" background is {name}', action=f'"{cmd}" background set {name}')
-       for name, label in (("tint", "Tint"), ("gradient", "Gradient"))},
-    "setup.tablet.transparency": dict(icon="\U000f1853", label="BG Transparency"),
-    **{f"setup.tablet.transparency.{level}": dict(icon="\U000f1853", label=label,
-        checked=f'"{cmd}" transparency is {level}', action=f'"{cmd}" transparency set {level}')
-       for level, label in (("auto", "Match Bar"), ("opaque", "Opaque"), ("low", "Low"),
-                            ("medium", "Medium"), ("high", "High"), ("full", "Full"))},
-    "setup.tablet.edge": dict(icon="\U000f08a6", label="Edge"),
-    **{f"setup.tablet.edge.{name}": dict(icon="\U000f08a6", label=label,
-        checked=f'"{cmd}" edge is {name}', action=f'"{cmd}" edge set {name}')
-       for name, label in (("border", "Border"), ("fade", "Fade"), ("none", "None"))},
+    "setup.tablet.theme": dict(icon="\U000f03d8", label="Theme"),
+    **{f"setup.tablet.theme.{name}": dict(icon="\U000f03d8", label=label,
+        checked=f'"{cmd}" theme is {name}', action=f'"{cmd}" theme apply {name}')
+       for name, label in themes},
+    # What a key looks like is the theme's to say (themes/<slug>/ragtop.toml).
+    # What is left here is what no theme author can know: how big the keys
+    # need to be on this screen for these eyes, and how much of the window
+    # behind them has to stay readable.
+    "setup.tablet.size-adjust": dict(icon="\U000f004c", label="Key Size"),
+    **{f"setup.tablet.size-adjust.{name}": dict(icon="\U000f004c", label=label,
+        checked=f'"{cmd}" size-adjust is {name}', action=f'"{cmd}" size-adjust set {name}')
+       for name, label in (("smallest", "Smallest"), ("smaller", "Smaller"),
+                           ("regular", "Regular"), ("larger", "Larger"),
+                           ("largest", "Largest"))},
     "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),

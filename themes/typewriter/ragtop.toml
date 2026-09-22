@@ -1,0 +1,13 @@
+name = "Typewriter"
+
+shape = "pill"
+relief = "raised"
+fill = "auto"
+size = 115
+background = "tint"
+transparency = 0
+key-transparency = 0
+edge = "border"
+labels = "large"
+depth = 8
+blur = false

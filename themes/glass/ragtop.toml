@@ -1,0 +1,13 @@
+name = "Glass"
+
+shape = "rounded"
+relief = "flat"
+fill = "auto"
+size = 100
+background = "tint"
+transparency = 50
+key-transparency = 30
+edge = "fade"
+labels = "normal"
+edge-fade = 12
+blur = true

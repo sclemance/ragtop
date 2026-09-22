@@ -1,0 +1,13 @@
+name = "Soft"
+
+shape = "rounded"
+relief = "flat"
+fill = "auto"
+size = 100
+background = "gradient"
+transparency = 30
+key-transparency = 15
+edge = "fade"
+labels = "normal"
+edge-fade = 16
+blur = false

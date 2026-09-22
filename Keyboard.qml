@@ -9,19 +9,23 @@ import QtQuick
 Item {
   id: root
 
-  // Service.qml: sendKeys(command), openSettings(), modifierMode, keyLabels.
+  // Service.qml: sendKeys(command), openSettings(), keyLabels.
   required property var service
   required property var theme
 
   property string page: "letters"
   // Modifiers: "off", "latched" (applies to the next key) or "locked".
-  property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off" })
-  readonly property bool oneShot: root.service.modifierMode !== "sticky"
+  property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off", "altgr": "off" })
   readonly property bool upper: root.mods.shift !== "off"
+  readonly property bool altgrOn: root.mods.altgr !== "off"
 
   // The extra row of desktop keys, then the pages. A key is its character,
   // or one of the named keys below.
-  readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super", "left", "up", "down", "right"]
+  // AltGr is only there on a layout that puts something on its third level.
+  // On a plain US layout there is nothing to reach, so the key would do
+  // nothing and the row is better without it.
+  readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super"]
+    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"])
   readonly property var fallbackRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
     [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
@@ -30,6 +34,13 @@ Item {
   readonly property var layoutRows: root.service.keyLabels && root.service.keyLabels.rows.length === 3
     ? root.service.keyLabels.rows : fallbackRows
   readonly property string layoutName: root.service.keyLabels ? root.service.keyLabels.name : ""
+  // Every layout Hyprland has configured, in its order, and which one is on.
+  // A hold on the space bar offers the others. Ragtop does not keep a layout
+  // of its own, so with one configured there is nothing to offer.
+  readonly property var layoutList: root.service.keyLabels && Array.isArray(root.service.keyLabels.layouts)
+    ? root.service.keyLabels.layouts : []
+  readonly property int activeLayout: root.service.keyLabels && root.service.keyLabels.active >= 0
+    ? root.service.keyLabels.active : 0
   // Each letter's shifted character, e.g. "Ü" for "ü".
   readonly property var shiftOf: {
     var map = {}
@@ -37,6 +48,22 @@ Item {
     return map
   }
   function letters(row) { return row.map(function(k) { return k[0] }) }
+
+  // What AltGr and AltGr with Shift type on each letter key, where the
+  // layout has anything there: @ and Ω on a German q, æ and Æ on a French a.
+  // The helper reports them as the third and fourth character of the key
+  // (see keyboard-helper.py), empty where the level is unused.
+  readonly property var level3Of: {
+    var map = {}
+    layoutRows.forEach(function(row) { row.forEach(function(k) { if (k[2]) map[k[0]] = k[2] }) })
+    return map
+  }
+  readonly property var level4Of: {
+    var map = {}
+    layoutRows.forEach(function(row) { row.forEach(function(k) { if (k[3]) map[k[0]] = k[3] }) })
+    return map
+  }
+  readonly property bool hasLevel3: Object.keys(root.level3Of).length > 0
 
   // The symbol pages, which are the same whatever the layout: every
   // character here types in any of them, because the helper types by
@@ -99,7 +126,7 @@ Item {
   }
 
   readonly property var labels: ({
-    "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super",
+    "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super", "altgr": "AltGr",
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": ""
@@ -188,11 +215,40 @@ Item {
     return [key].concat(list).slice(0, 9).map(function(c) { return root.upper ? c.toUpperCase() : c })
   }
 
-  // Sized so the longest row fits; layouts differ (10 to 12 letter keys).
+  // What a hold on a key offers: the characters behind a letter, or the
+  // layouts behind the space bar. Fewer than two and there is nothing to
+  // show, so the key types on the way down as usual.
+  function holdItems(key) {
+    if (key === "space") return root.layoutList.length > 1 ? root.layoutList : []
+    return root.variantsFor(key)
+  }
+
+
+  // Wide enough for the longest word in a list, measured rather than
+  // guessed: layout names are proportional text and vary a lot in length.
+  TextMetrics {
+    id: wordMetrics
+    font.family: root.theme.fontFamily
+    font.pixelSize: root.theme.wordSize
+  }
+  function wordCell(items) {
+    var widest = 0
+    for (var i = 0; i < items.length; i++) {
+      wordMetrics.text = items[i]
+      widest = Math.max(widest, wordMetrics.width)
+    }
+    return Math.ceil(widest) + 3 * root.theme.gap
+  }
+
+  // Sized so the longest row fits. Layouts differ, 10 to 12 letter keys.
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
   readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, Math.round(84 * theme.keyScale))
-  readonly property real keyHeight: Math.max(Math.round(36 * theme.keyScale),
-    Math.min(Math.round(unit * 0.78), Math.round(60 * theme.keyScale)))
+  // Height follows the size setting, not the width a key happens to get. On
+  // a narrow screen the width is spent long before the ladder runs out, so
+  // pinning height to it made Larger and Largest render identically to
+  // Regular. The cap against `unit` only stops a key becoming a tall ribbon.
+  readonly property real keyHeight: Math.max(30,
+    Math.min(Math.round(60 * theme.keyScale), Math.round(unit * 1.4)))
   readonly property real topRowHeight: Math.round(keyHeight * 0.62)
 
   // Where each key sits: { key, x, y, width, height } for every key of the
@@ -296,23 +352,46 @@ Item {
   function label(key) {
     if (key === "space") return layoutName
     if (key in labels) return labels[key]
-    return upper ? shifted(key) : key
+    return root.charFor(key)
   }
 
   function shifted(key) {
     return shiftOf[key] || key.toUpperCase()
   }
 
+  // The character a key types with the modifiers as they are. A cap shows
+  // this, so what is written on a key is always what tapping it gives you.
+  // A key with nothing on its third level types its own character, the way
+  // it would with AltGr held on a physical keyboard that has nothing there.
+  function charFor(key) {
+    if (root.altgrOn) {
+      var deep = root.upper ? (root.level4Of[key] || root.level3Of[key]) : root.level3Of[key]
+      if (deep) return deep
+    }
+    return root.upper ? root.shifted(key) : key
+  }
+
+  // How a key is coloured, which follows what it does: a key that produces a
+  // character is drawn as a letter, and one that acts on the next key or on
+  // the keyboard itself is drawn apart from them.
   function kind(key) {
+    if (key === "settings" && root.service.toolsOpen) return "locked"
     if (key in mods) return mods[key] === "locked" ? "locked" : mods[key] === "latched" ? "latched" : "special"
     if (key === "enter") return "accent"
+    // The space bar goes with them rather than with the letters, though it
+    // does type a character: it is part of the frame around the letters, it
+    // carries the layout's name instead of a legend, and no one hunts for it.
     return key in labels ? "special" : "normal"
   }
 
-  // Modifiers applied to the next key, as the helper names them.
+  // Modifiers applied to the next key, as the helper names them. AltGr is
+  // not one of them: it chooses which character a key types (charFor), and
+  // that character is then typed as itself, so a layout's third level works
+  // the same whether or not the character has a key of its own.
   function activeMods(includeShift) {
     var names = []
-    for (var m in mods) if (mods[m] !== "off" && (includeShift || m !== "shift")) names.push(m)
+    for (var m in mods)
+      if (m !== "altgr" && mods[m] !== "off" && (includeShift || m !== "shift")) names.push(m)
     return names
   }
 
@@ -329,22 +408,23 @@ Item {
     mods = next
   }
 
+  // Off, then latched for the next key, then locked, then off again. The
+  // second tap locks however long it comes after the first, because a latch
+  // only lives until the next key is sent (afterKey), and a tap on another
+  // modifier is not a key. So "tapped again while still latched" says all a
+  // timer used to say, without asking anyone to be quick about it: Super,
+  // Shift, Super locks Super, and the B that follows launches the browser,
+  // drops the latched Shift and leaves Super on.
   function tapModifier(name) {
     var state = mods[name]
-    if (!oneShot) {
-      setMod(name, state === "off" ? "locked" : "off")
-    } else if (state === "off") {
+    if (state === "off") {
       setMod(name, "latched")
-      doubleTap.name = name
-      doubleTap.restart()
-    } else if (state === "latched" && doubleTap.running && doubleTap.name === name) {
-      setMod(name, "locked")  // a quick second tap locks it on
+    } else if (state === "latched") {
+      setMod(name, "locked")
     } else {
       setMod(name, "off")
     }
   }
-
-  Timer { id: doubleTap; interval: 400; property string name: "" }
 
   function press(key) {
     if (key in mods) { tapModifier(key); return }
@@ -353,7 +433,10 @@ Item {
       page = key
       return
     case "settings":
-      service.openSettings()
+      // Ragtop's controls come up over the keyboard rather than in place of
+      // it, so the keys stay under them while you change how they look. The
+      // gear stays where it is and reads as held down while they are open.
+      root.service.toolsOpen = !root.service.toolsOpen
       return
     }
     if (holdable.indexOf(key) !== -1) {
@@ -369,7 +452,7 @@ Item {
       if (combo.length > 0)
         service.sendKeys(["key", key].concat(activeMods(true)).join(" "))
       else
-        service.sendKeys("type " + (upper ? shifted(key) : key))
+        service.sendKeys("type " + root.charFor(key))
     }
     afterKey()
   }
@@ -422,17 +505,24 @@ Item {
   // to stay on the keyboard. Where it can't fit at all it's centred.
   function openPopup() {
     var key = root.pendingKey
-    var items = root.variantsFor(key)
+    var items = root.holdItems(key)
     if (items.length < 2 || root.pendingPoint === -1) return
+    var layouts = key === "space"
     var slot = null
     for (var i = 0; i < root.slots.length; i++) if (root.slots[i].key === key) { slot = root.slots[i]; break }
     if (!slot) return
-    var cell = Math.max(slot.width + root.theme.gap, root.unit * 0.92)
-    var total = items.length * cell
     var room = root.width - 2 * root.theme.padding
+    var cell = layouts ? Math.min(root.wordCell(items), room / items.length)
+      : Math.max(slot.width + root.theme.gap, root.unit * 0.92)
+    var total = items.length * cell
+    // Characters start their first cell over the key being held, so the
+    // finger is already on the one it holds. Layout names are a list rather
+    // than a row of keys, so they sit centred on the space bar.
+    var from = layouts ? slot.x + (slot.width - total) / 2 : slot.x
     var x = total > room ? (root.width - total) / 2
-      : Math.min(Math.max(slot.x, root.theme.padding), root.width - root.theme.padding - total)
-    root.popup = { key: key, items: items, pointId: root.pendingPoint, index: 0,
+      : Math.min(Math.max(from, root.theme.padding), root.width - root.theme.padding - total)
+    root.popup = { key: key, kind: layouts ? "layouts" : "chars",
+                   items: items, pointId: root.pendingPoint, index: 0,
                    x: x, y: Math.max(root.popupTop, slot.y - slot.height - root.theme.gap),
                    cellWidth: cell, cellHeight: slot.height }
     root.selectAt(root.pendingX, root.pendingY)
@@ -444,7 +534,16 @@ Item {
     var p = root.popup
     if (!p) return
     var index = -1
-    if (y < p.y + p.cellHeight + root.keyHeight) {
+    // Characters reach a cell from the key below, since the popup's first
+    // cell sits over the key being held and the finger is already on it.
+    // Layouts are centred on the space bar instead and none of them is the
+    // one you are on, so nothing is chosen until the finger is actually on
+    // the card. Otherwise holding space and lifting would change the
+    // system's layout without the finger ever moving.
+    var within = p.kind === "layouts"
+      ? (y >= p.y && y <= p.y + p.cellHeight)
+      : y < p.y + p.cellHeight + root.keyHeight
+    if (within) {
       index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
     }
     if (index === p.index) return
@@ -458,6 +557,10 @@ Item {
     root.popup = null
     root.endHold()
     if (!p || p.index < 0) return
+    if (p.kind === "layouts") {
+      if (p.index !== root.activeLayout) root.service.switchLayout(p.index)
+      return
+    }
     root.service.sendKeys("type " + p.items[p.index])
     root.afterKey()
   }
@@ -487,6 +590,7 @@ Item {
       width: modelData.width
       height: modelData.height
       label: root.label(modelData.key)
+      hint: root.altgrOn ? "" : (root.level3Of[modelData.key] || "")
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconKeys.indexOf(modelData.key) !== -1 ? modelData.key : ""
@@ -529,8 +633,13 @@ Item {
         width: (root.popup ? root.popup.cellWidth : 0) - root.theme.gap
         height: parent.height
         label: modelData
-        labelKind: "char"
-        kind: root.popup && index === root.popup.index ? "accent" : "normal"
+        labelKind: root.popup && root.popup.kind === "layouts" ? "word" : "char"
+        // The cell under the finger is filled, not merely edged: it is
+        // usually half covered by that finger. "accent" no longer fills,
+        // since Enter took it and became an edge, so this takes "locked".
+        kind: root.popup && index === root.popup.index ? "locked"
+          : root.popup && root.popup.kind === "layouts" && index === root.activeLayout ? "special"
+          : "normal"
         opaque: true
       }
     }
@@ -543,18 +652,33 @@ Item {
   MultiPointTouchArea {
     anchors.fill: parent
     onPressed: function(points) {
+      // While the controls are up, a touch on the keyboard puts them away
+      // rather than typing. That is the tap-outside-to-dismiss, done from the
+      // surface the finger is already on instead of a sheet over everything,
+      // which would take the tile's own touches with it. Decided once for the
+      // whole event: inside the loop, the first finger closed them and the
+      // second read them as already closed and typed a letter.
+      if (root.service.toolsOpen) {
+        root.service.toolsOpen = false
+        return
+      }
       var next = Object.assign({}, root.held)
       var pressed = []
       points.forEach(function(p) {
-        // While a popup is open the other fingers wait their turn.
-        if (root.popup !== null || root.pendingPoint !== -1) return
+        // While a popup is open the other fingers wait their turn. A pending
+        // space hold is not one to wait for, since space has already typed.
+        if (root.popup !== null
+            || (root.pendingPoint !== -1 && root.pendingKey !== "space")) return
         var key = root.keyAt(p.x, p.y)
         if (key === null) return
         next[p.pointId] = key
         // A key with variants types on release instead, so a hold can turn
-        // into a popup rather than a letter that's already been typed.
-        if (root.variantsFor(key).length > 1) root.startHold(p, key)
-        else pressed.push(key)
+        // into a popup rather than a letter that's already been typed. The
+        // space bar is not one of those. It types on the way down as it
+        // always has, and its hold runs alongside, because a thumb resting
+        // on space must not swallow the letter rolling in after it.
+        if (root.holdItems(key).length > 1) root.startHold(p, key)
+        if (key === "space" || root.holdItems(key).length <= 1) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
@@ -585,7 +709,7 @@ Item {
       } else if (p.pointId === root.pendingPoint) {
         var key = root.pendingKey
         root.endHold()
-        root.press(key)  // a tap after all
+        if (key !== "space") root.press(key)  // a tap after all, and space already did
       } else if (p.pointId in next) {
         lifted.push(next[p.pointId])
       }

@@ -11,7 +11,8 @@ import QtQuick.Shapes
 Item {
   id: icon
 
-  // "settings", "shift", "backspace", "enter", "left", "up", "down", "right".
+  // "settings", "shift", "backspace", "enter", "rotate", "check", "left",
+  // "up", "down", "right".
   property string name: ""
   property color color: "white"
 
@@ -73,6 +74,38 @@ Item {
       + move(tip + arm, 0.44) + line(tip, 0.62) + line(tip + arm, 0.8)
   }
 
+  // Two arcs chasing each other round a circle, each ending in a head: the
+  // rotation glyph. Drawn with SVG arcs rather than the straight-line
+  // helpers, so the points are worked out here in the same 0..1 box.
+  function rotatePath() {
+    var r = 0.3
+    function pt(deg) {
+      var a = deg * Math.PI / 180
+      return [0.5 + r * Math.cos(a), 0.5 - r * Math.sin(a)]
+    }
+    function arcTo(deg) {
+      var p = pt(deg)
+      return "A " + (r * unit).toFixed(2) + " " + (r * unit).toFixed(2) + " 0 0 1 " + at(p[0], p[1])
+    }
+    function head(deg, away) {
+      // A short two-line head at the arc's end, turned to follow it.
+      var p = pt(deg), a = deg * Math.PI / 180, w = 0.11
+      var tx = Math.sin(a) * (away ? 1 : -1), ty = Math.cos(a) * (away ? 1 : -1)
+      var nx = Math.cos(a), ny = -Math.sin(a)
+      return move(p[0] + (tx + nx) * w, p[1] + (ty + ny) * w)
+        + line(p[0], p[1])
+        + line(p[0] + (tx - nx) * w, p[1] + (ty - ny) * w)
+    }
+    var top = pt(160), bottom = pt(340)
+    return move(top[0], top[1]) + arcTo(20) + head(20, false)
+      + move(bottom[0], bottom[1]) + arcTo(200) + head(200, false)
+  }
+
+  // A tick.
+  function checkPath() {
+    return move(0.2, 0.52) + line(0.42, 0.74) + line(0.8, 0.28)
+  }
+
   // A plain arrow pointing left; `arrowTurn` turns it the other ways.
   function arrowPath() {
     return move(0.88, 0.5) + line(0.16, 0.5) + " " + move(0.42, 0.26) + line(0.16, 0.5) + line(0.42, 0.74)
@@ -81,6 +114,8 @@ Item {
   readonly property string strokedPath: name === "shift" ? shiftPath()
     : name === "backspace" ? backspacePath()
     : name === "enter" ? enterPath()
+    : name === "rotate" ? rotatePath()
+    : name === "check" ? checkPath()
     : isArrow ? arrowPath()
     : ""
 

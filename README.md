@@ -15,11 +15,11 @@ returns to normal.
 
 The keyboard takes its colours from your Omarchy theme and its letters from
 your Hyprland layout, so it matches whatever you already run. The look is
-yours to change (see [Presets](#presets)).
+yours to change (see [Themes](#themes)).
 
 | | | |
 | --- | --- | --- |
-| ![Glass preset on Tokyo Night, German layout](screenshots/glass-tokyo-night.jpg) | ![Typewriter preset on Catppuccin Latte, French layout](screenshots/typewriter-catppuccin-latte.jpg) | ![The lock screen's keyboard on Rose Pine](screenshots/lock-screen-rose-pine.jpg) |
+| ![Glass theme on Tokyo Night, German layout](screenshots/glass-tokyo-night.jpg) | ![Typewriter theme on Catppuccin Latte, French layout](screenshots/typewriter-catppuccin-latte.jpg) | ![The lock screen's keyboard on Rose Pine](screenshots/lock-screen-rose-pine.jpg) |
 | **Glass** on Tokyo Night — see-through keys over a blurred desktop, QWERTZ | **Typewriter** on Catppuccin Latte — raised keycaps, AZERTY with its short bottom row filled out | **The lock screen's own keyboard**, in the lock screen's palette |
 
 Held upright, the same keyboard fills the width it is given:
@@ -75,7 +75,8 @@ space until tablet mode turns on.
   remembered, and released automatically on the way back to laptop mode.
 - **An on-screen keyboard that fits Omarchy.** Drawn by the Omarchy shell in
   your theme's colours and font, and restyled the moment you switch themes. Its
-  background can be see-through, matching the bar's transparency by default.
+  background is see-through as its theme asks, and goes entirely when you make
+  Omarchy's bar transparent.
 - **The keys a desktop needs.** A slim extra row has Esc, Tab, Ctrl, Alt, Super
   and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C. Your
   Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
@@ -279,11 +280,18 @@ colours and font, and the Transparency setting, without restarting. It has:
 
 - **An extra row** of Esc, Tab, Ctrl, Alt, Super and the arrow keys. Held
   arrows and Backspace repeat.
-- **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C; the Ctrl turns off by
-  itself. Tap a modifier twice to lock it on. Or pick Sticky under
-  Setup › Tablet › Modifier Keys to have them stay on until tapped again.
+- **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C, and the Ctrl turns
+  off by itself. Tap a modifier a second time to lock it on until you tap it
+  again, however long you take over it.
 - **Your layout's letters:** the letter keys follow the active Hyprland
-  layout, and the space bar shows its name.
+  layout, and the space bar shows its name. **Hold the space bar** to switch
+  to another of the layouts you have configured in Hyprland, if you have
+  more than one. It is Hyprland's own switch, so everything follows it.
+- **AltGr, where your layout has one.** A German q carries `@`, a French a
+  carries `æ`, and every cap prints its AltGr character small in the corner
+  the way a real keycap does. Tap AltGr and the caps switch to it, the way
+  Shift switches them to capitals. The key only appears on a layout that has
+  a third level, so a plain US keyboard is not given one that does nothing.
 - **Hold a letter for its accents:** e gives é è ê ë, c gives ç, s gives ß.
   Slide onto the one you want and let go; let go where you started for the
   plain letter, or slide off the popup to take nothing. The letters your own
@@ -297,7 +305,8 @@ colours and font, and the Transparency setting, without restarting. It has:
   US layout adds nothing, so its pages look exactly as they always did.
 - **Any character** your layout can't type still arrives, and every key types
   what it shows whatever your Hyprland layout is.
-- A settings key that opens Setup › Tablet directly.
+- **A gear key** that opens Ragtop's own controls over the keyboard, so the
+  keys stay in view while you change them. See below.
 
 `keyboard-helper.py` sends the keys: it registers a Wayland virtual keyboard
 with the same keymap as your physical keyboard, which is also why your SUPER
@@ -306,6 +315,57 @@ shortcuts work from it. For keybindings or scripts:
 ```bash
 omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 ```
+
+### The controls
+
+The gear on the keyboard opens a small panel that sits below Omarchy's bar
+and holds what you reach for while actually holding the machine. The keyboard
+stays drawn underneath, so changing the theme or the key size shows you the
+result as you do it. Tap the gear again, or anywhere on the keyboard, to put
+it away.
+
+| Control | What it does |
+| --- | --- |
+| Theme | Steps through your themes, redrawing the keyboard behind each one |
+| Screen Rotation | Locked, Unlocked, or Automatic, which turns while the machine is folded and holds still while it is a laptop |
+| Keyboard Size | The five-step nudge against whatever size the theme asks for |
+| Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
+| Settings | Opens Setup › Tablet for everything else |
+
+Tablet Mode is deliberately not here. Turning it off takes the keyboard away
+with it, and the way back would be the menu this panel exists to save you
+from. It stays in Setup › Tablet, where you can reach it without a keyboard.
+
+**Screen rotation** is also in the bar, always visible, and the button there
+cycles the same three states. Rotation follows the sensor whether or not the
+machine is folded, so the screen can start turning with the keyboard
+attached, which is why Unlocked and Automatic are different things.
+
+### Keybindings
+
+Ragtop writes no keybindings of its own. If you want them, these are the ones
+worth having, in `~/.config/hypr/bindings.lua`:
+
+```lua
+-- The keyboard, whatever the tablet switch thinks
+bind("SUPER SHIFT", "K", "exec", "omarchy-shell ragtop toggleKeyboard")
+-- The panel the gear opens
+bind("SUPER SHIFT", "T", "exec", "omarchy-shell ragtop toggleControls")
+-- Locked, unlocked, automatic, round again
+bind("SUPER SHIFT", "R", "exec", "omarchy-shell ragtop cycleRotation")
+-- Bigger and smaller keys
+bind("SUPER SHIFT", "equal", "exec", "omarchy-shell ragtop growKeyboard")
+bind("SUPER SHIFT", "minus", "exec", "omarchy-shell ragtop shrinkKeyboard")
+```
+
+Check them against Omarchy's own bindings before you add them, since nothing
+here reserves a chord.
+
+Everything on that socket takes no argument, deliberately: `showKeyboard`,
+`hideKeyboard`, `toggleKeyboard`, `keyboardVisible`, `openSetup`,
+`closeSetup`, `toggleControls`, `cycleRotation`, `growKeyboard`,
+`shrinkKeyboard`, `rotationState`, `keyboardState` and `pickerState`. None of
+them can be handed a value to type, which is the point.
 
 ### The keyboard's look
 
@@ -316,15 +376,29 @@ row in the Omarchy menu under **Setup › Tablet**:
 
 | Row | Choices |
 | --- | --- |
-| Preset | A saved look; picking one writes the rows below |
-| Key Shape | Omarchy (the theme's own corner rounding), Rounded, Pill, Angular |
-| Key Relief | Flat, or Raised: the key stands on a side, like a keycap |
-| Key Fill | Dark or Light (an opaque key sitting darker or lighter than the keyboard), Automatic (whichever of those your theme has room for — a dark theme has little below its background, a light one little above it, so a fixed choice reads strongly on some themes and barely at all on others), or Outline (no fill, carried by its edge) |
-| Key Size | Compact, Normal, Large — the labels scale with the keys |
-| Key Transparency | Opaque, Low, Medium, High, Full. What shows through is the keyboard's background, so the desktop only shows if that's see-through too |
-| Background | Tint or Gradient |
-| BG Transparency | The keyboard's background: Match Bar, Opaque, Low, Medium, High, Full |
-| Edge | Border, Fade or None, for the keyboard's top edge |
+| Tablet Mode | Automatic (follow the hardware switch), On, or Off |
+| Auto Keyboard | Whether the keyboard comes up by itself on a text field |
+| Theme | The keyboard's whole look, from a theme file |
+| Key Size | Smallest, Smaller, Regular, Larger, Largest — against whatever size the theme asks for, and the labels scale with the keys |
+| System Overlays | Touch typing in each of Omarchy's overlays, one at a time |
+| Run Setup | Opens setup in the shell |
+
+Theme, Key Size and the keyboard's own auto-expand are also on the panel the
+gear opens, which is the quicker way to them while you are holding the
+machine.
+
+What a key looks like — its shape, relief, fill, how see-through it is, the
+background behind it and the top edge — belongs to the theme, so it is set in
+a theme file and not row by row. What stays here is the one thing no theme
+author can know: how big the keys have to be on your screen for your eyes.
+Key Size is a nudge against whatever the theme asked for, and it is yours, so
+applying a theme never resets it.
+
+**Whether the keyboard has a background at all is Omarchy's call, not a
+setting here.** Double-tap the bar to make it transparent and the keyboard's
+background goes with it, so the keys float over the desktop the way the bar
+does. Make the bar solid again and the background comes back as the theme
+asked for it.
 
 Whatever a key looks like, a touch goes to the nearest key, so no shape
 makes keys harder to hit.
@@ -335,33 +409,37 @@ the same border your tiled windows have, taken from the Omarchy theme itself
 live, gradients included. Fade fades the background out over `edge-fade`
 pixels. None leaves a hard edge.
 
-### Presets
+### Themes
 
-A preset is a small JSON file of those same settings, never code. Applying
-one **writes its values into your settings**, so afterwards every menu row
-shows what the keyboard is actually doing — a preset is a starting point,
-not a layer that overrides you.
+A Ragtop theme is a small TOML file of those same settings, never code. It
+sets the keyboard's **form**. Its colours keep coming from your Omarchy
+theme, which is why any Ragtop theme looks right on any Omarchy one.
 
-Ragtop's are in `presets/` (Omarchy, Soft, Typewriter, Glass); put your own
-in `~/.config/ragtop/presets/<name>.json` and apply it from the menu or with
-`./ragtop preset apply <name>`:
+Applying one **writes its values into your settings**, so afterwards every
+menu row shows what the keyboard is actually doing. A theme is a starting
+point, not a layer that overrides you.
 
-```json
-{
-  "name": "Chunky",
-  "shape": "rounded",
-  "relief": "raised",
-  "fill": "light",
-  "size": "large",
-  "background": "tint",
-  "transparency": "opaque",
-  "edge": "border",
-  "labels": "large",
-  "depth": 6
-}
+They are laid out the way Omarchy lays out its own themes, in the same two
+places, and yours wins where the names match. Ragtop's are in
+`themes/<name>/ragtop.toml` (Omarchy, Soft, Typewriter, Glass, Industrial).
+Put your own in `~/.config/ragtop/themes/<name>/ragtop.toml` and apply it
+from the menu or with `./ragtop theme apply <name>`:
+
+```toml
+name = "Chunky"
+
+shape = "rounded"
+relief = "raised"
+fill = "light"
+size = 115
+background = "tint"
+transparency = 0
+edge = "border"
+labels = "large"
+depth = 6
 ```
 
-Besides the menu rows, a preset can set the details that don't deserve one:
+Besides the menu rows, a theme can set the details that don't deserve one:
 
 | Field | Values | Default |
 | --- | --- | --- |
@@ -369,10 +447,14 @@ Besides the menu rows, a preset can set the details that don't deserve one:
 | `depth` | Raised keys: how far the key's side shows, 0–10 | 4 |
 | `chamfer` | Angular: how much of each corner is cut, 0–20 | 8 |
 | `edge-fade` | pixels the background fades over with Edge set to Fade, 0–24 | 8 |
+| `size` | key size as a percentage of the usual, 60–160 | 100 |
+| `transparency` | the background over the desktop, 0 solid to 100 gone | 0 |
+| `key-transparency` | the keys over that background, 0 solid to 100 gone | 0 |
+| `special-keys` | how the keys that type nothing sit against the letters: `darker`, `lighter`, `off` | `darker` |
 | `blur` | blur what's behind the keyboard (see below) | `false` |
 
-To leave the theme behind for one part of the look, a preset can also set
-these outright. Only what you set stops following the theme:
+To leave the Omarchy theme behind for one part of the look, a Ragtop theme
+can also set these outright. Only what you set stops following it:
 
 | Field | Values |
 | --- | --- |
@@ -385,8 +467,8 @@ Anything missing, unknown or out of range is ignored, so a stray file can't
 break the keyboard. All of this lands in `~/.config/ragtop/settings.conf`,
 which you can also edit directly.
 
-**Blur** is Hyprland's, and Omarchy ships with it turned off. A preset with
-`"blur": true` turns it on at runtime, for Ragtop's keyboard and its handle
+**Blur** is Hyprland's, and Omarchy ships with it turned off. A theme with
+`blur = true` turns it on at runtime, for Ragtop's keyboard and its handle
 only: Hyprland is told to leave every window unblurred, so your see-through
 terminals stay as they are. Turning blur off again restores it, and nothing
 is written to your Hyprland config, so `hyprctl reload` clears it either
@@ -503,7 +585,7 @@ Shift (tap twice for Caps), and two pages of digits and symbols, which pick
 up your layout's own symbols the same way the desktop keyboard's do. Holding
 a letter offers its accents there too — a password is typed in characters,
 and on some layouts é or ß is only reachable that way. Its popup sits on a card of
-its own, opaque whatever your Key Transparency setting is, so the letter you
+its own, opaque whatever the theme's key transparency is, so the letter you
 are picking stays legible against the keys it covers. The keys edit
 the password the same way typing does, and Omarchy checks it as usual. The
 keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
@@ -538,34 +620,27 @@ the gear key on the on-screen keyboard opens directly:
 | Setting | Default | Where |
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hardware — folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
-| Keyboard modifiers: One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
-| A saved look, which writes the rows below (see [Presets](#presets)) | Omarchy | Setup › Tablet › Preset |
-| Key shape: Omarchy, Rounded, Pill or Angular | Omarchy | Setup › Tablet › Key Shape |
-| Key relief: Flat or Raised | Flat | Setup › Tablet › Key Relief |
-| Keys: Automatic (whichever way your theme has room for), Dark, Light or Outline | Light | Setup › Tablet › Key Fill |
-| Key size: Compact, Normal or Large | Normal | Setup › Tablet › Key Size |
-| Keyboard background: Tint or Gradient | Tint | Setup › Tablet › Background |
-| Keyboard top edge: Border (your Hyprland window border), Fade or None | None | Setup › Tablet › Edge |
-| Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › BG Transparency |
-| Key transparency: Opaque, Low, Medium, High or Full | Opaque | Setup › Tablet › Key Transparency |
+| A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
+| Key size against the theme's, in five steps from Smallest to Largest | Regular | Setup › Tablet › Key Size |
+| Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
+| Whether the keyboard has a background | follows the bar | double-tap Omarchy's bar |
 | Touch typing in each overlay, the picker nav strip, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
 
-Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
-keyboard background, a transparent bar a fully clear one. The keys themselves
-always stay solid. The handle along the bottom follows the bar the same way
-while the keyboard is closed, and the keyboard while it's open.
+The bar follows Style › Bar › Transparency, which a double tap on it
+toggles: a transparent bar takes the keyboard's background away entirely, and
+a solid one gives back whatever the theme asked for. The handle along the
+bottom follows the bar the same way while the keyboard is closed, and the
+keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`modifiers set oneshot|sticky`, `background set tint|gradient`, `edge set border|fade|none`,
-`shape set omarchy|rounded|pill|angular`, `relief set flat|raised`,
-`fill set dark|light|outline`, `key-transparency set opaque|low|medium|high|full`,
-`size set compact|normal|large`, `preset apply <name>` (`preset list` shows
-them) and
-`transparency set auto|opaque|low|medium|high|full`. Settings other than the
-overlays are kept in
-`~/.config/ragtop/settings.conf`, and changes apply straight away.
+`size-adjust set smallest|smaller|regular|larger|largest`,
+`rotation set locked|unlocked|auto`, and
+`theme apply <name>` (`theme list` shows them). Settings other than the
+overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
+straight away. The rest of the look has no verb, because it is the theme's
+to set.
 
 A couple more live in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
 

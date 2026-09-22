@@ -27,7 +27,15 @@ QtObject {
   // Both filled kinds are fully opaque, so Key Transparency is the only
   // thing that makes a key see-through.
   readonly property string keyFill: look.fill
-  readonly property string density: look.size
+  // How big the keys are: the theme's percentage, times the user's nudge,
+  // held inside what a keyboard can actually be. Spacing follows the result
+  // rather than a name, so a theme asking for 130 is roomy without having to
+  // say so.
+  // What the user's step does to the theme's size. The service works it out,
+  // so there is one table rather than one per keyboard.
+  readonly property real sizeNudge: look.sizeNudge || 1
+  readonly property string density: keyScale < 0.95 ? "compact"
+    : keyScale > 1.08 ? "roomy" : "normal"
   readonly property string labels: look.labels
 
   // A look's off-theme colour: a palette role or a hex colour, "" to follow
@@ -78,11 +86,10 @@ QtObject {
   // then the keyboard keeps those taps to itself.
   readonly property bool backgroundVisible: Math.max(background.a, backgroundTop.a) > 0.01
 
-  // How see-through the keys are (Setup › Tablet › Key Transparency). What
-  // shows through is the keyboard's own background; the desktop only shows
-  // if that is see-through too.
-  readonly property real keyOpacity:
-    ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[look.keyTransparency]
+  // How see-through the keys are, as the theme asked. What shows through is
+  // the keyboard's own background, so the desktop only shows if that is
+  // see-through too, or gone because the bar is.
+  readonly property real keyOpacity: 1 - look.keyTransparency / 100
   function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
 
   // A key sits darker or lighter than its panel. The palette has roles
@@ -108,7 +115,7 @@ QtObject {
   // "auto" takes whichever direction the theme has room for. A dark theme
   // has little below its background and a light one little above it, so a
   // fixed choice is strong on half the themes and nearly invisible on the
-  // rest — which is no way to ship a preset.
+  // rest — which is no way to ship a theme.
   readonly property color autoKey: Math.abs(luminance(lightKey) - luminance(solidBase))
     >= Math.abs(luminance(darkKey) - luminance(solidBase)) ? lightKey : darkKey
 
@@ -122,10 +129,50 @@ QtObject {
                                 : keyFill === "light" ? lightKey : autoKey), themeKey)
   property color key: seeThrough(keyBase)
   property color pressedKey: Style.pressedFillFor(text, Color.accent, Color.urgent)
-  property color latchedKey: seeThrough(Qt.tint(keyBase, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.45)))
+  property color latchedKey: seeThrough(Qt.tint(specialBase, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.45)))
   property color lockedKey: seeThrough(Color.accent)
+  // A key that produces no character sits a step further from the panel than
+  // the letters do, so the letters read as one block and the rest read as
+  // the keys that act on them. Stepped the same way the keys themselves step
+  // off the panel: tint toward the theme's own roles rather than multiply a
+  // value, since multiplying leaves pure black and pure white where they
+  // were, and keep whichever direction measurably moves further. The base's
+  // own alpha is put back, so these keys are no more solid than the letters
+  // at any Key Transparency.
+  // Darker than the letters, whatever the palette. Qt.darker only drops the
+  // value, so the hue and saturation are the theme's own and nothing has to
+  // be mixed in. Tinting toward the darker role was tried and is wrong here:
+  // on a dark theme the darker role IS nearly the panel the keys sit on, and
+  // a key that starts 19/255 above it barely moves.
+  //
+  // The one thing darker must not do is sink a key into the panel, which is
+  // exactly the case on a dark theme where the letters are lifted only a
+  // little above it. So where the keys sit above the panel, the step stops
+  // halfway down to it. Where they sit below it, as on a light theme, darker
+  // moves away from the panel and needs no floor. The base's alpha is put
+  // back, so these keys are no more solid than the letters at any Key
+  // Transparency.
+  // Which way, and whether at all, is the Ragtop theme's to say (special-keys).
+  // Off leaves them the letters' own shade, where the quieter label is the
+  // only thing setting them apart, which is how the keyboard looked before.
+  readonly property string specialStep: look.specialKeys
+  readonly property color specialBase: {
+    if (keyBase.a === 0 || specialStep === "off") return keyBase
+    var up = specialStep === "lighter"
+    var target = up ? Qt.lighter(keyBase, 1.45) : Qt.darker(keyBase, 1.45)
+    // A step must not take a key into the panel it sits on. Going down, that
+    // is a risk where the keys are already above the panel, as a dark theme
+    // has them. Going up, where they are below it. Either way the step stops
+    // halfway rather than crossing.
+    if (up === (luminance(keyBase) < luminance(solidBase))) {
+      var halfway = Qt.tint(keyBase, Util.alpha(solidBase, 0.5))
+      if (up ? luminance(target) > luminance(halfway) : luminance(target) < luminance(halfway))
+        target = halfway
+    }
+    return Qt.rgba(target.r, target.g, target.b, keyBase.a)
+  }
   // Keys that aren't characters (Esc, Shift, ?123…) carry a quieter label.
-  property color specialKey: key
+  property color specialKey: seeThrough(specialBase)
   property color specialText: Util.alpha(text, 0.66)
 
   // A raised key's side is part of the key, not a wash over the background:
@@ -168,7 +215,7 @@ QtObject {
   property color outline: Util.alpha(text, 0.45)
 
   // "omarchy" (the theme's own corner rounding, as windows have),
-  // "rounded", "pill" or "angular"; a preset can pin a radius instead.
+  // "rounded", "pill" or "angular"; a Ragtop theme can pin a radius instead.
   property string keyShape: look.shape
   // Raised keys stand on a side, as a keycap does, whatever their shape.
   readonly property bool raised: look.relief === "raised"
@@ -186,7 +233,7 @@ QtObject {
   // Density steps through Omarchy's spacing tokens and scales the keys.
   property int gap: density === "compact" ? Style.spacing.sm : density === "roomy" ? Style.spacing.lg : Style.spacing.md
   property int padding: density === "compact" ? Style.spacing.md : density === "roomy" ? Style.spacing.xl : Style.spacing.lg
-  property real keyScale: density === "compact" ? 0.88 : density === "roomy" ? 1.15 : 1
+  property real keyScale: Math.max(0.6, Math.min(1.6, look.size / 100 * sizeNudge))
 
   property string fontFamily: Style.font.family
   // Labels step on Omarchy's type scale — a character reads large, a word

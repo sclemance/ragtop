@@ -21,6 +21,9 @@ Item {
   // The drawn icon's name, for labelKind "drawn" (see KeyIcon.qml).
   property string icon: ""
   property bool pressed: false
+  // A second character printed small in a corner, the way a keycap prints
+  // what AltGr types on it. Empty on a key that has nothing there.
+  property string hint: ""
   // Draw the fill at full strength whatever Key Transparency says. The
   // setting is there to let the desktop show through the keyboard; behind a
   // key in a long-press popup is the popup's own panel, so being see-through
@@ -29,17 +32,24 @@ Item {
 
   readonly property string shape: theme.keyShape
   readonly property bool outlined: theme.keyFill === "outline"
-  readonly property bool marked: kind === "accent" || kind === "locked" || kind === "latched"
   readonly property color tinted: pressed ? theme.pressedKey
-    : kind === "accent" || kind === "locked" ? theme.lockedKey
+    : kind === "locked" ? theme.lockedKey
     : kind === "latched" ? theme.latchedKey
-    : kind === "special" ? theme.specialKey
+    : kind === "special" || kind === "accent" ? theme.specialKey
     : theme.key
   readonly property color fill: opaque && tinted.a > 0
     ? Qt.rgba(tinted.r, tinted.g, tinted.b, 1) : tinted
-  readonly property color labelColor: kind === "accent" || kind === "locked" ? theme.accentText
+  readonly property color labelColor: kind === "locked" ? theme.accentText
+    : kind === "accent" ? theme.accent
     : kind === "special" ? theme.specialText
     : theme.text
+
+  // An accent edge is what marks Enter now that it is not filled. Any style
+  // can set a border width of zero, so this one insists on a hairline.
+  readonly property color edgeColor: kind === "accent" ? theme.accent
+    : outlined ? theme.outline : theme.keyBorder
+  readonly property real edgeWidth: kind === "accent"
+    ? Math.max(1, theme.keyBorderWidth) : theme.keyBorderWidth
 
   // A raised key's face sits above its side and sinks into it when pressed.
   readonly property real depth: Math.min(theme.keyDepth, height * theme.maxDepthFraction)
@@ -50,6 +60,14 @@ Item {
   // Angular keys are drawn as a chamfered box; the same path serves the
   // face and the side, so a raised angular key keeps its cut corners.
   readonly property real chamfer: Math.min(theme.keyChamfer, width / 3, height / 3)
+
+  // How far the corner eats into the face where the hint sits. A pill's
+  // radius is half the key, so its corner is nowhere near the corner of the
+  // box and a hint placed by the box alone ends up on the curve. Roughly the
+  // horizontal reach of the arc where the hint's own line crosses it.
+  readonly property real cornerInset: shape === "angular"
+    ? chamfer * 0.5
+    : (shape === "pill" ? faceHeight / 2 : theme.keyRadius) * 0.3
   function chamferPath(top, boxHeight) {
     var c = chamfer, w = width, bottom = top + boxHeight
     return "M " + c + " " + top + " L " + (w - c) + " " + top
@@ -90,8 +108,8 @@ Item {
     height: key.faceHeight
     radius: key.shape === "pill" ? height / 2 : key.theme.keyRadius
     color: key.fill
-    border.width: key.theme.keyBorderWidth
-    border.color: key.outlined ? key.theme.outline : key.theme.keyBorder
+    border.width: key.edgeWidth
+    border.color: key.edgeColor
   }
 
   // Angular: the corners cut off.
@@ -102,8 +120,8 @@ Item {
 
     ShapePath {
       fillColor: key.fill
-      strokeColor: key.outlined ? key.theme.outline : key.theme.keyBorder
-      strokeWidth: key.theme.keyBorderWidth
+      strokeColor: key.edgeColor
+      strokeWidth: key.edgeWidth
       joinStyle: ShapePath.MiterJoin
       PathSvg { path: key.chamferPath(key.faceY, key.faceHeight) }
     }
@@ -138,8 +156,23 @@ Item {
     verticalAlignment: Text.AlignVCenter
     text: key.label
     color: key.labelColor
+    elide: Text.ElideRight
     font.family: key.theme.fontFamily
     font.pixelSize: key.labelPixelSize
+  }
+
+  Text {
+    visible: key.hint !== ""
+    y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInset / 2)
+    width: key.width - Math.round(key.theme.gap / 2 + key.cornerInset)
+    horizontalAlignment: Text.AlignRight
+    text: key.hint
+    color: key.labelColor
+    // Quieter than the label it sits beside: it says what the key can also
+    // do, and should not compete with what it does now.
+    opacity: 0.5
+    font.family: key.theme.fontFamily
+    font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
   }
 
   KeyIcon {

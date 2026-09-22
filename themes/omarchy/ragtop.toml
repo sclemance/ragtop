@@ -1,0 +1,11 @@
+name = "Omarchy"
+
+shape = "omarchy"
+relief = "flat"
+fill = "light"
+size = 100
+background = "tint"
+transparency = 0
+edge = "none"
+labels = "normal"
+blur = false

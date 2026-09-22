@@ -58,7 +58,10 @@ Item {
     if (!layout || !Array.isArray(layout.rows) || layout.rows.length !== 3) return false
     return layout.rows.every(function(row) {
       return Array.isArray(row) && row.length > 0 && row.length <= 13 && row.every(function(k) {
-        return Array.isArray(k) && k.length === 2 && k.every(function(c) {
+        // Four now, of which this keyboard reads the first two: it has no
+        // AltGr key, and a password's deeper levels are not worth the
+        // surface on a lock screen.
+        return Array.isArray(k) && k.length >= 2 && k.slice(0, 2).every(function(c) {
           return typeof c === "string" && c.length >= 1 && c.length <= 2 && c.trim() === c
         })
       })
@@ -271,8 +274,11 @@ Item {
       shape: pick(raw.shape, ["omarchy", "rounded", "pill", "angular"], "omarchy"),
       relief: pick(raw.relief, ["flat", "raised"], "flat"),
       fill: pick(raw.fill, ["auto", "dark", "light", "outline"], "light"),
-      keyTransparency: pick(raw.keyTransparency, ["opaque", "low", "medium", "high", "full"], "opaque"),
-      size: pick(raw.size, ["compact", "normal", "large"], "normal"),
+      // Numbers since the look went numeric. Checked, not trusted: this
+      // comes out of a file and is drawn on a lock screen.
+      keyTransparency: num(raw.keyTransparency, 0, 100, 0),
+      size: num(raw.size, 60, 160, 100),
+      sizeNudge: num(raw.sizeNudge, 0.5, 2, 1),
       labels: pick(raw.labels, ["small", "normal", "large"], "normal"),
       depth: num(raw.depth, 0, 10, 4),
       chamfer: num(raw.chamfer, 0, 20, 8),
@@ -297,11 +303,22 @@ Item {
 
   // Sized as the desktop keyboard is, on Omarchy's spacing scale, stepped
   // by the style's density.
-  readonly property int gap: style.size === "compact" ? Style.spacing.sm
-    : style.size === "large" ? Style.spacing.lg : Style.spacing.md
-  readonly property int padding: style.size === "compact" ? Style.spacing.md
-    : style.size === "large" ? Style.spacing.xl : Style.spacing.lg
-  readonly property real keyScale: style.size === "compact" ? 0.88 : style.size === "large" ? 1.15 : 1
+  // Size the way the desktop keyboard works it out, the theme's percentage
+  // times the user's own nudge, but checked here rather than trusted: this
+  // comes out of a file and is drawn on a lock screen.
+  readonly property real keyScale: {
+    var base = Number(style.size)
+    if (!isFinite(base)) base = 100
+    var nudge = Number(style.sizeNudge)
+    if (!isFinite(nudge) || nudge <= 0) nudge = 1
+    return Math.max(0.6, Math.min(1.6, base / 100 * nudge))
+  }
+  readonly property string density: keyScale < 0.95 ? "compact"
+    : keyScale > 1.08 ? "roomy" : "normal"
+  readonly property int gap: density === "compact" ? Style.spacing.sm
+    : density === "roomy" ? Style.spacing.lg : Style.spacing.md
+  readonly property int padding: density === "compact" ? Style.spacing.md
+    : density === "roomy" ? Style.spacing.xl : Style.spacing.lg
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
 
   // How wide a key is, in units, once a short row has been stretched to the
@@ -325,8 +342,9 @@ Item {
     return base
   }
   readonly property real unit: Math.min((width - 2 * padding) / rowUnits, Math.round(84 * keyScale))
-  readonly property real keyHeight: Math.max(Math.round(36 * keyScale),
-    Math.min(Math.round(unit * 0.78), Math.round(60 * keyScale)))
+  // As the desktop keyboard works it out, and for the same reason.
+  readonly property real keyHeight: Math.max(30,
+    Math.min(Math.round(60 * keyScale), Math.round(unit * 1.4)))
 
   // Omarchy's shared control states, in the lock screen's own colours.
   readonly property color themeKeyColor: Style.normalFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
@@ -358,8 +376,7 @@ Item {
   // it show through, outline keys are carried by their edge alone.
   // How see-through the keys are; what shows through is the lock screen
   // behind them.
-  readonly property real keyOpacity:
-    ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[style.keyTransparency]
+  readonly property real keyOpacity: 1 - style.keyTransparency / 100
   function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
 
   // A key sits darker or lighter than the lock screen's own surface; where
@@ -440,10 +457,13 @@ Item {
     root.view.wakeRequested()
     switch (key) {
     case "shift":
-      // A second tap soon after the first locks capitals on.
+      // Off, then on for the next character, then locked, then off, as the
+      // main keyboard's modifiers go. A tap while it is on locks it however
+      // long it comes after the first, because shift only lives until the
+      // next character (see type) and so a tap can only mean lock.
       if (root.capsLock) { root.capsLock = false; root.shift = false }
-      else if (root.shift && shiftTap.running) { root.capsLock = true; root.shift = false }
-      else { root.shift = !root.shift; shiftTap.restart() }
+      else if (root.shift) { root.capsLock = true; root.shift = false }
+      else root.shift = true
       break
     case "backspace":
       root.view.passwordTextEdited(root.view.passwordText.slice(0, -1))
@@ -467,8 +487,6 @@ Item {
       root.type(root.upper ? root.shifted(key) : key)
     }
   }
-
-  Timer { id: shiftTap; interval: 400 }
 
   // The popup, over the rows above the key being held: the letters on a card
   // of their own, so it reads as one thing lifted off the keyboard rather
