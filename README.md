@@ -78,7 +78,8 @@ space until tablet mode turns on.
   background is see-through as its theme asks, and goes entirely when you make
   Omarchy's bar transparent.
 - **The keys a desktop needs.** A slim extra row has Esc, Tab, Ctrl, Alt, Super
-  and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C. Your
+  and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C, and
+  tap one twice to lock it on. Your
   Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
   terminal.
 - **Your layout, any character.** The letter keys and the symbol pages follow
@@ -233,6 +234,25 @@ Each of these is undone by the uninstaller, which removes the overlay clones
 whether the installer or the menu turned them on. While running, Ragtop keeps
 generated files in `~/.local/state/ragtop` and its settings in
 `~/.config/ragtop`.
+
+## Privacy and security
+
+Ragtop does not read what you type. It types.
+
+| | |
+| --- | --- |
+| **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol. It keeps no history and writes no log. |
+| **Network** | There is none. Nothing in Ragtop opens a socket, calls out, or names an address. |
+| **What it reads** | The tablet-mode switch, which reports folded or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
+| **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
+| **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
+| **Diagnostics** | **Setup › Tablet › Diagnostics** copies versions, hardware and settings. No paths under your home directory, no host name, no user name, and nothing you typed. |
+| **The overlay clones** | A clone is Omarchy's own code living in your config, where anything running as you can rewrite it. The password prompt and the lock screen are on that list. They stay off until you turn them on, one at a time. See [Omarchy's overlays](#omarchys-overlays). |
+| **The lock screen keyboard** | A separate file that shares no code with the desktop keyboard and sends no key events. What it learns about your layout is data, rechecked by its own rules. See [The lock screen](#the-lock-screen). |
+
+What it cannot do anything about is the room. Keys light up when tapped, the
+way they do on every on-screen keyboard, so a password typed on a tablet is
+readable over a shoulder.
 
 ## Using it
 
@@ -681,6 +701,33 @@ If tablet mode is never detected:
 - Rotation is separate: it needs `iio-sensor-proxy` to see your accelerometer
   with the right orientation, which is handled by your distribution's hardware
   database, not Ragtop.
+
+## Known limitations
+
+True today, and worth saying if you want them gone:
+
+- **No swipe typing.** Keys are tapped one at a time.
+- **No dead keys.** Accents come from holding a letter, not from a dead key
+  followed by one, so a character your layout only reaches that way is out of
+  reach.
+- **One layout at a time, and it is the system's.** Ragtop follows Hyprland's
+  layout instead of keeping one of its own. Holding the space bar switches
+  between the layouts you set there, and there is no picker of Ragtop's.
+- **Automatic tablet mode needs a kernel switch.** A machine that reports none
+  still works, set to **Always On**, and setup says so rather than failing
+  quietly. See [Tablet-mode detection](#tablet-mode-detection).
+- **Rotation needs `iio-sensor-proxy`.** Without it the screen holds still and
+  the padlock is the only control.
+- **The keyboard takes every tap inside it.** A theme that draws no background
+  at all is the exception, and then only the keys take one. There is no gap
+  between keys to reach the window underneath.
+- **The screen does not rotate while locked.** Omarchy's lock screen is not
+  redrawn for a rotated display, so it keeps the orientation it was locked in
+  and catches up when you unlock.
+- **A cloned menu's Apps list is empty** on Omarchy 4.0.0.alpha, which is an
+  Omarchy bug rather than Ragtop's. Ragtop works around it and the workaround
+  undoes itself once upstream lands a fix. See
+  [The menu's Apps list](#the-menus-apps-list).
 
 ## Troubleshooting
 
