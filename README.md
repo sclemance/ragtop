@@ -741,13 +741,22 @@ True today, and worth saying if you want them gone:
   `quickshell log -r '*=true' /run/user/$UID/quickshell/by-pid/$(pgrep -f 'quickshell.*omarchy/shell')/log.qslog | grep 'sclemance.ragtop failed'`
 - **The keyboard doesn't type.** Check that `python-pywayland` is installed:
   the setup notification says so if it isn't.
+- **Something stops working and nothing says why.** Four things run in the
+  background: the key sender, the watcher that notices text fields, the
+  tablet-mode switch watcher and the rotation sensor. Any of them can die
+  while everything on screen still looks right. Ragtop now says so once, in
+  the words of what you lost rather than the name of a process, and
+  Diagnostics has a **Background** line that names whichever is failing and
+  how many tries it has had. A process that keeps dying is restarted more
+  slowly each time, up to once every five minutes, instead of every three
+  seconds forever.
 - **The screen stops following the device.** Ragtop says so, once, when the
   sensor has failed to answer twice. `iio-sensor-proxy` can get into a state
   where claiming the accelerometer never returns, and
   `systemctl restart iio-sensor-proxy` clears it. Diagnostics says
-  `sensor not answering` while that is true, and Ragtop backs off to one
-  attempt every five minutes rather than asking every three seconds, because
-  asking that often is what keeps the daemon from recovering.
+  `sensor not answering` while that is true. Backing off matters more here
+  than elsewhere: asking every three seconds is what keeps the daemon from
+  recovering in the first place.
 - **Reporting any of it.** Tap **Setup › Tablet › Diagnostics**. It puts the
   machine, the four versions, the tablet-mode switch and its read access, the
   keyboard layout, which of Ragtop's surfaces are up, the packages, the
