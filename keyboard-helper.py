@@ -315,16 +315,29 @@ class Keymap:
                 return self.lookups[key]
         cmd = [f"{XKB}/xkbcli-how-to-type", *xkb_args(self.names)] + (["--keysym"] if keysym else []) + [target]
         out = subprocess.run(cmd, capture_output=True, text=True).stdout.split("=== Access via Compose")[0]
-        best = None
+        best = fallback = None
+        # A named key like BackSpace, Return or space is the same key in every
+        # layout, and how-to-type says so once, under the first one. Asking
+        # only for lines from the active group therefore finds nothing for
+        # them as soon as the active layout is not the first configured one,
+        # which left every one of those keys dead on a second layout. Those
+        # may take a line from any group. A character never may: the same
+        # keycode types something else in each group.
+        shared = keysym and len(target) > 1
         for line in out.splitlines():
             m = re.match(r"\s*(\d+)\s+\S+\s+(\d+)\s+.*?\[\s*(.*?)\s*\]\s*$", line)
-            if not m or int(m.group(2)) - 1 != self.group:
+            if not m:
                 continue
             mods = {HOW_TO_TYPE_MODS.get(x, x.lower()) for x in m.group(3).split()} - {None}
             if "lock" in mods:
                 continue  # Caps Lock levels duplicate Shift ones
-            if best is None or len(mods) < len(best[1]):
-                best = (int(m.group(1)) - 8, mods)
+            candidate = (int(m.group(1)) - 8, mods)
+            if int(m.group(2)) - 1 == self.group:
+                if best is None or len(mods) < len(best[1]):
+                    best = candidate
+            elif shared and (fallback is None or len(mods) < len(fallback[1])):
+                fallback = candidate
+        best = best if best is not None else fallback
         with self.lock:
             self.lookups[key] = best
         return best
