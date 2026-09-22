@@ -1129,6 +1129,21 @@ Item {
     function toggleKeyboard(): string { root.toggleOsk(); return "ok" }
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
     function openSetup(): string { root.openSetup(); return "ok" }
+    // The things worth binding a key to, and every one of them takes no
+    // argument, so nothing on this socket can be handed a value to act on.
+    function toggleControls(): string {
+      if (!root.oskVisible) root.setOskVisible(true)
+      root.toolsOpen = !root.toolsOpen
+      return "ok"
+    }
+    function cycleRotation(): string {
+      var order = root.rotationModes
+      root.setRotationMode(order[(order.indexOf(root.rotationMode) + 1) % order.length])
+      return root.rotationMode
+    }
+    function growKeyboard(): string { root.stepSize(1); return "ok" }
+    function shrinkKeyboard(): string { root.stepSize(-1); return "ok" }
+    function rotationState(): string { return root.rotationMode }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.

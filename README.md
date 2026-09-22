@@ -284,7 +284,14 @@ colours and font, and the Transparency setting, without restarting. It has:
   off by itself. Tap a modifier a second time to lock it on until you tap it
   again, however long you take over it.
 - **Your layout's letters:** the letter keys follow the active Hyprland
-  layout, and the space bar shows its name.
+  layout, and the space bar shows its name. **Hold the space bar** to switch
+  to another of the layouts you have configured in Hyprland, if you have
+  more than one. It is Hyprland's own switch, so everything follows it.
+- **AltGr, where your layout has one.** A German q carries `@`, a French a
+  carries `æ`, and every cap prints its AltGr character small in the corner
+  the way a real keycap does. Tap AltGr and the caps switch to it, the way
+  Shift switches them to capitals. The key only appears on a layout that has
+  a third level, so a plain US keyboard is not given one that does nothing.
 - **Hold a letter for its accents:** e gives é è ê ë, c gives ç, s gives ß.
   Slide onto the one you want and let go; let go where you started for the
   plain letter, or slide off the popup to take nothing. The letters your own
@@ -298,7 +305,8 @@ colours and font, and the Transparency setting, without restarting. It has:
   US layout adds nothing, so its pages look exactly as they always did.
 - **Any character** your layout can't type still arrives, and every key types
   what it shows whatever your Hyprland layout is.
-- A settings key that opens Setup › Tablet directly.
+- **A gear key** that opens Ragtop's own controls over the keyboard, so the
+  keys stay in view while you change them. See below.
 
 `keyboard-helper.py` sends the keys: it registers a Wayland virtual keyboard
 with the same keymap as your physical keyboard, which is also why your SUPER
@@ -307,6 +315,57 @@ shortcuts work from it. For keybindings or scripts:
 ```bash
 omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 ```
+
+### The controls
+
+The gear on the keyboard opens a small panel that sits below Omarchy's bar
+and holds what you reach for while actually holding the machine. The keyboard
+stays drawn underneath, so changing the theme or the key size shows you the
+result as you do it. Tap the gear again, or anywhere on the keyboard, to put
+it away.
+
+| Control | What it does |
+| --- | --- |
+| Theme | Steps through your themes, redrawing the keyboard behind each one |
+| Screen Rotation | Locked, Unlocked, or Automatic, which turns while the machine is folded and holds still while it is a laptop |
+| Keyboard Size | The five-step nudge against whatever size the theme asks for |
+| Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
+| Settings | Opens Setup › Tablet for everything else |
+
+Tablet Mode is deliberately not here. Turning it off takes the keyboard away
+with it, and the way back would be the menu this panel exists to save you
+from. It stays in Setup › Tablet, where you can reach it without a keyboard.
+
+**Screen rotation** is also in the bar, always visible, and the button there
+cycles the same three states. Rotation follows the sensor whether or not the
+machine is folded, so the screen can start turning with the keyboard
+attached, which is why Unlocked and Automatic are different things.
+
+### Keybindings
+
+Ragtop writes no keybindings of its own. If you want them, these are the ones
+worth having, in `~/.config/hypr/bindings.lua`:
+
+```lua
+-- The keyboard, whatever the tablet switch thinks
+bind("SUPER SHIFT", "K", "exec", "omarchy-shell ragtop toggleKeyboard")
+-- The panel the gear opens
+bind("SUPER SHIFT", "T", "exec", "omarchy-shell ragtop toggleControls")
+-- Locked, unlocked, automatic, round again
+bind("SUPER SHIFT", "R", "exec", "omarchy-shell ragtop cycleRotation")
+-- Bigger and smaller keys
+bind("SUPER SHIFT", "equal", "exec", "omarchy-shell ragtop growKeyboard")
+bind("SUPER SHIFT", "minus", "exec", "omarchy-shell ragtop shrinkKeyboard")
+```
+
+Check them against Omarchy's own bindings before you add them, since nothing
+here reserves a chord.
+
+Everything on that socket takes no argument, deliberately: `showKeyboard`,
+`hideKeyboard`, `toggleKeyboard`, `keyboardVisible`, `openSetup`,
+`closeSetup`, `toggleControls`, `cycleRotation`, `growKeyboard`,
+`shrinkKeyboard`, `rotationState`, `keyboardState` and `pickerState`. None of
+them can be handed a value to type, which is the point.
 
 ### The keyboard's look
 
@@ -317,8 +376,16 @@ row in the Omarchy menu under **Setup › Tablet**:
 
 | Row | Choices |
 | --- | --- |
+| Tablet Mode | Automatic (follow the hardware switch), On, or Off |
+| Auto Keyboard | Whether the keyboard comes up by itself on a text field |
 | Theme | The keyboard's whole look, from a theme file |
 | Key Size | Smallest, Smaller, Regular, Larger, Largest — against whatever size the theme asks for, and the labels scale with the keys |
+| System Overlays | Touch typing in each of Omarchy's overlays, one at a time |
+| Run Setup | Opens setup in the shell |
+
+Theme, Key Size and the keyboard's own auto-expand are also on the panel the
+gear opens, which is the quicker way to them while you are holding the
+machine.
 
 What a key looks like — its shape, relief, fill, how see-through it is, the
 background behind it and the top edge — belongs to the theme, so it is set in
