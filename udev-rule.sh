@@ -73,6 +73,12 @@ case "${1:-}" in
       if command -v udevadm >/dev/null; then
         udevadm control --reload
         udevadm trigger --action=change --subsystem-match=input
+        # Wait for that trigger before asking which tags apply. Without it,
+        # CURRENT_TAGS still answers with the tags from before the rule was
+        # taken away, which include the uaccess this rule was putting there,
+        # and the check below reads that leftover as another rule wanting the
+        # device tagged and leaves the access in place.
+        udevadm settle
       fi
       if [ -n "$2" ] && [ -e "$2" ] && command -v setfacl >/dev/null; then
         # Only take the access back if nothing else wants the device tagged.
