@@ -20,8 +20,9 @@ commands on stdin, one per line:
 
 At startup and after each reload it also prints "labels <json>": the active
 layout's name, the characters on its letter keys, row by row, as
-[normal, shifted] pairs, the symbols its keys carry, and any letters of its
-own that those rows don't reach, for the keyboard to draw.
+[normal, shifted, altgr, shift+altgr], the symbols its keys carry, and any
+letters of its own that those rows don't reach, for the keyboard to draw. The
+two AltGr levels are empty strings where the layout has nothing there.
 
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
 for each command.
@@ -148,9 +149,11 @@ class XkbLabels:
     COMMON_CURRENCY = "$€£¥¢¤"
 
     def letter_rows(self, keymap_text, group):
-        """{"name": layout name, "rows": [[[normal, shifted], ...], ...]}, with
-        the keys that type letters; punctuation keys are left to the
-        keyboard's symbol pages."""
+        """{"name": layout name, "rows": [[[normal, shifted, altgr, both], ...],
+        ...]}, with the keys that type letters. Punctuation keys are left to
+        the keyboard's symbol pages. The two AltGr levels are what a physical
+        keycap prints in its corner, and are empty where the layout puts
+        nothing at that level."""
         lib = self.lib
         keymap = lib.xkb_keymap_new_from_string(self.context, keymap_text.encode(), 1, 0)
         if not keymap:
@@ -163,6 +166,16 @@ class XkbLabels:
             u = lib.xkb_keysym_to_utf32(syms[0])
             return chr(u) if u else ""
 
+        def deeper(code, level):
+            """A key's AltGr character, or "" when there is nothing a cap can
+            print there: no character at all, a dead key (which reports none
+            of its own), or a combining mark, which needs a letter to sit on
+            and draws as a blob by itself."""
+            c = char(code, level)
+            if not c or not c.isprintable() or c.isspace() or unicodedata.category(c)[0] == "M":
+                return ""
+            return c
+
         rows = []
         for prefix, count in self.ROWS:
             row = []
@@ -172,7 +185,8 @@ class XkbLabels:
                     continue
                 normal = char(code, 0)
                 if normal.isalpha():
-                    row.append([normal, char(code, 1) or normal.upper()])
+                    row.append([normal, char(code, 1) or normal.upper(),
+                                deeper(code, 2), deeper(code, 3)])
             rows.append(row)
         name = lib.xkb_keymap_layout_get_name(keymap, group)
         symbols = self._symbols(keymap, group, char)
@@ -187,7 +201,7 @@ class XkbLabels:
         The keyboard puts them behind the letter they belong to, where a
         long press reaches them."""
         lib = self.lib
-        on_rows = {c.lower() for row in rows for pair in row for c in pair}
+        on_rows = {c.lower() for row in rows for pair in row for c in pair[:2]}
         out = []
         for prefix, count in self.ALL_KEYS:
             names = [prefix] if count == 0 else [f"{prefix}{i:02d}" for i in range(1, count + 1)]

@@ -15,13 +15,18 @@ Item {
 
   property string page: "letters"
   // Modifiers: "off", "latched" (applies to the next key) or "locked".
-  property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off" })
+  property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off", "altgr": "off" })
   readonly property bool oneShot: root.service.modifierMode !== "sticky"
   readonly property bool upper: root.mods.shift !== "off"
+  readonly property bool altgrOn: root.mods.altgr !== "off"
 
   // The extra row of desktop keys, then the pages. A key is its character,
   // or one of the named keys below.
-  readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super", "left", "up", "down", "right"]
+  // AltGr is only there on a layout that puts something on its third level.
+  // On a plain US layout there is nothing to reach, so the key would do
+  // nothing and the row is better without it.
+  readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super"]
+    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"])
   readonly property var fallbackRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
     [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
@@ -37,6 +42,22 @@ Item {
     return map
   }
   function letters(row) { return row.map(function(k) { return k[0] }) }
+
+  // What AltGr and AltGr with Shift type on each letter key, where the
+  // layout has anything there: @ and Ω on a German q, æ and Æ on a French a.
+  // The helper reports them as the third and fourth character of the key
+  // (see keyboard-helper.py), empty where the level is unused.
+  readonly property var level3Of: {
+    var map = {}
+    layoutRows.forEach(function(row) { row.forEach(function(k) { if (k[2]) map[k[0]] = k[2] }) })
+    return map
+  }
+  readonly property var level4Of: {
+    var map = {}
+    layoutRows.forEach(function(row) { row.forEach(function(k) { if (k[3]) map[k[0]] = k[3] }) })
+    return map
+  }
+  readonly property bool hasLevel3: Object.keys(root.level3Of).length > 0
 
   // The symbol pages, which are the same whatever the layout: every
   // character here types in any of them, because the helper types by
@@ -99,7 +120,7 @@ Item {
   }
 
   readonly property var labels: ({
-    "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super",
+    "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super", "altgr": "AltGr",
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": ""
@@ -296,11 +317,23 @@ Item {
   function label(key) {
     if (key === "space") return layoutName
     if (key in labels) return labels[key]
-    return upper ? shifted(key) : key
+    return root.charFor(key)
   }
 
   function shifted(key) {
     return shiftOf[key] || key.toUpperCase()
+  }
+
+  // The character a key types with the modifiers as they are. A cap shows
+  // this, so what is written on a key is always what tapping it gives you.
+  // A key with nothing on its third level types its own character, the way
+  // it would with AltGr held on a physical keyboard that has nothing there.
+  function charFor(key) {
+    if (root.altgrOn) {
+      var deep = root.upper ? (root.level4Of[key] || root.level3Of[key]) : root.level3Of[key]
+      if (deep) return deep
+    }
+    return root.upper ? root.shifted(key) : key
   }
 
   function kind(key) {
@@ -309,10 +342,14 @@ Item {
     return key in labels ? "special" : "normal"
   }
 
-  // Modifiers applied to the next key, as the helper names them.
+  // Modifiers applied to the next key, as the helper names them. AltGr is
+  // not one of them: it chooses which character a key types (charFor), and
+  // that character is then typed as itself, so a layout's third level works
+  // the same whether or not the character has a key of its own.
   function activeMods(includeShift) {
     var names = []
-    for (var m in mods) if (mods[m] !== "off" && (includeShift || m !== "shift")) names.push(m)
+    for (var m in mods)
+      if (m !== "altgr" && mods[m] !== "off" && (includeShift || m !== "shift")) names.push(m)
     return names
   }
 
@@ -369,7 +406,7 @@ Item {
       if (combo.length > 0)
         service.sendKeys(["key", key].concat(activeMods(true)).join(" "))
       else
-        service.sendKeys("type " + (upper ? shifted(key) : key))
+        service.sendKeys("type " + root.charFor(key))
     }
     afterKey()
   }
@@ -487,6 +524,7 @@ Item {
       width: modelData.width
       height: modelData.height
       label: root.label(modelData.key)
+      hint: root.altgrOn ? "" : (root.level3Of[modelData.key] || "")
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconKeys.indexOf(modelData.key) !== -1 ? modelData.key : ""

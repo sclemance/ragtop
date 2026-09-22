@@ -21,6 +21,9 @@ Item {
   // The drawn icon's name, for labelKind "drawn" (see KeyIcon.qml).
   property string icon: ""
   property bool pressed: false
+  // A second character printed small in a corner, the way a keycap prints
+  // what AltGr types on it. Empty on a key that has nothing there.
+  property string hint: ""
   // Draw the fill at full strength whatever Key Transparency says. The
   // setting is there to let the desktop show through the keyboard; behind a
   // key in a long-press popup is the popup's own panel, so being see-through
@@ -140,6 +143,20 @@ Item {
     color: key.labelColor
     font.family: key.theme.fontFamily
     font.pixelSize: key.labelPixelSize
+  }
+
+  Text {
+    visible: key.hint !== ""
+    y: key.faceY + Math.round(key.theme.gap / 2)
+    width: key.width - Math.round(key.theme.gap / 2) - Math.round(key.chamfer / 2)
+    horizontalAlignment: Text.AlignRight
+    text: key.hint
+    color: key.labelColor
+    // Quieter than the label it sits beside: it says what the key can also
+    // do, and should not compete with what it does now.
+    opacity: 0.5
+    font.family: key.theme.fontFamily
+    font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
   }
 
   KeyIcon {

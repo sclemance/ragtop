@@ -58,7 +58,10 @@ Item {
     if (!layout || !Array.isArray(layout.rows) || layout.rows.length !== 3) return false
     return layout.rows.every(function(row) {
       return Array.isArray(row) && row.length > 0 && row.length <= 13 && row.every(function(k) {
-        return Array.isArray(k) && k.length === 2 && k.every(function(c) {
+        // Four now, of which this keyboard reads the first two: it has no
+        // AltGr key, and a password's deeper levels are not worth the
+        // surface on a lock screen.
+        return Array.isArray(k) && k.length >= 2 && k.slice(0, 2).every(function(c) {
           return typeof c === "string" && c.length >= 1 && c.length <= 2 && c.trim() === c
         })
       })
