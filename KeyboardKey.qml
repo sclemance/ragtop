@@ -60,6 +60,14 @@ Item {
   // Angular keys are drawn as a chamfered box; the same path serves the
   // face and the side, so a raised angular key keeps its cut corners.
   readonly property real chamfer: Math.min(theme.keyChamfer, width / 3, height / 3)
+
+  // How far the corner eats into the face where the hint sits. A pill's
+  // radius is half the key, so its corner is nowhere near the corner of the
+  // box and a hint placed by the box alone ends up on the curve. Roughly the
+  // horizontal reach of the arc where the hint's own line crosses it.
+  readonly property real cornerInset: shape === "angular"
+    ? chamfer * 0.5
+    : (shape === "pill" ? faceHeight / 2 : theme.keyRadius) * 0.3
   function chamferPath(top, boxHeight) {
     var c = chamfer, w = width, bottom = top + boxHeight
     return "M " + c + " " + top + " L " + (w - c) + " " + top
@@ -155,8 +163,8 @@ Item {
 
   Text {
     visible: key.hint !== ""
-    y: key.faceY + Math.round(key.theme.gap / 2)
-    width: key.width - Math.round(key.theme.gap / 2) - Math.round(key.chamfer / 2)
+    y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInset / 2)
+    width: key.width - Math.round(key.theme.gap / 2 + key.cornerInset)
     horizontalAlignment: Text.AlignRight
     text: key.hint
     color: key.labelColor
