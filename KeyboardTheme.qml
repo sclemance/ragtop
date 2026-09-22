@@ -122,10 +122,40 @@ QtObject {
                                 : keyFill === "light" ? lightKey : autoKey), themeKey)
   property color key: seeThrough(keyBase)
   property color pressedKey: Style.pressedFillFor(text, Color.accent, Color.urgent)
-  property color latchedKey: seeThrough(Qt.tint(keyBase, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.45)))
+  property color latchedKey: seeThrough(Qt.tint(specialBase, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.45)))
   property color lockedKey: seeThrough(Color.accent)
+  // A key that produces no character sits a step further from the panel than
+  // the letters do, so the letters read as one block and the rest read as
+  // the keys that act on them. Stepped the same way the keys themselves step
+  // off the panel: tint toward the theme's own roles rather than multiply a
+  // value, since multiplying leaves pure black and pure white where they
+  // were, and keep whichever direction measurably moves further. The base's
+  // own alpha is put back, so these keys are no more solid than the letters
+  // at any Key Transparency.
+  // Darker than the letters, whatever the palette. Qt.darker only drops the
+  // value, so the hue and saturation are the theme's own and nothing has to
+  // be mixed in. Tinting toward the darker role was tried and is wrong here:
+  // on a dark theme the darker role IS nearly the panel the keys sit on, and
+  // a key that starts 19/255 above it barely moves.
+  //
+  // The one thing darker must not do is sink a key into the panel, which is
+  // exactly the case on a dark theme where the letters are lifted only a
+  // little above it. So where the keys sit above the panel, the step stops
+  // halfway down to it. Where they sit below it, as on a light theme, darker
+  // moves away from the panel and needs no floor. The base's alpha is put
+  // back, so these keys are no more solid than the letters at any Key
+  // Transparency.
+  readonly property color specialBase: {
+    if (keyBase.a === 0) return keyBase
+    var target = Qt.darker(keyBase, 1.45)
+    if (luminance(keyBase) > luminance(solidBase)) {
+      var halfway = Qt.tint(keyBase, Util.alpha(solidBase, 0.5))
+      if (luminance(target) < luminance(halfway)) target = halfway
+    }
+    return Qt.rgba(target.r, target.g, target.b, keyBase.a)
+  }
   // Keys that aren't characters (Esc, Shift, ?123…) carry a quieter label.
-  property color specialKey: key
+  property color specialKey: seeThrough(specialBase)
   property color specialText: Util.alpha(text, 0.66)
 
   // A raised key's side is part of the key, not a wash over the background:

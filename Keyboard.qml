@@ -367,9 +367,15 @@ Item {
     return root.upper ? root.shifted(key) : key
   }
 
+  // How a key is coloured, which follows what it does: a key that produces a
+  // character is drawn as a letter, and one that acts on the next key or on
+  // the keyboard itself is drawn apart from them.
   function kind(key) {
     if (key in mods) return mods[key] === "locked" ? "locked" : mods[key] === "latched" ? "latched" : "special"
     if (key === "enter") return "accent"
+    // The space bar goes with them rather than with the letters, though it
+    // does type a character: it is part of the frame around the letters, it
+    // carries the layout's name instead of a legend, and no one hunts for it.
     return key in labels ? "special" : "normal"
   }
 

@@ -33,15 +33,23 @@ Item {
   readonly property string shape: theme.keyShape
   readonly property bool outlined: theme.keyFill === "outline"
   readonly property color tinted: pressed ? theme.pressedKey
-    : kind === "accent" || kind === "locked" ? theme.lockedKey
+    : kind === "locked" ? theme.lockedKey
     : kind === "latched" ? theme.latchedKey
-    : kind === "special" ? theme.specialKey
+    : kind === "special" || kind === "accent" ? theme.specialKey
     : theme.key
   readonly property color fill: opaque && tinted.a > 0
     ? Qt.rgba(tinted.r, tinted.g, tinted.b, 1) : tinted
-  readonly property color labelColor: kind === "accent" || kind === "locked" ? theme.accentText
+  readonly property color labelColor: kind === "locked" ? theme.accentText
+    : kind === "accent" ? theme.accent
     : kind === "special" ? theme.specialText
     : theme.text
+
+  // An accent edge is what marks Enter now that it is not filled. Any style
+  // can set a border width of zero, so this one insists on a hairline.
+  readonly property color edgeColor: kind === "accent" ? theme.accent
+    : outlined ? theme.outline : theme.keyBorder
+  readonly property real edgeWidth: kind === "accent"
+    ? Math.max(1, theme.keyBorderWidth) : theme.keyBorderWidth
 
   // A raised key's face sits above its side and sinks into it when pressed.
   readonly property real depth: Math.min(theme.keyDepth, height * theme.maxDepthFraction)
@@ -92,8 +100,8 @@ Item {
     height: key.faceHeight
     radius: key.shape === "pill" ? height / 2 : key.theme.keyRadius
     color: key.fill
-    border.width: key.theme.keyBorderWidth
-    border.color: key.outlined ? key.theme.outline : key.theme.keyBorder
+    border.width: key.edgeWidth
+    border.color: key.edgeColor
   }
 
   // Angular: the corners cut off.
@@ -104,8 +112,8 @@ Item {
 
     ShapePath {
       fillColor: key.fill
-      strokeColor: key.outlined ? key.theme.outline : key.theme.keyBorder
-      strokeWidth: key.theme.keyBorderWidth
+      strokeColor: key.edgeColor
+      strokeWidth: key.edgeWidth
       joinStyle: ShapePath.MiterJoin
       PathSvg { path: key.chamferPath(key.faceY, key.faceHeight) }
     }
