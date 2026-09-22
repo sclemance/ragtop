@@ -16,8 +16,8 @@ Item {
   property string tabletSwitchDevice: ""
   property string detectedSwitchDevice: ""
   readonly property string switchDevice: root.tabletSwitchDevice !== "" ? root.tabletSwitchDevice : root.detectedSwitchDevice
-  // Locked, unlocked, or automatic, which means rotate while the machine is
-  // folded and hold still while it is a laptop. A machine whose switch is
+  // Locked, unlocked, or automatic, which means rotate while in tablet mode
+  // and hold still in laptop mode. A machine whose switch is
   // never found is not a laptop, it is unknown, and Automatic rotates there
   // rather than freezing a slate that has no switch to report with. Automatic is what the old
   // pair of states was reaching for when it force unlocked on unfolding: a
@@ -1242,7 +1242,7 @@ Item {
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
     anchors { top: true }
-    implicitWidth: 520
+    implicitWidth: 596
     implicitHeight: 258
     margins.top: 22
     color: "transparent"
