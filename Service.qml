@@ -39,8 +39,18 @@ Item {
   // display at whatever orientation it is in. Automatic reaches this too,
   // every time the machine is folded or unfolded.
   function applyRotationLock() {
-    if (root.rotationLocked) { orientationSettle.stop(); lockRecheck.stop() }
-    rotationProc.running = !root.rotationLocked && root.rotationAvailable
+    if (root.rotationLocked) {
+      orientationSettle.stop()
+      lockRecheck.stop()
+      rotationRestart.stop()
+      // Killing monitor-sensor while its claim is still in flight is what
+      // leaves iio-sensor-proxy unable to answer the next one. If the claim
+      // has not landed yet, let it run. Nothing it reports is applied while
+      // rotation is locked, and it is stopped the moment the claim lands.
+      if (!rotationProc.running || root.sensorClaimed) rotationProc.running = false
+    } else {
+      root.wantSensor()
+    }
   }
   onRotationLockedChanged: root.applyRotationLock()
 
@@ -183,7 +193,7 @@ Item {
     id: configureFallback
     interval: 2000
     running: true
-    onTriggered: rotationProc.running = !root.rotationLocked && root.rotationAvailable
+    onTriggered: root.applyRotationLock()
   }
 
   // Orientation comes from iio-sensor-proxy, through its monitor-sensor
@@ -202,13 +212,64 @@ Item {
   // the shell runs. The setup steps say what's missing; this just stops
   // asking.
   property bool rotationAvailable: true
+
+  // monitor-sensor asks iio-sensor-proxy to claim the accelerometer, and
+  // that call can hang. It gives up after 25 seconds, and a restart three
+  // seconds later asks again before the daemon has cleared the last one, so
+  // the retry keeps wedged the very thing it is waiting for. Measured on a
+  // Yoga 300w: the claim had been timing out for every caller, monitor-sensor
+  // was being respawned every 23 seconds, and stopping it for 40 seconds made
+  // the same claim answer in a fifth of a second.
+  //
+  // So a run that never reached the sensor counts as a failure, and each
+  // failure waits longer than the last. The first wait is already long
+  // enough to be the quiet window the daemon needs.
+  property int sensorFailures: 0
+  property bool sensorClaimed: false
+  property bool sensorStuckReported: false
+  readonly property var sensorBackoff: [3000, 30000, 120000, 300000]
+  // When the next attempt is allowed, as a clock reading rather than a
+  // timer that is running. Four things ask for the sensor at startup, within
+  // a second of each other, and whichever arrives while the timer is being
+  // armed would otherwise start it anyway. A deadline cannot be raced.
+  property double sensorRetryAt: 0
+
+  // The only way the sensor is ever started. Either it is due, or the timer
+  // is armed for the rest of the wait.
+  function wantSensor() {
+    if (root.rotationLocked || !root.rotationAvailable || rotationProc.running) return
+    var wait = root.sensorRetryAt - Date.now()
+    if (wait <= 0) {
+      rotationProc.running = true
+      return
+    }
+    rotationRestart.interval = wait
+    rotationRestart.start()
+  }
+
+  // Rotation not working is invisible until someone turns the machine and
+  // nothing happens, so say it once, with the command that clears it.
+  function reportSensorStuck() {
+    if (root.sensorStuckReported) return
+    root.sensorStuckReported = true
+    sensorNotifyProc.command = [
+      "omarchy-notification-send", "-g", "󰌌",
+      "Rotation is not working",
+      "iio-sensor-proxy is not answering, so the screen will not follow the "
+        + "device. Restarting it usually clears this:\n"
+        + "systemctl restart iio-sensor-proxy"
+    ]
+    sensorNotifyProc.running = true
+  }
+  Process { id: sensorNotifyProc }
+
   Process {
     id: sensorCheckProc
     running: true
     command: ["sh", "-c", "command -v monitor-sensor >/dev/null"]
     onExited: function(code) {
       root.rotationAvailable = code === 0
-      if (root.rotationAvailable) rotationProc.running = !root.rotationLocked
+      if (root.rotationAvailable) root.applyRotationLock()
     }
   }
   // Someone who installs the package is owed rotation without restarting the
@@ -228,16 +289,36 @@ Item {
     // A fresh start reports the current orientation, which must be applied
     // even if it matches the last one, since it may have been changed
     // while locked.
-    onRunningChanged: if (running) root.appliedOrientation = ""
+    onRunningChanged: {
+      if (!running) return
+      root.appliedOrientation = ""
+      root.sensorClaimed = false
+    }
     stdout: SplitParser {
       onRead: function(line) {
         var match = /orientation(?: changed)?: ([a-z-]+)/.exec(line)
         if (!match || !(match[1] in root.orientationTransforms)) return
+        // The first orientation is the proof that the claim went through.
+        root.sensorClaimed = true
+        root.sensorFailures = 0
+        root.sensorStuckReported = false
+        root.sensorRetryAt = 0
+        // A stop held back while the claim was in flight happens now.
+        if (root.rotationLocked) {
+          rotationProc.running = false
+          return
+        }
         root.pendingOrientation = match[1]
         orientationSettle.restart()
       }
     }
-    onExited: if (!root.rotationLocked && root.rotationAvailable) rotationRestart.start()
+    onExited: {
+      if (!root.sensorClaimed) root.sensorFailures++
+      root.sensorRetryAt = Date.now() + root.sensorBackoff[
+        Math.min(root.sensorFailures, root.sensorBackoff.length - 1)]
+      if (root.sensorFailures >= 2) root.reportSensorStuck()
+      root.wantSensor()
+    }
   }
   Timer {
     id: orientationSettle
@@ -292,10 +373,11 @@ Item {
     root.appliedOrientation = orientation
   }
   Process { id: rotateApplyProc }
+  // The interval is set by wantSensor, from the deadline.
   Timer {
     id: rotationRestart
     interval: 3000
-    onTriggered: if (!root.rotationLocked && root.rotationAvailable) rotationProc.running = true
+    onTriggered: root.wantSensor()
   }
 
   // Settings written by the `ragtop` command (Setup › Tablet in the
@@ -1184,6 +1266,16 @@ Item {
     function growKeyboard(): string { root.stepSize(1); return "ok" }
     function shrinkKeyboard(): string { root.stepSize(-1); return "ok" }
     function rotationState(): string { return root.rotationMode }
+    // Whether the screen can actually follow the device, which the setting
+    // alone does not say.
+    function sensorState(): string {
+      if (!root.rotationAvailable) return "absent"
+      if (root.rotationLocked) return "held"
+      if (root.sensorClaimed) return "ok"
+      if (root.sensorFailures >= 2) return "stuck"
+      if (rotationProc.running) return "claiming"
+      return "waiting"
+    }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.

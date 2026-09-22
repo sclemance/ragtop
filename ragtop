@@ -390,7 +390,7 @@ plugin_source() {
 }
 
 diagnostics() {
-  local value chassis name version model mode switch layout keymap layers missing=()
+  local value chassis name version model mode switch sensor layout keymap layers missing=()
 
   row Ragtop "$(manifest_field version) ($(plugin_source))"
   value=$(omarchy version 2>/dev/null | head -n 1 || true)
@@ -425,17 +425,29 @@ diagnostics() {
   else
     row Switch "none found"
   fi
-  # Rotation is what the setting says. Whether monitor-sensor is running is
-  # the answer to "the screen does not turn", and the two disagree when
-  # something has gone wrong.
+  # Rotation is what the setting says. Whether the sensor is answering is
+  # the reply to "the screen does not turn", and the two disagree when
+  # something has gone wrong. The service knows, because monitor-sensor
+  # going quiet for a few seconds between restarts is normal and a claim
+  # that never lands is not, and only one of those is a fault.
   value=$(get rotation auto)
-  if ! command -v monitor-sensor >/dev/null; then
-    row Rotation "$value, no sensor installed"
-  elif pgrep -x monitor-sensor >/dev/null; then
-    row Rotation "$value, sensor running"
-  else
-    row Rotation "$value, sensor not running"
-  fi
+  sensor=$(omarchy-shell ragtop sensorState 2>/dev/null || true)
+  case "$sensor" in
+    ok) row Rotation "$value, sensor answering" ;;
+    held) row Rotation "$value, not watching right now" ;;
+    claiming) row Rotation "$value, sensor starting up" ;;
+    stuck) row Rotation "$value, sensor not answering, rotation is dead" ;;
+    absent) row Rotation "$value, no sensor installed" ;;
+    waiting) row Rotation "$value, sensor between tries" ;;
+    # An older service, or none running at all.
+    *) if ! command -v monitor-sensor >/dev/null; then
+         row Rotation "$value, no sensor installed"
+       elif pgrep -x monitor-sensor >/dev/null; then
+         row Rotation "$value, sensor running"
+       else
+         row Rotation "$value, sensor not running"
+       fi ;;
+  esac
   layout=$(hyprctl devices 2>/dev/null | sed -n 's/.*l "\([^"]*\)".*/\1/p' | head -n 1 || true)
   keymap=$(hyprctl devices 2>/dev/null | sed -n 's/^[[:space:]]*active keymap: //p' | head -n 1 || true)
   row Layout "${layout:-unknown}${keymap:+, now $keymap}"

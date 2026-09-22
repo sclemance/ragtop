@@ -14,7 +14,6 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "rotationLocked": false,
       "tabletSwitchDevice": ""
     },
     "schema": [

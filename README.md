@@ -663,12 +663,15 @@ overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
 straight away. The rest of the look has no verb, because it is the theme's
 to set.
 
-A couple more live in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
+One more lives in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `tabletSwitchDevice` | blank | Input device to read the tablet-mode switch from. Blank means auto-detect. |
-| `rotationLocked` | `false` | Saved by the padlock button. |
+
+The padlock button writes `rotation` to `settings.conf` like every other
+setting, so an old `rotationLocked` or `rotationMode` left in `shell.json` is
+read by nothing and can go.
 
 ## Tablet-mode detection
 
@@ -738,6 +741,13 @@ True today, and worth saying if you want them gone:
   `quickshell log -r '*=true' /run/user/$UID/quickshell/by-pid/$(pgrep -f 'quickshell.*omarchy/shell')/log.qslog | grep 'sclemance.ragtop failed'`
 - **The keyboard doesn't type.** Check that `python-pywayland` is installed:
   the setup notification says so if it isn't.
+- **The screen stops following the device.** Ragtop says so, once, when the
+  sensor has failed to answer twice. `iio-sensor-proxy` can get into a state
+  where claiming the accelerometer never returns, and
+  `systemctl restart iio-sensor-proxy` clears it. Diagnostics says
+  `sensor not answering` while that is true, and Ragtop backs off to one
+  attempt every five minutes rather than asking every three seconds, because
+  asking that often is what keeps the daemon from recovering.
 - **Reporting any of it.** Tap **Setup › Tablet › Diagnostics**. It puts the
   machine, the four versions, the tablet-mode switch and its read access, the
   keyboard layout, which of Ragtop's surfaces are up, the packages, the
