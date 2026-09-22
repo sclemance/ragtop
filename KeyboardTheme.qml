@@ -27,7 +27,14 @@ QtObject {
   // Both filled kinds are fully opaque, so Key Transparency is the only
   // thing that makes a key see-through.
   readonly property string keyFill: look.fill
-  readonly property string density: look.size
+  // How big the keys are: the theme's percentage, times the user's nudge,
+  // held inside what a keyboard can actually be. Spacing follows the result
+  // rather than a name, so a theme asking for 130 is roomy without having to
+  // say so.
+  readonly property real sizeNudge: look.sizeAdjust === "smaller" ? 0.88
+    : look.sizeAdjust === "larger" ? 1.15 : 1
+  readonly property string density: keyScale < 0.95 ? "compact"
+    : keyScale > 1.08 ? "roomy" : "normal"
   readonly property string labels: look.labels
 
   // A look's off-theme colour: a palette role or a hex colour, "" to follow
@@ -78,11 +85,10 @@ QtObject {
   // then the keyboard keeps those taps to itself.
   readonly property bool backgroundVisible: Math.max(background.a, backgroundTop.a) > 0.01
 
-  // How see-through the keys are (Setup › Tablet › Key Transparency). What
-  // shows through is the keyboard's own background; the desktop only shows
-  // if that is see-through too.
-  readonly property real keyOpacity:
-    ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[look.keyTransparency]
+  // How see-through the keys are, as the theme asked. What shows through is
+  // the keyboard's own background, so the desktop only shows if that is
+  // see-through too, or gone because the bar is.
+  readonly property real keyOpacity: 1 - look.keyTransparency / 100
   function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
 
   // A key sits darker or lighter than its panel. The palette has roles
@@ -226,7 +232,7 @@ QtObject {
   // Density steps through Omarchy's spacing tokens and scales the keys.
   property int gap: density === "compact" ? Style.spacing.sm : density === "roomy" ? Style.spacing.lg : Style.spacing.md
   property int padding: density === "compact" ? Style.spacing.md : density === "roomy" ? Style.spacing.xl : Style.spacing.lg
-  property real keyScale: density === "compact" ? 0.88 : density === "roomy" ? 1.15 : 1
+  property real keyScale: Math.max(0.6, Math.min(1.6, look.size / 100 * sizeNudge))
 
   property string fontFamily: Style.font.family
   // Labels step on Omarchy's type scale — a character reads large, a word

@@ -366,14 +366,13 @@ Item {
     onTriggered: focusBridgeProc.running = root.tabletMode && root.autoShowEnabled
   }
 
-  // The keyboard's background transparency. "auto" follows Omarchy's bar
-  // transparency (Style › Bar › Transparency), which is either fully clear
-  // or solid.
-  readonly property string keyboardTransparency: {
-    var level = root.settings["transparency"]
-    if (["opaque", "low", "medium", "high", "full"].indexOf(level) !== -1) return level
-    return root.barTransparent ? "full" : "opaque"
-  }
+  // Whether the keyboard has a background at all is Omarchy's call, not a
+  // setting of ours: double-tapping the bar makes it transparent, and the
+  // keyboard's background goes with it, so the keys float over the desktop
+  // the way the bar does. With the bar solid, the background is whatever the
+  // theme asked for.
+  readonly property real backgroundOpacity: root.barTransparent
+    ? 0 : 1 - root.look.transparency / 100
 
   Process { id: modeWriteProc }
 
@@ -686,7 +685,7 @@ Item {
 
   KeyboardTheme {
     id: keyboardTheme
-    backgroundOpacity: ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[root.keyboardTransparency]
+    backgroundOpacity: root.backgroundOpacity
     look: root.look
   }
 
@@ -711,12 +710,18 @@ Item {
     }
     return {
       shape: pick("shape", ["omarchy", "rounded", "pill", "angular"], "omarchy"),
-      // How see-through the keys are, over the keyboard's background.
-      keyTransparency: pick("key-transparency", ["opaque", "low", "medium", "high", "full"], "opaque"),
+      // How see-through the keys are over the keyboard's background, and the
+      // background over the desktop. 0 is solid and 100 is gone.
+      keyTransparency: num("key-transparency", 0, 100, 0),
+      transparency: num("transparency", 0, 100, 0),
       // Raised keys stand on a side, like a keycap; flat ones don't.
       relief: pick("relief", ["flat", "raised"], "flat"),
       fill: pick("fill", ["auto", "dark", "light", "outline"], "light"),
-      size: pick("size", ["compact", "normal", "large"], "normal"),
+      // The theme's key size, as a percentage of the usual, and the nudge on
+      // top of it that is the user's alone. A theme cannot write size-adjust,
+      // so how big the keys are for these eyes survives changing theme.
+      size: num("size", 60, 160, 100),
+      sizeAdjust: pick("size-adjust", ["smaller", "regular", "larger"], "regular"),
       background: pick("background", ["tint", "gradient"], "tint"),
       edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),

@@ -71,20 +71,10 @@ rows = {
     # What is left here is what no theme author can know: how big the keys
     # need to be on this screen for these eyes, and how much of the window
     # behind them has to stay readable.
-    "setup.tablet.size": dict(icon="\U000f004c", label="Key Size"),
-    **{f"setup.tablet.size.{name}": dict(icon="\U000f004c", label=label,
-        checked=f'"{cmd}" size is {name}', action=f'"{cmd}" size set {name}')
-       for name, label in (("compact", "Compact"), ("normal", "Normal"), ("large", "Large"))},
-    "setup.tablet.key-transparency": dict(icon="\U000f1853", label="Key Transparency"),
-    **{f"setup.tablet.key-transparency.{level}": dict(icon="\U000f1853", label=label,
-        checked=f'"{cmd}" key-transparency is {level}', action=f'"{cmd}" key-transparency set {level}')
-       for level, label in (("opaque", "Opaque"), ("low", "Low"), ("medium", "Medium"),
-                            ("high", "High"), ("full", "Full"))},
-    "setup.tablet.transparency": dict(icon="\U000f1853", label="BG Transparency"),
-    **{f"setup.tablet.transparency.{level}": dict(icon="\U000f1853", label=label,
-        checked=f'"{cmd}" transparency is {level}', action=f'"{cmd}" transparency set {level}')
-       for level, label in (("auto", "Match Bar"), ("opaque", "Opaque"), ("low", "Low"),
-                            ("medium", "Medium"), ("high", "High"), ("full", "Full"))},
+    "setup.tablet.size-adjust": dict(icon="\U000f004c", label="Key Size"),
+    **{f"setup.tablet.size-adjust.{name}": dict(icon="\U000f004c", label=label,
+        checked=f'"{cmd}" size-adjust is {name}', action=f'"{cmd}" size-adjust set {name}')
+       for name, label in (("smaller", "Smaller"), ("regular", "Regular"), ("larger", "Larger"))},
     "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),

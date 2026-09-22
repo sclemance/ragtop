@@ -75,7 +75,8 @@ space until tablet mode turns on.
   remembered, and released automatically on the way back to laptop mode.
 - **An on-screen keyboard that fits Omarchy.** Drawn by the Omarchy shell in
   your theme's colours and font, and restyled the moment you switch themes. Its
-  background can be see-through, matching the bar's transparency by default.
+  background is see-through as its theme asks, and goes entirely when you make
+  Omarchy's bar transparent.
 - **The keys a desktop needs.** A slim extra row has Esc, Tab, Ctrl, Alt, Super
   and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C. Your
   Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
@@ -317,16 +318,20 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Row | Choices |
 | --- | --- |
 | Theme | The keyboard's whole look, from a theme file |
-| Key Size | Compact, Normal, Large — the labels scale with the keys |
-| Key Transparency | Opaque, Low, Medium, High, Full. What shows through is the keyboard's background, so the desktop only shows if that's see-through too |
-| BG Transparency | The keyboard's background: Match Bar, Opaque, Low, Medium, High, Full |
+| Key Size | Smaller, Regular, Larger — against whatever size the theme asks for, and the labels scale with the keys |
 
-What a key looks like — its shape, relief, fill, the background behind it and
-the top edge — belongs to the theme, so it is set in a theme file and not
-row by row. What stays here is what no theme author can know: how big the
-keys have to be on your screen for your eyes, and how much of the window
-behind them you need to see. Picking a theme can set those too, since a theme
-is a whole look, so adjust them after if its answer does not suit you.
+What a key looks like — its shape, relief, fill, how see-through it is, the
+background behind it and the top edge — belongs to the theme, so it is set in
+a theme file and not row by row. What stays here is the one thing no theme
+author can know: how big the keys have to be on your screen for your eyes.
+Key Size is a nudge against whatever the theme asked for, and it is yours, so
+applying a theme never resets it.
+
+**Whether the keyboard has a background at all is Omarchy's call, not a
+setting here.** Double-tap the bar to make it transparent and the keyboard's
+background goes with it, so the keys float over the desktop the way the bar
+does. Make the bar solid again and the background comes back as the theme
+asked for it.
 
 Whatever a key looks like, a touch goes to the nearest key, so no shape
 makes keys harder to hit.
@@ -359,9 +364,9 @@ name = "Chunky"
 shape = "rounded"
 relief = "raised"
 fill = "light"
-size = "large"
+size = 115
 background = "tint"
-transparency = "opaque"
+transparency = 0
 edge = "border"
 labels = "large"
 depth = 6
@@ -375,6 +380,9 @@ Besides the menu rows, a theme can set the details that don't deserve one:
 | `depth` | Raised keys: how far the key's side shows, 0–10 | 4 |
 | `chamfer` | Angular: how much of each corner is cut, 0–20 | 8 |
 | `edge-fade` | pixels the background fades over with Edge set to Fade, 0–24 | 8 |
+| `size` | key size as a percentage of the usual, 60–160 | 100 |
+| `transparency` | the background over the desktop, 0 solid to 100 gone | 0 |
+| `key-transparency` | the keys over that background, 0 solid to 100 gone | 0 |
 | `special-keys` | how the keys that type nothing sit against the letters: `darker`, `lighter`, `off` | `darker` |
 | `blur` | blur what's behind the keyboard (see below) | `false` |
 
@@ -510,7 +518,7 @@ Shift (tap twice for Caps), and two pages of digits and symbols, which pick
 up your layout's own symbols the same way the desktop keyboard's do. Holding
 a letter offers its accents there too — a password is typed in characters,
 and on some layouts é or ß is only reachable that way. Its popup sits on a card of
-its own, opaque whatever your Key Transparency setting is, so the letter you
+its own, opaque whatever the theme's key transparency is, so the letter you
 are picking stays legible against the keys it covers. The keys edit
 the password the same way typing does, and Omarchy checks it as usual. The
 keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
@@ -547,22 +555,20 @@ the gear key on the on-screen keyboard opens directly:
 | Tablet mode: Automatic (follow the hardware — folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
-| Key size: Compact, Normal or Large | Normal | Setup › Tablet › Key Size |
-| Key shape, relief, fill, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
-| Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › BG Transparency |
-| Key transparency: Opaque, Low, Medium, High or Full | Opaque | Setup › Tablet › Key Transparency |
+| Key size against the theme's: Smaller, Regular or Larger | Regular | Setup › Tablet › Key Size |
+| Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
+| Whether the keyboard has a background | follows the bar | double-tap Omarchy's bar |
 | Touch typing in each overlay, the picker nav strip, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
 
-Match Bar follows Style › Bar › Transparency: a solid bar gives a solid
-keyboard background, a transparent bar a fully clear one. The keys themselves
-always stay solid. The handle along the bottom follows the bar the same way
-while the keyboard is closed, and the keyboard while it's open.
+The bar follows Style › Bar › Transparency, which a double tap on it
+toggles: a transparent bar takes the keyboard's background away entirely, and
+a solid one gives back whatever the theme asked for. The handle along the
+bottom follows the bar the same way while the keyboard is closed, and the
+keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`size set compact|normal|large`,
-`key-transparency set opaque|low|medium|high|full`,
-`transparency set auto|opaque|low|medium|high|full`, and
+`size-adjust set smaller|regular|larger`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
 overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
 straight away. The rest of the look has no verb, because it is the theme's

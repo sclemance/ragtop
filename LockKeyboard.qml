@@ -300,11 +300,21 @@ Item {
 
   // Sized as the desktop keyboard is, on Omarchy's spacing scale, stepped
   // by the style's density.
-  readonly property int gap: style.size === "compact" ? Style.spacing.sm
-    : style.size === "large" ? Style.spacing.lg : Style.spacing.md
-  readonly property int padding: style.size === "compact" ? Style.spacing.md
-    : style.size === "large" ? Style.spacing.xl : Style.spacing.lg
-  readonly property real keyScale: style.size === "compact" ? 0.88 : style.size === "large" ? 1.15 : 1
+  // Size the way the desktop keyboard works it out, the theme's percentage
+  // times the user's own nudge, but checked here rather than trusted: this
+  // comes out of a file and is drawn on a lock screen.
+  readonly property real keyScale: {
+    var base = Number(style.size)
+    if (!isFinite(base)) base = 100
+    var nudge = style.sizeAdjust === "smaller" ? 0.88 : style.sizeAdjust === "larger" ? 1.15 : 1
+    return Math.max(0.6, Math.min(1.6, base / 100 * nudge))
+  }
+  readonly property string density: keyScale < 0.95 ? "compact"
+    : keyScale > 1.08 ? "roomy" : "normal"
+  readonly property int gap: density === "compact" ? Style.spacing.sm
+    : density === "roomy" ? Style.spacing.lg : Style.spacing.md
+  readonly property int padding: density === "compact" ? Style.spacing.md
+    : density === "roomy" ? Style.spacing.xl : Style.spacing.lg
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
 
   // How wide a key is, in units, once a short row has been stretched to the
