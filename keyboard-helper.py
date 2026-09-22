@@ -22,7 +22,8 @@ At startup and after each reload it also prints "labels <json>": the active
 layout's name, the characters on its letter keys, row by row, as
 [normal, shifted, altgr, shift+altgr], the symbols its keys carry, and any
 letters of its own that those rows don't reach, for the keyboard to draw. The
-two AltGr levels are empty strings where the layout has nothing there.
+two AltGr levels are empty strings where the layout has nothing there. It also
+names every layout Hyprland has configured, and which of them is active.
 
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
 for each command.
@@ -135,6 +136,8 @@ class XkbLabels:
         lib.xkb_keysym_to_utf32.argtypes = [ctypes.c_uint32]
         lib.xkb_keymap_layout_get_name.restype = ctypes.c_char_p
         lib.xkb_keymap_layout_get_name.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        lib.xkb_keymap_num_layouts.restype = ctypes.c_uint32
+        lib.xkb_keymap_num_layouts.argtypes = [ctypes.c_void_p]
         self.lib = lib
         self.context = lib.xkb_context_new(0)
 
@@ -191,9 +194,16 @@ class XkbLabels:
         name = lib.xkb_keymap_layout_get_name(keymap, group)
         symbols = self._symbols(keymap, group, char)
         letters = self._stray_letters(keymap, char, rows)
+        # Every layout Hyprland has configured, in its order, so the keyboard
+        # can offer the others. One entry means there is nothing to switch to.
+        layouts = []
+        for g in range(lib.xkb_keymap_num_layouts(keymap)):
+            other = lib.xkb_keymap_layout_get_name(keymap, g)
+            layouts.append(localized_layout_name(other.decode() if other else ""))
         lib.xkb_keymap_unref(keymap)
         return {"name": localized_layout_name(name.decode() if name else ""),
-                "rows": rows, "symbols": symbols, "letters": letters}
+                "rows": rows, "symbols": symbols, "letters": letters,
+                "layouts": layouts, "active": group}
 
     def _stray_letters(self, keymap, char, rows):
         """Letters this layout types that its three letter rows don't carry:

@@ -674,6 +674,17 @@ Item {
     Quickshell.execDetached(["omarchy", "menu", "summon", "setup.tablet"])
   }
 
+  // Switch to one of the layouts Hyprland has configured, by its index.
+  // Hyprland owns the layout, so this asks rather than imposes: nothing is
+  // written to anyone's config, and the switch is the same one a keybinding
+  // would do. It emits activelayout, which is already what tells the helper
+  // to re-read the keymap, so the keys and their labels follow on their own.
+  function switchLayout(index) {
+    switchLayoutProc.command = ["hyprctl", "switchxkblayout", "all", String(index)]
+    switchLayoutProc.running = true
+  }
+  Process { id: switchLayoutProc }
+
   KeyboardTheme {
     id: keyboardTheme
     backgroundOpacity: ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[root.keyboardTransparency]

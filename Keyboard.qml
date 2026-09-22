@@ -35,6 +35,13 @@ Item {
   readonly property var layoutRows: root.service.keyLabels && root.service.keyLabels.rows.length === 3
     ? root.service.keyLabels.rows : fallbackRows
   readonly property string layoutName: root.service.keyLabels ? root.service.keyLabels.name : ""
+  // Every layout Hyprland has configured, in its order, and which one is on.
+  // A hold on the space bar offers the others. Ragtop does not keep a layout
+  // of its own, so with one configured there is nothing to offer.
+  readonly property var layoutList: root.service.keyLabels && Array.isArray(root.service.keyLabels.layouts)
+    ? root.service.keyLabels.layouts : []
+  readonly property int activeLayout: root.service.keyLabels && root.service.keyLabels.active >= 0
+    ? root.service.keyLabels.active : 0
   // Each letter's shifted character, e.g. "Ü" for "ü".
   readonly property var shiftOf: {
     var map = {}
@@ -209,7 +216,31 @@ Item {
     return [key].concat(list).slice(0, 9).map(function(c) { return root.upper ? c.toUpperCase() : c })
   }
 
-  // Sized so the longest row fits; layouts differ (10 to 12 letter keys).
+  // What a hold on a key offers: the characters behind a letter, or the
+  // layouts behind the space bar. Fewer than two and there is nothing to
+  // show, so the key types on the way down as usual.
+  function holdItems(key) {
+    if (key === "space") return root.layoutList.length > 1 ? root.layoutList : []
+    return root.variantsFor(key)
+  }
+
+  // Wide enough for the longest word in a list, measured rather than
+  // guessed: layout names are proportional text and vary a lot in length.
+  TextMetrics {
+    id: wordMetrics
+    font.family: root.theme.fontFamily
+    font.pixelSize: root.theme.wordSize
+  }
+  function wordCell(items) {
+    var widest = 0
+    for (var i = 0; i < items.length; i++) {
+      wordMetrics.text = items[i]
+      widest = Math.max(widest, wordMetrics.width)
+    }
+    return Math.ceil(widest) + 3 * root.theme.gap
+  }
+
+  // Sized so the longest row fits. Layouts differ, 10 to 12 letter keys.
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
   readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, Math.round(84 * theme.keyScale))
   readonly property real keyHeight: Math.max(Math.round(36 * theme.keyScale),
@@ -459,17 +490,24 @@ Item {
   // to stay on the keyboard. Where it can't fit at all it's centred.
   function openPopup() {
     var key = root.pendingKey
-    var items = root.variantsFor(key)
+    var items = root.holdItems(key)
     if (items.length < 2 || root.pendingPoint === -1) return
+    var layouts = key === "space"
     var slot = null
     for (var i = 0; i < root.slots.length; i++) if (root.slots[i].key === key) { slot = root.slots[i]; break }
     if (!slot) return
-    var cell = Math.max(slot.width + root.theme.gap, root.unit * 0.92)
-    var total = items.length * cell
     var room = root.width - 2 * root.theme.padding
+    var cell = layouts ? Math.min(root.wordCell(items), room / items.length)
+      : Math.max(slot.width + root.theme.gap, root.unit * 0.92)
+    var total = items.length * cell
+    // Characters start their first cell over the key being held, so the
+    // finger is already on the one it holds. Layout names are a list rather
+    // than a row of keys, so they sit centred on the space bar.
+    var from = layouts ? slot.x + (slot.width - total) / 2 : slot.x
     var x = total > room ? (root.width - total) / 2
-      : Math.min(Math.max(slot.x, root.theme.padding), root.width - root.theme.padding - total)
-    root.popup = { key: key, items: items, pointId: root.pendingPoint, index: 0,
+      : Math.min(Math.max(from, root.theme.padding), root.width - root.theme.padding - total)
+    root.popup = { key: key, kind: layouts ? "layouts" : "chars",
+                   items: items, pointId: root.pendingPoint, index: 0,
                    x: x, y: Math.max(root.popupTop, slot.y - slot.height - root.theme.gap),
                    cellWidth: cell, cellHeight: slot.height }
     root.selectAt(root.pendingX, root.pendingY)
@@ -495,6 +533,10 @@ Item {
     root.popup = null
     root.endHold()
     if (!p || p.index < 0) return
+    if (p.kind === "layouts") {
+      if (p.index !== root.activeLayout) root.service.switchLayout(p.index)
+      return
+    }
     root.service.sendKeys("type " + p.items[p.index])
     root.afterKey()
   }
@@ -567,8 +609,10 @@ Item {
         width: (root.popup ? root.popup.cellWidth : 0) - root.theme.gap
         height: parent.height
         label: modelData
-        labelKind: "char"
-        kind: root.popup && index === root.popup.index ? "accent" : "normal"
+        labelKind: root.popup && root.popup.kind === "layouts" ? "word" : "char"
+        kind: root.popup && index === root.popup.index ? "accent"
+          : root.popup && root.popup.kind === "layouts" && index === root.activeLayout ? "special"
+          : "normal"
         opaque: true
       }
     }
@@ -591,7 +635,7 @@ Item {
         next[p.pointId] = key
         // A key with variants types on release instead, so a hold can turn
         // into a popup rather than a letter that's already been typed.
-        if (root.variantsFor(key).length > 1) root.startHold(p, key)
+        if (root.holdItems(key).length > 1) root.startHold(p, key)
         else pressed.push(key)
       })
       root.held = next

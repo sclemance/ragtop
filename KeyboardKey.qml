@@ -141,6 +141,7 @@ Item {
     verticalAlignment: Text.AlignVCenter
     text: key.label
     color: key.labelColor
+    elide: Text.ElideRight
     font.family: key.theme.fontFamily
     font.pixelSize: key.labelPixelSize
   }
