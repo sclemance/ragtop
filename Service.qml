@@ -17,18 +17,20 @@ Item {
   property string detectedSwitchDevice: ""
   readonly property string switchDevice: root.tabletSwitchDevice !== "" ? root.tabletSwitchDevice : root.detectedSwitchDevice
   // Locked, unlocked, or automatic, which means rotate while the machine is
-  // folded and hold still while it is a laptop. Automatic is what the old
+  // folded and hold still while it is a laptop. A machine whose switch is
+  // never found is not a laptop, it is unknown, and Automatic rotates there
+  // rather than freezing a slate that has no switch to report with. Automatic is what the old
   // pair of states was reaching for when it force unlocked on unfolding: a
   // screen that turns in your hands but not while it is sat on a desk.
-  property string rotationMode: "auto"
+  readonly property string rotationMode: ["locked", "unlocked", "auto"]
+    .indexOf(root.settings["rotation"]) !== -1 ? root.settings["rotation"] : "auto"
   readonly property bool rotationLocked: root.rotationMode === "locked"
-    || (root.rotationMode === "auto" && !root.tabletMode)
+    || (root.rotationMode === "auto" && root.tabletModeKnown && !root.tabletMode)
   property bool tabletMode: false
   property bool oskVisible: false
 
-  function configure(device, mode) {
+  function configure(device) {
     root.tabletSwitchDevice = device || ""
-    root.rotationMode = ["locked", "unlocked", "auto"].indexOf(mode) !== -1 ? mode : "auto"
     configureFallback.stop()
     root.applyRotationLock()
   }
@@ -684,25 +686,39 @@ Item {
     Quickshell.execDetached(["omarchy", "menu", "summon", "setup.tablet"])
   }
 
-  // The keyboard's tools page asks for these. Rotation lock is kept by the
-  // bar widget, inline on its own shell.json entry, so the keyboard asks the
-  // widget rather than reaching for a file it does not own.
-  // Asks for a state rather than a flip: there is one bar widget per screen
-  // and all of them hear this, and setRotationLocked is idempotent while a
-  // flip repeated by a second screen would undo the first.
+  // What the controls tile asks for. Rotation is kept by the bar widget,
+  // inline on its own shell.json entry, so the tile asks the widget rather
+  // than reaching for a file it does not own.
+  // Asks for a state rather than a step: there is one bar widget per screen
+  // and every one of them hears this, so setRotationMode settling on the
+  // named mode is safe where cycling would have each screen advance it again
+  // and land somewhere nobody asked for.
   // Ragtop's controls, on their own surface above the keyboard. They go away
   // with it, so they can never be left floating over nothing.
   property bool toolsOpen: false
   onOskVisibleChanged: if (!root.oskVisible) root.toolsOpen = false
 
 
-  signal rotationModeRequested(string mode)
   readonly property var rotationModes: ["auto", "locked", "unlocked"]
-  function setRotationMode(mode) { root.rotationModeRequested(mode) }
+  // Written here, to the same file as everything else. The bar widget used
+  // to own this on its own shell.json entry, which meant the tile, the IPC
+  // and the bar button all did nothing on a bar with no Ragtop widget on it.
+  function setRotationMode(mode) {
+    if (root.rotationModes.indexOf(mode) === -1 || rotationModeProc.running) return
+    rotationModeProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                                "rotation", "set", mode]
+    rotationModeProc.running = true
+  }
+  Process { id: rotationModeProc }
 
   // Key size against whatever the theme asked for, stepped rather than set,
   // so the keyboard needs no argument-taking IPC to offer it.
   readonly property var sizeSteps: ["smallest", "smaller", "regular", "larger", "largest"]
+  // What each step does to the theme's size, defined here and nowhere else.
+  // Both keyboards draw from it, the lock screen's through the style file,
+  // because a second copy is how Smallest and Largest came to do nothing.
+  readonly property var sizeNudges: ({ "smallest": 0.78, "smaller": 0.88, "regular": 1,
+                                       "larger": 1.15, "largest": 1.3 })
   function stepSize(by) {
     var at = root.sizeSteps.indexOf(root.look.sizeAdjust)
     root.setSize((at < 0 ? 2 : at) + by)
@@ -713,9 +729,16 @@ Item {
   // a drag into a couple of writes and guarantees the value under the finger
   // when it lifts is the one that lands.
   property string pendingSize: ""
+  property string lastAskedSize: ""
   function setSize(index) {
     var next = root.sizeSteps[Math.max(0, Math.min(root.sizeSteps.length - 1, index))]
-    if (!next || next === root.look.sizeAdjust) return
+    if (!next) return
+    // Against what was last asked for, not what has settled. The settled
+    // value lags a drag, so dragging away and back again used to look like
+    // no change at all and leave the handle somewhere the keyboard was not.
+    var current = root.lastAskedSize !== "" ? root.lastAskedSize : root.look.sizeAdjust
+    if (next === current) return
+    root.lastAskedSize = next
     root.pendingSize = next
     root.flushSize()
   }
@@ -734,6 +757,7 @@ Item {
   // moment you want it off is the moment it has just appeared over what you
   // were reading.
   function toggleAutoShow() {
+    if (autoShowProc.running) return   // a second tap mid-write would be lost
     autoShowProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
                             "auto-show", "toggle"]
     autoShowProc.running = true
@@ -754,7 +778,10 @@ Item {
     }
   }
   function stepTheme(by) {
-    if (root.themeList.length === 0) return
+    // Until the write lands, currentTheme still names the old one, so a
+    // second tap would both compute the same answer and be dropped for
+    // reassigning a running process. Two taps would move one theme, or none.
+    if (root.themeList.length === 0 || themeApplyProc.running) return
     var at = root.themeList.indexOf(root.currentTheme)
     var count = root.themeList.length
     var next = root.themeList[(((at < 0 ? 0 : at) + by) % count + count) % count]
@@ -770,6 +797,7 @@ Item {
   // would do. It emits activelayout, which is already what tells the helper
   // to re-read the keymap, so the keys and their labels follow on their own.
   function switchLayout(index) {
+    if (switchLayoutProc.running) return
     switchLayoutProc.command = ["hyprctl", "switchxkblayout", "all", String(index)]
     switchLayoutProc.running = true
   }
@@ -814,6 +842,7 @@ Item {
       // so how big the keys are for these eyes survives changing theme.
       size: num("size", 60, 160, 100),
       sizeAdjust: pick("size-adjust", root.sizeSteps, "regular"),
+      sizeNudge: root.sizeNudges[pick("size-adjust", root.sizeSteps, "regular")] || 1,
       background: pick("background", ["tint", "gradient"], "tint"),
       edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),

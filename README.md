@@ -635,7 +635,8 @@ keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`size-adjust set smallest|smaller|regular|larger|largest`, and
+`size-adjust set smallest|smaller|regular|larger|largest`,
+`rotation set locked|unlocked|auto`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
 overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
 straight away. The rest of the look has no verb, because it is the theme's

@@ -31,12 +31,9 @@ QtObject {
   // held inside what a keyboard can actually be. Spacing follows the result
   // rather than a name, so a theme asking for 130 is roomy without having to
   // say so.
-  // Five steps rather than three, because the same keyboard has to work on a
-  // 1366 by 768 panel and on a retina screen, and one step either side of
-  // normal does not span that.
-  readonly property var sizeNudges: ({ "smallest": 0.78, "smaller": 0.88,
-                                       "regular": 1, "larger": 1.15, "largest": 1.3 })
-  readonly property real sizeNudge: sizeNudges[look.sizeAdjust] || 1
+  // What the user's step does to the theme's size. The service works it out,
+  // so there is one table rather than one per keyboard.
+  readonly property real sizeNudge: look.sizeNudge || 1
   readonly property string density: keyScale < 0.95 ? "compact"
     : keyScale > 1.08 ? "roomy" : "normal"
   readonly property string labels: look.labels

@@ -223,6 +223,7 @@ Item {
     return root.variantsFor(key)
   }
 
+
   // Wide enough for the longest word in a list, measured rather than
   // guessed: layout names are proportional text and vary a lot in length.
   TextMetrics {
@@ -533,7 +534,16 @@ Item {
     var p = root.popup
     if (!p) return
     var index = -1
-    if (y < p.y + p.cellHeight + root.keyHeight) {
+    // Characters reach a cell from the key below, since the popup's first
+    // cell sits over the key being held and the finger is already on it.
+    // Layouts are centred on the space bar instead and none of them is the
+    // one you are on, so nothing is chosen until the finger is actually on
+    // the card. Otherwise holding space and lifting would change the
+    // system's layout without the finger ever moving.
+    var within = p.kind === "layouts"
+      ? (y >= p.y && y <= p.y + p.cellHeight)
+      : y < p.y + p.cellHeight + root.keyHeight
+    if (within) {
       index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
     }
     if (index === p.index) return
@@ -624,7 +634,10 @@ Item {
         height: parent.height
         label: modelData
         labelKind: root.popup && root.popup.kind === "layouts" ? "word" : "char"
-        kind: root.popup && index === root.popup.index ? "accent"
+        // The cell under the finger is filled, not merely edged: it is
+        // usually half covered by that finger. "accent" no longer fills,
+        // since Enter took it and became an edge, so this takes "locked".
+        kind: root.popup && index === root.popup.index ? "locked"
           : root.popup && root.popup.kind === "layouts" && index === root.activeLayout ? "special"
           : "normal"
         opaque: true
@@ -639,26 +652,33 @@ Item {
   MultiPointTouchArea {
     anchors.fill: parent
     onPressed: function(points) {
+      // While the controls are up, a touch on the keyboard puts them away
+      // rather than typing. That is the tap-outside-to-dismiss, done from the
+      // surface the finger is already on instead of a sheet over everything,
+      // which would take the tile's own touches with it. Decided once for the
+      // whole event: inside the loop, the first finger closed them and the
+      // second read them as already closed and typed a letter.
+      if (root.service.toolsOpen) {
+        root.service.toolsOpen = false
+        return
+      }
       var next = Object.assign({}, root.held)
       var pressed = []
       points.forEach(function(p) {
-        // While the controls are up, a touch on the keyboard puts them away
-        // rather than typing. That is the tap-outside-to-dismiss, done from
-        // the surface the finger is already on instead of a sheet over
-        // everything, which would take the tile's own touches with it.
-        if (root.service.toolsOpen) {
-          root.service.toolsOpen = false
-          return
-        }
-        // While a popup is open the other fingers wait their turn.
-        if (root.popup !== null || root.pendingPoint !== -1) return
+        // While a popup is open the other fingers wait their turn. A pending
+        // space hold is not one to wait for, since space has already typed.
+        if (root.popup !== null
+            || (root.pendingPoint !== -1 && root.pendingKey !== "space")) return
         var key = root.keyAt(p.x, p.y)
         if (key === null) return
         next[p.pointId] = key
         // A key with variants types on release instead, so a hold can turn
-        // into a popup rather than a letter that's already been typed.
+        // into a popup rather than a letter that's already been typed. The
+        // space bar is not one of those. It types on the way down as it
+        // always has, and its hold runs alongside, because a thumb resting
+        // on space must not swallow the letter rolling in after it.
         if (root.holdItems(key).length > 1) root.startHold(p, key)
-        else pressed.push(key)
+        if (key === "space" || root.holdItems(key).length <= 1) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
@@ -689,7 +709,7 @@ Item {
       } else if (p.pointId === root.pendingPoint) {
         var key = root.pendingKey
         root.endHold()
-        root.press(key)  // a tap after all
+        if (key !== "space") root.press(key)  // a tap after all, and space already did
       } else if (p.pointId in next) {
         lifted.push(next[p.pointId])
       }

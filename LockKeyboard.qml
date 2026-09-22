@@ -274,8 +274,11 @@ Item {
       shape: pick(raw.shape, ["omarchy", "rounded", "pill", "angular"], "omarchy"),
       relief: pick(raw.relief, ["flat", "raised"], "flat"),
       fill: pick(raw.fill, ["auto", "dark", "light", "outline"], "light"),
-      keyTransparency: pick(raw.keyTransparency, ["opaque", "low", "medium", "high", "full"], "opaque"),
-      size: pick(raw.size, ["compact", "normal", "large"], "normal"),
+      // Numbers since the look went numeric. Checked, not trusted: this
+      // comes out of a file and is drawn on a lock screen.
+      keyTransparency: num(raw.keyTransparency, 0, 100, 0),
+      size: num(raw.size, 60, 160, 100),
+      sizeNudge: num(raw.sizeNudge, 0.5, 2, 1),
       labels: pick(raw.labels, ["small", "normal", "large"], "normal"),
       depth: num(raw.depth, 0, 10, 4),
       chamfer: num(raw.chamfer, 0, 20, 8),
@@ -306,8 +309,8 @@ Item {
   readonly property real keyScale: {
     var base = Number(style.size)
     if (!isFinite(base)) base = 100
-    var nudge = ({ "smallest": 0.78, "smaller": 0.88, "regular": 1,
-                   "larger": 1.15, "largest": 1.3 })[style.sizeAdjust] || 1
+    var nudge = Number(style.sizeNudge)
+    if (!isFinite(nudge) || nudge <= 0) nudge = 1
     return Math.max(0.6, Math.min(1.6, base / 100 * nudge))
   }
   readonly property string density: keyScale < 0.95 ? "compact"
@@ -373,8 +376,7 @@ Item {
   // it show through, outline keys are carried by their edge alone.
   // How see-through the keys are; what shows through is the lock screen
   // behind them.
-  readonly property real keyOpacity:
-    ({ "opaque": 1, "low": 0.85, "medium": 0.7, "high": 0.5, "full": 0 })[style.keyTransparency]
+  readonly property real keyOpacity: 1 - style.keyTransparency / 100
   function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
 
   // A key sits darker or lighter than the lock screen's own surface; where

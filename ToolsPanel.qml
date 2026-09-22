@@ -17,7 +17,6 @@ Item {
 
   signal dismissed()
 
-  readonly property color faceOn: panel.theme.lockedKey
   readonly property color faceOff: panel.theme.specialKey
 
   Rectangle {
@@ -76,8 +75,14 @@ Item {
       // each look like something you do.
       Row {
         spacing: 14
+        KeyIcon {
+          anchors.verticalCenter: parent.verticalCenter
+          height: 20
+          name: "rotate"
+          color: panel.theme.specialText
+        }
         Text {
-          width: 150
+          width: 116
           anchors.verticalCenter: parent.verticalCenter
           text: "Screen Rotation"
           color: panel.theme.text

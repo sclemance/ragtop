@@ -10,6 +10,7 @@
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop size-adjust (get | is <adjust> | set <adjust>)
+#        ragtop rotation (get | is <mode> | set <mode>)
 #        ragtop theme (list | apply <theme>)
 #        ragtop setup                       open setup in the shell
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
@@ -23,6 +24,8 @@
 # which a double tap on it toggles. What is left is <adjust>, one of
 # smallest, smaller, regular, larger or largest, which sizes the keys
 # against whatever the theme asked for and is never written by applying one.
+# Rotation <mode> is locked, unlocked, or auto, which turns the screen while
+# the machine is folded and holds it still while it is a laptop.
 #
 # A theme is a TOML file of those same settings, laid out the way Omarchy
 # lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
@@ -164,6 +167,9 @@ choice_notice() {
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
     "size-adjust smallest"|"size-adjust smaller"|"size-adjust regular"\
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
+    "rotation locked") echo "The screen will not rotate." ;;
+    "rotation unlocked") echo "The screen follows the sensor." ;;
+    "rotation auto") echo "The screen rotates while the machine is folded." ;;
     "labels small"|"labels normal"|"labels large") echo "The key labels are now $2." ;;
     *) return 1 ;;
   esac
@@ -253,7 +259,8 @@ open(settings + ".tmp", "w").write("\n".join(lines) + "\n")
 os.replace(settings + ".tmp", settings)
 
 label = raw.get("name")
-print(label if isinstance(label, str) and label.strip() else os.path.basename(path)[:-5])
+print(label if isinstance(label, str) and label.strip()
+      else os.path.basename(os.path.dirname(path)))
 EOF
   ) || exit 2
   put theme "$1"
@@ -263,6 +270,7 @@ EOF
 case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "size-adjust "*) choice size-adjust regular "${2:-}" "${3:-}" ;;
+  "rotation "*) choice rotation auto "${2:-}" "${3:-}" ;;
   "labels "*) choice labels normal "${2:-}" "${3:-}" ;;
   "theme list") themes ;;
   "theme get") get theme omarchy ;;
