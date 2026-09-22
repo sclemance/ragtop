@@ -758,9 +758,10 @@ True today, and worth saying if you want them gone:
   than elsewhere: asking every three seconds is what keeps the daemon from
   recovering in the first place.
 - **Reporting any of it.** Tap **Setup › Tablet › Diagnostics**. It puts the
-  machine, the four versions, the tablet-mode switch and its read access, the
-  keyboard layout, which of Ragtop's surfaces are up, the packages, the
-  overlays and every setting on your clipboard, ready to paste into an issue.
+  machine, the four versions, the screen and its scale, the tablet-mode switch
+  and its read access, the keyboard layout, which of Ragtop's surfaces are up,
+  the packages, the overlays and every setting on your clipboard, ready to
+  paste into an issue.
   From a terminal it is `ragtop diagnostics`, and `ragtop diagnostics copy`
   does the same as the menu row.
 

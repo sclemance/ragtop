@@ -422,6 +422,39 @@ diagnostics() {
   [[ -n $version && $version != "$name" ]] && model="$name ($version)"
   row Machine "$(dmi sys_vendor) $model, $chassis"
 
+  # Resolution on its own says very little. A Surface scaled to 2 lays out on
+  # the same canvas a 1366x768 laptop does, so "the keys are too small" cannot
+  # be answered without the scale, and nobody thinks to send it. The transform
+  # says which way the screen is really turned, which is the other half of a
+  # rotation report.
+  value=$(python3 - <<'PYEOF' || true
+import json, subprocess, sys
+
+turns = {0: "normal", 1: "turned left", 2: "upside down", 3: "turned right"}
+try:
+    raw = subprocess.run(["hyprctl", "monitors", "-j"],
+                         capture_output=True, text=True, timeout=5).stdout
+    monitors = json.loads(raw)
+except Exception:
+    sys.exit(0)
+
+out = []
+for m in monitors:
+    scale = m.get("scale", 1) or 1
+    part = "%s %dx%d scale %g" % (m.get("name", "?"), m.get("width", 0),
+                                  m.get("height", 0), scale)
+    if scale != 1:
+        part += " (%dx%d laid out)" % (m.get("width", 0) / scale,
+                                       m.get("height", 0) / scale)
+    turn = turns.get(m.get("transform", 0), "transform %s" % m.get("transform"))
+    if turn != "normal":
+        part += ", " + turn
+    out.append(part)
+print(", ".join(out))
+PYEOF
+)
+  row Screen "${value:-unknown}"
+
   # What the service says about itself, asked once and read field by field.
   health=$(omarchy-shell ragtop health 2>/dev/null || true)
 
