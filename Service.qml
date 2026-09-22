@@ -16,19 +16,31 @@ Item {
   property string tabletSwitchDevice: ""
   property string detectedSwitchDevice: ""
   readonly property string switchDevice: root.tabletSwitchDevice !== "" ? root.tabletSwitchDevice : root.detectedSwitchDevice
-  property bool rotationLocked: false
+  // Locked, unlocked, or automatic, which means rotate while the machine is
+  // folded and hold still while it is a laptop. Automatic is what the old
+  // pair of states was reaching for when it force unlocked on unfolding: a
+  // screen that turns in your hands but not while it is sat on a desk.
+  property string rotationMode: "auto"
+  readonly property bool rotationLocked: root.rotationMode === "locked"
+    || (root.rotationMode === "auto" && !root.tabletMode)
   property bool tabletMode: false
   property bool oskVisible: false
 
-  function configure(device, locked) {
+  function configure(device, mode) {
     root.tabletSwitchDevice = device || ""
-    root.rotationLocked = locked
+    root.rotationMode = ["locked", "unlocked", "auto"].indexOf(mode) !== -1 ? mode : "auto"
     configureFallback.stop()
-    // Locking just means "stop watching the orientation", which freezes the
-    // display at whatever orientation it's currently in.
-    if (locked) { orientationSettle.stop(); lockRecheck.stop() }
-    rotationProc.running = !locked && root.rotationAvailable
+    root.applyRotationLock()
   }
+
+  // Locking just means "stop watching the orientation", which freezes the
+  // display at whatever orientation it is in. Automatic reaches this too,
+  // every time the machine is folded or unfolded.
+  function applyRotationLock() {
+    if (root.rotationLocked) { orientationSettle.stop(); lockRecheck.stop() }
+    rotationProc.running = !root.rotationLocked && root.rotationAvailable
+  }
+  onRotationLockedChanged: root.applyRotationLock()
 
   // False until tablet mode is first decided, so "laptop mode" can be told
   // apart from "not decided yet".
@@ -684,8 +696,9 @@ Item {
   onOskVisibleChanged: if (!root.oskVisible) root.toolsOpen = false
 
 
-  signal rotationLockRequested(bool locked)
-  function toggleRotationLock() { root.rotationLockRequested(!root.rotationLocked) }
+  signal rotationModeRequested(string mode)
+  readonly property var rotationModes: ["auto", "locked", "unlocked"]
+  function setRotationMode(mode) { root.rotationModeRequested(mode) }
 
   // Key size against whatever the theme asked for, stepped rather than set,
   // so the keyboard needs no argument-taking IPC to offer it.
@@ -1009,8 +1022,8 @@ Item {
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
     anchors { top: true }
-    implicitWidth: 470
-    implicitHeight: 172
+    implicitWidth: 520
+    implicitHeight: 258
     margins.top: 22
     color: "transparent"
 

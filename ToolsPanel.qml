@@ -30,7 +30,7 @@ Item {
 
     Column {
       anchors.centerIn: parent
-      spacing: 10
+      spacing: 14
 
       // The theme, stepped rather than listed: the keyboard behind redraws
       // as you go, which is a better way to choose one than reading names.
@@ -45,7 +45,7 @@ Item {
           MouseArea { anchors.fill: parent; onClicked: panel.service.stepTheme(-1) }
         }
         Rectangle {
-          width: 342; height: 44; radius: 12
+          width: 368; height: 44; radius: 12
           color: panel.faceOff
           border.width: Math.max(1, panel.theme.keyBorderWidth)
           border.color: panel.theme.keyBorder
@@ -70,29 +70,79 @@ Item {
         }
       }
 
+      // Screen rotation, named rather than implied. Automatic follows the
+      // machine: it turns while folded and holds still while it is a laptop.
+      // Three exclusive states, so radios rather than three buttons that
+      // each look like something you do.
       Row {
-        spacing: 8
+        spacing: 14
+        Text {
+          width: 150
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Screen Rotation"
+          color: panel.theme.text
+          font.family: panel.theme.fontFamily
+          font.pixelSize: 15
+        }
+        Repeater {
+          model: [{ mode: "locked", label: "Locked" },
+                  { mode: "unlocked", label: "Unlocked" },
+                  { mode: "auto", label: "Automatic" }]
+          Item {
+            required property var modelData
+            readonly property bool on: panel.service.rotationMode === modelData.mode
+            width: dot.width + 6 + optionLabel.width
+            height: 44
 
-        // Rotation lock. The bar widget keeps it, so this asks rather than sets.
-        Rectangle {
-          width: 52; height: 52; radius: 12
-          color: panel.service.rotationLocked ? panel.faceOn : panel.faceOff
-          border.width: Math.max(1, panel.theme.keyBorderWidth)
-          border.color: panel.theme.keyBorder
-          KeyIcon {
-            anchors.centerIn: parent
-            height: 26
-            name: "rotate"
-            color: panel.service.rotationLocked ? panel.theme.accentText : panel.theme.text
+            Rectangle {
+              id: dot
+              anchors.verticalCenter: parent.verticalCenter
+              width: 22; height: 22; radius: 11
+              color: "transparent"
+              border.width: Math.max(1, panel.theme.keyBorderWidth)
+              border.color: parent.on ? panel.theme.accent : panel.theme.keyBorder
+              Rectangle {
+                anchors.centerIn: parent
+                width: 12; height: 12; radius: 6
+                color: panel.theme.accent
+                visible: dot.parent.on
+              }
+            }
+            Text {
+              id: optionLabel
+              anchors.verticalCenter: parent.verticalCenter
+              x: dot.width + 6
+              text: parent.modelData.label
+              color: panel.theme.text
+              font.family: panel.theme.fontFamily
+              font.pixelSize: 15
+            }
+            // The label belongs to the radio, as the sentence does below.
+            MouseArea {
+              anchors.fill: parent
+              onClicked: panel.service.setRotationMode(parent.modelData.mode)
+            }
           }
-          MouseArea { anchors.fill: parent; onClicked: panel.service.toggleRotationLock() }
+        }
+      }
+
+      // Key size, on a line of its own and saying which step it is on.
+      Row {
+        spacing: 14
+        Text {
+          id: sizeLabel
+          width: 150
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Keyboard Size"
+          color: panel.theme.text
+          font.family: panel.theme.fontFamily
+          font.pixelSize: 15
         }
 
-        // Key size, the whole ladder at once rather than a step at a time.
         Item {
           id: sizeSlider
-          width: 298
-          height: 52
+          width: 308
+          height: 44
           readonly property int steps: panel.service.sizeSteps.length
           readonly property int index: Math.max(0,
             panel.service.sizeSteps.indexOf(panel.service.look.sizeAdjust))
@@ -107,30 +157,19 @@ Item {
           // so a write still in flight cannot look like a spring back.
           onIndexChanged: if (dragIndex === index) dragIndex = -1
 
-          Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: 0
-            text: {
-              var name = panel.service.sizeSteps[sizeSlider.shown] || ""
-              return name.charAt(0).toUpperCase() + name.slice(1)
-            }
-            color: panel.theme.specialText
-            font.family: panel.theme.fontFamily
-            font.pixelSize: 13
-          }
-          Rectangle { y: 34; x: 14; width: sizeSlider.span; height: 4; radius: 2
+          Rectangle { y: 20; x: 14; width: sizeSlider.span; height: 4; radius: 2
                       color: panel.faceOff }
           Repeater {
             model: sizeSlider.steps
             Rectangle {
               required property int index
-              width: 6; height: 6; radius: 3; y: 33
+              width: 6; height: 6; radius: 3; y: 19
               x: 11 + index * sizeSlider.stepWidth
               color: panel.theme.specialText
             }
           }
           Rectangle {
-            width: 28; height: 28; radius: 14; y: 22
+            width: 28; height: 28; radius: 14; y: 8
             x: sizeSlider.shown * sizeSlider.stepWidth
             color: panel.theme.accent
             border.width: 1
@@ -160,10 +199,49 @@ Item {
             onCanceled: sizeSlider.dragIndex = -1
           }
         }
+      }
 
-        // Everything else is rare enough to be worth a menu.
+      // Whether the keyboard comes up by itself on a text field, and the way
+      // through to everything that does not belong on a surface you hold.
+      Item {
+        width: 472
+        height: 44
+
         Rectangle {
-          width: 84; height: 52; radius: 12
+          id: autoBox
+          y: 9
+          width: 26; height: 26; radius: 7
+          color: panel.service.autoShowEnabled ? panel.theme.accent : "transparent"
+          border.width: Math.max(1, panel.theme.keyBorderWidth)
+          border.color: panel.service.autoShowEnabled ? panel.theme.accent : panel.theme.keyBorder
+          KeyIcon {
+            anchors.centerIn: parent
+            height: 16
+            name: "check"
+            color: panel.theme.accentText
+            visible: panel.service.autoShowEnabled
+          }
+        }
+        Text {
+          id: autoLabel
+          anchors.verticalCenter: autoBox.verticalCenter
+          x: 38
+          text: "Auto-expand keyboard on text fields"
+          color: panel.theme.text
+          font.family: panel.theme.fontFamily
+          font.pixelSize: 15
+        }
+        // The sentence is part of the control, not a caption beside it.
+        MouseArea {
+          width: autoLabel.x + autoLabel.width
+          height: parent.height
+          onClicked: panel.service.toggleAutoShow()
+        }
+
+        Rectangle {
+          anchors.right: parent.right
+          y: 0
+          width: 84; height: 44; radius: 12
           color: panel.faceOff
           border.width: Math.max(1, panel.theme.keyBorderWidth)
           border.color: panel.theme.keyBorder
@@ -179,42 +257,6 @@ Item {
             onClicked: { panel.dismissed(); panel.service.openSettings() }
           }
         }
-      }
-
-      // Whether the keyboard comes up by itself on a text field. A box with
-      // a sentence beside it, because "Auto" on a key says nothing about
-      // what is automatic. The moment you want this off is the moment it has
-      // appeared over what you were reading, which is a bad moment to be
-      // several taps deep in a menu.
-      Item {
-        width: 446
-        height: 30
-
-        Rectangle {
-          id: autoBox
-          y: 2
-          width: 26; height: 26; radius: 7
-          color: panel.service.autoShowEnabled ? panel.theme.accent : "transparent"
-          border.width: Math.max(1, panel.theme.keyBorderWidth)
-          border.color: panel.service.autoShowEnabled ? panel.theme.accent : panel.theme.keyBorder
-          KeyIcon {
-            anchors.centerIn: parent
-            height: 16
-            name: "check"
-            color: panel.theme.accentText
-            visible: panel.service.autoShowEnabled
-          }
-        }
-        Text {
-          anchors.verticalCenter: autoBox.verticalCenter
-          x: 38
-          text: "Auto-expand keyboard on text fields"
-          color: panel.theme.text
-          font.family: panel.theme.fontFamily
-          font.pixelSize: 15
-        }
-        // The sentence is part of the control, not a caption beside it.
-        MouseArea { anchors.fill: parent; onClicked: panel.service.toggleAutoShow() }
       }
     }
   }
