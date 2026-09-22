@@ -67,20 +67,10 @@ rows = {
     **{f"setup.tablet.theme.{name}": dict(icon="\U000f03d8", label=label,
         checked=f'"{cmd}" theme is {name}', action=f'"{cmd}" theme apply {name}')
        for name, label in themes},
-    "setup.tablet.shape": dict(icon="\U000f0831", label="Key Shape"),
-    **{f"setup.tablet.shape.{name}": dict(icon="\U000f0831", label=label,
-        checked=f'"{cmd}" shape is {name}', action=f'"{cmd}" shape set {name}')
-       for name, label in (("omarchy", "Omarchy"), ("rounded", "Rounded"), ("pill", "Pill"),
-                           ("angular", "Angular"))},
-    "setup.tablet.relief": dict(icon="\U000f0764", label="Key Relief"),
-    **{f"setup.tablet.relief.{name}": dict(icon="\U000f0764", label=label,
-        checked=f'"{cmd}" relief is {name}', action=f'"{cmd}" relief set {name}')
-       for name, label in (("flat", "Flat"), ("raised", "Raised"))},
-    "setup.tablet.fill": dict(icon="\U000f0764", label="Key Fill"),
-    **{f"setup.tablet.fill.{name}": dict(icon="\U000f0764", label=label,
-        checked=f'"{cmd}" fill is {name}', action=f'"{cmd}" fill set {name}')
-       for name, label in (("auto", "Automatic"), ("dark", "Dark"), ("light", "Light"),
-                           ("outline", "Outline"))},
+    # What a key looks like is the theme's to say (themes/<slug>/ragtop.toml).
+    # What is left here is what no theme author can know: how big the keys
+    # need to be on this screen for these eyes, and how much of the window
+    # behind them has to stay readable.
     "setup.tablet.size": dict(icon="\U000f004c", label="Key Size"),
     **{f"setup.tablet.size.{name}": dict(icon="\U000f004c", label=label,
         checked=f'"{cmd}" size is {name}', action=f'"{cmd}" size set {name}')
@@ -90,19 +80,11 @@ rows = {
         checked=f'"{cmd}" key-transparency is {level}', action=f'"{cmd}" key-transparency set {level}')
        for level, label in (("opaque", "Opaque"), ("low", "Low"), ("medium", "Medium"),
                             ("high", "High"), ("full", "Full"))},
-    "setup.tablet.background": dict(icon="\U000f06a0", label="Background"),
-    **{f"setup.tablet.background.{name}": dict(icon="\U000f06a0", label=label,
-        checked=f'"{cmd}" background is {name}', action=f'"{cmd}" background set {name}')
-       for name, label in (("tint", "Tint"), ("gradient", "Gradient"))},
     "setup.tablet.transparency": dict(icon="\U000f1853", label="BG Transparency"),
     **{f"setup.tablet.transparency.{level}": dict(icon="\U000f1853", label=label,
         checked=f'"{cmd}" transparency is {level}', action=f'"{cmd}" transparency set {level}')
        for level, label in (("auto", "Match Bar"), ("opaque", "Opaque"), ("low", "Low"),
                             ("medium", "Medium"), ("high", "High"), ("full", "Full"))},
-    "setup.tablet.edge": dict(icon="\U000f08a6", label="Edge"),
-    **{f"setup.tablet.edge.{name}": dict(icon="\U000f08a6", label=label,
-        checked=f'"{cmd}" edge is {name}', action=f'"{cmd}" edge set {name}')
-       for name, label in (("border", "Border"), ("fade", "Fade"), ("none", "None"))},
     "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),

@@ -316,15 +316,17 @@ row in the Omarchy menu under **Setup › Tablet**:
 
 | Row | Choices |
 | --- | --- |
-| Theme | A saved look; picking one writes the rows below |
-| Key Shape | Omarchy (the theme's own corner rounding), Rounded, Pill, Angular |
-| Key Relief | Flat, or Raised: the key stands on a side, like a keycap |
-| Key Fill | Dark or Light (an opaque key sitting darker or lighter than the keyboard), Automatic (whichever of those your theme has room for — a dark theme has little below its background, a light one little above it, so a fixed choice reads strongly on some themes and barely at all on others), or Outline (no fill, carried by its edge) |
+| Theme | The keyboard's whole look, from a theme file |
 | Key Size | Compact, Normal, Large — the labels scale with the keys |
 | Key Transparency | Opaque, Low, Medium, High, Full. What shows through is the keyboard's background, so the desktop only shows if that's see-through too |
-| Background | Tint or Gradient |
 | BG Transparency | The keyboard's background: Match Bar, Opaque, Low, Medium, High, Full |
-| Edge | Border, Fade or None, for the keyboard's top edge |
+
+What a key looks like — its shape, relief, fill, the background behind it and
+the top edge — belongs to the theme, so it is set in a theme file and not
+row by row. What stays here is what no theme author can know: how big the
+keys have to be on your screen for your eyes, and how much of the window
+behind them you need to see. Picking a theme can set those too, since a theme
+is a whole look, so adjust them after if its answer does not suit you.
 
 Whatever a key looks like, a touch goes to the nearest key, so no shape
 makes keys harder to hit.
@@ -545,12 +547,8 @@ the gear key on the on-screen keyboard opens directly:
 | Tablet mode: Automatic (follow the hardware — folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
-| Key shape: Omarchy, Rounded, Pill or Angular | Omarchy | Setup › Tablet › Key Shape |
-| Key relief: Flat or Raised | Flat | Setup › Tablet › Key Relief |
-| Keys: Automatic (whichever way your theme has room for), Dark, Light or Outline | Light | Setup › Tablet › Key Fill |
 | Key size: Compact, Normal or Large | Normal | Setup › Tablet › Key Size |
-| Keyboard background: Tint or Gradient | Tint | Setup › Tablet › Background |
-| Keyboard top edge: Border (your Hyprland window border), Fade or None | None | Setup › Tablet › Edge |
+| Key shape, relief, fill, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
 | Keyboard background transparency: Match Bar, or Opaque, Low, Medium, High or Full to override it | Match Bar | Setup › Tablet › BG Transparency |
 | Key transparency: Opaque, Low, Medium, High or Full | Opaque | Setup › Tablet › Key Transparency |
 | Touch typing in each overlay, the picker nav strip, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
@@ -562,14 +560,13 @@ while the keyboard is closed, and the keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`background set tint|gradient`, `edge set border|fade|none`,
-`shape set omarchy|rounded|pill|angular`, `relief set flat|raised`,
-`fill set dark|light|outline`, `key-transparency set opaque|low|medium|high|full`,
-`size set compact|normal|large`, `theme apply <name>` (`theme list` shows
-them) and
-`transparency set auto|opaque|low|medium|high|full`. Settings other than the
-overlays are kept in
-`~/.config/ragtop/settings.conf`, and changes apply straight away.
+`size set compact|normal|large`,
+`key-transparency set opaque|low|medium|high|full`,
+`transparency set auto|opaque|low|medium|high|full`, and
+`theme apply <name>` (`theme list` shows them). Settings other than the
+overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
+straight away. The rest of the look has no verb, because it is the theme's
+to set.
 
 A couple more live in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
 
