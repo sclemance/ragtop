@@ -9,14 +9,13 @@ import QtQuick
 Item {
   id: root
 
-  // Service.qml: sendKeys(command), openSettings(), modifierMode, keyLabels.
+  // Service.qml: sendKeys(command), openSettings(), keyLabels.
   required property var service
   required property var theme
 
   property string page: "letters"
   // Modifiers: "off", "latched" (applies to the next key) or "locked".
   property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off", "altgr": "off" })
-  readonly property bool oneShot: root.service.modifierMode !== "sticky"
   readonly property bool upper: root.mods.shift !== "off"
   readonly property bool altgrOn: root.mods.altgr !== "off"
 
@@ -412,9 +411,7 @@ Item {
   // drops the latched Shift and leaves Super on.
   function tapModifier(name) {
     var state = mods[name]
-    if (!oneShot) {
-      setMod(name, state === "off" ? "locked" : "off")
-    } else if (state === "off") {
+    if (state === "off") {
       setMod(name, "latched")
     } else if (state === "latched") {
       setMod(name, "locked")

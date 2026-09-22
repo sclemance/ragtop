@@ -9,7 +9,6 @@
 #        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
-#        ragtop modifiers (get | is <mode> | set <mode>)
 #        ragtop shape (get | is <shape> | set <shape>)
 #        ragtop relief (get | is <relief> | set <relief>)
 #        ragtop fill (get | is <fill> | set <fill>)
@@ -23,8 +22,7 @@
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
 # (follow the hardware switch — folding a hinge or taking the keyboard off),
-# on or off, and the modifiers <mode> is oneshot
-# or sticky.
+# on or off.
 #
 # The keyboard's look: <shape> is omarchy (the theme's own corner rounding),
 # rounded, pill or angular; <relief> is flat or raised (keys standing on a
@@ -178,8 +176,6 @@ choice_notice() {
     "key-transparency opaque") echo "The keys are solid." ;;
     "key-transparency low"|"key-transparency medium"|"key-transparency high") echo "The keys are now $2 transparency." ;;
     "key-transparency full") echo "The keys are fully transparent." ;;
-    "modifiers oneshot") echo "Ctrl, Alt, Super and Shift now apply to the next key; tap twice to lock." ;;
-    "modifiers sticky") echo "Ctrl, Alt, Super and Shift now stay on until tapped again." ;;
     "background tint") echo "The keyboard's background is a flat tint." ;;
     "background gradient") echo "The keyboard's background is a gradient." ;;
     "edge border") echo "The keyboard's top edge now has the same border as your tiled windows." ;;
@@ -271,8 +267,8 @@ for key in colors:
 
 # A theme is a whole look, not a patch: every setting it doesn't name goes
 # back to its default rather than keeping whatever the last theme left
-# behind. Settings that aren't part of the look — tablet mode, auto-show,
-# the modifiers — are untouched.
+# behind. Settings that aren't part of the look, tablet mode and auto-show,
+# are untouched.
 look_keys = set(choices) | set(numbers) | set(colors)
 lines = []
 if os.path.exists(settings):
@@ -295,7 +291,6 @@ case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "transparency "*) choice transparency auto "${2:-}" "${3:-}" ;;
   "key-transparency "*) choice key-transparency opaque "${2:-}" "${3:-}" ;;
-  "modifiers "*) choice modifiers oneshot "${2:-}" "${3:-}" ;;
   "background "*) choice background tint "${2:-}" "${3:-}" ;;
   "edge "*) choice edge none "${2:-}" "${3:-}" ;;
   "shape "*) choice shape omarchy "${2:-}" "${3:-}" ;;

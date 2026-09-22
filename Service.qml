@@ -343,7 +343,6 @@ Item {
   readonly property bool autoShowEnabled: root.settings["auto-show"] !== "off"
   // Modifiers apply to the next key ("oneshot") or stay on until tapped
   // again ("sticky").
-  readonly property string modifierMode: root.settings["modifiers"] === "sticky" ? "sticky" : "oneshot"
 
   // In tablet mode, bring the keyboard up when a text field gets focus. The
   // bridge learns about focus from fcitx5, Omarchy's input method, and prints
@@ -1001,7 +1000,7 @@ Item {
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {
       return JSON.stringify({ visible: root.oskVisible,
-                              page: keyboard.page, mods: keyboard.mods, modifierMode: root.modifierMode })
+                              page: keyboard.page, mods: keyboard.mods })
     }
     function pickerState(): string {
       return JSON.stringify({ open: root.pickerOpen, patched: root.pickerPatched,

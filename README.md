@@ -279,9 +279,9 @@ colours and font, and the Transparency setting, without restarting. It has:
 
 - **An extra row** of Esc, Tab, Ctrl, Alt, Super and the arrow keys. Held
   arrows and Backspace repeat.
-- **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C; the Ctrl turns off by
-  itself. Tap a modifier twice to lock it on. Or pick Sticky under
-  Setup › Tablet › Modifier Keys to have them stay on until tapped again.
+- **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C, and the Ctrl turns
+  off by itself. Tap a modifier a second time to lock it on until you tap it
+  again, however long you take over it.
 - **Your layout's letters:** the letter keys follow the active Hyprland
   layout, and the space bar shows its name.
 - **Hold a letter for its accents:** e gives é è ê ë, c gives ç, s gives ß.
@@ -543,7 +543,6 @@ the gear key on the on-screen keyboard opens directly:
 | Setting | Default | Where |
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hardware — folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
-| Keyboard modifiers: One-Shot (next key only; tap twice to lock) or Sticky (until tapped again) | One-Shot | Setup › Tablet › Modifier Keys |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key shape: Omarchy, Rounded, Pill or Angular | Omarchy | Setup › Tablet › Key Shape |
@@ -563,7 +562,7 @@ while the keyboard is closed, and the keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
-`modifiers set oneshot|sticky`, `background set tint|gradient`, `edge set border|fade|none`,
+`background set tint|gradient`, `edge set border|fade|none`,
 `shape set omarchy|rounded|pill|angular`, `relief set flat|raised`,
 `fill set dark|light|outline`, `key-transparency set opaque|low|medium|high|full`,
 `size set compact|normal|large`, `theme apply <name>` (`theme list` shows
