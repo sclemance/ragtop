@@ -382,6 +382,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Key Size | Smallest, Smaller, Regular, Larger, Largest — against whatever size the theme asks for, and the labels scale with the keys |
 | System Overlays | Touch typing in each of Omarchy's overlays, one at a time |
 | Run Setup | Opens setup in the shell |
+| Diagnostics | Copies everything a bug report needs to the clipboard |
 
 Theme, Key Size and the keyboard's own auto-expand are also on the panel the
 gear opens, which is the quicker way to them while you are holding the
@@ -690,6 +691,17 @@ If tablet mode is never detected:
   `quickshell log -r '*=true' /run/user/$UID/quickshell/by-pid/$(pgrep -f 'quickshell.*omarchy/shell')/log.qslog | grep 'sclemance.ragtop failed'`
 - **The keyboard doesn't type.** Check that `python-pywayland` is installed:
   the setup notification says so if it isn't.
+- **Reporting any of it.** Tap **Setup › Tablet › Diagnostics**. It puts the
+  machine, the four versions, the tablet-mode switch and its read access, the
+  keyboard layout, which of Ragtop's surfaces are up, the packages, the
+  overlays and every setting on your clipboard, ready to paste into an issue.
+  From a terminal it is `ragtop diagnostics`, and `ragtop diagnostics copy`
+  does the same as the menu row.
+
+  It also says where the code came from, because a linked working copy can
+  hold edits that are in no commit and a folder copied in by hand never takes
+  an update. It carries no paths under your home directory, no host name and
+  no user name.
 
 ## Uninstall
 

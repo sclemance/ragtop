@@ -47,5 +47,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Ragtop's version from manifest.json, and `omarchy version`.
-      placeholder: Ragtop 0.35.6, Omarchy 4.0.0
+      description: >
+        Setup › Tablet › Diagnostics copies these and the rest of what we
+        need. Paste it here, or just name the two versions.
+      placeholder: Ragtop 0.39.0, Omarchy 4.0.4
