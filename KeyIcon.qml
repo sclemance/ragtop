@@ -11,8 +11,8 @@ import QtQuick.Shapes
 Item {
   id: icon
 
-  // "settings", "shift", "backspace", "enter", "rotate", "check", "left",
-  // "up", "down", "right".
+  // "settings", "shift", "backspace", "enter", "rotate", "keyboard",
+  // "check", "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
 
@@ -102,6 +102,19 @@ Item {
   }
 
   // A tick.
+  // A keyboard: the case, a row of keys and a space bar. At the size this is
+  // drawn the keys are dots rather than squares, since anything with a shape
+  // of its own turns to mush by 20 pixels.
+  function keyboardPath() {
+    var path = move(0.08, 0.28) + line(0.92, 0.28) + line(0.92, 0.72)
+      + line(0.08, 0.72) + line(0.08, 0.28)
+    var xs = [0.25, 0.42, 0.58, 0.75]
+    for (var i = 0; i < xs.length; i++) {
+      path += move(xs[i], 0.42) + line(xs[i] + 0.02, 0.42)
+    }
+    return path + move(0.34, 0.60) + line(0.66, 0.60)
+  }
+
   function checkPath() {
     return move(0.2, 0.52) + line(0.42, 0.74) + line(0.8, 0.28)
   }
@@ -115,6 +128,7 @@ Item {
     : name === "backspace" ? backspacePath()
     : name === "enter" ? enterPath()
     : name === "rotate" ? rotatePath()
+    : name === "keyboard" ? keyboardPath()
     : name === "check" ? checkPath()
     : isArrow ? arrowPath()
     : ""

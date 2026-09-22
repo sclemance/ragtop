@@ -78,7 +78,8 @@ space until tablet mode turns on.
   background is see-through as its theme asks, and goes entirely when you make
   Omarchy's bar transparent.
 - **The keys a desktop needs.** A slim extra row has Esc, Tab, Ctrl, Alt, Super
-  and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C. Your
+  and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C, and
+  tap one twice to lock it on. Your
   Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
   terminal.
 - **Your layout, any character.** The letter keys and the symbol pages follow
@@ -234,6 +235,25 @@ whether the installer or the menu turned them on. While running, Ragtop keeps
 generated files in `~/.local/state/ragtop` and its settings in
 `~/.config/ragtop`.
 
+## Privacy and security
+
+Ragtop does not read what you type. It types.
+
+| | |
+| --- | --- |
+| **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol. It keeps no history and writes no log. |
+| **Network** | There is none. Nothing in Ragtop opens a socket, calls out, or names an address. |
+| **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
+| **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
+| **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
+| **Diagnostics** | **Setup › Tablet › Diagnostics** copies versions, hardware and settings. No paths under your home directory, no host name, no user name, and nothing you typed. |
+| **The overlay clones** | A clone is Omarchy's own code living in your config, where anything running as you can rewrite it. The password prompt and the lock screen are on that list. They stay off until you turn them on, one at a time. See [Omarchy's overlays](#omarchys-overlays). |
+| **The lock screen keyboard** | A separate file that shares no code with the desktop keyboard and sends no key events. What it learns about your layout is data, rechecked by its own rules. See [The lock screen](#the-lock-screen). |
+
+What it cannot do anything about is the room. Keys light up when tapped, the
+way they do on every on-screen keyboard, so a password typed on a tablet is
+readable over a shoulder.
+
 ## Using it
 
 In tablet mode, two icons appear in the bar:
@@ -327,7 +347,7 @@ it away.
 | Control | What it does |
 | --- | --- |
 | Theme | Steps through your themes, redrawing the keyboard behind each one |
-| Screen Rotation | Locked, Unlocked, or Automatic, which turns while the machine is folded and holds still while it is a laptop |
+| Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode |
 | Keyboard Size | The five-step nudge against whatever size the theme asks for |
 | Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
 | Settings | Opens Setup › Tablet for everything else |
@@ -338,8 +358,8 @@ from. It stays in Setup › Tablet, where you can reach it without a keyboard.
 
 **Screen rotation** is also in the bar, always visible, and the button there
 cycles the same three states. Rotation follows the sensor whether or not the
-machine is folded, so the screen can start turning with the keyboard
-attached, which is why Unlocked and Automatic are different things.
+machine is in tablet mode, so the screen can start turning while it is still
+a laptop, which is why Unlocked and Automatic are different things.
 
 ### Keybindings
 
@@ -382,6 +402,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Key Size | Smallest, Smaller, Regular, Larger, Largest — against whatever size the theme asks for, and the labels scale with the keys |
 | System Overlays | Touch typing in each of Omarchy's overlays, one at a time |
 | Run Setup | Opens setup in the shell |
+| Diagnostics | Copies everything a bug report needs to the clipboard |
 
 Theme, Key Size and the keyboard's own auto-expand are also on the panel the
 gear opens, which is the quicker way to them while you are holding the
@@ -642,12 +663,15 @@ overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
 straight away. The rest of the look has no verb, because it is the theme's
 to set.
 
-A couple more live in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
+One more lives in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `tabletSwitchDevice` | blank | Input device to read the tablet-mode switch from. Blank means auto-detect. |
-| `rotationLocked` | `false` | Saved by the padlock button. |
+
+The padlock button writes `rotation` to `settings.conf` like every other
+setting, so an old `rotationLocked` or `rotationMode` left in `shell.json` is
+read by nothing and can go.
 
 ## Tablet-mode detection
 
@@ -681,6 +705,33 @@ If tablet mode is never detected:
   with the right orientation, which is handled by your distribution's hardware
   database, not Ragtop.
 
+## Known limitations
+
+True today, and worth saying if you want them gone:
+
+- **No swipe typing.** Keys are tapped one at a time.
+- **No dead keys.** Accents come from holding a letter, not from a dead key
+  followed by one, so a character your layout only reaches that way is out of
+  reach.
+- **One layout at a time, and it is the system's.** Ragtop follows Hyprland's
+  layout instead of keeping one of its own. Holding the space bar switches
+  between the layouts you set there, and there is no picker of Ragtop's.
+- **Automatic tablet mode needs a kernel switch.** A machine that reports none
+  still works, set to **Always On**, and setup says so rather than failing
+  quietly. See [Tablet-mode detection](#tablet-mode-detection).
+- **Rotation needs `iio-sensor-proxy`.** Without it the screen holds still and
+  the padlock is the only control.
+- **The keyboard takes every tap inside it.** A theme that draws no background
+  at all is the exception, and then only the keys take one. There is no gap
+  between keys to reach the window underneath.
+- **The screen does not rotate while locked.** Omarchy's lock screen is not
+  redrawn for a rotated display, so it keeps the orientation it was locked in
+  and catches up when you unlock.
+- **A cloned menu's Apps list is empty** on Omarchy 4.0.0.alpha, which is an
+  Omarchy bug rather than Ragtop's. Ragtop works around it and the workaround
+  undoes itself once upstream lands a fix. See
+  [The menu's Apps list](#the-menus-apps-list).
+
 ## Troubleshooting
 
 - **Changes to Ragtop's code don't take effect.** Run
@@ -690,6 +741,33 @@ If tablet mode is never detected:
   `quickshell log -r '*=true' /run/user/$UID/quickshell/by-pid/$(pgrep -f 'quickshell.*omarchy/shell')/log.qslog | grep 'sclemance.ragtop failed'`
 - **The keyboard doesn't type.** Check that `python-pywayland` is installed:
   the setup notification says so if it isn't.
+- **Something stops working and nothing says why.** Four things run in the
+  background: the key sender, the watcher that notices text fields, the
+  tablet-mode switch watcher and the rotation sensor. Any of them can die
+  while everything on screen still looks right. Ragtop now says so once, in
+  the words of what you lost rather than the name of a process, and
+  Diagnostics has a **Background** line that names whichever is failing and
+  how many tries it has had. A process that keeps dying is restarted more
+  slowly each time, up to once every five minutes, instead of every three
+  seconds forever.
+- **The screen stops following the device.** Ragtop says so, once, when the
+  sensor has failed to answer twice. `iio-sensor-proxy` can get into a state
+  where claiming the accelerometer never returns, and
+  `systemctl restart iio-sensor-proxy` clears it. Diagnostics says
+  `sensor not answering` while that is true. Backing off matters more here
+  than elsewhere: asking every three seconds is what keeps the daemon from
+  recovering in the first place.
+- **Reporting any of it.** Tap **Setup › Tablet › Diagnostics**. It puts the
+  machine, the four versions, the tablet-mode switch and its read access, the
+  keyboard layout, which of Ragtop's surfaces are up, the packages, the
+  overlays and every setting on your clipboard, ready to paste into an issue.
+  From a terminal it is `ragtop diagnostics`, and `ragtop diagnostics copy`
+  does the same as the menu row.
+
+  It also says where the code came from, because a linked working copy can
+  hold edits that are in no commit and a folder copied in by hand never takes
+  an update. It carries no paths under your home directory, no host name and
+  no user name.
 
 ## Uninstall
 

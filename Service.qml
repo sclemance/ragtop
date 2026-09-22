@@ -16,8 +16,8 @@ Item {
   property string tabletSwitchDevice: ""
   property string detectedSwitchDevice: ""
   readonly property string switchDevice: root.tabletSwitchDevice !== "" ? root.tabletSwitchDevice : root.detectedSwitchDevice
-  // Locked, unlocked, or automatic, which means rotate while the machine is
-  // folded and hold still while it is a laptop. A machine whose switch is
+  // Locked, unlocked, or automatic, which means rotate while in tablet mode
+  // and hold still in laptop mode. A machine whose switch is
   // never found is not a laptop, it is unknown, and Automatic rotates there
   // rather than freezing a slate that has no switch to report with. Automatic is what the old
   // pair of states was reaching for when it force unlocked on unfolding: a
@@ -39,8 +39,18 @@ Item {
   // display at whatever orientation it is in. Automatic reaches this too,
   // every time the machine is folded or unfolded.
   function applyRotationLock() {
-    if (root.rotationLocked) { orientationSettle.stop(); lockRecheck.stop() }
-    rotationProc.running = !root.rotationLocked && root.rotationAvailable
+    if (root.rotationLocked) {
+      orientationSettle.stop()
+      lockRecheck.stop()
+      rotationRestart.stop()
+      // Killing monitor-sensor while its claim is still in flight is what
+      // leaves iio-sensor-proxy unable to answer the next one. If the claim
+      // has not landed yet, let it run. Nothing it reports is applied while
+      // rotation is locked, and it is stopped the moment the claim lands.
+      if (!rotationProc.running || root.sensorClaimed) rotationProc.running = false
+    } else {
+      root.wantSensor()
+    }
   }
   onRotationLockedChanged: root.applyRotationLock()
 
@@ -183,7 +193,7 @@ Item {
     id: configureFallback
     interval: 2000
     running: true
-    onTriggered: rotationProc.running = !root.rotationLocked && root.rotationAvailable
+    onTriggered: root.applyRotationLock()
   }
 
   // Orientation comes from iio-sensor-proxy, through its monitor-sensor
@@ -202,13 +212,130 @@ Item {
   // the shell runs. The setup steps say what's missing; this just stops
   // asking.
   property bool rotationAvailable: true
+
+  // monitor-sensor asks iio-sensor-proxy to claim the accelerometer, and
+  // that call can hang. It gives up after 25 seconds, and a restart three
+  // seconds later asks again before the daemon has cleared the last one, so
+  // the retry keeps wedged the very thing it is waiting for. Measured on a
+  // Yoga 300w: the claim had been timing out for every caller, monitor-sensor
+  // was being respawned every 23 seconds, and stopping it for 40 seconds made
+  // the same claim answer in a fifth of a second.
+  //
+  // So a run that never reached the sensor counts as a failure, and each
+  // failure waits longer than the last. The first wait is already long
+  // enough to be the quiet window the daemon needs.
+  property int sensorFailures: 0
+  property bool sensorClaimed: false
+  property bool sensorStuckReported: false
+  readonly property var sensorBackoff: [3000, 30000, 120000, 300000]
+  // When the next attempt is allowed, as a clock reading rather than a
+  // timer that is running. Four things ask for the sensor at startup, within
+  // a second of each other, and whichever arrives while the timer is being
+  // armed would otherwise start it anyway. A deadline cannot be raced.
+  property double sensorRetryAt: 0
+
+  // The only way the sensor is ever started. Either it is due, or the timer
+  // is armed for the rest of the wait.
+  function wantSensor() {
+    if (root.rotationLocked || !root.rotationAvailable || rotationProc.running) return
+    var wait = root.sensorRetryAt - Date.now()
+    if (wait <= 0) {
+      rotationProc.running = true
+      return
+    }
+    rotationRestart.interval = wait
+    rotationRestart.start()
+  }
+
+  // The sensor was not the only process being respawned forever with nothing
+  // said. The keyboard helper, the focus bridge and the switch watcher all
+  // did it too, and each one is a headline feature that can be dead while
+  // the plugin looks fine. They share a policy now.
+  //
+  // A run that lasted ten seconds was working, whatever stopped it, so it
+  // starts again at once. A run that died sooner is a failure, and failures
+  // wait longer each time. A stop we asked for is neither.
+  readonly property var retryBackoff: [3000, 15000, 60000, 300000]
+  readonly property int retryGoodRun: 10000
+  property var retryState: ({})
+
+  function retryFor(name) {
+    if (!root.retryState[name]) root.retryState[name] = { failures: 0, at: 0, told: false }
+    return root.retryState[name]
+  }
+  function retryStarted(name) { root.retryFor(name).at = Date.now() }
+
+  // How long to wait before starting it again.
+  function retryAfterExit(name) {
+    var s = root.retryFor(name)
+    if (s.at && Date.now() - s.at >= root.retryGoodRun) {
+      s.failures = 0
+      s.told = false
+    } else {
+      s.failures++
+    }
+    return root.retryBackoff[Math.min(s.failures, root.retryBackoff.length - 1)]
+  }
+  function retryHealth(name, running) {
+    var s = root.retryState[name]
+    if (!s || s.failures === 0) return running ? "ok" : "starting"
+    // Already up for longer than a good run, so it is working now whatever
+    // went wrong before it. The count is only cleared when it next exits.
+    if (running && s.at && Date.now() - s.at >= root.retryGoodRun) return "ok"
+    return "failing:" + s.failures
+  }
+
+  // What stopped working, in the words of the thing the user lost. Said once
+  // per run of bad luck, and only on the second failure, so a single crash
+  // that recovers goes unremarked. Two in a row means the first wait of
+  // fifteen seconds did not help, and a keyboard that has not typed for
+  // fifteen seconds has earned an explanation.
+  readonly property var retryTrouble: ({
+    "keyboard": ["The on-screen keyboard is not typing",
+                 "Ragtop's key sender keeps stopping. Check that python-pywayland "
+                 + "is installed. Setup › Tablet › Diagnostics has the rest."],
+    "autoshow": ["The keyboard is not coming up by itself",
+                 "The watcher that notices text fields keeps stopping. Tap the handle "
+                 + "at the bottom to raise the keyboard by hand."],
+    "switch": ["Tablet mode is not being noticed",
+               "The tablet-mode switch watcher keeps stopping, so folding will not "
+               + "register. Setup › Tablet › Tablet Mode sets it by hand."]
+  })
+  function retryTell(name) {
+    var s = root.retryFor(name)
+    if (s.told || s.failures < 2 || retryNotifyProc.running) return
+    var words = root.retryTrouble[name]
+    if (!words) return
+    s.told = true
+    retryNotifyProc.command = ["omarchy-notification-send", "-g", "󰌌",
+                               words[0], words[1]]
+    retryNotifyProc.running = true
+  }
+  Process { id: retryNotifyProc }
+
+  // Rotation not working is invisible until someone turns the machine and
+  // nothing happens, so say it once, with the command that clears it.
+  function reportSensorStuck() {
+    if (root.sensorStuckReported) return
+    root.sensorStuckReported = true
+    sensorNotifyProc.command = [
+      "omarchy-notification-send", "-g", "󰌌",
+      "Rotation is not working",
+      "iio-sensor-proxy is not answering, so the screen will not follow the "
+        + "device. Restarting it usually clears this:\n"
+        + "systemctl restart iio-sensor-proxy"
+    ]
+    sensorNotifyProc.running = true
+  }
+  Process { id: sensorNotifyProc }
+
   Process {
     id: sensorCheckProc
     running: true
     command: ["sh", "-c", "command -v monitor-sensor >/dev/null"]
     onExited: function(code) {
       root.rotationAvailable = code === 0
-      if (root.rotationAvailable) rotationProc.running = !root.rotationLocked
+      if (root.rotationAvailable) root.applyRotationLock()
     }
   }
   // Someone who installs the package is owed rotation without restarting the
@@ -228,16 +355,36 @@ Item {
     // A fresh start reports the current orientation, which must be applied
     // even if it matches the last one, since it may have been changed
     // while locked.
-    onRunningChanged: if (running) root.appliedOrientation = ""
+    onRunningChanged: {
+      if (!running) return
+      root.appliedOrientation = ""
+      root.sensorClaimed = false
+    }
     stdout: SplitParser {
       onRead: function(line) {
         var match = /orientation(?: changed)?: ([a-z-]+)/.exec(line)
         if (!match || !(match[1] in root.orientationTransforms)) return
+        // The first orientation is the proof that the claim went through.
+        root.sensorClaimed = true
+        root.sensorFailures = 0
+        root.sensorStuckReported = false
+        root.sensorRetryAt = 0
+        // A stop held back while the claim was in flight happens now.
+        if (root.rotationLocked) {
+          rotationProc.running = false
+          return
+        }
         root.pendingOrientation = match[1]
         orientationSettle.restart()
       }
     }
-    onExited: if (!root.rotationLocked && root.rotationAvailable) rotationRestart.start()
+    onExited: {
+      if (!root.sensorClaimed) root.sensorFailures++
+      root.sensorRetryAt = Date.now() + root.sensorBackoff[
+        Math.min(root.sensorFailures, root.sensorBackoff.length - 1)]
+      if (root.sensorFailures >= 2) root.reportSensorStuck()
+      root.wantSensor()
+    }
   }
   Timer {
     id: orientationSettle
@@ -292,10 +439,11 @@ Item {
     root.appliedOrientation = orientation
   }
   Process { id: rotateApplyProc }
+  // The interval is set by wantSensor, from the deadline.
   Timer {
     id: rotationRestart
     interval: 3000
-    onTriggered: if (!root.rotationLocked && root.rotationAvailable) rotationProc.running = true
+    onTriggered: root.wantSensor()
   }
 
   // Settings written by the `ragtop` command (Setup › Tablet in the
@@ -362,22 +510,37 @@ Item {
   // bridge learns about focus from fcitx5, Omarchy's input method, and prints
   // "show"; hiding stays with the user (see fcitx-osk-bridge.py for why).
   // Stopping it hands fcitx5 back its own interface.
+  // `running` cannot be a binding here. The restart timer assigns to it, and
+  // an assignment breaks a binding for good, so after the first crash the
+  // bridge stopped following tablet mode at all and auto-show stayed dead
+  // until the shell restarted. The switch watcher below already avoided this
+  // by driving its process from a changed handler, and so does this now.
+  readonly property bool wantFocusBridge: root.tabletMode && root.autoShowEnabled
+  onWantFocusBridgeChanged: {
+    focusBridgeRestart.stop()
+    focusBridgeProc.running = root.wantFocusBridge
+  }
   Process {
     id: focusBridgeProc
     command: ["python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
-    running: root.tabletMode && root.autoShowEnabled
     stdout: SplitParser {
       onRead: function(line) {
         if (line === "show" && root.tabletMode && root.autoShowEnabled && !root.oskVisible && !root.pickerOpen)
           root.setOskVisible(true)
       }
     }
-    onExited: if (root.tabletMode && root.autoShowEnabled) focusBridgeRestart.start()
+    onRunningChanged: if (running) root.retryStarted("autoshow")
+    onExited: {
+      if (!root.wantFocusBridge) return
+      focusBridgeRestart.interval = root.retryAfterExit("autoshow")
+      focusBridgeRestart.start()
+      root.retryTell("autoshow")
+    }
   }
   Timer {
     id: focusBridgeRestart
     interval: 5000
-    onTriggered: focusBridgeProc.running = root.tabletMode && root.autoShowEnabled
+    onTriggered: focusBridgeProc.running = root.wantFocusBridge
   }
 
   // Whether the keyboard has a background at all is Omarchy's call, not a
@@ -611,7 +774,13 @@ Item {
   readonly property bool watchSwitch: root.switchDevice !== "" && root.tabletModeSetting === "auto"
   onWatchSwitchChanged: tabletModeProc.running = root.watchSwitch
   // A different device: stop, and onExited starts it again on the new one.
-  onSwitchDeviceChanged: if (tabletModeProc.running) tabletModeProc.running = false
+  // That stop is one we asked for, so it is not counted as a failure.
+  property bool switchDeviceChanging: false
+  onSwitchDeviceChanged: {
+    if (!tabletModeProc.running) return
+    root.switchDeviceChanging = true
+    tabletModeProc.running = false
+  }
   Component.onCompleted: {
     tabletModeProc.running = root.watchSwitch
     applyLayerRules()
@@ -627,9 +796,15 @@ Item {
     // The watcher exits when its device goes away, which on a detachable can
     // mean the keyboard was taken off. Look for a switch again rather than
     // retrying a path that may no longer be there.
+    onRunningChanged: if (running) root.retryStarted("switch")
     onExited: {
       if (root.tabletSwitchDevice === "" && !detectProc.running) detectProc.running = true
-      if (root.watchSwitch) tabletModeRestart.start()
+      var asked = root.switchDeviceChanging
+      root.switchDeviceChanging = false
+      if (!root.watchSwitch) return
+      tabletModeRestart.interval = asked ? root.retryBackoff[0] : root.retryAfterExit("switch")
+      tabletModeRestart.start()
+      if (!asked) root.retryTell("switch")
     }
   }
   Timer {
@@ -653,7 +828,12 @@ Item {
         }
       }
     }
-    onExited: keyboardHelperRestart.start()
+    onRunningChanged: if (running) root.retryStarted("keyboard")
+    onExited: {
+      keyboardHelperRestart.interval = root.retryAfterExit("keyboard")
+      keyboardHelperRestart.start()
+      root.retryTell("keyboard")
+    }
   }
   Timer {
     id: keyboardHelperRestart
@@ -1062,7 +1242,7 @@ Item {
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
     anchors { top: true }
-    implicitWidth: 520
+    implicitWidth: 596
     implicitHeight: 258
     margins.top: 22
     color: "transparent"
@@ -1184,6 +1364,21 @@ Item {
     function growKeyboard(): string { root.stepSize(1); return "ok" }
     function shrinkKeyboard(): string { root.stepSize(-1); return "ok" }
     function rotationState(): string { return root.rotationMode }
+    // What is working and what is not. Four things run in the background and
+    // each can be dead while everything on screen looks right, so this is
+    // what a bug report needs and the settings cannot say.
+    function health(): string {
+      return JSON.stringify({
+        keyboard: root.retryHealth("keyboard", keyboardHelper.running),
+        autoshow: root.wantFocusBridge ? root.retryHealth("autoshow", focusBridgeProc.running) : "off",
+        tabletSwitch: root.watchSwitch ? root.retryHealth("switch", tabletModeProc.running) : "off",
+        sensor: !root.rotationAvailable ? "absent"
+          : root.rotationLocked ? "held"
+          : root.sensorClaimed ? "ok"
+          : root.sensorFailures >= 2 ? "stuck"
+          : rotationProc.running ? "claiming" : "waiting"
+      })
+    }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.

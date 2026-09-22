@@ -22,9 +22,9 @@ BarWidget {
   onTabletModeChanged: if (!root.tabletMode) root.close()
 
   // Always there. Rotation follows the sensor whether or not the machine is
-  // folded, so a screen can start turning with the keyboard attached, and the
-  // one control that stops it should not be somewhere you have to fold the
-  // machine to reach.
+  // in tablet mode, so a screen can start turning while it is still a laptop,
+  // and the one control that stops it should not be somewhere you have to
+  // reach tablet mode to find.
   visible: true
   implicitWidth: grid.implicitWidth
   implicitHeight: grid.implicitHeight

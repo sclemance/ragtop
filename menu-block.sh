@@ -3,13 +3,17 @@
 # menu extension file between two marker comments. Both the installer and the
 # in-shell setup use this, so the rows are written in exactly one place.
 #
-# Usage: menu-block.sh add|remove
+# Usage: menu-block.sh add|remove|check
+#
+# check says nothing and succeeds when the block in the file is already the
+# one this version writes. It fails when a row is missing, when an older
+# Ragtop left one behind, and when a theme of your own has appeared since.
 set -euo pipefail
 
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 case "${1:-}" in
-  add|remove) ;;
-  *) echo "Usage: $0 add|remove" >&2; exit 2 ;;
+  add|remove|check) ;;
+  *) echo "Usage: $0 add|remove|check" >&2; exit 2 ;;
 esac
 
 python3 - "$1" "$menu_file" <<'EOF'
@@ -80,6 +84,10 @@ rows = {
     "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),
+    # One tap puts everything a report needs on the clipboard, so nobody has
+    # to find a terminal on a machine whose keyboard is folded away.
+    "setup.tablet.diagnostics": dict(icon="\U000f085e", label="Diagnostics",
+        action=f'"{cmd}" diagnostics copy'),
 }
 for name, icon, label in overlays:
     rows[f"setup.tablet.overlays.{name}"] = dict(
@@ -90,6 +98,14 @@ block = [start] + [f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," fo
 
 text = open(path).read() if os.path.exists(path) else ""
 lines = text.split("\n")
+
+if action == "check":
+    if start not in lines:
+        sys.exit(1)
+    i = lines.index(start)
+    j = lines.index(end, i)
+    sys.exit(0 if lines[i:j + 1] == block else 1)
+
 if start in lines:
     i = lines.index(start)
     j = lines.index(end, i)

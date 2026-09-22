@@ -26,13 +26,10 @@ body:
     attributes:
       label: What Ragtop thinks is going on
       description: |
-        Whatever of these is relevant — none is required, and no output is
-        sensitive:
+        Open the Omarchy menu and tap Setup › Tablet › Diagnostics. That puts
+        the machine, the versions and every setting on your clipboard, so
+        paste it here. From a terminal it is `ragtop diagnostics`.
 
-        ```bash
-        ./ragtop tablet-mode get          # what mode it believes it is in
-        ./ragtop overlay status           # which overlays are patched
-        cat $XDG_RUNTIME_DIR/ragtop-mode  # tablet or laptop, as the clones see it
-        hyprctl layers | grep ragtop      # which of its surfaces are up
-        ```
+        It carries no paths under your home directory, no host name and no
+        user name. Nothing in it is sensitive.
       render: shell

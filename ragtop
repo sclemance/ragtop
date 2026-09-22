@@ -13,6 +13,7 @@
 #        ragtop rotation (get | is <mode> | set <mode>)
 #        ragtop theme (list | apply <theme>)
 #        ragtop setup                       open setup in the shell
+#        ragtop diagnostics [copy]          what a bug report needs
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
 # (follow the hardware switch — folding a hinge or taking the keyboard off),
@@ -25,7 +26,7 @@
 # smallest, smaller, regular, larger or largest, which sizes the keys
 # against whatever the theme asked for and is never written by applying one.
 # Rotation <mode> is locked, unlocked, or auto, which turns the screen while
-# the machine is folded and holds it still while it is a laptop.
+# in tablet mode and holds it still in laptop mode.
 #
 # A theme is a TOML file of those same settings, laid out the way Omarchy
 # lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
@@ -44,8 +45,9 @@ repo="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 conf="$HOME/.local/state/ragtop/install.conf"
 clones="$repo/overlay-clones.sh"
 settings="$HOME/.config/ragtop/settings.conf"
+menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 
-usage() { sed -n '4,29p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '4,30p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 label() {
   case "$1" in
@@ -169,7 +171,7 @@ choice_notice() {
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
     "rotation locked") echo "The screen will not rotate." ;;
     "rotation unlocked") echo "The screen follows the sensor." ;;
-    "rotation auto") echo "The screen rotates while the machine is folded." ;;
+    "rotation auto") echo "The screen rotates while in tablet mode." ;;
     "labels small"|"labels normal"|"labels large") echo "The key labels are now $2." ;;
     *) return 1 ;;
   esac
@@ -184,12 +186,14 @@ choice_notice() {
 # commands no longer exist. None of that reaches a machine that upgrades in
 # place: the settings file keeps words where numbers are expected and falls
 # back to defaults, a user's own presets stop being found, and the menu keeps
-# rows calling verbs this version does not answer.
+# rows calling verbs this version does not answer. The menu is the one part
+# it does not look at itself, because menu-block.sh already knows what the
+# rows should be and can say whether the file holds them.
 migrate() {
-  python3 - "$settings" "$HOME/.config/ragtop" "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" <<'PYEOF'
-import json, os, re, sys
+  python3 - "$settings" "$HOME/.config/ragtop" <<'PYEOF'
+import json, os, sys
 
-settings_path, config_dir, menu_path = sys.argv[1:]
+settings_path, config_dir = sys.argv[1:]
 TRANS = {"opaque": 0, "low": 15, "medium": 30, "high": 50, "full": 100, "auto": 0}
 SIZE = {"compact": 88, "normal": 100, "large": 115}
 did = []
@@ -254,13 +258,6 @@ if os.path.isdir(presets):
         os.makedirs(target_dir, exist_ok=True)
         open(target, "w").write("\n".join(rows) + "\n")
         did.append("theme:" + slug)
-
-# Menu rows whose commands are gone. Reported only when one is really there,
-# so the menu file is not rewritten on every start.
-if os.path.exists(menu_path):
-    stale = r'"setup\.tablet\.(preset|shape|relief|fill|background|edge|modifiers|transparency|key-transparency|size)[."]'
-    if re.search(stale, open(menu_path).read()):
-        did.append("menu")
 
 print(" ".join(did))
 PYEOF
@@ -358,6 +355,167 @@ EOF
   notify "The keyboard now looks like $name."
 }
 
+# What the issue forms ask for by hand, gathered in one place.
+#
+# This is meant to be pasted into a public issue, so it carries no paths
+# under your home directory, no host name and no user name. What it carries
+# is the machine, the versions, what Ragtop was told to do, and what it
+# found when it looked.
+
+# One string field out of the manifest, which is flat enough to read this way.
+manifest_field() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$repo/manifest.json" | head -n 1
+}
+
+row() { printf '%-13s %s\n' "$1" "$2"; }
+
+# One flat string field out of the service's health JSON.
+health=""
+health_field() {
+  printf '%s' "$health" | sed -n "s/.*\"$1\":\"\([a-z:0-9]*\)\".*/\1/p"
+}
+
+dmi() { cat "/sys/class/dmi/id/$1" 2>/dev/null || true; }
+
+# Where the running code came from decides what a report means. A linked
+# working copy can hold edits that are in no commit, and a directory copied
+# in by hand never takes an update.
+plugin_source() {
+  local dir commit="" state
+  dir="$HOME/.config/omarchy/plugins/$(manifest_field id)"
+  if commit=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null); then
+    git -C "$repo" diff --quiet 2>/dev/null || commit="$commit plus local edits"
+    commit="git $commit, "
+  fi
+  if [[ -L $dir ]]; then state="linked working copy"
+  elif [[ -d $dir/.git ]]; then state="installed clone"
+  elif [[ -d $dir ]]; then state="copied in by hand"
+  else state="not in the plugins directory"
+  fi
+  echo "$commit$state"
+}
+
+diagnostics() {
+  local value chassis name version model mode switch sensor layout keymap layers trouble state item missing=()
+
+  row Ragtop "$(manifest_field version) ($(plugin_source))"
+  value=$(omarchy version 2>/dev/null | head -n 1 || true)
+  row Omarchy "${value:-unknown}"
+  value=$(hyprctl version 2>/dev/null | sed -n '1s/^Hyprland \([^ ]*\).*/\1/p' || true)
+  row Hyprland "${value:-unknown}"
+  value=$(qs --version 2>/dev/null | awk 'NR == 1 { print $2 }' || true)
+  row Quickshell "${value:-unknown}"
+
+  # Vendors put the model in whichever of the two fields they feel like, so
+  # print both when they differ rather than guessing which one reads better.
+  case "$(dmi chassis_type)" in
+    8|9|10|14) chassis="laptop" ;;
+    11) chassis="handheld" ;;
+    30) chassis="tablet" ;;
+    31) chassis="convertible" ;;
+    32) chassis="detachable" ;;
+    *) chassis="chassis type $(dmi chassis_type)" ;;
+  esac
+  name=$(dmi product_name)
+  version=$(dmi product_version)
+  model="$name"
+  [[ -n $version && $version != "$name" ]] && model="$name ($version)"
+  row Machine "$(dmi sys_vendor) $model, $chassis"
+
+  # What the service says about itself, asked once and read field by field.
+  health=$(omarchy-shell ragtop health 2>/dev/null || true)
+
+  echo
+  mode=$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ragtop-mode" 2>/dev/null || true)
+  row "Tablet mode" "$(get tablet-mode auto)${mode:+, now $mode}"
+  switch=$("$repo/find-tablet-switch.py" 2>/dev/null || true)
+  if [[ -n $switch ]]; then
+    row Switch "$(bash "$repo/udev-rule.sh" status 2>/dev/null || echo unknown), ${switch#*$'\t'}"
+  else
+    row Switch "none found"
+  fi
+  # Rotation is what the setting says. Whether the sensor is answering is
+  # the reply to "the screen does not turn", and the two disagree when
+  # something has gone wrong. The service knows, because monitor-sensor
+  # going quiet for a few seconds between restarts is normal and a claim
+  # that never lands is not, and only one of those is a fault.
+  value=$(get rotation auto)
+  sensor=$(health_field sensor)
+  case "$sensor" in
+    ok) row Rotation "$value, sensor answering" ;;
+    held) row Rotation "$value, not watching right now" ;;
+    claiming) row Rotation "$value, sensor starting up" ;;
+    stuck) row Rotation "$value, sensor not answering, rotation is dead" ;;
+    absent) row Rotation "$value, no sensor installed" ;;
+    waiting) row Rotation "$value, sensor between tries" ;;
+    # An older service, or none running at all.
+    *) if ! command -v monitor-sensor >/dev/null; then
+         row Rotation "$value, no sensor installed"
+       elif pgrep -x monitor-sensor >/dev/null; then
+         row Rotation "$value, sensor running"
+       else
+         row Rotation "$value, sensor not running"
+       fi ;;
+  esac
+  layout=$(hyprctl devices 2>/dev/null | sed -n 's/.*l "\([^"]*\)".*/\1/p' | head -n 1 || true)
+  keymap=$(hyprctl devices 2>/dev/null | sed -n 's/^[[:space:]]*active keymap: //p' | head -n 1 || true)
+  row Layout "${layout:-unknown}${keymap:+, now $keymap}"
+  layers=$(hyprctl layers 2>/dev/null | sed -n 's/.*namespace: \(ragtop[a-z-]*\).*/\1/p' | sort -u | tr '\n' ' ' || true)
+  row "Surfaces up" "${layers:-none}"
+
+  # Four things run in the background and any of them can be dead while
+  # everything on screen looks right. Only the ones in trouble are named,
+  # because the interesting answer is which one is not running.
+  if [[ -z $health ]]; then
+    row Background "unknown, the service did not answer"
+  else
+    trouble=""
+    for item in keyboard:keyboard autoshow:auto-show tabletSwitch:switch-watcher sensor:rotation-sensor; do
+      state=$(health_field "${item%%:*}")
+      case "$state" in
+        # claiming is an ordinary start, not a complaint.
+        ok|off|held|claiming|"") continue ;;
+        failing:*) state="failing, ${state#failing:} tries" ;;
+        stuck) state="not answering" ;;
+      esac
+      trouble="${trouble:+$trouble, }${item#*:} $state"
+    done
+    row Background "${trouble:-all four running}"
+  fi
+
+  command -v monitor-sensor >/dev/null || missing+=(iio-sensor-proxy)
+  python3 -c "import pywayland" 2>/dev/null || missing+=(python-pywayland)
+  python3 -c "import gi" 2>/dev/null || missing+=(python-gobject)
+  command -v git >/dev/null || missing+=(git)
+  if (( ${#missing[@]} )); then
+    row Packages "missing ${missing[*]}"
+  else
+    row Packages "all present"
+  fi
+  if [[ -f $conf ]]; then
+    row Installer "has run"
+  else
+    row Installer "has not run"
+  fi
+  if grep -qsF "// Ragtop: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"; then
+    row "Menu rows" "present"
+  else
+    row "Menu rows" "missing"
+  fi
+
+  echo
+  echo "Overlays"
+  "$clones" status 2>/dev/null | sed 's/^/  /' || echo "  unknown"
+
+  echo
+  echo "Settings"
+  if [[ -f $settings ]]; then
+    sed 's/^/  /' "$settings"
+  else
+    echo "  nothing written yet"
+  fi
+}
+
 case "${1:-} ${2:-}" in
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "size-adjust "*) choice size-adjust regular "${2:-}" "${3:-}" ;;
@@ -379,14 +537,30 @@ case "${1:-} ${2:-}" in
   "overlay sync") shift 2; "$clones" sync "$@" ;;
   "migrate "*|"migrate")
     changed=$(migrate)
-    case " $changed " in
-      *" menu "*|*" menu") "$repo/menu-block.sh" add >/dev/null ;;
-    esac
     if [[ -n $changed ]]; then
       notify "Ragtop brought your settings up to date for this version."
+    fi
+    # The rows this version writes, whenever the file holds something else.
+    # A row an older Ragtop left behind and a row this one added are the same
+    # problem, and one rewrite answers both. A menu that was never added
+    # stays that way, since putting it there is the installer's job.
+    if grep -qsF "// Ragtop: tablet settings." "$menu_file" && ! "$repo/menu-block.sh" check; then
+      "$repo/menu-block.sh" add >/dev/null
+      changed="${changed:+$changed }menu"
+    fi
+    if [[ -n $changed ]]; then
       echo "$changed"
     fi
     ;;
   "setup "*|"setup") omarchy-shell ragtop openSetup >/dev/null ;;
+  "diagnostics copy")
+    if command -v wl-copy >/dev/null; then
+      diagnostics | wl-copy
+      notify "Diagnostics copied. Paste them into your report."
+    else
+      diagnostics
+    fi
+    ;;
+  "diagnostics "|"diagnostics") diagnostics ;;
   *) usage ;;
 esac

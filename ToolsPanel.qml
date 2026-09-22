@@ -44,7 +44,7 @@ Item {
           MouseArea { anchors.fill: parent; onClicked: panel.service.stepTheme(-1) }
         }
         Rectangle {
-          width: 368; height: 44; radius: 12
+          width: 444; height: 44; radius: 12
           color: panel.faceOff
           border.width: Math.max(1, panel.theme.keyBorderWidth)
           border.color: panel.theme.keyBorder
@@ -70,7 +70,7 @@ Item {
       }
 
       // Screen rotation, named rather than implied. Automatic follows the
-      // machine: it turns while folded and holds still while it is a laptop.
+      // machine: it turns in tablet mode and holds still in laptop mode.
       // Three exclusive states, so radios rather than three buttons that
       // each look like something you do.
       Row {
@@ -82,7 +82,7 @@ Item {
           color: panel.theme.specialText
         }
         Text {
-          width: 116
+          width: 150
           anchors.verticalCenter: parent.verticalCenter
           text: "Screen Rotation"
           color: panel.theme.text
@@ -131,9 +131,17 @@ Item {
         }
       }
 
-      // Key size, on a line of its own and saying which step it is on.
+      // Key size, on a line of its own and saying which step it is on. The
+      // icon and the label width match the row above, so the two read as a
+      // pair rather than as two rows that happen to be near each other.
       Row {
         spacing: 14
+        KeyIcon {
+          anchors.verticalCenter: parent.verticalCenter
+          height: 20
+          name: "keyboard"
+          color: panel.theme.specialText
+        }
         Text {
           id: sizeLabel
           width: 150
@@ -146,7 +154,7 @@ Item {
 
         Item {
           id: sizeSlider
-          width: 308
+          width: 350
           height: 44
           readonly property int steps: panel.service.sizeSteps.length
           readonly property int index: Math.max(0,
@@ -209,7 +217,7 @@ Item {
       // Whether the keyboard comes up by itself on a text field, and the way
       // through to everything that does not belong on a surface you hold.
       Item {
-        width: 472
+        width: 548
         height: 44
 
         Rectangle {

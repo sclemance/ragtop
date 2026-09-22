@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sclemance.ragtop",
   "name": "Ragtop",
-  "version": "0.39.0",
+  "version": "0.40.0",
   "author": "Stan Clemance",
   "description": "Made for convertibles, works for tablets, built for Omarchy: tablet mode when you fold the screen back or take the keyboard off, rotation that follows the device, a themed on-screen keyboard, and window management by touch.",
   "kinds": ["bar-widget", "service"],
@@ -14,7 +14,6 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "rotationLocked": false,
       "tabletSwitchDevice": ""
     },
     "schema": [
