@@ -243,7 +243,7 @@ Ragtop does not read what you type. It types.
 | --- | --- |
 | **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol. It keeps no history and writes no log. |
 | **Network** | There is none. Nothing in Ragtop opens a socket, calls out, or names an address. |
-| **What it reads** | The tablet-mode switch, which reports folded or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
+| **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
 | **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
 | **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
 | **Diagnostics** | **Setup › Tablet › Diagnostics** copies versions, hardware and settings. No paths under your home directory, no host name, no user name, and nothing you typed. |
@@ -347,7 +347,7 @@ it away.
 | Control | What it does |
 | --- | --- |
 | Theme | Steps through your themes, redrawing the keyboard behind each one |
-| Screen Rotation | Locked, Unlocked, or Automatic, which turns while the machine is folded and holds still while it is a laptop |
+| Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode |
 | Keyboard Size | The five-step nudge against whatever size the theme asks for |
 | Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
 | Settings | Opens Setup › Tablet for everything else |
@@ -358,8 +358,8 @@ from. It stays in Setup › Tablet, where you can reach it without a keyboard.
 
 **Screen rotation** is also in the bar, always visible, and the button there
 cycles the same three states. Rotation follows the sensor whether or not the
-machine is folded, so the screen can start turning with the keyboard
-attached, which is why Unlocked and Automatic are different things.
+machine is in tablet mode, so the screen can start turning while it is still
+a laptop, which is why Unlocked and Automatic are different things.
 
 ### Keybindings
 

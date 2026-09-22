@@ -26,7 +26,7 @@
 # smallest, smaller, regular, larger or largest, which sizes the keys
 # against whatever the theme asked for and is never written by applying one.
 # Rotation <mode> is locked, unlocked, or auto, which turns the screen while
-# the machine is folded and holds it still while it is a laptop.
+# in tablet mode and holds it still in laptop mode.
 #
 # A theme is a TOML file of those same settings, laid out the way Omarchy
 # lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
@@ -171,7 +171,7 @@ choice_notice() {
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
     "rotation locked") echo "The screen will not rotate." ;;
     "rotation unlocked") echo "The screen follows the sensor." ;;
-    "rotation auto") echo "The screen rotates while the machine is folded." ;;
+    "rotation auto") echo "The screen rotates while in tablet mode." ;;
     "labels small"|"labels normal"|"labels large") echo "The key labels are now $2." ;;
     *) return 1 ;;
   esac
