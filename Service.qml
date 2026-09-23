@@ -1025,6 +1025,104 @@ Item {
     arrangeIdle.restart()
   }
 
+  // Resize by a relative delta, as fast as a finger can ask for it.
+  //
+  // One hyprctl at a time: a drag asks far more often than a process can
+  // answer, so the newest ask is held while one is in flight and sent when
+  // it finishes, adding up anything that arrived meanwhile. Nothing is
+  // dropped and nothing queues up behind the finger. The size slider learnt
+  // this the same way.
+  property var resizeHeld: null
+  property bool resizeBusy: false
+
+  function resizeWindow(address, dx, dy) {
+    if (!/^0x[0-9a-f]+$/.test(address)) return
+    if (dx === 0 && dy === 0) return
+    if (root.resizeBusy) {
+      if (root.resizeHeld && root.resizeHeld.address === address) {
+        root.resizeHeld.dx += dx
+        root.resizeHeld.dy += dy
+      } else {
+        root.resizeHeld = { address: address, dx: dx, dy: dy }
+      }
+      return
+    }
+    root.sendResize(address, dx, dy)
+  }
+
+  function sendResize(address, dx, dy) {
+    root.resizeBusy = true
+    resizeProc.command = ["hyprctl", "eval",
+      "hl.dispatch(hl.dsp.window.resize({ window = \"address:" + address
+      + "\", x = " + Math.round(dx) + ", y = " + Math.round(dy)
+      + ", relative = true }))"]
+    resizeProc.running = true
+    arrangeIdle.restart()
+  }
+
+  Process {
+    id: resizeProc
+    onExited: {
+      root.resizeBusy = false
+      var held = root.resizeHeld
+      root.resizeHeld = null
+      if (held) {
+        root.sendResize(held.address, held.dx, held.dy)
+        return
+      }
+      // Read the geometry back the moment the resize lands, so the outlines
+      // keep up with the windows. Resizing a tile moves its neighbour as
+      // well, so guessing the new shape locally would draw one of them
+      // right and the other wrong. This rides the resize rate, which is
+      // already limited to one at a time.
+      if (root.arrangeOpen && !arrangeClientsProc.running)
+        arrangeClientsProc.running = true
+    }
+  }
+
+  // A floating window has no splits, and a relative resize grows it from
+  // the centre, which can never move one edge on its own. So its rectangle
+  // is set outright instead: position and size in one dispatch, latest ask
+  // wins, no deltas to accumulate and nothing to drift.
+  property var geomHeld: null
+  property bool geomBusy: false
+
+  function setWindowGeom(address, x, y, w, h) {
+    if (!/^0x[0-9a-f]+$/.test(address)) return
+    if (root.geomBusy) {
+      root.geomHeld = { address: address, x: x, y: y, w: w, h: h }
+      return
+    }
+    root.sendGeom(address, x, y, w, h)
+  }
+
+  function sendGeom(address, x, y, w, h) {
+    root.geomBusy = true
+    var win = "\"address:" + address + "\""
+    geomProc.command = ["hyprctl", "eval",
+      "hl.dispatch(hl.dsp.window.resize({ window = " + win
+        + ", x = " + Math.round(w) + ", y = " + Math.round(h) + " })) "
+      + "hl.dispatch(hl.dsp.window.move({ window = " + win
+        + ", x = " + Math.round(x) + ", y = " + Math.round(y) + " }))"]
+    geomProc.running = true
+    arrangeIdle.restart()
+  }
+
+  Process {
+    id: geomProc
+    onExited: {
+      root.geomBusy = false
+      var held = root.geomHeld
+      root.geomHeld = null
+      if (held) {
+        root.sendGeom(held.address, held.x, held.y, held.w, held.h)
+        return
+      }
+      if (root.arrangeOpen && !arrangeClientsProc.running)
+        arrangeClientsProc.running = true
+    }
+  }
+
   // Swap two windows by address. A tile has no free position, so dropping
   // one on another is an exchange rather than a move, and Hyprland takes
   // both addresses for it, which means no guessing a direction from the
@@ -1078,6 +1176,11 @@ Item {
         } catch (e) {
           return
         }
+        // A stable order, so the model's rows never reshuffle when focus
+        // or stacking changes. Reordering rebuilds every delegate, which
+        // kills whatever gesture is in flight. What is drawn on top is
+        // decided in the layer instead.
+        out.sort(function(a, b) { return a.address < b.address ? -1 : 1 })
         root.arrangeWindows = out
       }
     }
