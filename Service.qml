@@ -969,6 +969,105 @@ Item {
     if (proc) proc.running = true
   }
 
+  // ---- arrange mode -------------------------------------------------------
+
+  // A transparent layer over the real windows, for rearranging them by hand.
+  // It draws outlines and nothing solid: the whole reason to do this over the
+  // windows instead of over a map is that their content is visible and
+  // reflows as you work, and a panel on top of a window is a panel you cannot
+  // judge a split through.
+  //
+  // Phase one only shows where the windows are and gets out of the way again.
+  // Nothing here moves or resizes anything yet. What it does prove is the
+  // geometry matching, the timing around the keyboard's exclusive zone, and
+  // every way back out.
+  property bool arrangeOpen: false
+  property var arrangeWindows: []
+
+  function openArrange() {
+    // The keyboard's strip is reserved, so hiding it first lets the windows
+    // reflow to the full screen. The list is read after that settles, or the
+    // outlines would be drawn around where the windows used to be.
+    root.setOskVisible(false)
+    root.arrangeOpen = true
+    arrangeIdle.restart()
+    arrangeSettle.restart()
+  }
+  // Done came from the keyboard, so it goes back to it. A timeout or tablet
+  // mode ending did not, and putting a keyboard up for nobody would only
+  // shrink the windows again.
+  function closeArrange(restore) {
+    // Cleared before the keyboard is asked for, or the rule below would see
+    // it come up and call this a second time.
+    root.arrangeOpen = false
+    arrangeIdle.stop()
+    arrangeSettle.stop()
+    if (restore) root.setOskVisible(true)
+  }
+
+  // The keyboard and this mode are exclusive: entering hides the keyboard,
+  // and the keyboard coming back by any route ends the mode. That is the
+  // handle, auto-show on a text field, and the bar's own button.
+  //
+  // It is also the fix for a real fault. The keyboard's exclusive zone
+  // changing relayouts every window, and Hyprland emits no resizewindow for
+  // that, so the event-driven refresh never fired and the outlines sat over
+  // a keyboard, around windows that had already shrunk away from them.
+  Timer {
+    id: arrangeSettle
+    interval: 260
+    onTriggered: arrangeClientsProc.running = true
+  }
+  Timer {
+    id: arrangeIdle
+    interval: 90000
+    onTriggered: root.closeArrange()
+  }
+  // Tablet mode ending takes the mode with it, along with everything else
+  // that only makes sense with a screen you are holding.
+  onTabletModeChanged: if (!root.tabletMode) root.closeArrange()
+
+  Process {
+    id: arrangeClientsProc
+    command: ["hyprctl", "clients", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        if (!root.arrangeOpen) return
+        var monitor = Hyprland.focusedMonitor
+        var ox = monitor ? monitor.x : 0
+        var oy = monitor ? monitor.y : 0
+        var ws = root.focusedWorkspace
+        var out = []
+        try {
+          JSON.parse(text).forEach(function(c) {
+            if (!c.mapped || c.hidden) return
+            if (!c.workspace || c.workspace.id !== ws) return
+            if (c.size[0] <= 0 || c.size[1] <= 0) return
+            out.push({ address: c.address, x: c.at[0] - ox, y: c.at[1] - oy,
+                       w: c.size[0], h: c.size[1],
+                       name: c.title || c["class"] || "", floating: !!c.floating })
+          })
+        } catch (e) {
+          return
+        }
+        root.arrangeWindows = out
+      }
+    }
+  }
+  // Anything that moves a window moves an outline with it.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!root.arrangeOpen) return
+      var n = event.name
+      if (n === "openwindow" || n === "closewindow" || n === "movewindow"
+          || n === "resizewindow" || n === "activewindow" || n === "changefloatingmode"
+          || n === "fullscreen") {
+        arrangeSettle.restart()
+      }
+    }
+  }
+
   // The bar's window button raises the keyboard on its windows page rather
   // than opening a card over the windows it is there to rearrange.
   property string pendingPage: ""
@@ -984,7 +1083,17 @@ Item {
     root.setOskVisible(true)
     root.pendingPage = "windows"
   }
-  onOskVisibleChanged: if (!root.oskVisible) root.toolsOpen = false
+  onOskVisibleChanged: {
+    if (!root.oskVisible) root.toolsOpen = false
+    // The keyboard and arrange mode are exclusive: entering hides the
+    // keyboard, and the keyboard coming back by any route ends the mode.
+    // That covers the handle, auto-show on a text field, and the bar's own
+    // button, and it is also the fix for a real fault: the keyboard's
+    // exclusive zone changing relayouts every window, Hyprland emits no
+    // resizewindow for that, so the outlines used to sit over a keyboard,
+    // drawn around windows that had already shrunk away from them.
+    if (root.oskVisible && root.arrangeOpen) root.closeArrange()
+  }
 
 
   readonly property var rotationModes: ["auto", "locked", "unlocked"]
@@ -1297,6 +1406,39 @@ Item {
     }
   }
 
+  // Arrange mode's surface. Top rather than Overlay, and ordered below the
+  // bar and the keyboard's handle, so both of those stay tappable the whole
+  // time it is up. The screensaver catcher next door is Overlay because it
+  // has to cover everything. This one must not: a full-screen layer that
+  // swallows every touch is the worst thing to get stuck on a machine that
+  // is folded shut, and those two surfaces are two more ways back out.
+  PanelWindow {
+    screen: keyboardWindow.screen
+    visible: root.arrangeOpen && root.layerRulesReady
+
+    WlrLayershell.namespace: "ragtop-arrange"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
+
+    // The surface covers the screen so the outlines can be drawn at the
+    // windows' own coordinates, but it only takes touches where it has
+    // something to take them with. Everything else falls through, which is
+    // how the bar and the keyboard's handle stay usable underneath it
+    // without depending on layer ordering to arrange that. Layer order was
+    // the first attempt and it put this on top of both.
+    mask: Region { item: arrangeLayer.touchArea }
+
+    ArrangeLayer {
+      id: arrangeLayer
+      anchors.fill: parent
+      service: root
+      windows: root.arrangeWindows
+    }
+  }
+
   // On the built-in screen, reserving its space so windows move up out of
   // its way. It never takes keyboard focus, so typing goes to the window
   // underneath. Created when shown, so it stacks above the handle.
@@ -1488,6 +1630,11 @@ Item {
       })
     }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
+    function toggleArrange(): string {
+      if (root.arrangeOpen) root.closeArrange()
+      else root.openArrange()
+      return root.arrangeOpen ? "open" : "closed"
+    }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {

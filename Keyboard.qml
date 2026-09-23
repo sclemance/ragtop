@@ -159,7 +159,7 @@ Item {
     "windows": [
       ["w:swap", "w:focus-l", "w:focus-u", "w:focus-d", "w:focus-r", "w:next", "w:close"],
       ["w:wide", "w:tiled", "w:split", "w:float", "w:pop"],
-      ["w:narrower", "w:wider", "w:shorter", "w:taller"],
+      ["w:narrower", "w:wider", "w:shorter", "w:taller", "w:arrange"],
       ["w:theme", "w:background", "w:apps", "w:terminal", "w:browser", "w:agent"]
     ]
   })
@@ -191,7 +191,7 @@ Item {
     "w:narrower": "W \u2212", "w:wider": "W +",
     "w:shorter": "H \u2212", "w:taller": "H +",
     "w:wide": "Full width", "w:tiled": "Tiled full screen",
-    "w:send": "Send to\u2026", "w:theme": "Theme", "w:background": "Background", "w:apps": "Apps",
+    "w:send": "Send to\u2026", "w:arrange": "Arrange", "w:theme": "Theme", "w:background": "Background", "w:apps": "Apps",
     "w:terminal": "Terminal", "w:browser": "Browser", "w:agent": "Agent"
   })
   readonly property var widths: ({
@@ -201,7 +201,7 @@ Item {
     // Ten across, four times. Send and Move both sit beside what they change.
     "w:swap": 1.5, "w:next": 2.25, "w:close": 2.25,
     "w:wide": 2, "w:tiled": 2, "w:split": 2, "w:float": 2, "w:pop": 2,
-    "w:narrower": 2.5, "w:wider": 2.5, "w:shorter": 2.5, "w:taller": 2.5,
+    "w:narrower": 2, "w:wider": 2, "w:shorter": 2, "w:taller": 2, "w:arrange": 2,
     "w:theme": 1.67, "w:background": 1.67, "w:apps": 1.67,
     "w:terminal": 1.67, "w:browser": 1.67, "w:agent": 1.65
   })
@@ -570,6 +570,10 @@ Item {
     if (key.indexOf("ws:") === 0) {
       root.service.runWorkspace(key.slice(3), root.sendMod !== "off")
       if (root.sendMod === "latched") root.sendMod = "off"
+      return
+    }
+    if (key === "w:arrange") {
+      root.service.openArrange()
       return
     }
     if (key === "w:swap") {
