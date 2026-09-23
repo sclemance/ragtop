@@ -29,11 +29,51 @@ Item {
   readonly property int chipPad: Style.space(6)
 
   // What the window is masked to: the only part of the screen this takes
-  // touches on. Everything outside it falls through to whatever is
-  // underneath, which in phase one is everything, since nothing but the way
-  // out is interactive yet. The bar and the keyboard's handle stay usable
-  // for free, and there is no way for this mode to strand a machine.
-  readonly property Item touchArea: doneButton
+  // touches on. Everything outside falls through to whatever is underneath,
+  // so the bar and the keyboard's handle stay usable while this is up,
+  // without depending on layer ordering to arrange that.
+  //
+  // It is the windows and the way out, and nothing else. One rectangle
+  // around both rather than a region per window: the tiles already cover
+  // that area between them, and a single shape cannot end up with a seam
+  // down the middle of it that swallows a tap.
+  readonly property Item touchArea: activeArea
+
+  readonly property rect windowBounds: {
+    if (surface.windows.length === 0) return Qt.rect(0, 0, 0, 0)
+    var l = Infinity, t = Infinity, r = -Infinity, b = -Infinity
+    for (var i = 0; i < surface.windows.length; i++) {
+      var w = surface.windows[i]
+      l = Math.min(l, w.x)
+      t = Math.min(t, w.y)
+      r = Math.max(r, w.x + w.w)
+      b = Math.max(b, w.y + w.h)
+    }
+    return Qt.rect(l, t, r - l, b - t)
+  }
+
+  // Not `left` and `top` for these: every Item already has those as final
+  // anchor lines and QML refuses to shadow them, which takes the whole
+  // service down with it. The same trap as naming an id `layer`.
+  Item {
+    id: activeArea
+    visible: false
+    readonly property bool empty: surface.windows.length === 0
+    readonly property real minX: empty ? doneButton.x
+      : Math.min(doneButton.x, surface.windowBounds.x)
+    readonly property real minY: empty ? doneButton.y
+      : Math.min(doneButton.y, surface.windowBounds.y)
+    readonly property real maxX: empty ? doneButton.x + doneButton.width
+      : Math.max(doneButton.x + doneButton.width,
+                 surface.windowBounds.x + surface.windowBounds.width)
+    readonly property real maxY: empty ? doneButton.y + doneButton.height
+      : Math.max(doneButton.y + doneButton.height,
+                 surface.windowBounds.y + surface.windowBounds.height)
+    x: minX
+    y: minY
+    width: maxX - minX
+    height: maxY - minY
+  }
 
   // A label on its own background, so it stays readable over whatever the
   // window happens to be showing behind it. The text is measured first and
@@ -79,9 +119,15 @@ Item {
         anchors.fill: parent
         color: "transparent"
         radius: Style.cornerRadius
-        border.width: surface.edge
+        // The focused one is drawn heavier rather than in another colour,
+        // so floating still reads as floating whether or not it has focus.
+        border.width: frame.modelData.focused ? surface.edge * 2 : surface.edge
         border.color: frame.modelData.floating ? Color.urgent : Color.accent
-        opacity: 0.9
+        opacity: frame.modelData.focused ? 1 : 0.65
+      }
+
+      TapHandler {
+        onTapped: surface.service.focusWindow(frame.modelData.address)
       }
 
       // Which window this is on the left, how big it is on the right. Both

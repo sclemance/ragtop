@@ -1013,6 +1013,18 @@ Item {
   // changing relayouts every window, and Hyprland emits no resizewindow for
   // that, so the event-driven refresh never fired and the outlines sat over
   // a keyboard, around windows that had already shrunk away from them.
+  // Focus a window by its address. Checked against the shape Hyprland gives
+  // them before it goes anywhere, so the only thing that reaches a command
+  // line is an address this recognised.
+  function focusWindow(address) {
+    if (!/^0x[0-9a-f]+$/.test(address)) return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval",
+                  "hl.dispatch(hl.dsp.focus({ window = \"address:" + address + "\" }))"] })
+    if (proc) proc.running = true
+    arrangeIdle.restart()
+  }
+
   Timer {
     id: arrangeSettle
     interval: 260
@@ -1045,7 +1057,8 @@ Item {
             if (c.size[0] <= 0 || c.size[1] <= 0) return
             out.push({ address: c.address, x: c.at[0] - ox, y: c.at[1] - oy,
                        w: c.size[0], h: c.size[1],
-                       name: c.title || c["class"] || "", floating: !!c.floating })
+                       name: c.title || c["class"] || "", floating: !!c.floating,
+                       focused: c.focusHistoryID === 0 })
           })
         } catch (e) {
           return
