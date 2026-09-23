@@ -1025,6 +1025,21 @@ Item {
     arrangeIdle.restart()
   }
 
+  // Swap two windows by address. A tile has no free position, so dropping
+  // one on another is an exchange rather than a move, and Hyprland takes
+  // both addresses for it, which means no guessing a direction from the
+  // drag.
+  function swapWindows(from, to) {
+    if (from === to) return
+    if (!/^0x[0-9a-f]+$/.test(from) || !/^0x[0-9a-f]+$/.test(to)) return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval",
+                  "hl.dispatch(hl.dsp.window.swap({ window = \"address:" + from
+                  + "\", target = \"address:" + to + "\" }))"] })
+    if (proc) proc.running = true
+    arrangeIdle.restart()
+  }
+
   Timer {
     id: arrangeSettle
     interval: 260

@@ -27,6 +27,15 @@ Item {
 
   readonly property int edge: Math.max(2, Style.space(2))
   readonly property int chipPad: Style.space(6)
+  // Long enough that a tap is not mistaken for a hold, short enough that
+  // holding does not feel like waiting. The keyboard uses 420 for its
+  // accents, which have a popup to justify the pause; this only has to say
+  // "picked up".
+  readonly property int holdMs: 280
+  // One number for the shrink and the ghost, so what you pick up and what
+  // you carry are the same size.
+  readonly property real liftScale: 0.94
+  readonly property int tapSlop: Style.space(16)
 
   // What the window is masked to: the only part of the screen this takes
   // touches on. Everything outside falls through to whatever is underneath,
@@ -38,6 +47,33 @@ Item {
   // that area between them, and a single shape cannot end up with a seam
   // down the middle of it that swallows a tap.
   readonly property Item touchArea: activeArea
+
+  // A drag in progress: the window it started on, and the one the finger is
+  // over now. Both are addresses, empty when nothing is being dragged.
+  property string dragFrom: ""
+  property string dragOver: ""
+
+  // Where the finger is while carrying something, so the ghost can follow
+  // it. Negative until a drag starts.
+  property real dragX: -1
+  property real dragY: -1
+
+  function windowByAddress(address) {
+    for (var i = 0; i < surface.windows.length; i++) {
+      if (surface.windows[i].address === address) return surface.windows[i]
+    }
+    return null
+  }
+
+  function windowAt(px, py) {
+    // Last first, so an overlapping floating window wins over the tile it
+    // is sitting on, which is the order they are drawn in.
+    for (var i = surface.windows.length - 1; i >= 0; i--) {
+      var w = surface.windows[i]
+      if (px >= w.x && px < w.x + w.w && py >= w.y && py < w.y + w.h) return w.address
+    }
+    return ""
+  }
 
   readonly property rect windowBounds: {
     if (surface.windows.length === 0) return Qt.rect(0, 0, 0, 0)
@@ -115,19 +151,92 @@ Item {
       width: modelData.w
       height: modelData.h
 
+      // Picked up: this outline stops being drawn here, because it is the
+      // thing now under the finger. One object, one place, rather than an
+      // after-image left behind to be explained.
+      readonly property bool lifted: surface.dragFrom === modelData.address
+      visible: !lifted
+
       Rectangle {
         anchors.fill: parent
         color: "transparent"
         radius: Style.cornerRadius
         // The focused one is drawn heavier rather than in another colour,
         // so floating still reads as floating whether or not it has focus.
-        border.width: frame.modelData.focused ? surface.edge * 2 : surface.edge
+        border.width: frame.dropTarget || frame.modelData.focused
+          ? surface.edge * 2 : surface.edge
         border.color: frame.modelData.floating ? Color.urgent : Color.accent
-        opacity: frame.modelData.focused ? 1 : 0.65
+        opacity: frame.dropTarget || frame.modelData.focused ? 1 : 0.65
       }
 
-      TapHandler {
-        onTapped: surface.service.focusWindow(frame.modelData.address)
+      // Where this one would land. A wash rather than a fill: you are
+      // dropping onto a window, and you should still be able to see which.
+      readonly property bool dropTarget: surface.dragFrom !== ""
+        && surface.dragOver === modelData.address
+        && surface.dragOver !== surface.dragFrom
+      Rectangle {
+        anchors.fill: parent
+        anchors.margins: surface.edge
+        radius: Style.cornerRadius
+        visible: frame.dropTarget
+        color: Util.alpha(Color.accent, 0.16)
+      }
+
+      // A tap focuses, a hold picks up. Waiting for movement to decide meant
+      // nothing happened until the finger had already travelled, so the
+      // pickup arrived late and felt like a miss. Holding says what you
+      // meant before you have moved at all, which is what the keyboard's
+      // own hold does for the accents.
+      //
+      // A PointHandler rather than a DragHandler and a TapHandler together:
+      // it reports the finger without taking an exclusive grab, so press,
+      // move and release all arrive here in one place and in order.
+      PointHandler {
+        id: finger
+        property real downX: 0
+        property real downY: 0
+
+        onActiveChanged: {
+          if (active) {
+            finger.downX = point.scenePosition.x
+            finger.downY = point.scenePosition.y
+            liftTimer.restart()
+            return
+          }
+          liftTimer.stop()
+          if (surface.dragFrom === frame.modelData.address) {
+            var to = surface.dragOver
+            var from = surface.dragFrom
+            surface.dragFrom = ""
+            surface.dragOver = ""
+            surface.dragX = -1
+            surface.dragY = -1
+            if (to !== "" && to !== from) surface.service.swapWindows(from, to)
+            return
+          }
+          // Never picked up, and the finger stayed put: that was a tap.
+          if (Math.abs(point.scenePosition.x - finger.downX)
+              + Math.abs(point.scenePosition.y - finger.downY) < surface.tapSlop)
+            surface.service.focusWindow(frame.modelData.address)
+        }
+
+        onPointChanged: {
+          if (!active || surface.dragFrom !== frame.modelData.address) return
+          surface.dragX = point.scenePosition.x
+          surface.dragY = point.scenePosition.y
+          surface.dragOver = surface.windowAt(point.scenePosition.x,
+                                              point.scenePosition.y)
+        }
+      }
+      Timer {
+        id: liftTimer
+        interval: surface.holdMs
+        onTriggered: {
+          surface.dragFrom = frame.modelData.address
+          surface.dragOver = frame.modelData.address
+          surface.dragX = finger.point.scenePosition.x
+          surface.dragY = finger.point.scenePosition.y
+        }
       }
 
       // Which window this is on the left, how big it is on the right. Both
@@ -146,6 +255,43 @@ Item {
         maxWidth: frame.width / 2 - surface.edge * 3
         text: frame.modelData.w + "\u00d7" + frame.modelData.h
       }
+    }
+  }
+
+  // A small copy of what you are carrying, under the finger. Without it a
+  // drag looks like nothing is happening until a border is crossed, so
+  // there is no reason to believe dragging does anything at all. It is an
+  // outline rather than a solid, like everything else here, and the finger
+  // sits in the hole in the middle of it.
+  Item {
+    id: ghost
+    readonly property var src: surface.windowByAddress(surface.dragFrom)
+    visible: src !== null && surface.dragX >= 0
+    // The size it shrank to, so what leaves the outline and what follows the
+    // finger are plainly the same object.
+    width: src ? src.w * surface.liftScale : 0
+    height: src ? src.h * surface.liftScale : 0
+    x: surface.dragX - width / 2
+    y: surface.dragY - height / 2
+    // Comes in at the window's own size and settles to the carried one, so
+    // the pickup is still a movement rather than a swap of one box for
+    // another.
+    scale: visible ? 1 : 1 / surface.liftScale
+    Behavior on scale { NumberAnimation { duration: 110 } }
+
+    Rectangle {
+      anchors.fill: parent
+      radius: Style.cornerRadius
+      color: Util.alpha(Color.popups.background, 0.4)
+      border.width: surface.edge * 2
+      border.color: Color.accent
+    }
+    // At the top, where the hand carrying it is not.
+    Chip {
+      x: surface.edge * 2
+      y: surface.edge * 2
+      maxWidth: ghost.width - surface.edge * 4 - surface.chipPad * 2
+      text: ghost.src ? ghost.src.name : ""
     }
   }
 
