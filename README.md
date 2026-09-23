@@ -56,7 +56,7 @@ thing:
 | --- | --- | --- |
 | A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
 | An accelerometer, or `iio-sensor-proxy` | The screen following the device; the rotation-lock button has nothing to lock | The keyboard, the handle, tablet mode, the overlays |
-| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, the shortcuts panel, the picker strip |
+| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, the windows page, the picker strip |
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously — but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
 
@@ -88,11 +88,16 @@ space until tablet mode turns on.
   layout, emoji) still arrive.
 - **Settings one tap away.** A gear key next to the space bar opens Ragtop's
   settings.
-- **Window shortcuts panel.** Omarchy windows have no title bars and moving or
-  resizing them needs SUPER plus a mouse, so a bar button opens a touch panel
-  for focus, swap, close, fullscreen, float, split, pop out, resize, move to
-  workspace 1–5, scratchpad and window cycling. Each button runs the same
-  action as Omarchy's own keybinding.
+- **A windows page on the keyboard.** Omarchy windows have no title bars and
+  moving or resizing them needs SUPER plus a mouse. The keyboard has a page for
+  it, reached by the tiled icon at the end of the top row. A strip of
+  workspaces runs along the top, and **Send to…** latches like Shift so the
+  next workspace you tap takes the window with it. **Swap…** does the same to
+  the arrows. Below that: close, full width, tiled full screen, split, float,
+  pop out, resize, and Omarchy's own menus and launchers. Each key runs the
+  same action as Omarchy's own keybinding. It lives on the keyboard because
+  the keyboard's strip is already held clear of the tiling area, so the page
+  never covers the windows it is rearranging.
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
@@ -260,7 +265,7 @@ In tablet mode, two icons appear in the bar:
 
 | Icon | Does |
 | --- | --- |
-| Grid | Opens the window shortcuts panel. |
+| Grid | Raises the keyboard on its windows page. Tap it again to put it away. |
 | Padlock | Locks or unlocks rotation. Highlighted while locked, and stays in the bar while locked, even in laptop mode. |
 
 A slim handle, coloured like the bar, runs along the bottom of the screen in

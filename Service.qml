@@ -876,6 +876,114 @@ Item {
   // Ragtop's controls, on their own surface above the keyboard. They go away
   // with it, so they can never be left floating over nothing.
   property bool toolsOpen: false
+
+  // ---- window management -------------------------------------------------
+
+  // What the keyboard's windows page can do, by name. The keyboard asks for
+  // a name and this looks it up, so a name is the only thing that ever
+  // crosses into a command line and an unknown one does nothing. These are
+  // the same dispatches the bar's popup used to run, which is where they
+  // came from.
+  readonly property var windowActions: ({
+    "focus-l": 'hl.dsp.focus({ direction = "l" })',
+    "focus-u": 'hl.dsp.focus({ direction = "u" })',
+    "focus-d": 'hl.dsp.focus({ direction = "d" })',
+    "focus-r": 'hl.dsp.focus({ direction = "r" })',
+    "move-l": 'hl.dsp.window.swap({ direction = "l" })',
+    "move-u": 'hl.dsp.window.swap({ direction = "u" })',
+    "move-d": 'hl.dsp.window.swap({ direction = "d" })',
+    "move-r": 'hl.dsp.window.swap({ direction = "r" })',
+    "close": 'hl.dsp.window.close()',
+    // True fullscreen is deliberately not here. It covers the whole monitor,
+    // reserved space and all, so the keyboard and the bar both go under it
+    // and the only two ways back are invisible. On a machine that is folded
+    // shut there is no third way, and the toggle that would undo it is the
+    // key you can no longer see. Maximized gets the same "make this big"
+    // without taking the way out with it.
+    "wide": 'hl.dsp.window.fullscreen({ mode = "maximized" })',
+    // Omarchy's own SUPER + CTRL + F. The window keeps its place in the
+    // layout and only the client is told it is fullscreen, so an app drops
+    // its chrome while the bar and the keyboard stay exactly where they are.
+    // This is the fullscreen a machine with no other keyboard can afford.
+    "tiled": 'hl.dsp.exec_cmd("omarchy-hyprland-window-tiled-fullscreen-toggle")',
+    "float": 'hl.dsp.window.float({ action = "toggle" })',
+    "split": 'hl.dsp.layout("togglesplit")',
+    "pop": 'hl.dsp.exec_cmd("omarchy-hyprland-window-pop")',
+    "narrower": 'hl.dsp.window.resize({ x = -100, y = 0, relative = true })',
+    "wider": 'hl.dsp.window.resize({ x = 100, y = 0, relative = true })',
+    "shorter": 'hl.dsp.window.resize({ x = 0, y = -100, relative = true })',
+    "taller": 'hl.dsp.window.resize({ x = 0, y = 100, relative = true })',
+    "next": 'hl.dsp.window.cycle_next()',
+    "lastws": 'hl.dsp.focus({ workspace = "previous" })',
+    "scratch": 'hl.dsp.workspace.toggle_special("scratchpad")',
+    "toscratch": 'hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })',
+    // Omarchy's own menus and launchers, by the commands its own bindings
+    // use. Nothing here decides what your browser or terminal is: those
+    // scripts read xdg-settings and xdg-terminal-exec, so an unset default
+    // launches nothing rather than launching something we guessed.
+    "theme": 'hl.dsp.exec_cmd("omarchy-menu toggle theme")',
+    "background": 'hl.dsp.exec_cmd("omarchy-menu toggle background")',
+    "apps": 'hl.dsp.exec_cmd("omarchy-menu toggle apps")',
+    "terminal": 'hl.dsp.exec_cmd("omarchy-launch-terminal")',
+    "browser": 'hl.dsp.exec_cmd("omarchy-launch-browser")',
+    "agent": 'hl.dsp.exec_cmd("omarchy-launch-openclaw")'
+  })
+  // One process per tap, so quick repeated taps are not dropped.
+  property Component windowActionProc: Component { Process { onExited: destroy() } }
+  function runWindowAction(name) {
+    var lua = root.windowActions[name]
+    if (!lua) return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
+    if (proc) proc.running = true
+  }
+
+  // Which workspaces the strip offers, by Omarchy's own rule: always 1 to 5,
+  // plus any other that exists up to 10. Copied from its Workspaces widget
+  // so the keyboard and the bar never disagree about what there is.
+  readonly property var workspaceIds: {
+    var ids = [1, 2, 3, 4, 5]
+    var values = Hyprland.workspaces.values
+    for (var i = 0; i < values.length; i++) {
+      var id = values[i].id
+      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+    }
+    ids.sort(function(a, b) { return a - b })
+    return ids
+  }
+  readonly property int focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+
+  // A number rather than a name, checked against the range Hyprland has, so
+  // the only thing that reaches a command line is a digit this decided on.
+  function workspaceLua(id, send) {
+    var n = parseInt(id, 10)
+    if (!(n >= 1 && n <= 10)) return ""
+    return send ? 'hl.dsp.window.move({ workspace = "' + n + '" })'
+                : 'hl.dsp.focus({ workspace = "' + n + '" })'
+  }
+  function runWorkspace(id, send) {
+    var lua = root.workspaceLua(id, send)
+    if (lua === "") return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
+    if (proc) proc.running = true
+  }
+
+  // The bar's window button raises the keyboard on its windows page rather
+  // than opening a card over the windows it is there to rearrange.
+  property string pendingPage: ""
+  readonly property string keyboardPage: keyboard.page
+  function showWindowsPage() {
+    // A second tap on the bar puts it away again, the way the card did.
+    if (root.oskVisible && keyboard.page === "windows") {
+      root.setOskVisible(false)
+      return
+    }
+    // Visible first, then the page: the keyboard resets the windows page on
+    // the way up, and asking afterwards is what survives that.
+    root.setOskVisible(true)
+    root.pendingPage = "windows"
+  }
   onOskVisibleChanged: if (!root.oskVisible) root.toolsOpen = false
 
 

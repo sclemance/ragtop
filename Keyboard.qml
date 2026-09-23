@@ -14,6 +14,35 @@ Item {
   required property var theme
 
   property string page: "letters"
+
+  // Send, on the windows page: off, then latched for the next workspace,
+  // then locked, then off. The same ladder Shift climbs, because it is the
+  // same idea and Omarchy spells it the same way (SUPER for a workspace,
+  // SUPER + SHIFT to take the window along).
+  property string sendMod: "off"
+
+  // Swap, the same idea one row down: armed, the arrows swap the window
+  // instead of moving the focus. Omarchy spells that relationship the same
+  // way, SUPER for focus and SUPER + SHIFT to take the window along, so
+  // four keys that duplicated the arrows are one key that changes them.
+  // Its name is Omarchy's too, which calls this swapping rather than moving.
+  property string swapMod: "off"
+
+  Connections {
+    target: root.service
+    // The bar's window button asks for a page. Taken once and cleared, so
+    // the next tap asks again rather than being swallowed.
+    function onPendingPageChanged() {
+      if (root.service.pendingPage === "") return
+      root.page = root.service.pendingPage
+      root.service.pendingPage = ""
+    }
+    // The windows page is somewhere you go, not a state to leave the
+    // keyboard in. Coming back up for a text field should be ready to type.
+    function onOskVisibleChanged() {
+      if (root.service.oskVisible && root.page === "windows") root.page = "letters"
+    }
+  }
   // Modifiers: "off", "latched" (applies to the next key) or "locked".
   property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off", "altgr": "off" })
   readonly property bool upper: root.mods.shift !== "off"
@@ -24,8 +53,17 @@ Item {
   // AltGr is only there on a layout that puts something on its third level.
   // On a plain US layout there is nothing to reach, so the key would do
   // nothing and the row is better without it.
-  readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super"]
-    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"])
+  readonly property var typingTopRow: ["esc", "tab", "ctrl", "alt", "super"]
+    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"], ["windows"])
+  // On the windows page the typing row means nothing: Esc, Tab and the
+  // modifiers are there to type with, and the arrows already have keys of
+  // their own below. The strip carries the workspaces instead, which is
+  // where the eye goes first on a page about where things are. The last key
+  // is the one that got you here, so it is also the way back.
+  readonly property var windowsTopRow: ["w:send"]
+    .concat(root.service.workspaceIds.map(function(id) { return "ws:" + id }),
+            ["ws:scratch", "windows"])
+  readonly property var topRow: root.page === "windows" ? root.windowsTopRow : root.typingTopRow
   readonly property var fallbackRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
     [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
@@ -108,6 +146,21 @@ Item {
       moreRows[1],
       ["symbols"].concat(punctuation, extraSymbols.slice(2, 4), ["backspace"]),
       ["letters", "settings", "space", ",", "enter"]
+    ],
+    // Window management, where it cannot cover the windows it moves. The
+    // keyboard's strip is already excluded from the tiling area, so every
+    // one of these lands in full view of its own result. The card this
+    // replaces floated on top of exactly the thing it was rearranging.
+    //
+    // Four rows of ten units, the narrowest any layout gets, so the page is
+    // the same on every keymap. Plain arrows move the focus, which is what
+    // an arrow means everywhere else on this keyboard. Moving the window
+    // says so in words, because nothing about an arrow can.
+    "windows": [
+      ["w:swap", "w:focus-l", "w:focus-u", "w:focus-d", "w:focus-r", "w:next", "w:close"],
+      ["w:wide", "w:tiled", "w:split", "w:float", "w:pop"],
+      ["w:narrower", "w:wider", "w:shorter", "w:taller"],
+      ["w:theme", "w:background", "w:apps", "w:terminal", "w:browser", "w:agent"]
     ]
   })
   // The key back to the letters page names the script, not a language: the
@@ -129,11 +182,28 @@ Item {
     "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super", "altgr": "AltGr",
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
-    "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": ""
+    "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
+    "windows": "",
+    "w:focus-l": "", "w:focus-u": "", "w:focus-d": "", "w:focus-r": "",
+    "w:swap": "Swap\u2026",
+    "w:next": "Next window", "w:float": "Float", "w:close": "Close",
+    "w:split": "Split", "w:pop": "Pop out",
+    "w:narrower": "W \u2212", "w:wider": "W +",
+    "w:shorter": "H \u2212", "w:taller": "H +",
+    "w:wide": "Full width", "w:tiled": "Tiled full screen",
+    "w:send": "Send to\u2026", "w:theme": "Theme", "w:background": "Background", "w:apps": "Apps",
+    "w:terminal": "Terminal", "w:browser": "Browser", "w:agent": "Agent"
   })
   readonly property var widths: ({
     "shift": 1.5, "backspace": 1.5, "symbols": 1.5, "more": 1.5, "letters": 1.5,
-    "space": 4.5, "enter": 2
+    "space": 4.5, "enter": 2,
+    // Move + four arrows + 2 + 2, then 3, 4 and 3 keys filling the row.
+    // Ten across, four times. Send and Move both sit beside what they change.
+    "w:swap": 1.5, "w:next": 2.25, "w:close": 2.25,
+    "w:wide": 2, "w:tiled": 2, "w:split": 2, "w:float": 2, "w:pop": 2,
+    "w:narrower": 2.5, "w:wider": 2.5, "w:shorter": 2.5, "w:taller": 2.5,
+    "w:theme": 1.67, "w:background": 1.67, "w:apps": 1.67,
+    "w:terminal": 1.67, "w:browser": 1.67, "w:agent": 1.65
   })
   // Keys sent as key events, by the name xkb gives them.
   readonly property var keysyms: ({
@@ -142,9 +212,24 @@ Item {
   })
   // Keys Ragtop draws an icon for (KeyIcon.qml) instead of a label, so they
   // don't depend on the font carrying a glyph and scale with the keys.
-  readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace", "enter", "settings"]
+  readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace",
+                                   "enter", "settings", "windows"]
+  // The focus arrows are the same four arrows, drawn under another name.
+  readonly property var iconNames: ({
+    "w:focus-l": "left", "w:focus-u": "up", "w:focus-d": "down", "w:focus-r": "right",
+    // Super carries the system's mark, the way it does on a keyboard you
+    // can touch.
+    "super": "omarchy"
+  })
+  function iconFor(key) {
+    if (key in root.iconNames) return root.iconNames[key]
+    return root.iconKeys.indexOf(key) !== -1 ? key : ""
+  }
   function labelKind(key) {
-    if (iconKeys.indexOf(key) !== -1) return "drawn"
+    // Super is the key every Omarchy binding is written around, and the mark
+    // is on nobody's hardware to learn it from, so it carries both.
+    if (key === "super") return "markword"
+    if (root.iconFor(key) !== "") return "drawn"
     return root.label(key).length > 1 ? "word" : "char"
   }
 
@@ -259,6 +344,19 @@ Item {
   // above the keys, so it's clear of the first row.
   readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
 
+  // Keys that hold a width of their own on the top row, whatever else is
+  // sharing it. The windows toggle keeps one place and one size on every
+  // page, which is what makes it read as a switch rather than another key,
+  // the way the gear does on the row below. Super takes more than its share
+  // because it carries a mark and a word, and because it is the key every
+  // Omarchy binding is written around.
+  readonly property var topRowFixed: ({ "windows": 1, "super": 1.5, "w:send": 1.5 })
+  // Scratchpad is a workspace with a word for a name, so it takes a share
+  // of the strip rather than a fixed width: with five workspaces it is
+  // roomy, with ten it narrows along with the numbers instead of squeezing
+  // them out.
+  readonly property var topRowWeight: ({ "ws:scratch": 2.2 })
+
   // A row that comes up short is stretched to the keyboard's width by its
   // own stretchy keys, rather than floating in the middle with a gap at
   // either end: the space bar on the bottom row, and the wide keys at both
@@ -290,9 +388,22 @@ Item {
     var out = []
     var y = root.topPadding
     rows.forEach(function(row, i) {
-      // The top row spreads its keys over the full width.
+      // The top row spreads its keys over the full width, less whatever the
+      // windows toggle holds at the end of it.
+      var fixedUnits = 0, weight = 0
+      if (i === 0) {
+        row.forEach(function(k) {
+          if (k in root.topRowFixed) fixedUnits += root.topRowFixed[k]
+          else weight += root.topRowWeight[k] || 1
+        })
+      }
+      var share = weight > 0
+        ? root.unit * (root.rowUnits - fixedUnits) / weight
+        : root.unit * root.rowUnits / row.length
       var widths = row.map(function(k) {
-        return i === 0 ? root.unit * root.rowUnits / root.topRow.length : root.unit * (root.widths[k] || 1)
+        if (i !== 0) return root.unit * (root.widths[k] || 1)
+        return k in root.topRowFixed ? root.unit * root.topRowFixed[k]
+          : share * (root.topRowWeight[k] || 1)
       })
       if (i > 0) widths = root.stretch(row, widths)
       var h = i === 0 ? root.topRowHeight : root.keyHeight
@@ -351,6 +462,9 @@ Item {
 
   function label(key) {
     if (key === "space") return layoutName
+    if (key.indexOf("ws:") === 0)
+      return (root.sendMod === "off" ? "" : "\u2192")
+        + (key === "ws:scratch" ? "Scratchpad" : key.slice(3))
     if (key in labels) return labels[key]
     return root.charFor(key)
   }
@@ -376,6 +490,26 @@ Item {
   // the keyboard itself is drawn apart from them.
   function kind(key) {
     if (key === "settings" && root.service.toolsOpen) return "locked"
+    // Lit while its page is up, the way the gear is lit while its panel is,
+    // so a switch that stays in one place still says which way it is set.
+    if (key === "windows" && root.page === "windows") return "locked"
+    if (key === "w:send") return root.sendMod === "off" ? "special" : root.sendMod
+    if (key === "w:swap") return root.swapMod === "off" ? "special" : root.swapMod
+    // Armed, the arrows are lit to say they now carry the window.
+    if (key.indexOf("w:focus-") === 0 && root.swapMod !== "off") return root.swapMod
+    // The workspace you are on, lit the way a held modifier is. A special
+    // workspace has a negative id, which is what the scratchpad is.
+    if (key === "ws:scratch")
+      return root.service.focusedWorkspace < 0 ? "locked" : "special"
+    if (key.indexOf("ws:") === 0)
+      return parseInt(key.slice(3), 10) === root.service.focusedWorkspace ? "locked" : "special"
+    // Super is the key Omarchy is built around, so at rest it is drawn the
+    // way Enter is rather than as another grey modifier. Armed, it drops
+    // back to the latched and locked colours, because what it is doing then
+    // matters more than how important it is.
+    if (key === "super")
+      return mods["super"] === "locked" ? "locked"
+        : mods["super"] === "latched" ? "latched" : "accent"
     if (key in mods) return mods[key] === "locked" ? "locked" : mods[key] === "latched" ? "latched" : "special"
     if (key === "enter") return "accent"
     // The space bar goes with them rather than with the letters, though it
@@ -428,9 +562,43 @@ Item {
 
   function press(key) {
     if (key in mods) { tapModifier(key); return }
+    if (key === "ws:scratch") {
+      root.service.runWindowAction(root.sendMod !== "off" ? "toscratch" : "scratch")
+      if (root.sendMod === "latched") root.sendMod = "off"
+      return
+    }
+    if (key.indexOf("ws:") === 0) {
+      root.service.runWorkspace(key.slice(3), root.sendMod !== "off")
+      if (root.sendMod === "latched") root.sendMod = "off"
+      return
+    }
+    if (key === "w:swap") {
+      root.swapMod = root.swapMod === "off" ? "latched"
+        : root.swapMod === "latched" ? "locked" : "off"
+      return
+    }
+    if (key.indexOf("w:focus-") === 0 && root.swapMod !== "off") {
+      root.service.runWindowAction("move-" + key.slice(8))
+      if (root.swapMod === "latched") root.swapMod = "off"
+      return
+    }
+    if (key === "w:send") {
+      root.sendMod = root.sendMod === "off" ? "latched"
+        : root.sendMod === "latched" ? "locked" : "off"
+      return
+    }
+    if (key.indexOf("w:") === 0) {
+      root.service.runWindowAction(key.slice(2))
+      return
+    }
     switch (key) {
     case "symbols": case "more": case "letters":
       page = key
+      return
+    case "windows":
+      // The same key goes there and comes back, so the page needs no key of
+      // its own to leave by and keeps all forty slots for doing something.
+      page = page === "windows" ? "letters" : "windows"
       return
     case "settings":
       // Ragtop's controls come up over the keyboard rather than in place of
@@ -593,7 +761,7 @@ Item {
       hint: root.altgrOn ? "" : (root.level3Of[modelData.key] || "")
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
-      icon: root.iconKeys.indexOf(modelData.key) !== -1 ? modelData.key : ""
+      icon: root.iconFor(modelData.key)
       pressed: modelData.key in root.heldKeys
     }
   }

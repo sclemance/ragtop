@@ -15,10 +15,8 @@ BarWidget {
   // A machine with no switch to read never reports laptop, and Automatic must
   // not take silence for one: a slate would sit frozen and never turn.
   readonly property bool tabletModeKnown: root.service ? root.service.tabletModeKnown : false
-  property bool shortcutsOpen: false
 
   // PopupCard calls its owner's close() when tapped outside.
-  function close() { root.shortcutsOpen = false }
   onTabletModeChanged: if (!root.tabletMode) root.close()
 
   // Always there. Rotation follows the sensor whether or not the machine is
@@ -87,8 +85,9 @@ BarWidget {
       bar: root.bar
       text: ""
       tooltipText: "Window shortcuts"
-      active: root.shortcutsOpen
-      onPressed: root.shortcutsOpen = !root.shortcutsOpen
+      active: root.service !== null && root.service.oskVisible
+        && root.service.keyboardPage === "windows"
+      onPressed: if (root.service) root.service.showWindowsPage()
     }
 
     BarIconButton {
@@ -100,12 +99,5 @@ BarWidget {
       active: root.rotationLocked
       onPressed: root.cycleRotationMode()
     }
-  }
-
-  ShortcutsPopup {
-    anchorItem: shortcutsButton
-    bar: root.bar
-    owner: root
-    open: root.shortcutsOpen
   }
 }
