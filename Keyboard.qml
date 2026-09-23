@@ -233,6 +233,18 @@ Item {
     return root.label(key).length > 1 ? "word" : "char"
   }
 
+  // Keys that must not act until the finger lifts, because acting takes the
+  // keyboard off the screen. A surface that unmaps while a touch is still
+  // down leaves that touch with nowhere to end, and the next touch-down
+  // anywhere is swallowed putting it right: the first tap on whatever
+  // replaced the keyboard does nothing. Measured, with a counter on the far
+  // side: the touch never arrived at all.
+  //
+  // This is the same reason a key with variants types on release. That one
+  // waits so a hold can become a popup, this one waits so the finger has
+  // somewhere to lift from.
+  readonly property var liftKeys: ["w:arrange"]
+
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right"]
 
@@ -630,6 +642,10 @@ Item {
   }
 
   function release(key) {
+    if (root.liftKeys.indexOf(key) !== -1) {
+      root.press(key)
+      return
+    }
     if (holdable.indexOf(key) !== -1) {
       service.sendKeys("up " + keysyms[key])
       afterKey()
@@ -850,7 +866,8 @@ Item {
         // always has, and its hold runs alongside, because a thumb resting
         // on space must not swallow the letter rolling in after it.
         if (root.holdItems(key).length > 1) root.startHold(p, key)
-        if (key === "space" || root.holdItems(key).length <= 1) pressed.push(key)
+        if (root.liftKeys.indexOf(key) === -1
+            && (key === "space" || root.holdItems(key).length <= 1)) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)

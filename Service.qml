@@ -155,10 +155,10 @@ Item {
         Behavior on color { ColorAnimation { duration: 150 } }
       }
 
-      MouseArea {
-        id: handleArea
-        anchors.fill: parent
-        onClicked: root.toggleOsk()
+      // TapHandler rather than MouseArea: see ToolsPanel for why a tap
+      // target reads touch instead of a mouse event synthesised from it.
+      TapHandler {
+        onTapped: root.toggleOsk()
       }
 
       // A wide ^ while the keyboard is hidden, a wide v while it's showing.

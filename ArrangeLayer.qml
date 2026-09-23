@@ -126,9 +126,8 @@ Item {
       font.pixelSize: Style.font.body
     }
 
-    MouseArea {
-      anchors.fill: parent
-      onClicked: surface.service.closeArrange(true)
+    TapHandler {
+      onTapped: surface.service.closeArrange(true)
     }
   }
 
