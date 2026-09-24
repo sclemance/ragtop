@@ -7,9 +7,9 @@ the hardware reports the same way — and Ragtop switches your
 [Omarchy 4](https://github.com/omacom/omarchy) desktop into a touch-friendly
 mode: the screen rotates with the device, an on-screen keyboard themed like
 the rest of Omarchy is one tap away, and the things that normally need a
-keyboard shortcut or a mouse (moving windows between tiles, closing them,
-typing into the Omarchy menu) work by touch. Put it back and everything
-returns to normal.
+keyboard shortcut or a mouse work by touch. Your windows can be rearranged by
+dragging them around, and the Omarchy menu can be typed into. Put it back and
+everything returns to normal.
 
 ## How it looks
 
