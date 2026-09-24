@@ -1109,7 +1109,12 @@ Item {
       + "\", x = " + Math.round(dx) + ", y = " + Math.round(dy)
       + ", relative = true }))"]
     resizeProc.running = true
+    // Hyprland emits no geometry event for a resize asked for this way, and
+    // an outline drawn where a window used to be is not only wrong to look
+    // at: windowAt reads these same rectangles to decide what a drag lands
+    // on, so a stale one picks the wrong window to swap with.
     arrangeIdle.restart()
+    arrangeSettle.restart()
   }
 
   Process {
@@ -1157,7 +1162,10 @@ Item {
       + "hl.dispatch(hl.dsp.window.move({ window = " + win
         + ", x = " + Math.round(x) + ", y = " + Math.round(y) + " }))"]
     geomProc.running = true
+    // As above. Setting a floating window's geometry moves it with no event
+    // to say so.
     arrangeIdle.restart()
+    arrangeSettle.restart()
   }
 
   Process {
@@ -1187,7 +1195,12 @@ Item {
                   "hl.dispatch(hl.dsp.window.swap({ window = \"address:" + from
                   + "\", target = \"address:" + to + "\" }))"] })
     if (proc) proc.running = true
+    // Measured on the socket: a swap emits no movewindow and no resizewindow,
+    // and it does not change focus either, so nothing arrives to notice it
+    // by. Tapping a window first happened to fix it only because focusing
+    // does emit activewindow. Say so directly instead.
     arrangeIdle.restart()
+    arrangeSettle.restart()
   }
 
   // Read once on the way in, because the event below only fires on a change
