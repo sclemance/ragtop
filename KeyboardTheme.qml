@@ -19,7 +19,7 @@ QtObject {
   property var look: ({ shape: "omarchy", relief: "flat", fill: "solid", size: "normal", background: "tint",
                         keyTransparency: "opaque", edge: "none", labels: "normal", depth: 4, chamfer: 8, edgeFade: 8,
                         keyColor: "", labelColor: "", keyFillAlpha: "auto",
-                        borderWidth: "auto", radius: "auto" })
+                        borderWidth: "auto", radius: "auto", corners: "auto" })
 
   // "dark" or "light" (an opaque key sitting darker or lighter than the
   // keyboard's background), "auto" (whichever of those the theme has room
@@ -215,13 +215,36 @@ QtObject {
   property color outline: Util.alpha(text, 0.45)
 
   // "omarchy" (the theme's own corner rounding, as windows have),
-  // "rounded", "pill" or "angular"; a Ragtop theme can pin a radius instead.
+  // "rounded", "pill", "angular" or "bevel". A Ragtop theme can pin a
+  // radius instead, or name the corners one by one.
   property string keyShape: look.shape
+
+  // Each corner in turn, clockwise from the top left.
+  //
+  // A named shape is nothing more than a set of these. Angular is four cut
+  // corners and rounded is four round ones, so rather than every silhouette
+  // needing a name and a branch of its own, a theme can write `corners`
+  // and have the one that suits it. Bevel is the pair that gets a name
+  // because it is the one worth having by default: cut on one diagonal,
+  // round on the other.
+  readonly property var keyCorners: {
+    if (look.corners !== "auto") return String(look.corners).split(" ")
+    if (keyShape === "angular") return ["cut", "cut", "cut", "cut"]
+    if (keyShape === "bevel") return ["cut", "round", "cut", "round"]
+    return ["round", "round", "round", "round"]
+  }
+  // Four round corners is a rectangle, which is cheaper to draw and is what
+  // most themes are, so it stays the common path and everything else takes
+  // the outline.
+  readonly property bool cornersAllRound: keyCorners[0] === "round"
+    && keyCorners[1] === "round" && keyCorners[2] === "round"
+    && keyCorners[3] === "round"
   // Raised keys stand on a side, as a keycap does, whatever their shape.
   readonly property bool raised: look.relief === "raised"
   property real keyRadius: look.radius !== "auto" ? Style.space(look.radius)
     : keyShape === "omarchy" ? Style.cornerRadius
     : keyShape === "angular" ? 0
+    : keyShape === "bevel" ? Style.space(8)
     : Style.space(8)
   property real keyDepth: raised ? Style.space(look.depth) : 0
   // A side can't take more than this much of the key, or the face has

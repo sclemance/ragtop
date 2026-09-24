@@ -270,8 +270,22 @@ Item {
     function pick(value, allowed, fallback) {
       return allowed.indexOf(value) !== -1 ? value : fallback
     }
+    // Four corner styles clockwise from the top left, or "auto" for the
+    // shape's own. Checked word by word, not trusted: this comes out of a
+    // file and is drawn on a lock screen.
+    function cornerSpec(value) {
+      var text = String(value === undefined || value === null ? "auto" : value)
+      text = text.trim().toLowerCase()
+      if (text === "" || text === "auto") return "auto"
+      var parts = text.split(/\s+/)
+      if (parts.length !== 4) return "auto"
+      for (var i = 0; i < 4; i++)
+        if (["round", "cut", "square"].indexOf(parts[i]) === -1) return "auto"
+      return parts.join(" ")
+    }
     return {
-      shape: pick(raw.shape, ["omarchy", "rounded", "pill", "angular"], "omarchy"),
+      shape: pick(raw.shape, ["omarchy", "rounded", "pill", "angular", "bevel"], "omarchy"),
+      corners: cornerSpec(raw.corners),
       relief: pick(raw.relief, ["flat", "raised"], "flat"),
       fill: pick(raw.fill, ["auto", "dark", "light", "outline"], "light"),
       // Numbers since the look went numeric. Checked, not trusted: this
@@ -416,9 +430,21 @@ Item {
   readonly property real keyRadius: style.radius !== "auto" ? Style.space(style.radius)
     : style.shape === "omarchy" ? Style.cornerRadius
     : style.shape === "angular" ? 0
+    : style.shape === "bevel" ? Style.space(8)
     : Style.space(8)
   readonly property real keyDepth: style.relief === "raised" ? Style.space(style.depth) : 0
   readonly property real keyChamfer: Style.space(style.chamfer)
+  // The same corner set the keyboard proper uses, read the same way, so a
+  // theme looks like itself on the lock screen too.
+  readonly property var keyCorners: {
+    if (style.corners !== "auto") return String(style.corners).split(" ")
+    if (style.shape === "angular") return ["cut", "cut", "cut", "cut"]
+    if (style.shape === "bevel") return ["cut", "round", "cut", "round"]
+    return ["round", "round", "round", "round"]
+  }
+  readonly property bool cornersAllRound: keyCorners[0] === "round"
+    && keyCorners[1] === "round" && keyCorners[2] === "round"
+    && keyCorners[3] === "round"
   // Labels on Omarchy's scales, growing with the keys; glyph keys take its
   // icon scale.
   function labelPx(size) { return Math.max(8, Math.round(size * keyScale)) }
@@ -583,21 +609,37 @@ Item {
             width: root.unit * root.keyUnits(keyRow.modelData, index) - root.gap
             height: root.keyHeight
 
-            // Angular keys are drawn as a chamfered box; the same path
-            // serves the face and the side, so a raised angular key keeps
-            // its cut corners.
+            // Each corner drawn the way its style asks, the same path
+            // serving the face and the side, so a raised key keeps whatever
+            // corners it has. A square corner is a cut of no length, so the
+            // line that draws a cut draws it too.
+            readonly property var corners: root.keyCorners
+            readonly property bool boxy: root.cornersAllRound
             readonly property real chamfer: Math.min(root.keyChamfer, width / 3, height / 3)
-            function chamferPath(top, boxHeight) {
-              var c = chamfer, w = width, bottom = top + boxHeight
-              return "M " + c + " " + top + " L " + (w - c) + " " + top
-                + " L " + w + " " + (top + c) + " L " + w + " " + (bottom - c)
-                + " L " + (w - c) + " " + bottom + " L " + c + " " + bottom
-                + " L 0 " + (bottom - c) + " L 0 " + (top + c) + " Z"
+            function cornerPath(top, boxHeight) {
+              var w = width, bottom = top + boxHeight
+              var r = Math.min(root.keyRadius, w / 2, boxHeight / 2)
+              var c = Math.min(chamfer, w / 3, boxHeight / 3)
+              function reach(i) {
+                return key.corners[i] === "round" ? r : key.corners[i] === "cut" ? c : 0
+              }
+              function turn(i, x, y) {
+                return key.corners[i] === "round"
+                  ? " A " + r + " " + r + " 0 0 1 " + x + " " + y
+                  : " L " + x + " " + y
+              }
+              var tl = reach(0), tr = reach(1), br = reach(2), bl = reach(3)
+              return "M " + tl + " " + top
+                + " L " + (w - tr) + " " + top + turn(1, w, top + tr)
+                + " L " + w + " " + (bottom - br) + turn(2, w - br, bottom)
+                + " L " + bl + " " + bottom + turn(3, 0, bottom - bl)
+                + " L 0 " + (top + tl) + turn(0, tl, top)
+                + " Z"
             }
 
             // A raised key's side, only ever below the face.
             Rectangle {
-              visible: key.depth > 0 && key.shape !== "angular"
+              visible: key.depth > 0 && key.boxy
               y: key.faceY
               width: key.width
               height: key.height - key.faceY
@@ -606,7 +648,7 @@ Item {
             }
 
             Shape {
-              visible: key.depth > 0 && key.shape === "angular"
+              visible: key.depth > 0 && !key.boxy
               anchors.fill: parent
               preferredRendererType: Shape.CurveRenderer
 
@@ -614,13 +656,13 @@ Item {
                 fillColor: root.keySide
                 strokeWidth: 0
                 strokeColor: "transparent"
-                PathSvg { path: key.chamferPath(key.faceY, key.height - key.faceY) }
+                PathSvg { path: key.cornerPath(key.faceY, key.height - key.faceY) }
               }
             }
 
             // The face, in every shape but Angular.
             Rectangle {
-              visible: key.shape !== "angular"
+              visible: key.boxy
               y: key.faceY
               width: key.width
               height: key.faceHeight
@@ -632,7 +674,7 @@ Item {
 
             // Angular: the corners cut off.
             Shape {
-              visible: key.shape === "angular"
+              visible: !key.boxy
               anchors.fill: parent
               preferredRendererType: Shape.CurveRenderer
 
@@ -641,7 +683,7 @@ Item {
                 strokeColor: root.style.fill === "outline" ? root.outline : root.keyBorder
                 strokeWidth: root.keyBorderWidth
                 joinStyle: ShapePath.MiterJoin
-                PathSvg { path: key.chamferPath(key.faceY, key.faceHeight) }
+                PathSvg { path: key.cornerPath(key.faceY, key.faceHeight) }
               }
             }
 

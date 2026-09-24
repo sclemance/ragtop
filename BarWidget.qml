@@ -79,23 +79,46 @@ BarWidget {
     id: grid
     columns: root.vertical ? 1 : 2
 
+    // Both drawn by KeyIcon rather than set as a Nerd Font glyph, which is
+    // what the keyboard's own keys use. That makes the button that opens
+    // arrange mode the same mark as the key that opens it, so the bar and
+    // the keyboard are visibly the same control, and it means neither one
+    // depends on the bar's font carrying an icon at all.
     BarIconButton {
       id: shortcutsButton
       visible: root.tabletMode
       bar: root.bar
-      text: ""
-      tooltipText: "Window shortcuts"
+      tooltipText: "Arrange and resize windows"
       active: root.service !== null && root.service.arrangeOpen
+      iconComponent: Component {
+        KeyIcon {
+          name: "windows"
+          color: shortcutsButton.active && shortcutsButton.useActiveColor
+            ? shortcutsButton.activeColor : shortcutsButton.foreground
+        }
+      }
       onPressed: if (root.service) root.service.toggleArrangeMode()
     }
 
+    // A padlock said whether rotation was held, which is the state, not the
+    // thing. What this button is about is the screen turning, so it says
+    // that, and the accent it takes while locked says it is held. That also
+    // stops it reading as a screen lock, which is what a padlock in a bar
+    // usually means.
     BarIconButton {
+      id: rotationButton
       bar: root.bar
-      text: root.rotationLocked ? "" : ""
       tooltipText: root.rotationMode === "locked" ? "Screen rotation: locked"
         : root.rotationMode === "unlocked" ? "Screen rotation: unlocked"
         : "Screen rotation: automatic, follows tablet mode"
       active: root.rotationLocked
+      iconComponent: Component {
+        KeyIcon {
+          name: "rotate"
+          color: rotationButton.active && rotationButton.useActiveColor
+            ? rotationButton.activeColor : rotationButton.foreground
+        }
+      }
       onPressed: root.cycleRotationMode()
     }
   }

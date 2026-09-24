@@ -130,7 +130,9 @@ Item {
       // While a stock picker is up every touch reaches the picker, so a tap
       // on the handle would only throw it away; a cloned picker leaves the
       // handle usable, for filter typing.
-      visible: root.tabletMode && root.layerRulesReady && (!root.pickerOpen || root.pickerPatched)
+      visible: root.tabletMode && root.layerRulesReady
+        && (!root.pickerOpen || root.pickerPatched)
+        && root.screensaverAddress === ""
 
       // Under an open keyboard the handle takes the keyboard's background
       // and text colours, so the two read as one panel with the handle as
@@ -543,6 +545,19 @@ Item {
   // until the shell restarted. The switch watcher below already avoided this
   // by driving its process from a changed handler, and so does this now.
   readonly property bool wantFocusBridge: root.tabletMode && root.autoShowEnabled
+
+  // Whether a focused text field may raise the keyboard on its own. Asking
+  // for it by hand still works in each of these: they go through
+  // setOskVisible rather than through the bridge.
+  //
+  // Not while the picker is up, because the keyboard covers the preview the
+  // picker exists to show. Not while arranging, because the keyboard coming
+  // back ends the mode, and the bar's own buttons change which window has
+  // focus, so a window with a text field would close the mode out from
+  // under the button just tapped. Not while the screensaver is up, because
+  // nothing should be drawn over it.
+  readonly property bool autoShowAllowed: root.tabletMode && root.autoShowEnabled
+    && !root.pickerOpen && !root.arrangeOpen && root.screensaverAddress === ""
   onWantFocusBridgeChanged: {
     focusBridgeRestart.stop()
     focusBridgeProc.running = root.wantFocusBridge
@@ -554,15 +569,7 @@ Item {
       onRead: function(line) {
         if (line !== "show") return
         root.autoShows++
-        // Not while arranging. The keyboard coming back ends the mode, and
-        // the bar's own buttons change which window has focus, so a window
-        // with a text field in it would raise the keyboard and close the
-        // mode out from under the button that was just tapped. Asking for
-        // the keyboard still ends the mode, because that goes through
-        // setOskVisible rather than through here.
-        if (root.tabletMode && root.autoShowEnabled && !root.oskVisible
-            && !root.pickerOpen && !root.arrangeOpen)
-          root.setOskVisible(true)
+        if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
       }
     }
     onRunningChanged: if (running) root.retryStarted("autoshow")
@@ -745,7 +752,14 @@ Item {
         if (fields.length >= 3 && fields[2] === "org.omarchy.screensaver") root.screensaverAddress = fields[0]
       } else if (name === "closewindow") {
         if (String(event.data || "").trim() === root.screensaverAddress) root.screensaverAddress = ""
+        else if (root.screensaverAddress !== "") root.confirmScreensaver()
       }
+      // A window opening or closing while a screensaver is supposedly up
+      // says the session is awake, which a screensaver mostly is not. These
+      // events are already subscribed, so asking costs nothing.
+      if (name === "openwindow" && root.screensaverAddress !== ""
+          && String(event.data || "").split(",")[0] !== root.screensaverAddress)
+        root.confirmScreensaver()
 
       if (name !== "openlayer" && name !== "closelayer") return
       var ns = String(event.data || "")
@@ -1436,8 +1450,21 @@ Item {
       return ["foreground", "background", "accent", "urgent"].indexOf(value) !== -1
         || /^#[0-9a-fA-F]{6,8}$/.test(value) ? value : ""
     }
+    // Four corner styles, clockwise from the top left, for a theme after a
+    // silhouette none of the names cover. Anything that is not four known
+    // words falls back to the shape's own corners rather than half-applying.
+    function cornerSpec() {
+      var raw = String(root.settings["corners"] || "auto").trim().toLowerCase()
+      if (raw === "" || raw === "auto") return "auto"
+      var parts = raw.split(/\s+/)
+      if (parts.length !== 4) return "auto"
+      for (var i = 0; i < 4; i++)
+        if (["round", "cut", "square"].indexOf(parts[i]) === -1) return "auto"
+      return parts.join(" ")
+    }
     return {
-      shape: pick("shape", ["omarchy", "rounded", "pill", "angular"], "omarchy"),
+      shape: pick("shape", ["omarchy", "rounded", "pill", "angular", "bevel"], "omarchy"),
+      corners: cornerSpec(),
       // How see-through the keys are over the keyboard's background, and the
       // background over the desktop. 0 is solid and 100 is gone.
       keyTransparency: num("key-transparency", 0, 100, 0),
@@ -1543,11 +1570,59 @@ Item {
 
   // Omarchy's screensaver, while it's up: its window address, or "".
   property string screensaverAddress: ""
+  property bool oskHiddenForScreensaver: false
+
+  // The screensaver is an ordinary window and everything Ragtop puts on
+  // screen is a layer surface above it, so none of it goes away on its own
+  // when the screensaver starts. The catcher next door covers the screen
+  // and swallows the touch, so the keyboard was never doing anything there,
+  // it was only sitting on top of a screensaver looking like a fault.
+  //
+  // Arranging ends rather than pausing. Coming back to an arrange layer
+  // drawn around windows that may have moved while the screen was off is
+  // worse than coming back to the desktop.
+  onScreensaverAddressChanged: {
+    if (root.screensaverAddress !== "") {
+      if (root.arrangeOpen) root.closeArrange(true)
+      if (root.oskVisible) {
+        root.oskHiddenForScreensaver = true
+        root.setOskVisible(false)
+      }
+    } else if (root.oskHiddenForScreensaver) {
+      root.oskHiddenForScreensaver = false
+      if (root.tabletMode) root.setOskVisible(true)
+    }
+  }
 
   // Window events only tell us about a screensaver that starts while the
   // shell is running, so ask once at startup as well — restarting the shell
   // with the screensaver already up is the ordinary case while working on
   // Ragtop, not a corner one.
+  // What the address was when the read below was started. A reply is about
+  // the moment it was asked, not the moment it arrives, so a screensaver
+  // that opened in between must not be cleared by an answer that predates
+  // it.
+  property string screensaverCheckedFor: ""
+
+  // Ask whether the screensaver is really still there.
+  //
+  // Nothing here runs on a timer. A screensaver is meant to run for as long
+  // as it likes, and waking the machine every few seconds to check on it
+  // would be its own kind of interference, on battery through exactly the
+  // stretch the machine should be quiet.
+  //
+  // So this is called when a human is already there: on a tap on the
+  // catcher, and when a window opens or closes while we believe a
+  // screensaver is up. Both mean the session is alive. A stuck catcher on a
+  // machine nobody is touching harms nobody. The moment it matters is the
+  // moment someone taps and nothing happens, and that is the moment this
+  // runs.
+  function confirmScreensaver() {
+    if (screensaverCheckProc.running) return
+    root.screensaverCheckedFor = root.screensaverAddress
+    screensaverCheckProc.running = true
+  }
+
   Process {
     id: screensaverCheckProc
     running: true
@@ -1560,8 +1635,16 @@ Item {
           // events as 589cf9091790. Keep the events' spelling, or closewindow
           // never matches and the catcher stays up over a screensaver that
           // has already gone, swallowing every tap.
-          if (found.length > 0 && root.screensaverAddress === "")
-            root.screensaverAddress = String(found[0].address).replace(/^0x/, "")
+          if (found.length > 0) {
+            if (root.screensaverAddress === "")
+              root.screensaverAddress = String(found[0].address).replace(/^0x/, "")
+          } else if (root.screensaverAddress !== ""
+                     && root.screensaverAddress === root.screensaverCheckedFor) {
+            // Gone, and gone since before we asked. Whatever closewindow we
+            // missed, this is the way back: the catcher comes down and the
+            // keyboard and handle return.
+            root.screensaverAddress = ""
+          }
         } catch (e) {}
       }
     }
@@ -1602,7 +1685,17 @@ Item {
 
     MouseArea {
       anchors.fill: parent
-      onPressed: root.sendKeys("key Escape")
+      // Escape first, so a screensaver that is really there dies on the
+      // touch rather than waiting for a round trip. The check runs beside
+      // it, and only matters when the screensaver has already gone: then
+      // this tap is spent on a stray Escape to whatever has focus, once,
+      // and the next tap behaves normally because the catcher is gone.
+      // One stray Escape is a better failure than a screen that eats every
+      // touch with no way back.
+      onPressed: {
+        root.sendKeys("key Escape")
+        root.confirmScreensaver()
+      }
     }
   }
 

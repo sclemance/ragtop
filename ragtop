@@ -293,7 +293,7 @@ import os, re, sys, tomllib
 path, settings = sys.argv[1:]
 # Only these keys, only these values: a theme can't smuggle anything else in.
 choices = {
-    "shape": ["omarchy", "rounded", "pill", "angular"],
+    "shape": ["omarchy", "rounded", "pill", "angular", "bevel"],
     "relief": ["flat", "raised"],
     "fill": ["auto", "dark", "light", "outline"],
 
@@ -331,12 +331,27 @@ for key in colors:
     if isinstance(v, str) and (v in ("foreground", "background", "accent", "urgent")
                                or re.fullmatch(r"#[0-9a-fA-F]{6,8}", v)):
         values[key] = v
+# Corners are four words rather than one, so they are checked here instead
+# of in choices: clockwise from the top left, each round, cut or square.
+# Anything else is left out and the shape's own corners stand.
+v = raw.get("corners")
+if isinstance(v, str):
+    parts = v.strip().lower().split()
+    if len(parts) == 4 and all(w in ("round", "cut", "square") for w in parts):
+        values["corners"] = " ".join(parts)
+    elif v.strip().lower() == "auto":
+        values["corners"] = "auto"
 
 # A theme is a whole look, not a patch: every setting it doesn't name goes
 # back to its default rather than keeping whatever the last theme left
 # behind. Settings that aren't part of the look, tablet mode and auto-show,
 # are untouched.
-look_keys = set(choices) | set(numbers) | set(colors)
+# corners is checked on its own above rather than in choices, so it has to
+# be named here too. Leave it out and its old line is never stripped: it
+# piles up a line per apply, and a theme that doesn't mention corners keeps
+# whatever the last one left, which is a keyboard whose keys stop changing
+# shape with the theme.
+look_keys = set(choices) | set(numbers) | set(colors) | {"corners"}
 lines = []
 if os.path.exists(settings):
     lines = [l for l in open(settings).read().split("\n")
