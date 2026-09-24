@@ -752,7 +752,14 @@ Item {
         if (fields.length >= 3 && fields[2] === "org.omarchy.screensaver") root.screensaverAddress = fields[0]
       } else if (name === "closewindow") {
         if (String(event.data || "").trim() === root.screensaverAddress) root.screensaverAddress = ""
+        else if (root.screensaverAddress !== "") root.confirmScreensaver()
       }
+      // A window opening or closing while a screensaver is supposedly up
+      // says the session is awake, which a screensaver mostly is not. These
+      // events are already subscribed, so asking costs nothing.
+      if (name === "openwindow" && root.screensaverAddress !== ""
+          && String(event.data || "").split(",")[0] !== root.screensaverAddress)
+        root.confirmScreensaver()
 
       if (name !== "openlayer" && name !== "closelayer") return
       var ns = String(event.data || "")
@@ -1591,6 +1598,31 @@ Item {
   // shell is running, so ask once at startup as well — restarting the shell
   // with the screensaver already up is the ordinary case while working on
   // Ragtop, not a corner one.
+  // What the address was when the read below was started. A reply is about
+  // the moment it was asked, not the moment it arrives, so a screensaver
+  // that opened in between must not be cleared by an answer that predates
+  // it.
+  property string screensaverCheckedFor: ""
+
+  // Ask whether the screensaver is really still there.
+  //
+  // Nothing here runs on a timer. A screensaver is meant to run for as long
+  // as it likes, and waking the machine every few seconds to check on it
+  // would be its own kind of interference, on battery through exactly the
+  // stretch the machine should be quiet.
+  //
+  // So this is called when a human is already there: on a tap on the
+  // catcher, and when a window opens or closes while we believe a
+  // screensaver is up. Both mean the session is alive. A stuck catcher on a
+  // machine nobody is touching harms nobody. The moment it matters is the
+  // moment someone taps and nothing happens, and that is the moment this
+  // runs.
+  function confirmScreensaver() {
+    if (screensaverCheckProc.running) return
+    root.screensaverCheckedFor = root.screensaverAddress
+    screensaverCheckProc.running = true
+  }
+
   Process {
     id: screensaverCheckProc
     running: true
@@ -1603,8 +1635,16 @@ Item {
           // events as 589cf9091790. Keep the events' spelling, or closewindow
           // never matches and the catcher stays up over a screensaver that
           // has already gone, swallowing every tap.
-          if (found.length > 0 && root.screensaverAddress === "")
-            root.screensaverAddress = String(found[0].address).replace(/^0x/, "")
+          if (found.length > 0) {
+            if (root.screensaverAddress === "")
+              root.screensaverAddress = String(found[0].address).replace(/^0x/, "")
+          } else if (root.screensaverAddress !== ""
+                     && root.screensaverAddress === root.screensaverCheckedFor) {
+            // Gone, and gone since before we asked. Whatever closewindow we
+            // missed, this is the way back: the catcher comes down and the
+            // keyboard and handle return.
+            root.screensaverAddress = ""
+          }
         } catch (e) {}
       }
     }
@@ -1645,7 +1685,17 @@ Item {
 
     MouseArea {
       anchors.fill: parent
-      onPressed: root.sendKeys("key Escape")
+      // Escape first, so a screensaver that is really there dies on the
+      // touch rather than waiting for a round trip. The check runs beside
+      // it, and only matters when the screensaver has already gone: then
+      // this tap is spent on a stray Escape to whatever has focus, once,
+      // and the next tap behaves normally because the catcher is gone.
+      // One stray Escape is a better failure than a screen that eats every
+      // touch with no way back.
+      onPressed: {
+        root.sendKeys("key Escape")
+        root.confirmScreensaver()
+      }
     }
   }
 
