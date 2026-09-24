@@ -85,9 +85,8 @@ BarWidget {
       bar: root.bar
       text: ""
       tooltipText: "Window shortcuts"
-      active: root.service !== null && root.service.oskVisible
-        && root.service.keyboardPage === "windows"
-      onPressed: if (root.service) root.service.showWindowsPage()
+      active: root.service !== null && root.service.arrangeOpen
+      onPressed: if (root.service) root.service.toggleArrangeMode()
     }
 
     BarIconButton {

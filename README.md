@@ -56,7 +56,7 @@ thing:
 | --- | --- | --- |
 | A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
 | An accelerometer, or `iio-sensor-proxy` | The screen following the device; the rotation-lock button has nothing to lock | The keyboard, the handle, tablet mode, the overlays |
-| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, the windows page, the picker strip |
+| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, arrange mode, the picker strip |
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously — but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
 
@@ -88,16 +88,16 @@ space until tablet mode turns on.
   layout, emoji) still arrive.
 - **Settings one tap away.** A gear key next to the space bar opens Ragtop's
   settings.
-- **A windows page on the keyboard.** Omarchy windows have no title bars and
-  moving or resizing them needs SUPER plus a mouse. The keyboard has a page for
-  it, reached by the tiled icon at the end of the top row. A strip of
-  workspaces runs along the top, and **Send to…** latches like Shift so the
-  next workspace you tap takes the window with it. **Swap…** does the same to
-  the arrows. Below that: close, full width, tiled full screen, split, float,
-  pop out, resize, and Omarchy's own menus and launchers. Each key runs the
-  same action as Omarchy's own keybinding. It lives on the keyboard because
-  the keyboard's strip is already held clear of the tiling area, so the page
-  never covers the windows it is rearranging.
+- **Arrange mode.** Omarchy windows have no title bars and moving or resizing
+  them needs SUPER plus a mouse. Tap the tiled icon at the end of the keyboard's
+  top row and the keyboard steps aside for a transparent layer over the real
+  windows: tap one to focus it, hold and drag it onto another to swap them,
+  drag the squares and bars on its edges to resize. The windows are the
+  controls, at full size, with their content visible and reflowing as you
+  work. Along the bottom, where the keyboard's handle was, sit the things a
+  finger cannot express by dragging: the workspaces, **Send to…** which
+  latches like Shift so the next workspace you tap takes the window with it,
+  the scratchpad, and full width, tiled full screen, split and float.
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
@@ -265,7 +265,7 @@ In tablet mode, two icons appear in the bar:
 
 | Icon | Does |
 | --- | --- |
-| Grid | Raises the keyboard on its windows page. Tap it again to put it away. |
+| Grid | Opens arrange mode. Tap it again to leave. |
 | Padlock | Locks or unlocks rotation. Highlighted while locked, and stays in the bar while locked, even in laptop mode. |
 
 A slim handle, coloured like the bar, runs along the bottom of the screen in
@@ -732,6 +732,12 @@ True today, and worth saying if you want them gone:
 - **The screen does not rotate while locked.** Omarchy's lock screen is not
   redrawn for a rotated display, so it keeps the orientation it was locked in
   and catches up when you unlock.
+- **Resizing a boundary between two groups of tiles resizes the whole group.**
+  Omarchy's layout is a tree, so the line between two tiles is sometimes the
+  edge of a group rather than of one window, and moving it shares the change
+  across everything inside. A mouse does the same thing. Nothing can name a
+  single split to move, so this is the layout showing through rather than
+  something Ragtop gets wrong.
 - **A cloned menu's Apps list is empty** on Omarchy 4.0.0.alpha, which is an
   Omarchy bug rather than Ragtop's. Ragtop works around it and the workaround
   undoes itself once upstream lands a fix. See

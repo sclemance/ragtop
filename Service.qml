@@ -119,6 +119,10 @@ Item {
   // bottom bar keeps the edge with the handle above it, and the keyboard
   // opens above the handle, leaving the handle where it was.
   readonly property int handleHeight: 24
+  // While arranging, that strip is the controls, so it needs room for a row
+  // of them. Tall enough for a two line label, since Omarchy's own names
+  // are worth keeping whole.
+  readonly property int arrangeBarHeight: 56
 
   Variants {
     model: Quickshell.screens
@@ -146,7 +150,7 @@ Item {
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Auto
       anchors { bottom: true; left: true; right: true }
-      implicitHeight: root.handleHeight
+      implicitHeight: root.arrangeOpen ? root.arrangeBarHeight : root.handleHeight
       color: "transparent"
 
       Rectangle {
@@ -159,40 +163,18 @@ Item {
       // target reads touch instead of a mouse event synthesised from it.
       TapHandler {
         id: handleTap
-        onTapped: {
-          // While arranging, this strip is the way out. It is the one
-          // surface that stays live under that layer, so the way back
-          // belongs here rather than on a button floating over the windows.
-          if (root.arrangeOpen) root.closeArrange(true)
-          else root.toggleOsk()
-        }
+        // Only a handle when it is a handle. While arranging, the bar's own
+        // controls take the taps and a miss between them should do nothing
+        // rather than drop you out of the mode.
+        enabled: !root.arrangeOpen
+        onTapped: root.toggleOsk()
       }
 
-      // What the strip is for, while arranging. Drawn as a filled pill
-      // rather than as text on the strip: this is the way out of a mode
-      // that has taken the screen over, and it has to catch an eye that is
-      // not looking for it. Same treatment the button had before it moved
-      // here, just the height of the handle instead of its own.
-      Rectangle {
-        anchors.centerIn: parent
+      // While arranging, the strip is the controls.
+      ArrangeBar {
+        anchors.fill: parent
         visible: root.arrangeOpen
-        opacity: handleTap.pressed ? 0.6 : 1
-        width: arrangeLabel.implicitWidth + Style.space(24)
-        height: Math.max(0, root.handleHeight - Style.space(4))
-        radius: height / 2
-        color: Color.accent
-
-        Text {
-          id: arrangeLabel
-          anchors.centerIn: parent
-          text: root.arrangeWindows.length === 1
-            ? "Arranging 1 window. Tap here to finish."
-            : "Arranging " + root.arrangeWindows.length
-              + " windows. Tap here to finish."
-          color: Color.background
-          font.family: Style.font.family
-          font.pixelSize: Style.font.bodySmall
-        }
+        service: root
       }
 
       // A wide ^ while the keyboard is hidden, a wide v while it's showing.
@@ -603,9 +585,6 @@ Item {
   // set up its config lines, layouts and overlay patches. Check once per
   // session and offer to run the installer; installing a plugin never runs
   // its code, so this asks rather than doing it.
-  readonly property string installScript:
-    Qt.resolvedUrl("install.sh").toString().replace(/^file:\/\//, "")
-
   function offerSetup(problems) {
     if (problems.length === 0) return
     // Never set up on this machine: open setup rather than describe it.
@@ -931,15 +910,6 @@ Item {
   // the same dispatches the bar's popup used to run, which is where they
   // came from.
   readonly property var windowActions: ({
-    "focus-l": 'hl.dsp.focus({ direction = "l" })',
-    "focus-u": 'hl.dsp.focus({ direction = "u" })',
-    "focus-d": 'hl.dsp.focus({ direction = "d" })',
-    "focus-r": 'hl.dsp.focus({ direction = "r" })',
-    "move-l": 'hl.dsp.window.swap({ direction = "l" })',
-    "move-u": 'hl.dsp.window.swap({ direction = "u" })',
-    "move-d": 'hl.dsp.window.swap({ direction = "d" })',
-    "move-r": 'hl.dsp.window.swap({ direction = "r" })',
-    "close": 'hl.dsp.window.close()',
     // True fullscreen is deliberately not here. It covers the whole monitor,
     // reserved space and all, so the keyboard and the bar both go under it
     // and the only two ways back are invisible. On a machine that is folded
@@ -954,21 +924,8 @@ Item {
     "tiled": 'hl.dsp.exec_cmd("omarchy-hyprland-window-tiled-fullscreen-toggle")',
     "float": 'hl.dsp.window.float({ action = "toggle" })',
     "split": 'hl.dsp.layout("togglesplit")',
-    "pop": 'hl.dsp.exec_cmd("omarchy-hyprland-window-pop")',
-    "next": 'hl.dsp.window.cycle_next()',
-    "lastws": 'hl.dsp.focus({ workspace = "previous" })',
     "scratch": 'hl.dsp.workspace.toggle_special("scratchpad")',
-    "toscratch": 'hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })',
-    // Omarchy's own menus and launchers, by the commands its own bindings
-    // use. Nothing here decides what your browser or terminal is: those
-    // scripts read xdg-settings and xdg-terminal-exec, so an unset default
-    // launches nothing rather than launching something we guessed.
-    "theme": 'hl.dsp.exec_cmd("omarchy-menu toggle theme")',
-    "background": 'hl.dsp.exec_cmd("omarchy-menu toggle background")',
-    "apps": 'hl.dsp.exec_cmd("omarchy-menu toggle apps")',
-    "terminal": 'hl.dsp.exec_cmd("omarchy-launch-terminal")',
-    "browser": 'hl.dsp.exec_cmd("omarchy-launch-browser")',
-    "agent": 'hl.dsp.exec_cmd("omarchy-launch-openclaw")'
+    "toscratch": 'hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })'
   })
   // One process per tap, so quick repeated taps are not dropped.
   property Component windowActionProc: Component { Process { onExited: destroy() } }
@@ -1023,6 +980,24 @@ Item {
   // Nothing here moves or resizes anything yet. What it does prove is the
   // geometry matching, the timing around the keyboard's exclusive zone, and
   // every way back out.
+  // The Send latch, which used to live on the keyboard's windows page. Off,
+  // then armed for the next workspace, then locked, then off, the same
+  // ladder Shift climbs and the same one Omarchy spells as SUPER versus
+  // SUPER + SHIFT.
+  property string sendMod: "off"
+  function stepSendMod() {
+    root.sendMod = root.sendMod === "off" ? "latched"
+      : root.sendMod === "latched" ? "locked" : "off"
+  }
+  function takeWorkspace(id) {
+    root.runWorkspace(id, root.sendMod !== "off")
+    if (root.sendMod === "latched") root.sendMod = "off"
+  }
+  function takeScratchpad() {
+    root.runWindowAction(root.sendMod !== "off" ? "toscratch" : "scratch")
+    if (root.sendMod === "latched") root.sendMod = "off"
+  }
+
   property bool arrangeOpen: false
   property var arrangeWindows: []
 
@@ -1042,6 +1017,7 @@ Item {
     // Cleared before the keyboard is asked for, or the rule below would see
     // it come up and call this a second time.
     root.arrangeOpen = false
+    root.sendMod = "off"
     arrangeIdle.stop()
     arrangeSettle.stop()
     if (restore) root.setOskVisible(true)
@@ -1254,20 +1230,12 @@ Item {
     }
   }
 
-  // The bar's window button raises the keyboard on its windows page rather
-  // than opening a card over the windows it is there to rearrange.
-  property string pendingPage: ""
-  readonly property string keyboardPage: keyboard.page
-  function showWindowsPage() {
-    // A second tap on the bar puts it away again, the way the card did.
-    if (root.oskVisible && keyboard.page === "windows") {
-      root.setOskVisible(false)
-      return
-    }
-    // Visible first, then the page: the keyboard resets the windows page on
-    // the way up, and asking afterwards is what survives that.
-    root.setOskVisible(true)
-    root.pendingPage = "windows"
+  // What the bar's window button does, and the socket below with it: one
+  // way in and out of arranging, so both agree about what a second tap
+  // means.
+  function toggleArrangeMode() {
+    if (root.arrangeOpen) root.closeArrange(true)
+    else root.openArrange()
   }
   onOskVisibleChanged: {
     if (!root.oskVisible) root.toolsOpen = false
@@ -1817,8 +1785,7 @@ Item {
     }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
     function toggleArrange(): string {
-      if (root.arrangeOpen) root.closeArrange()
-      else root.openArrange()
+      root.toggleArrangeMode()
       return root.arrangeOpen ? "open" : "closed"
     }
     // What the keyboard and the picker are doing, for scripts and for a bug
