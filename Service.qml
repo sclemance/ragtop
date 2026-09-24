@@ -554,7 +554,14 @@ Item {
       onRead: function(line) {
         if (line !== "show") return
         root.autoShows++
-        if (root.tabletMode && root.autoShowEnabled && !root.oskVisible && !root.pickerOpen)
+        // Not while arranging. The keyboard coming back ends the mode, and
+        // the bar's own buttons change which window has focus, so a window
+        // with a text field in it would raise the keyboard and close the
+        // mode out from under the button that was just tapped. Asking for
+        // the keyboard still ends the mode, because that goes through
+        // setOskVisible rather than through here.
+        if (root.tabletMode && root.autoShowEnabled && !root.oskVisible
+            && !root.pickerOpen && !root.arrangeOpen)
           root.setOskVisible(true)
       }
     }
