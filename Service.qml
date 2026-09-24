@@ -552,7 +552,9 @@ Item {
     command: ["python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
     stdout: SplitParser {
       onRead: function(line) {
-        if (line === "show" && root.tabletMode && root.autoShowEnabled && !root.oskVisible && !root.pickerOpen)
+        if (line !== "show") return
+        root.autoShows++
+        if (root.tabletMode && root.autoShowEnabled && !root.oskVisible && !root.pickerOpen)
           root.setOskVisible(true)
       }
     }
@@ -1001,6 +1003,11 @@ Item {
   // focused workspace while it is up: it is an overlay, and it lives in the
   // monitor's own specialWorkspace rather than in focusedWorkspace, so
   // asking the usual place says no every time.
+  // How many times the focus bridge has asked for the keyboard. Zero after a
+  // long session is the signature of an input method gone quiet: everything
+  // reports healthy and nothing ever comes up.
+  property int autoShows: 0
+
   property bool specialShown: false
 
   property bool arrangeOpen: false
@@ -1807,6 +1814,7 @@ Item {
       return JSON.stringify({
         keyboard: root.retryHealth("keyboard", keyboardHelper.running),
         autoshow: root.wantFocusBridge ? root.retryHealth("autoshow", focusBridgeProc.running) : "off",
+        raises: root.autoShows,
         tabletSwitch: root.watchSwitch ? root.retryHealth("switch", tabletModeProc.running) : "off",
         sensor: !root.rotationAvailable ? "absent"
           : root.rotationLocked ? "held"

@@ -374,6 +374,10 @@ health=""
 health_field() {
   printf '%s' "$health" | sed -n "s/.*\"$1\":\"\([a-z:0-9]*\)\".*/\1/p"
 }
+# The same, for a field whose value is a bare number rather than a string.
+health_number() {
+  printf '%s' "$health" | sed -n "s/.*\"$1\":\([0-9][0-9]*\).*/\1/p"
+}
 
 dmi() { cat "/sys/class/dmi/id/$1" 2>/dev/null || true; }
 
@@ -499,6 +503,13 @@ PYEOF
   # Four things run in the background and any of them can be dead while
   # everything on screen looks right. Only the ones in trouble are named,
   # because the interesting answer is which one is not running.
+  # Auto-show can be armed and healthy while the input method has quietly
+  # stopped reporting focus, so say how many times it has actually fired.
+  raises=$(health_number raises)
+  if [[ -n $raises ]]; then
+    row "Auto-show" "$(get auto-show on), raised the keyboard $raises time(s) this session"
+  fi
+
   if [[ -z $health ]]; then
     row Background "unknown, the service did not answer"
   else

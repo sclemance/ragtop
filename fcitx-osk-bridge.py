@@ -92,6 +92,19 @@ def on_call(conn, sender, path, iface, method, params, invocation):
         rearm_in(300)
 
 
+def on_fcitx_appeared(conn, name, owner):
+    """fcitx5 came back, so whatever we told the old one is gone with it.
+
+    Arming is a request to a running fcitx5, not a setting that survives it.
+    A restart of fcitx5, or fcitx5 starting after this bridge, leaves us
+    holding the name and being asked nothing, which looks exactly like
+    working from every side.
+    """
+    global asked
+    asked = False
+    rearm_in(500)
+
+
 def watchdog():
     """Keep asking until fcitx5 answers.
 
@@ -118,6 +131,9 @@ def on_name_lost(conn, name):
     sys.exit(1)
 
 
+Gio.bus_watch_name_on_connection(bus, "org.fcitx.Fcitx5",
+                                 Gio.BusNameWatcherFlags.NONE,
+                                 on_fcitx_appeared, None)
 GLib.timeout_add_seconds(10, watchdog)
 
 
