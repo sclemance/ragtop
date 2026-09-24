@@ -130,6 +130,7 @@ Item {
   // The label's size on Omarchy's scales, kept inside the key.
   readonly property int labelPixelSize: Math.min(
     labelKind === "icon" || labelKind === "drawn" ? theme.iconSize
+      : labelKind === "banner" ? Math.round(theme.wordSize * 1.4)
       : labelKind === "word" || labelKind === "markword" ? theme.wordSize
       : theme.labelSize,
     Math.round(faceHeight * 0.62))
@@ -149,6 +150,8 @@ Item {
 
   Text {
     visible: key.labelKind === "char" || key.labelKind === "word"
+      || key.labelKind === "banner"
+    font.bold: key.labelKind === "banner"
     y: key.faceY
     width: key.width
     height: key.faceHeight

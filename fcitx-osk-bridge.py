@@ -40,6 +40,17 @@ XML = f"""
 bus = Gio.bus_get_sync(Gio.BusType.SESSION)
 arming = False
 rearm_source = 0
+# Whether fcitx5 has ever spoken to us. Until it has, a working arm and one
+# that never landed look exactly the same from here.
+asked = False
+
+
+def rearm_in(ms):
+    """Arm again, unless an arming is already on its way."""
+    global rearm_source
+    if rearm_source:
+        return
+    rearm_source = GLib.timeout_add(ms, arm)
 
 
 def arm():
@@ -58,7 +69,11 @@ def arm():
         try:
             conn.call_finish(result)
         except GLib.Error:
-            pass  # fcitx5 not running or restarting; the next hide re-arms
+            # Nothing else retries this. The re-arm below only happens on a
+            # hide, and fcitx5 only hides a keyboard it was asked to show,
+            # so one failed call here is a whole session with no keyboard
+            # coming up by itself. It happens when fcitx5 is still starting.
+            rearm_in(2000)
 
     bus.call("org.fcitx.Fcitx5", "/virtualkeyboard",
              "org.fcitx.Fcitx.VirtualKeyboard1", "ShowVirtualKeyboard",
@@ -67,13 +82,27 @@ def arm():
 
 
 def on_call(conn, sender, path, iface, method, params, invocation):
-    global rearm_source
+    global asked
     invocation.return_value(None)
+    asked = True
     if method == "ShowVirtualKeyboard" and not arming:
         print("show", flush=True)
-    elif method == "HideVirtualKeyboard" and not rearm_source:
+    elif method == "HideVirtualKeyboard":
         # Wait for a burst of typing to settle before re-arming.
-        rearm_source = GLib.timeout_add(300, arm)
+        rearm_in(300)
+
+
+def watchdog():
+    """Keep asking until fcitx5 answers.
+
+    A failed arm leaves no trace and nothing to notice it by: we hold the
+    name, the process is alive, everything reports healthy, and the keyboard
+    simply never comes up on its own. So while nothing has ever been
+    received, keep trying.
+    """
+    if not asked:
+        rearm_in(0)
+    return GLib.SOURCE_CONTINUE
 
 
 bus.register_object_with_closures2(
@@ -87,6 +116,9 @@ def on_name(conn, name):
 
 def on_name_lost(conn, name):
     sys.exit(1)
+
+
+GLib.timeout_add_seconds(10, watchdog)
 
 
 Gio.bus_own_name_on_connection(bus, NAME, Gio.BusNameOwnerFlags.NONE,

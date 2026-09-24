@@ -158,16 +158,51 @@ Item {
       // TapHandler rather than MouseArea: see ToolsPanel for why a tap
       // target reads touch instead of a mouse event synthesised from it.
       TapHandler {
-        onTapped: root.toggleOsk()
+        id: handleTap
+        onTapped: {
+          // While arranging, this strip is the way out. It is the one
+          // surface that stays live under that layer, so the way back
+          // belongs here rather than on a button floating over the windows.
+          if (root.arrangeOpen) root.closeArrange(true)
+          else root.toggleOsk()
+        }
+      }
+
+      // What the strip is for, while arranging. Drawn as a filled pill
+      // rather than as text on the strip: this is the way out of a mode
+      // that has taken the screen over, and it has to catch an eye that is
+      // not looking for it. Same treatment the button had before it moved
+      // here, just the height of the handle instead of its own.
+      Rectangle {
+        anchors.centerIn: parent
+        visible: root.arrangeOpen
+        opacity: handleTap.pressed ? 0.6 : 1
+        width: arrangeLabel.implicitWidth + Style.space(24)
+        height: Math.max(0, root.handleHeight - Style.space(4))
+        radius: height / 2
+        color: Color.accent
+
+        Text {
+          id: arrangeLabel
+          anchors.centerIn: parent
+          text: root.arrangeWindows.length === 1
+            ? "Arranging 1 window. Tap here to finish."
+            : "Arranging " + root.arrangeWindows.length
+              + " windows. Tap here to finish."
+          color: Color.background
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
       }
 
       // A wide ^ while the keyboard is hidden, a wide v while it's showing.
       Shape {
         id: chevron
         anchors.centerIn: parent
+        visible: !root.arrangeOpen
         width: 56
         height: 8
-        opacity: handleArea.pressed ? 0.5 : 1
+        opacity: handleTap.pressed ? 0.5 : 1
         preferredRendererType: Shape.CurveRenderer
         property color lineColor: handle.line
         Behavior on lineColor { ColorAnimation { duration: 150 } }
@@ -438,7 +473,18 @@ Item {
     rotateApplyProc.running = true
     root.appliedOrientation = orientation
   }
-  Process { id: rotateApplyProc }
+  Process {
+    id: rotateApplyProc
+    // Turning the screen moves and resizes every window on it, and Hyprland
+    // says nothing per window about that, so the outlines would keep the
+    // shape the screen had before. Same trap as the keyboard's exclusive
+    // zone. Read the geometry back once the transform has landed.
+    onExited: {
+      if (!root.arrangeOpen) return
+      arrangeSettle.again = 2
+      arrangeSettle.restart()
+    }
+  }
   // The interval is set by wantSensor, from the deadline.
   Timer {
     id: rotationRestart
@@ -909,10 +955,6 @@ Item {
     "float": 'hl.dsp.window.float({ action = "toggle" })',
     "split": 'hl.dsp.layout("togglesplit")',
     "pop": 'hl.dsp.exec_cmd("omarchy-hyprland-window-pop")',
-    "narrower": 'hl.dsp.window.resize({ x = -100, y = 0, relative = true })',
-    "wider": 'hl.dsp.window.resize({ x = 100, y = 0, relative = true })',
-    "shorter": 'hl.dsp.window.resize({ x = 0, y = -100, relative = true })',
-    "taller": 'hl.dsp.window.resize({ x = 0, y = 100, relative = true })',
     "next": 'hl.dsp.window.cycle_next()',
     "lastws": 'hl.dsp.focus({ workspace = "previous" })',
     "scratch": 'hl.dsp.workspace.toggle_special("scratchpad")',
@@ -1141,7 +1183,16 @@ Item {
   Timer {
     id: arrangeSettle
     interval: 260
-    onTriggered: arrangeClientsProc.running = true
+    // Twice, a beat apart: a rotation is still settling when the first read
+    // happens, and one stale set of outlines is worth a second look.
+    property int again: 0
+    onTriggered: {
+      arrangeClientsProc.running = true
+      if (again > 0) {
+        again--
+        arrangeSettle.restart()
+      }
+    }
   }
   Timer {
     id: arrangeIdle
@@ -1191,9 +1242,13 @@ Item {
     function onRawEvent(event) {
       if (!root.arrangeOpen) return
       var n = event.name
+      // The monitor ones matter because a rotation from anywhere else, the
+      // bar's button or a keybinding, has to be noticed too.
       if (n === "openwindow" || n === "closewindow" || n === "movewindow"
           || n === "resizewindow" || n === "activewindow" || n === "changefloatingmode"
-          || n === "fullscreen") {
+          || n === "fullscreen" || n === "monitorlayoutchanged"
+          || n === "monitoradded" || n === "monitorremoved"
+          || n === "configreloaded") {
         arrangeSettle.restart()
       }
     }

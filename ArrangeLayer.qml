@@ -126,24 +126,16 @@ Item {
   // Not `left` and `top` for these: every Item already has those as final
   // anchor lines and QML refuses to shadow them, which takes the whole
   // service down with it. The same trap as naming an id `layer`.
+  // Just the windows now. With nothing else on this layer to touch, an
+  // empty workspace means an empty mask, and the handle below is the way
+  // out either way.
   Item {
     id: activeArea
     visible: false
-    readonly property bool empty: surface.windows.length === 0
-    readonly property real minX: empty ? doneButton.x
-      : Math.min(doneButton.x, surface.windowBounds.x)
-    readonly property real minY: empty ? doneButton.y
-      : Math.min(doneButton.y, surface.windowBounds.y)
-    readonly property real maxX: empty ? doneButton.x + doneButton.width
-      : Math.max(doneButton.x + doneButton.width,
-                 surface.windowBounds.x + surface.windowBounds.width)
-    readonly property real maxY: empty ? doneButton.y + doneButton.height
-      : Math.max(doneButton.y + doneButton.height,
-                 surface.windowBounds.y + surface.windowBounds.height)
-    x: minX
-    y: minY
-    width: maxX - minX
-    height: maxY - minY
+    x: surface.windowBounds.x
+    y: surface.windowBounds.y
+    width: surface.windowBounds.width
+    height: surface.windowBounds.height
   }
 
   // A label on its own background, so it stays readable over whatever the
@@ -284,12 +276,13 @@ Item {
       // "make me bigger", and the delta is simply where the finger went.
       // A per-handle sign was the first attempt and it inverted every edge
       // on one side of the screen.
-      // Handles scale with the tile rather than being one size everywhere.
-      // A big tile can afford a target worth aiming at, a small one cannot,
-      // and two corners must never be wider than the side they sit on. The
-      // floor is roughly a fingertip.
-      readonly property int hs: Math.max(28, Math.min(96,
-        Math.min(width, height) * 0.18, width / 2.2, height / 2.2))
+      // Full size for as long as the tile can hold it, and only then
+      // smaller. Sizing these as a fraction of the tile made them shrink
+      // long before they had to, so the only thing that takes them below
+      // the maximum is not fitting: two corners plus a little can never be
+      // wider than the side they sit on.
+      readonly property int hs: Math.max(32, Math.min(96,
+        width / 2.4, height / 2.4))
       readonly property real eb: Math.max(14, hs * 0.42)
       readonly property bool wideEnough: width - 2 * hs >= surface.edgeMin
       readonly property bool tallEnough: height - 2 * hs >= surface.edgeMin
@@ -338,9 +331,7 @@ Item {
           width: spec.hw
           height: spec.hh
           radius: Style.space(3)
-          color: grip.active ? Color.accent : Util.alpha(Color.accent, 0.45)
-          border.width: 1
-          border.color: Color.accent
+          color: grip.active ? Color.accent : Util.alpha(Color.accent, 0.55)
 
           // DragHandler, not PointHandler: the handle moves as the window
           // resizes, and a PointHandler stops the moment its own item is no
@@ -545,47 +536,4 @@ Item {
     }
   }
 
-  // The way out. Large, always in the same place, and the only thing on this
-  // surface that takes a touch. The bar and the keyboard's handle stay live
-  // underneath, so this is the most obvious way back rather than the only
-  // one, and the idle timer is a third.
-  Rectangle {
-    id: doneButton
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottom: parent.bottom
-    anchors.bottomMargin: Style.space(28)
-    width: Math.max(Style.space(160), doneLabel.implicitWidth + Style.space(48))
-    height: Style.space(52)
-    radius: Style.cornerRadius
-    color: Color.accent
-
-    Text {
-      id: doneLabel
-      anchors.centerIn: parent
-      text: "Done"
-      color: Color.background
-      font.family: Style.font.family
-      font.pixelSize: Style.font.body
-    }
-
-    TapHandler {
-      onTapped: surface.service.closeArrange(true)
-    }
-  }
-
-  // What this is, said once, because a screen full of outlines needs to
-  // explain itself before someone decides something has gone wrong.
-  Text {
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottom: doneButton.top
-    anchors.bottomMargin: Style.space(10)
-    text: surface.windows.length === 0
-      ? "No windows on this workspace"
-      : "Arranging " + surface.windows.length
-        + (surface.windows.length === 1 ? " window" : " windows")
-    color: Color.popups.text
-    opacity: 0.75
-    font.family: Style.font.family
-    font.pixelSize: Style.font.bodySmall
-  }
 }
