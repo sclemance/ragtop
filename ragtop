@@ -374,6 +374,10 @@ health=""
 health_field() {
   printf '%s' "$health" | sed -n "s/.*\"$1\":\"\([a-z:0-9]*\)\".*/\1/p"
 }
+# The same, for a field whose value is a bare number rather than a string.
+health_number() {
+  printf '%s' "$health" | sed -n "s/.*\"$1\":\([0-9][0-9]*\).*/\1/p"
+}
 
 dmi() { cat "/sys/class/dmi/id/$1" 2>/dev/null || true; }
 
@@ -422,6 +426,39 @@ diagnostics() {
   [[ -n $version && $version != "$name" ]] && model="$name ($version)"
   row Machine "$(dmi sys_vendor) $model, $chassis"
 
+  # Resolution on its own says very little. A Surface scaled to 2 lays out on
+  # the same canvas a 1366x768 laptop does, so "the keys are too small" cannot
+  # be answered without the scale, and nobody thinks to send it. The transform
+  # says which way the screen is really turned, which is the other half of a
+  # rotation report.
+  value=$(python3 - <<'PYEOF' || true
+import json, subprocess, sys
+
+turns = {0: "normal", 1: "turned left", 2: "upside down", 3: "turned right"}
+try:
+    raw = subprocess.run(["hyprctl", "monitors", "-j"],
+                         capture_output=True, text=True, timeout=5).stdout
+    monitors = json.loads(raw)
+except Exception:
+    sys.exit(0)
+
+out = []
+for m in monitors:
+    scale = m.get("scale", 1) or 1
+    part = "%s %dx%d scale %g" % (m.get("name", "?"), m.get("width", 0),
+                                  m.get("height", 0), scale)
+    if scale != 1:
+        part += " (%dx%d laid out)" % (m.get("width", 0) / scale,
+                                       m.get("height", 0) / scale)
+    turn = turns.get(m.get("transform", 0), "transform %s" % m.get("transform"))
+    if turn != "normal":
+        part += ", " + turn
+    out.append(part)
+print(", ".join(out))
+PYEOF
+)
+  row Screen "${value:-unknown}"
+
   # What the service says about itself, asked once and read field by field.
   health=$(omarchy-shell ragtop health 2>/dev/null || true)
 
@@ -466,6 +503,13 @@ diagnostics() {
   # Four things run in the background and any of them can be dead while
   # everything on screen looks right. Only the ones in trouble are named,
   # because the interesting answer is which one is not running.
+  # Auto-show can be armed and healthy while the input method has quietly
+  # stopped reporting focus, so say how many times it has actually fired.
+  raises=$(health_number raises)
+  if [[ -n $raises ]]; then
+    row "Auto-show" "$(get auto-show on), raised the keyboard $raises time(s) this session"
+  fi
+
   if [[ -z $health ]]; then
     row Background "unknown, the service did not answer"
   else

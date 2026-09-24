@@ -12,7 +12,7 @@ Item {
   id: icon
 
   // "settings", "shift", "backspace", "enter", "rotate", "keyboard",
-  // "check", "left", "up", "down", "right".
+  // "windows", "omarchy", "check", "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
 
@@ -102,6 +102,49 @@ Item {
   }
 
   // A tick.
+  // Omarchy's own square mark, the one in /usr/share/pixmaps/omarchy.png,
+  // on the Super key the way a physical keyboard puts the system's logo
+  // there. It is drawn rather than loaded for the same reason every other
+  // icon here is: it needs no file on disk, it takes the key's colour, and
+  // it is exact at any size. The mark is built entirely from blocks on a
+  // 15 by 15 grid, so these thirteen rectangles are the whole of it, read
+  // off the image rather than traced by eye.
+  readonly property var omarchyRects: [
+      [0, 0, 15, 1],
+      [0, 1, 1, 14],
+      [7, 1, 1, 2],
+      [14, 1, 1, 14],
+      [2, 2, 5, 1],
+      [11, 2, 2, 1],
+      [2, 3, 1, 10],
+      [12, 3, 1, 10],
+      [1, 7, 1, 1],
+      [3, 12, 9, 1],
+      [7, 13, 1, 2],
+      [1, 14, 6, 1],
+      [9, 14, 5, 1]
+  ]
+  function omarchyPath() {
+    var path = ""
+    for (var i = 0; i < icon.omarchyRects.length; i++) {
+      var r = icon.omarchyRects[i]
+      var x0 = r[0] / 15, y0 = r[1] / 15
+      var x1 = (r[0] + r[2]) / 15, y1 = (r[1] + r[3]) / 15
+      path += move(x0, y0) + line(x1, y0) + line(x1, y1) + line(x0, y1) + "Z "
+    }
+    return path
+  }
+
+  // A tiled layout: one pane on the left, two stacked on the right. It is
+  // the shape of what the windows page rearranges, which reads faster than
+  // any word would at this size.
+  function windowsPath() {
+    return move(0.1, 0.22) + line(0.9, 0.22) + line(0.9, 0.78)
+      + line(0.1, 0.78) + line(0.1, 0.22)
+      + move(0.48, 0.22) + line(0.48, 0.78)
+      + move(0.48, 0.5) + line(0.9, 0.5)
+  }
+
   // A keyboard: the case, a row of keys and a space bar. At the size this is
   // drawn the keys are dots rather than squares, since anything with a shape
   // of its own turns to mush by 20 pixels.
@@ -129,14 +172,18 @@ Item {
     : name === "enter" ? enterPath()
     : name === "rotate" ? rotatePath()
     : name === "keyboard" ? keyboardPath()
+    : name === "windows" ? windowsPath()
     : name === "check" ? checkPath()
     : isArrow ? arrowPath()
     : ""
 
-  // The gear is a filled shape; the rest are drawn with strokes.
+  // The gear and Omarchy's mark are filled shapes; the rest are strokes.
+  readonly property string filledPath: name === "settings" ? gearPath()
+    : name === "omarchy" ? omarchyPath() : ""
+
   Shape {
     anchors.fill: parent
-    visible: icon.name === "settings"
+    visible: icon.filledPath !== ""
     preferredRendererType: Shape.CurveRenderer
 
     ShapePath {
@@ -144,7 +191,7 @@ Item {
       fillRule: ShapePath.OddEvenFill
       strokeWidth: 0
       strokeColor: "transparent"
-      PathSvg { path: icon.name === "settings" ? icon.gearPath() : "" }
+      PathSvg { path: icon.filledPath }
     }
   }
 

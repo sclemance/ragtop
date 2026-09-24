@@ -31,6 +31,15 @@ Item {
       anchors.centerIn: parent
       spacing: 14
 
+      // Tap targets here are TapHandlers rather than MouseAreas. MouseArea's
+      // onClicked needs Qt to synthesise a mouse press and release out of a
+      // touch, and the first touch on a surface that has not been touched
+      // yet is lost somewhere in that synthesis, so the first tap on a panel
+      // that has only just opened does nothing. The keyboard never had the
+      // problem because it reads touch points directly, which is what a
+      // TapHandler does too. The size slider below stays a MouseArea: it is
+      // a drag, not a tap, and its handling is already tuned for that.
+      //
       // The theme, stepped rather than listed: the keyboard behind redraws
       // as you go, which is a better way to choose one than reading names.
       Row {
@@ -41,7 +50,7 @@ Item {
           border.width: Math.max(1, panel.theme.keyBorderWidth)
           border.color: panel.theme.keyBorder
           KeyIcon { anchors.centerIn: parent; height: 20; name: "left"; color: panel.theme.text }
-          MouseArea { anchors.fill: parent; onClicked: panel.service.stepTheme(-1) }
+          TapHandler { onTapped: panel.service.stepTheme(-1) }
         }
         Rectangle {
           width: 444; height: 44; radius: 12
@@ -65,7 +74,7 @@ Item {
           border.width: Math.max(1, panel.theme.keyBorderWidth)
           border.color: panel.theme.keyBorder
           KeyIcon { anchors.centerIn: parent; height: 20; name: "right"; color: panel.theme.text }
-          MouseArea { anchors.fill: parent; onClicked: panel.service.stepTheme(1) }
+          TapHandler { onTapped: panel.service.stepTheme(1) }
         }
       }
 
@@ -94,6 +103,7 @@ Item {
                   { mode: "unlocked", label: "Unlocked" },
                   { mode: "auto", label: "Automatic" }]
           Item {
+            id: radio
             required property var modelData
             readonly property bool on: panel.service.rotationMode === modelData.mode
             width: dot.width + 6 + optionLabel.width
@@ -123,9 +133,8 @@ Item {
               font.pixelSize: 15
             }
             // The label belongs to the radio, as the sentence does below.
-            MouseArea {
-              anchors.fill: parent
-              onClicked: panel.service.setRotationMode(parent.modelData.mode)
+            TapHandler {
+              onTapped: panel.service.setRotationMode(radio.modelData.mode)
             }
           }
         }
@@ -245,10 +254,10 @@ Item {
           font.pixelSize: 15
         }
         // The sentence is part of the control, not a caption beside it.
-        MouseArea {
+        Item {
           width: autoLabel.x + autoLabel.width
           height: parent.height
-          onClicked: panel.service.toggleAutoShow()
+          TapHandler { onTapped: panel.service.toggleAutoShow() }
         }
 
         Rectangle {
@@ -265,9 +274,8 @@ Item {
             font.family: panel.theme.fontFamily
             font.pixelSize: 14
           }
-          MouseArea {
-            anchors.fill: parent
-            onClicked: { panel.dismissed(); panel.service.openSettings() }
+          TapHandler {
+            onTapped: { panel.dismissed(); panel.service.openSettings() }
           }
         }
       }

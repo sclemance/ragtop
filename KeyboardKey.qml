@@ -130,7 +130,7 @@ Item {
   // The label's size on Omarchy's scales, kept inside the key.
   readonly property int labelPixelSize: Math.min(
     labelKind === "icon" || labelKind === "drawn" ? theme.iconSize
-      : labelKind === "word" ? theme.wordSize
+      : labelKind === "word" || labelKind === "markword" ? theme.wordSize
       : theme.labelSize,
     Math.round(faceHeight * 0.62))
 
@@ -173,6 +173,32 @@ Item {
     opacity: 0.5
     font.family: key.theme.fontFamily
     font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
+  }
+
+  // A mark and its name together, for a key whose symbol nobody has on
+  // their hardware to learn it from. The pair is centred as one thing, so
+  // the key still reads as a single label rather than two.
+  Row {
+    visible: key.labelKind === "markword"
+    y: key.faceY
+    height: key.faceHeight
+    x: Math.max(0, (key.width - implicitWidth) / 2)
+    spacing: Math.max(7, key.theme.gap)
+
+    KeyIcon {
+      anchors.verticalCenter: parent.verticalCenter
+      height: Math.round(key.labelPixelSize * 1.05)
+      name: key.icon
+      color: key.labelColor
+      filled: key.kind === "locked"
+    }
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      text: key.label
+      color: key.labelColor
+      font.family: key.theme.fontFamily
+      font.pixelSize: key.labelPixelSize
+    }
   }
 
   KeyIcon {

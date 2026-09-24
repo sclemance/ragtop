@@ -146,7 +146,9 @@ Item {
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Auto
       anchors { bottom: true; left: true; right: true }
-      implicitHeight: root.handleHeight
+      // The bar says how much room it needs, since a narrow screen puts it
+      // on two rows and a wide one does not.
+      implicitHeight: root.arrangeOpen ? arrangeBar.neededHeight : root.handleHeight
       color: "transparent"
 
       Rectangle {
@@ -155,19 +157,33 @@ Item {
         Behavior on color { ColorAnimation { duration: 150 } }
       }
 
-      MouseArea {
-        id: handleArea
+      // TapHandler rather than MouseArea: see ToolsPanel for why a tap
+      // target reads touch instead of a mouse event synthesised from it.
+      TapHandler {
+        id: handleTap
+        // Only a handle when it is a handle. While arranging, the bar's own
+        // controls take the taps and a miss between them should do nothing
+        // rather than drop you out of the mode.
+        enabled: !root.arrangeOpen
+        onTapped: root.toggleOsk()
+      }
+
+      // While arranging, the strip is the controls.
+      ArrangeBar {
+        id: arrangeBar
         anchors.fill: parent
-        onClicked: root.toggleOsk()
+        visible: root.arrangeOpen
+        service: root
       }
 
       // A wide ^ while the keyboard is hidden, a wide v while it's showing.
       Shape {
         id: chevron
         anchors.centerIn: parent
+        visible: !root.arrangeOpen
         width: 56
         height: 8
-        opacity: handleArea.pressed ? 0.5 : 1
+        opacity: handleTap.pressed ? 0.5 : 1
         preferredRendererType: Shape.CurveRenderer
         property color lineColor: handle.line
         Behavior on lineColor { ColorAnimation { duration: 150 } }
@@ -438,7 +454,18 @@ Item {
     rotateApplyProc.running = true
     root.appliedOrientation = orientation
   }
-  Process { id: rotateApplyProc }
+  Process {
+    id: rotateApplyProc
+    // Turning the screen moves and resizes every window on it, and Hyprland
+    // says nothing per window about that, so the outlines would keep the
+    // shape the screen had before. Same trap as the keyboard's exclusive
+    // zone. Read the geometry back once the transform has landed.
+    onExited: {
+      if (!root.arrangeOpen) return
+      arrangeSettle.again = 2
+      arrangeSettle.restart()
+    }
+  }
   // The interval is set by wantSensor, from the deadline.
   Timer {
     id: rotationRestart
@@ -525,7 +552,9 @@ Item {
     command: ["python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
     stdout: SplitParser {
       onRead: function(line) {
-        if (line === "show" && root.tabletMode && root.autoShowEnabled && !root.oskVisible && !root.pickerOpen)
+        if (line !== "show") return
+        root.autoShows++
+        if (root.tabletMode && root.autoShowEnabled && !root.oskVisible && !root.pickerOpen)
           root.setOskVisible(true)
       }
     }
@@ -557,9 +586,6 @@ Item {
   // set up its config lines, layouts and overlay patches. Check once per
   // session and offer to run the installer; installing a plugin never runs
   // its code, so this asks rather than doing it.
-  readonly property string installScript:
-    Qt.resolvedUrl("install.sh").toString().replace(/^file:\/\//, "")
-
   function offerSetup(problems) {
     if (problems.length === 0) return
     // Never set up on this machine: open setup rather than describe it.
@@ -876,7 +902,391 @@ Item {
   // Ragtop's controls, on their own surface above the keyboard. They go away
   // with it, so they can never be left floating over nothing.
   property bool toolsOpen: false
-  onOskVisibleChanged: if (!root.oskVisible) root.toolsOpen = false
+
+  // ---- window management -------------------------------------------------
+
+  // What the keyboard's windows page can do, by name. The keyboard asks for
+  // a name and this looks it up, so a name is the only thing that ever
+  // crosses into a command line and an unknown one does nothing. These are
+  // the same dispatches the bar's popup used to run, which is where they
+  // came from.
+  readonly property var windowActions: ({
+    // True fullscreen is deliberately not here. It covers the whole monitor,
+    // reserved space and all, so the keyboard and the bar both go under it
+    // and the only two ways back are invisible. On a machine that is folded
+    // shut there is no third way, and the toggle that would undo it is the
+    // key you can no longer see. Maximized gets the same "make this big"
+    // without taking the way out with it.
+    "wide": 'hl.dsp.window.fullscreen({ mode = "maximized" })',
+    // Omarchy's own SUPER + CTRL + F. The window keeps its place in the
+    // layout and only the client is told it is fullscreen, so an app drops
+    // its chrome while the bar and the keyboard stay exactly where they are.
+    // This is the fullscreen a machine with no other keyboard can afford.
+    "tiled": 'hl.dsp.exec_cmd("omarchy-hyprland-window-tiled-fullscreen-toggle")',
+    "float": 'hl.dsp.window.float({ action = "toggle" })',
+    "split": 'hl.dsp.layout("togglesplit")',
+    "scratch": 'hl.dsp.workspace.toggle_special("scratchpad")',
+    "toscratch": 'hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })'
+  })
+  // One process per tap, so quick repeated taps are not dropped.
+  property Component windowActionProc: Component { Process { onExited: destroy() } }
+  function runWindowAction(name) {
+    var lua = root.windowActions[name]
+    if (!lua) return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
+    if (proc) proc.running = true
+  }
+
+  // Which workspaces the strip offers, by Omarchy's own rule: always 1 to 5,
+  // plus any other that exists up to 10. Copied from its Workspaces widget
+  // so the keyboard and the bar never disagree about what there is.
+  readonly property var workspaceIds: {
+    var ids = [1, 2, 3, 4, 5]
+    var values = Hyprland.workspaces.values
+    for (var i = 0; i < values.length; i++) {
+      var id = values[i].id
+      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+    }
+    ids.sort(function(a, b) { return a - b })
+    return ids
+  }
+  readonly property int focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+
+  // A number rather than a name, checked against the range Hyprland has, so
+  // the only thing that reaches a command line is a digit this decided on.
+  function workspaceLua(id, send) {
+    var n = parseInt(id, 10)
+    if (!(n >= 1 && n <= 10)) return ""
+    return send ? 'hl.dsp.window.move({ workspace = "' + n + '" })'
+                : 'hl.dsp.focus({ workspace = "' + n + '" })'
+  }
+  function runWorkspace(id, send) {
+    var lua = root.workspaceLua(id, send)
+    if (lua === "") return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
+    if (proc) proc.running = true
+  }
+
+  // ---- arrange mode -------------------------------------------------------
+
+  // A transparent layer over the real windows, for rearranging them by hand.
+  // It draws outlines and nothing solid: the whole reason to do this over the
+  // windows instead of over a map is that their content is visible and
+  // reflows as you work, and a panel on top of a window is a panel you cannot
+  // judge a split through.
+  //
+  // Phase one only shows where the windows are and gets out of the way again.
+  // Nothing here moves or resizes anything yet. What it does prove is the
+  // geometry matching, the timing around the keyboard's exclusive zone, and
+  // every way back out.
+  // The Send latch, which used to live on the keyboard's windows page. Off,
+  // then armed for the next workspace, then locked, then off, the same
+  // ladder Shift climbs and the same one Omarchy spells as SUPER versus
+  // SUPER + SHIFT.
+  property string sendMod: "off"
+  function stepSendMod() {
+    root.sendMod = root.sendMod === "off" ? "latched"
+      : root.sendMod === "latched" ? "locked" : "off"
+  }
+  function takeWorkspace(id) {
+    root.runWorkspace(id, root.sendMod !== "off")
+    if (root.sendMod === "latched") root.sendMod = "off"
+  }
+  function takeScratchpad() {
+    root.runWindowAction(root.sendMod !== "off" ? "toscratch" : "scratch")
+    if (root.sendMod === "latched") root.sendMod = "off"
+  }
+
+  // Whether a special workspace is showing. The scratchpad is not the
+  // focused workspace while it is up: it is an overlay, and it lives in the
+  // monitor's own specialWorkspace rather than in focusedWorkspace, so
+  // asking the usual place says no every time.
+  // How many times the focus bridge has asked for the keyboard. Zero after a
+  // long session is the signature of an input method gone quiet: everything
+  // reports healthy and nothing ever comes up.
+  property int autoShows: 0
+
+  property bool specialShown: false
+
+  property bool arrangeOpen: false
+  property var arrangeWindows: []
+
+  function openArrange() {
+    // The keyboard's strip is reserved, so hiding it first lets the windows
+    // reflow to the full screen. The list is read after that settles, or the
+    // outlines would be drawn around where the windows used to be.
+    root.setOskVisible(false)
+    root.arrangeOpen = true
+    specialReadProc.running = true
+    arrangeIdle.restart()
+    arrangeSettle.restart()
+  }
+  // Done came from the keyboard, so it goes back to it. A timeout or tablet
+  // mode ending did not, and putting a keyboard up for nobody would only
+  // shrink the windows again.
+  function closeArrange(restore) {
+    // Cleared before the keyboard is asked for, or the rule below would see
+    // it come up and call this a second time.
+    root.arrangeOpen = false
+    root.sendMod = "off"
+    arrangeIdle.stop()
+    arrangeSettle.stop()
+    if (restore) root.setOskVisible(true)
+  }
+
+  // The keyboard and this mode are exclusive: entering hides the keyboard,
+  // and the keyboard coming back by any route ends the mode. That is the
+  // handle, auto-show on a text field, and the bar's own button.
+  //
+  // It is also the fix for a real fault. The keyboard's exclusive zone
+  // changing relayouts every window, and Hyprland emits no resizewindow for
+  // that, so the event-driven refresh never fired and the outlines sat over
+  // a keyboard, around windows that had already shrunk away from them.
+  // Focus a window by its address. Checked against the shape Hyprland gives
+  // them before it goes anywhere, so the only thing that reaches a command
+  // line is an address this recognised.
+  function focusWindow(address) {
+    if (!/^0x[0-9a-f]+$/.test(address)) return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval",
+                  "hl.dispatch(hl.dsp.focus({ window = \"address:" + address + "\" }))"] })
+    if (proc) proc.running = true
+    arrangeIdle.restart()
+  }
+
+  // Resize by a relative delta, as fast as a finger can ask for it.
+  //
+  // One hyprctl at a time: a drag asks far more often than a process can
+  // answer, so the newest ask is held while one is in flight and sent when
+  // it finishes, adding up anything that arrived meanwhile. Nothing is
+  // dropped and nothing queues up behind the finger. The size slider learnt
+  // this the same way.
+  property var resizeHeld: null
+  property bool resizeBusy: false
+
+  function resizeWindow(address, dx, dy) {
+    if (!/^0x[0-9a-f]+$/.test(address)) return
+    if (dx === 0 && dy === 0) return
+    if (root.resizeBusy) {
+      if (root.resizeHeld && root.resizeHeld.address === address) {
+        root.resizeHeld.dx += dx
+        root.resizeHeld.dy += dy
+      } else {
+        root.resizeHeld = { address: address, dx: dx, dy: dy }
+      }
+      return
+    }
+    root.sendResize(address, dx, dy)
+  }
+
+  function sendResize(address, dx, dy) {
+    root.resizeBusy = true
+    resizeProc.command = ["hyprctl", "eval",
+      "hl.dispatch(hl.dsp.window.resize({ window = \"address:" + address
+      + "\", x = " + Math.round(dx) + ", y = " + Math.round(dy)
+      + ", relative = true }))"]
+    resizeProc.running = true
+    arrangeIdle.restart()
+  }
+
+  Process {
+    id: resizeProc
+    onExited: {
+      root.resizeBusy = false
+      var held = root.resizeHeld
+      root.resizeHeld = null
+      if (held) {
+        root.sendResize(held.address, held.dx, held.dy)
+        return
+      }
+      // Read the geometry back the moment the resize lands, so the outlines
+      // keep up with the windows. Resizing a tile moves its neighbour as
+      // well, so guessing the new shape locally would draw one of them
+      // right and the other wrong. This rides the resize rate, which is
+      // already limited to one at a time.
+      if (root.arrangeOpen && !arrangeClientsProc.running)
+        arrangeClientsProc.running = true
+    }
+  }
+
+  // A floating window has no splits, and a relative resize grows it from
+  // the centre, which can never move one edge on its own. So its rectangle
+  // is set outright instead: position and size in one dispatch, latest ask
+  // wins, no deltas to accumulate and nothing to drift.
+  property var geomHeld: null
+  property bool geomBusy: false
+
+  function setWindowGeom(address, x, y, w, h) {
+    if (!/^0x[0-9a-f]+$/.test(address)) return
+    if (root.geomBusy) {
+      root.geomHeld = { address: address, x: x, y: y, w: w, h: h }
+      return
+    }
+    root.sendGeom(address, x, y, w, h)
+  }
+
+  function sendGeom(address, x, y, w, h) {
+    root.geomBusy = true
+    var win = "\"address:" + address + "\""
+    geomProc.command = ["hyprctl", "eval",
+      "hl.dispatch(hl.dsp.window.resize({ window = " + win
+        + ", x = " + Math.round(w) + ", y = " + Math.round(h) + " })) "
+      + "hl.dispatch(hl.dsp.window.move({ window = " + win
+        + ", x = " + Math.round(x) + ", y = " + Math.round(y) + " }))"]
+    geomProc.running = true
+    arrangeIdle.restart()
+  }
+
+  Process {
+    id: geomProc
+    onExited: {
+      root.geomBusy = false
+      var held = root.geomHeld
+      root.geomHeld = null
+      if (held) {
+        root.sendGeom(held.address, held.x, held.y, held.w, held.h)
+        return
+      }
+      if (root.arrangeOpen && !arrangeClientsProc.running)
+        arrangeClientsProc.running = true
+    }
+  }
+
+  // Swap two windows by address. A tile has no free position, so dropping
+  // one on another is an exchange rather than a move, and Hyprland takes
+  // both addresses for it, which means no guessing a direction from the
+  // drag.
+  function swapWindows(from, to) {
+    if (from === to) return
+    if (!/^0x[0-9a-f]+$/.test(from) || !/^0x[0-9a-f]+$/.test(to)) return
+    var proc = root.windowActionProc.createObject(root,
+      { command: ["hyprctl", "eval",
+                  "hl.dispatch(hl.dsp.window.swap({ window = \"address:" + from
+                  + "\", target = \"address:" + to + "\" }))"] })
+    if (proc) proc.running = true
+    arrangeIdle.restart()
+  }
+
+  // Read once on the way in, because the event below only fires on a change
+  // and the scratchpad may already be up.
+  Process {
+    id: specialReadProc
+    command: ["hyprctl", "-j", "monitors"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var any = false
+          JSON.parse(text).forEach(function(m) {
+            if (m.specialWorkspace && m.specialWorkspace.id !== 0) any = true
+          })
+          root.specialShown = any
+        } catch (e) {}
+      }
+    }
+  }
+
+  Timer {
+    id: arrangeSettle
+    interval: 260
+    // Twice, a beat apart: a rotation is still settling when the first read
+    // happens, and one stale set of outlines is worth a second look.
+    property int again: 0
+    onTriggered: {
+      arrangeClientsProc.running = true
+      if (again > 0) {
+        again--
+        arrangeSettle.restart()
+      }
+    }
+  }
+  Timer {
+    id: arrangeIdle
+    interval: 90000
+    onTriggered: root.closeArrange()
+  }
+  // Tablet mode ending takes the mode with it, along with everything else
+  // that only makes sense with a screen you are holding.
+  onTabletModeChanged: if (!root.tabletMode) root.closeArrange()
+
+  Process {
+    id: arrangeClientsProc
+    command: ["hyprctl", "clients", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        if (!root.arrangeOpen) return
+        var monitor = Hyprland.focusedMonitor
+        var ox = monitor ? monitor.x : 0
+        var oy = monitor ? monitor.y : 0
+        var ws = root.focusedWorkspace
+        var out = []
+        try {
+          JSON.parse(text).forEach(function(c) {
+            if (!c.mapped || c.hidden) return
+            // A special workspace is drawn over the normal one, so while it
+            // is up its windows are on screen and belong in the layer too.
+            if (!c.workspace) return
+            if (c.workspace.id !== ws
+                && !(root.specialShown && c.workspace.id < 0)) return
+            if (c.size[0] <= 0 || c.size[1] <= 0) return
+            out.push({ address: c.address, x: c.at[0] - ox, y: c.at[1] - oy,
+                       w: c.size[0], h: c.size[1],
+                       name: c.title || c["class"] || "", floating: !!c.floating,
+                       focused: c.focusHistoryID === 0 })
+          })
+        } catch (e) {
+          return
+        }
+        // A stable order, so the model's rows never reshuffle when focus
+        // or stacking changes. Reordering rebuilds every delegate, which
+        // kills whatever gesture is in flight. What is drawn on top is
+        // decided in the layer instead.
+        out.sort(function(a, b) { return a.address < b.address ? -1 : 1 })
+        root.arrangeWindows = out
+      }
+    }
+  }
+  // Anything that moves a window moves an outline with it.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!root.arrangeOpen) return
+      var n = event.name
+      if (n === "activespecial") {
+        // "workspacename,monitorname", and an empty name means it went away.
+        root.specialShown = String(event.data).split(",")[0] !== ""
+      }
+      // The monitor ones matter because a rotation from anywhere else, the
+      // bar's button or a keybinding, has to be noticed too.
+      if (n === "openwindow" || n === "closewindow" || n === "movewindow"
+          || n === "resizewindow" || n === "activewindow" || n === "changefloatingmode"
+          || n === "fullscreen" || n === "monitorlayoutchanged"
+          || n === "monitoradded" || n === "monitorremoved"
+          || n === "configreloaded" || n === "activespecial") {
+        arrangeSettle.restart()
+      }
+    }
+  }
+
+  // What the bar's window button does, and the socket below with it: one
+  // way in and out of arranging, so both agree about what a second tap
+  // means.
+  function toggleArrangeMode() {
+    if (root.arrangeOpen) root.closeArrange(true)
+    else root.openArrange()
+  }
+  onOskVisibleChanged: {
+    if (!root.oskVisible) root.toolsOpen = false
+    // The keyboard and arrange mode are exclusive: entering hides the
+    // keyboard, and the keyboard coming back by any route ends the mode.
+    // That covers the handle, auto-show on a text field, and the bar's own
+    // button, and it is also the fix for a real fault: the keyboard's
+    // exclusive zone changing relayouts every window, Hyprland emits no
+    // resizewindow for that, so the outlines used to sit over a keyboard,
+    // drawn around windows that had already shrunk away from them.
+    if (root.oskVisible && root.arrangeOpen) root.closeArrange()
+  }
 
 
   readonly property var rotationModes: ["auto", "locked", "unlocked"]
@@ -1189,6 +1599,39 @@ Item {
     }
   }
 
+  // Arrange mode's surface. Top rather than Overlay, and ordered below the
+  // bar and the keyboard's handle, so both of those stay tappable the whole
+  // time it is up. The screensaver catcher next door is Overlay because it
+  // has to cover everything. This one must not: a full-screen layer that
+  // swallows every touch is the worst thing to get stuck on a machine that
+  // is folded shut, and those two surfaces are two more ways back out.
+  PanelWindow {
+    screen: keyboardWindow.screen
+    visible: root.arrangeOpen && root.layerRulesReady
+
+    WlrLayershell.namespace: "ragtop-arrange"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
+
+    // The surface covers the screen so the outlines can be drawn at the
+    // windows' own coordinates, but it only takes touches where it has
+    // something to take them with. Everything else falls through, which is
+    // how the bar and the keyboard's handle stay usable underneath it
+    // without depending on layer ordering to arrange that. Layer order was
+    // the first attempt and it put this on top of both.
+    mask: Region { item: arrangeLayer.touchArea }
+
+    ArrangeLayer {
+      id: arrangeLayer
+      anchors.fill: parent
+      service: root
+      windows: root.arrangeWindows
+    }
+  }
+
   // On the built-in screen, reserving its space so windows move up out of
   // its way. It never takes keyboard focus, so typing goes to the window
   // underneath. Created when shown, so it stacks above the handle.
@@ -1371,6 +1814,7 @@ Item {
       return JSON.stringify({
         keyboard: root.retryHealth("keyboard", keyboardHelper.running),
         autoshow: root.wantFocusBridge ? root.retryHealth("autoshow", focusBridgeProc.running) : "off",
+        raises: root.autoShows,
         tabletSwitch: root.watchSwitch ? root.retryHealth("switch", tabletModeProc.running) : "off",
         sensor: !root.rotationAvailable ? "absent"
           : root.rotationLocked ? "held"
@@ -1380,6 +1824,10 @@ Item {
       })
     }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
+    function toggleArrange(): string {
+      root.toggleArrangeMode()
+      return root.arrangeOpen ? "open" : "closed"
+    }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {

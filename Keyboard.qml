@@ -14,6 +14,7 @@ Item {
   required property var theme
 
   property string page: "letters"
+
   // Modifiers: "off", "latched" (applies to the next key) or "locked".
   property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off", "altgr": "off" })
   readonly property bool upper: root.mods.shift !== "off"
@@ -25,7 +26,7 @@ Item {
   // On a plain US layout there is nothing to reach, so the key would do
   // nothing and the row is better without it.
   readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super"]
-    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"])
+    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"], ["windows"])
   readonly property var fallbackRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
     [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
@@ -108,7 +109,7 @@ Item {
       moreRows[1],
       ["symbols"].concat(punctuation, extraSymbols.slice(2, 4), ["backspace"]),
       ["letters", "settings", "space", ",", "enter"]
-    ]
+    ],
   })
   // The key back to the letters page names the script, not a language: the
   // layout's own first three letters, so A B C on a Latin layout and А Б В
@@ -129,7 +130,8 @@ Item {
     "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super", "altgr": "AltGr",
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
-    "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": ""
+    "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
+    "windows": ""
   })
   readonly property var widths: ({
     "shift": 1.5, "backspace": 1.5, "symbols": 1.5, "more": 1.5, "letters": 1.5,
@@ -142,11 +144,37 @@ Item {
   })
   // Keys Ragtop draws an icon for (KeyIcon.qml) instead of a label, so they
   // don't depend on the font carrying a glyph and scale with the keys.
-  readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace", "enter", "settings"]
+  readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace",
+                                   "enter", "settings", "windows"]
+  // The focus arrows are the same four arrows, drawn under another name.
+  readonly property var iconNames: ({
+    // Super carries the system's mark, the way it does on a keyboard you
+    // can touch.
+    "super": "omarchy"
+  })
+  function iconFor(key) {
+    if (key in root.iconNames) return root.iconNames[key]
+    return root.iconKeys.indexOf(key) !== -1 ? key : ""
+  }
   function labelKind(key) {
-    if (iconKeys.indexOf(key) !== -1) return "drawn"
+    // Super is the key every Omarchy binding is written around, and the mark
+    // is on nobody's hardware to learn it from, so it carries both.
+    if (key === "super") return "markword"
+    if (root.iconFor(key) !== "") return "drawn"
     return root.label(key).length > 1 ? "word" : "char"
   }
+
+  // Keys that must not act until the finger lifts, because acting takes the
+  // keyboard off the screen. A surface that unmaps while a touch is still
+  // down leaves that touch with nowhere to end, and the next touch-down
+  // anywhere is swallowed putting it right: the first tap on whatever
+  // replaced the keyboard does nothing. Measured, with a counter on the far
+  // side: the touch never arrived at all.
+  //
+  // This is the same reason a key with variants types on release. That one
+  // waits so a hold can become a popup, this one waits so the finger has
+  // somewhere to lift from.
+  readonly property var liftKeys: ["windows"]
 
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right"]
@@ -259,6 +287,14 @@ Item {
   // above the keys, so it's clear of the first row.
   readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
 
+  // Keys that hold a width of their own on the top row, whatever else is
+  // sharing it. The windows toggle keeps one place and one size on every
+  // page, which is what makes it read as a switch rather than another key,
+  // the way the gear does on the row below. Super takes more than its share
+  // because it carries a mark and a word, and because it is the key every
+  // Omarchy binding is written around.
+  readonly property var topRowFixed: ({ "windows": 1, "super": 1.5 })
+
   // A row that comes up short is stretched to the keyboard's width by its
   // own stretchy keys, rather than floating in the middle with a gap at
   // either end: the space bar on the bottom row, and the wide keys at both
@@ -290,9 +326,21 @@ Item {
     var out = []
     var y = root.topPadding
     rows.forEach(function(row, i) {
-      // The top row spreads its keys over the full width.
+      // The top row spreads its keys over the full width, less whatever the
+      // windows toggle holds at the end of it.
+      var fixedUnits = 0, sharers = 0
+      if (i === 0) {
+        row.forEach(function(k) {
+          if (k in root.topRowFixed) fixedUnits += root.topRowFixed[k]
+          else sharers++
+        })
+      }
+      var share = sharers > 0
+        ? root.unit * (root.rowUnits - fixedUnits) / sharers
+        : root.unit * root.rowUnits / row.length
       var widths = row.map(function(k) {
-        return i === 0 ? root.unit * root.rowUnits / root.topRow.length : root.unit * (root.widths[k] || 1)
+        if (i !== 0) return root.unit * (root.widths[k] || 1)
+        return k in root.topRowFixed ? root.unit * root.topRowFixed[k] : share
       })
       if (i > 0) widths = root.stretch(row, widths)
       var h = i === 0 ? root.topRowHeight : root.keyHeight
@@ -376,6 +424,13 @@ Item {
   // the keyboard itself is drawn apart from them.
   function kind(key) {
     if (key === "settings" && root.service.toolsOpen) return "locked"
+    // Super is the key Omarchy is built around, so at rest it is drawn the
+    // way Enter is rather than as another grey modifier. Armed, it drops
+    // back to the latched and locked colours, because what it is doing then
+    // matters more than how important it is.
+    if (key === "super")
+      return mods["super"] === "locked" ? "locked"
+        : mods["super"] === "latched" ? "latched" : "accent"
     if (key in mods) return mods[key] === "locked" ? "locked" : mods[key] === "latched" ? "latched" : "special"
     if (key === "enter") return "accent"
     // The space bar goes with them rather than with the letters, though it
@@ -428,6 +483,13 @@ Item {
 
   function press(key) {
     if (key in mods) { tapModifier(key); return }
+    if (key === "windows") {
+      // Straight into arranging, rather than to a page of keys that say the
+      // same things. It waits for the finger to lift because it takes the
+      // keyboard off the screen: see liftKeys.
+      root.service.openArrange()
+      return
+    }
     switch (key) {
     case "symbols": case "more": case "letters":
       page = key
@@ -458,6 +520,10 @@ Item {
   }
 
   function release(key) {
+    if (root.liftKeys.indexOf(key) !== -1) {
+      root.press(key)
+      return
+    }
     if (holdable.indexOf(key) !== -1) {
       service.sendKeys("up " + keysyms[key])
       afterKey()
@@ -593,7 +659,7 @@ Item {
       hint: root.altgrOn ? "" : (root.level3Of[modelData.key] || "")
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
-      icon: root.iconKeys.indexOf(modelData.key) !== -1 ? modelData.key : ""
+      icon: root.iconFor(modelData.key)
       pressed: modelData.key in root.heldKeys
     }
   }
@@ -678,7 +744,8 @@ Item {
         // always has, and its hold runs alongside, because a thumb resting
         // on space must not swallow the letter rolling in after it.
         if (root.holdItems(key).length > 1) root.startHold(p, key)
-        if (key === "space" || root.holdItems(key).length <= 1) pressed.push(key)
+        if (root.liftKeys.indexOf(key) === -1
+            && (key === "space" || root.holdItems(key).length <= 1)) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
