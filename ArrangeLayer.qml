@@ -95,17 +95,44 @@ Item {
     return o ? o.address : ""
   }
 
+  // How the screen stacks a window, high on top. Floating always sits over
+  // tiled, and focus only orders within its own class.
+  //
+  // Focus must not lift a tile over a floating window. It reads like the
+  // obvious rule and it deadlocks: the tap resolves to the focused tile,
+  // so the floating window over it never gains focus, so it never outranks
+  // the tile, so it can never be selected at all. A floating window fully
+  // inside a focused tile was unreachable.
+  function stackRank(w) {
+    return (w.floating ? 2 : 0) + (w.focused ? 1 : 0)
+  }
+
   // Which window a point belongs to, in the order they are stacked rather
-  // than the order they are listed: the focused one first, then floating,
-  // then tiles. A floating window sits over the tiles on screen, so a tap
-  // inside it means that window and not the tile it happens to cover.
+  // than the order they are listed. A floating window sits over the tiles
+  // on screen, so a tap inside it means that window and not the tile it
+  // happens to cover.
+  //
+  // Handlers here take no exclusive grab, so every frame under the touch is
+  // offered the point and each one asks this whether it is the one meant.
+  // That makes this the only thing deciding what a tap selects, and it has
+  // to agree with what is drawn on top or a window becomes untappable.
+  //
+  // Ties go to the smaller window, which only two floating windows can
+  // reach because tiles do not overlap. It is the one more likely to be on
+  // top and meant, and being independent of focus it cannot deadlock the
+  // way ranking by focus did.
   function windowAt(px, py) {
-    var best = "", bestRank = -1
+    var best = "", bestRank = -1, bestArea = Infinity
     for (var i = 0; i < surface.windows.length; i++) {
       var w = surface.windows[i]
       if (px < w.x || px >= w.x + w.w || py < w.y || py >= w.y + w.h) continue
-      var rank = w.focused ? 2 : (w.floating ? 1 : 0)
-      if (rank > bestRank) { bestRank = rank; best = w.address }
+      var rank = surface.stackRank(w)
+      var area = w.w * w.h
+      if (rank > bestRank || (rank === bestRank && area < bestArea)) {
+        bestRank = rank
+        bestArea = area
+        best = w.address
+      }
     }
     return best
   }
@@ -215,9 +242,12 @@ Item {
       y: model.y
       width: model.w
       height: model.h
-      // Stacked the way the screen stacks them, so the focused window's
-      // outline and handles are never underneath another window's.
-      z: model.focused ? 3 : (model.floating ? 2 : 1)
+      // Stacked the way the screen stacks them, so an outline and its
+      // handles are never underneath another window's. The same ranking
+      // that decides what a tap selects, from the one function, because
+      // when these two disagreed the window drawn on top was not the one
+      // being tapped.
+      z: surface.stackRank(model)
 
       // Picked up: a tile's outline stops being drawn here, because it is
       // the thing now under the finger. One object, one place, rather than
@@ -465,6 +495,13 @@ Item {
               r.y + (point.scenePosition.y - finger.downY), r.w, r.h)
             return
           }
+          // Whatever is on top, floating included. Measured: swapping a
+          // tiled window with a floating one exchanges them, the float
+          // taking the tile's place in the tree at full size and the tile
+          // becoming floating where the float was. Skipping floats here
+          // was a guess that they had no place in a swap, and all it did
+          // was make the one useful thing you can do with a float in this
+          // mode impossible.
           surface.dragOver = surface.windowAt(point.scenePosition.x,
                                               point.scenePosition.y)
         }
