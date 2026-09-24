@@ -57,29 +57,56 @@ Item {
   readonly property real faceY: pressed ? depth * theme.pressSink : 0
   readonly property real faceHeight: height - depth
 
-  // Angular keys are drawn as a chamfered box; the same path serves the
-  // face and the side, so a raised angular key keeps its cut corners.
+  // Which corner is drawn how, clockwise from the top left. A shape name
+  // is only ever shorthand for one of these sets, so there is no shape to
+  // special-case here: either all four are round, which a rectangle draws,
+  // or the outline below does it.
+  readonly property var corners: theme.keyCorners
+  readonly property bool boxy: theme.cornersAllRound
   readonly property real chamfer: Math.min(theme.keyChamfer, width / 3, height / 3)
 
-  // How far the corner eats into the face where the hint sits. A pill's
-  // radius is half the key, so its corner is nowhere near the corner of the
-  // box and a hint placed by the box alone ends up on the curve. Roughly the
-  // horizontal reach of the arc where the hint's own line crosses it.
-  readonly property real cornerInset: shape === "angular"
+  // How far the corner eats into the face where the hint sits, which is the
+  // top right one. A pill's radius is half the key, so its corner is nowhere
+  // near the corner of the box and a hint placed by the box alone ends up on
+  // the curve. Roughly the horizontal reach of the arc where the hint's own
+  // line crosses it.
+  readonly property real cornerInset: corners[1] === "cut"
     ? chamfer * 0.5
+    : corners[1] === "square" ? 0
     : (shape === "pill" ? faceHeight / 2 : theme.keyRadius) * 0.3
-  function chamferPath(top, boxHeight) {
-    var c = chamfer, w = width, bottom = top + boxHeight
-    return "M " + c + " " + top + " L " + (w - c) + " " + top
-      + " L " + w + " " + (top + c) + " L " + w + " " + (bottom - c)
-      + " L " + (w - c) + " " + bottom + " L " + c + " " + bottom
-      + " L 0 " + (bottom - c) + " L 0 " + (top + c) + " Z"
+
+  // The key's outline with each corner drawn the way its style asks. The
+  // same path serves the face and the side, so a raised key keeps whatever
+  // corners it has.
+  //
+  // A square corner is a cut of no length, so both ends of it land on the
+  // same point and the straight line that draws a cut draws a square too.
+  // That is why there are two cases here and not three.
+  function cornerPath(top, boxHeight) {
+    var w = width, bottom = top + boxHeight
+    var r = Math.min(theme.keyRadius, w / 2, boxHeight / 2)
+    var c = Math.min(chamfer, w / 3, boxHeight / 3)
+    function reach(k) {
+      return key.corners[k] === "round" ? r : key.corners[k] === "cut" ? c : 0
+    }
+    function turn(k, x, y) {
+      return key.corners[k] === "round"
+        ? " A " + r + " " + r + " 0 0 1 " + x + " " + y
+        : " L " + x + " " + y
+    }
+    var tl = reach(0), tr = reach(1), br = reach(2), bl = reach(3)
+    return "M " + tl + " " + top
+      + " L " + (w - tr) + " " + top + turn(1, w, top + tr)
+      + " L " + w + " " + (bottom - br) + turn(2, w - br, bottom)
+      + " L " + bl + " " + bottom + turn(3, 0, bottom - bl)
+      + " L 0 " + (top + tl) + turn(0, tl, top)
+      + " Z"
   }
 
   // A raised key's side, which only ever shows below the face: it starts
   // where the face does, so a pressed key shows nothing above it.
   Rectangle {
-    visible: key.depth > 0 && key.shape !== "angular"
+    visible: key.depth > 0 && key.boxy
     y: key.faceY
     width: key.width
     height: key.height - key.faceY
@@ -88,7 +115,7 @@ Item {
   }
 
   Shape {
-    visible: key.depth > 0 && key.shape === "angular"
+    visible: key.depth > 0 && !key.boxy
     anchors.fill: parent
     preferredRendererType: Shape.CurveRenderer
 
@@ -96,13 +123,13 @@ Item {
       fillColor: key.theme.keySide
       strokeWidth: 0
       strokeColor: "transparent"
-      PathSvg { path: key.chamferPath(key.faceY, key.height - key.faceY) }
+      PathSvg { path: key.cornerPath(key.faceY, key.height - key.faceY) }
     }
   }
 
-  // The face, in every shape but Angular: a rectangle with its own corners.
+  // The face, when every corner is round: a rectangle with its own radius.
   Rectangle {
-    visible: key.shape !== "angular"
+    visible: key.boxy
     y: key.faceY
     width: key.width
     height: key.faceHeight
@@ -112,9 +139,9 @@ Item {
     border.color: key.edgeColor
   }
 
-  // Angular: the corners cut off.
+  // Anything else: the corners drawn one by one.
   Shape {
-    visible: key.shape === "angular"
+    visible: !key.boxy
     anchors.fill: parent
     preferredRendererType: Shape.CurveRenderer
 
@@ -123,7 +150,7 @@ Item {
       strokeColor: key.edgeColor
       strokeWidth: key.edgeWidth
       joinStyle: ShapePath.MiterJoin
-      PathSvg { path: key.chamferPath(key.faceY, key.faceHeight) }
+      PathSvg { path: key.cornerPath(key.faceY, key.faceHeight) }
     }
   }
 

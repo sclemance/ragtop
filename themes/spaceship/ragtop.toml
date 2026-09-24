@@ -1,0 +1,25 @@
+name = "Spaceship"
+
+# Cut on one diagonal, round on the other. The corners run top left, top
+# right, bottom right, bottom left, so this is the same as shape = "bevel"
+# written out. Any four of round, cut and square will do.
+#
+# The diagonal runs this way rather than the other because a keycap prints
+# what AltGr types in its top right corner, and a cut there makes the hint
+# back away from the chamfer. Measured against a layout carrying
+# superscripts on its third level it was close but fine, so this is a
+# preference and not a rule. A theme wanting the other diagonal should look
+# at its own font and key size and decide for itself.
+shape = "bevel"
+corners = "cut round cut round"
+relief = "raised"
+fill = "auto"
+size = 100
+background = "gradient"
+transparency = 20
+key-transparency = 10
+edge = "border"
+labels = "normal"
+depth = 4
+chamfer = 18
+blur = false

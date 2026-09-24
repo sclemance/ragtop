@@ -1436,8 +1436,21 @@ Item {
       return ["foreground", "background", "accent", "urgent"].indexOf(value) !== -1
         || /^#[0-9a-fA-F]{6,8}$/.test(value) ? value : ""
     }
+    // Four corner styles, clockwise from the top left, for a theme after a
+    // silhouette none of the names cover. Anything that is not four known
+    // words falls back to the shape's own corners rather than half-applying.
+    function cornerSpec() {
+      var raw = String(root.settings["corners"] || "auto").trim().toLowerCase()
+      if (raw === "" || raw === "auto") return "auto"
+      var parts = raw.split(/\s+/)
+      if (parts.length !== 4) return "auto"
+      for (var i = 0; i < 4; i++)
+        if (["round", "cut", "square"].indexOf(parts[i]) === -1) return "auto"
+      return parts.join(" ")
+    }
     return {
-      shape: pick("shape", ["omarchy", "rounded", "pill", "angular"], "omarchy"),
+      shape: pick("shape", ["omarchy", "rounded", "pill", "angular", "bevel"], "omarchy"),
+      corners: cornerSpec(),
       // How see-through the keys are over the keyboard's background, and the
       // background over the desktop. 0 is solid and 100 is gone.
       keyTransparency: num("key-transparency", 0, 100, 0),
