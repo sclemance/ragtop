@@ -11,6 +11,11 @@ keyboard shortcut or a mouse work by touch. Your windows can be rearranged by
 dragging them around, and the Omarchy menu can be typed into. Put it back and
 everything returns to normal.
 
+Two more documents sit beside this one. **[THEMING.md](THEMING.md)** is every
+field a keyboard theme may set. **[ARCHITECTURE.md](ARCHITECTURE.md)** is how
+Ragtop works underneath: the layer surfaces, the hardware it reads, and how
+it types.
+
 ## How it looks
 
 The keyboard takes its colours from your Omarchy theme and its letters from
@@ -89,15 +94,11 @@ space until tablet mode turns on.
 - **Settings one tap away.** A gear key next to the space bar opens Ragtop's
   settings.
 - **Arrange mode.** Omarchy windows have no title bars and moving or resizing
-  them needs SUPER plus a mouse. Tap the tiled icon at the end of the keyboard's
-  top row and the keyboard steps aside for a transparent layer over the real
-  windows: tap one to focus it, hold and drag it onto another to swap them,
-  drag the squares and bars on its edges to resize. The windows are the
-  controls, at full size, with their content visible and reflowing as you
-  work. Along the bottom, where the keyboard's handle was, sit the things a
-  finger cannot express by dragging: the workspaces, **Send to…** which
-  latches like Shift so the next workspace you tap takes the window with it,
-  the scratchpad, and full width, tiled full screen, split and float.
+  them needs SUPER plus a mouse. Arrange mode puts a transparent layer over
+  the real windows so you can tap one to focus it, hold and drag it onto
+  another to swap them, and drag the squares and bars on its edges to resize.
+  The windows are the controls, at full size, with their content visible and
+  reflowing as you work. See [Arrange mode](#arrange-mode).
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
@@ -437,61 +438,23 @@ pixels. None leaves a hard edge.
 
 ### Themes
 
-A Ragtop theme is a small TOML file of those same settings, never code. It
-sets the keyboard's **form**. Its colours keep coming from your Omarchy
-theme, which is why any Ragtop theme looks right on any Omarchy one.
+A Ragtop theme is a small TOML file, never code. It sets the keyboard's
+**form**. Its colours keep coming from your Omarchy theme, which is why any
+Ragtop theme looks right on any Omarchy one.
+
+Six ship: Omarchy, Soft, Typewriter, Glass, Industrial and Spaceship. Apply
+one from the menu or with `./ragtop theme apply <name>`. Yours go in
+`~/.config/ragtop/themes/<name>/ragtop.toml` and win where the names match.
 
 Applying one **writes its values into your settings**, so afterwards every
 menu row shows what the keyboard is actually doing. A theme is a starting
-point, not a layer that overrides you.
+point, not a layer that overrides you. It is also a whole look rather than a
+patch: every field a theme does not name goes back to its default instead of
+keeping whatever the last theme left behind.
 
-They are laid out the way Omarchy lays out its own themes, in the same two
-places, and yours wins where the names match. Ragtop's are in
-`themes/<name>/ragtop.toml` (Omarchy, Soft, Typewriter, Glass, Industrial).
-Put your own in `~/.config/ragtop/themes/<name>/ragtop.toml` and apply it
-from the menu or with `./ragtop theme apply <name>`:
-
-```toml
-name = "Chunky"
-
-shape = "rounded"
-relief = "raised"
-fill = "light"
-size = 115
-background = "tint"
-transparency = 0
-edge = "border"
-labels = "large"
-depth = 6
-```
-
-Besides the menu rows, a theme can set the details that don't deserve one:
-
-| Field | Values | Default |
-| --- | --- | --- |
-| `labels` | label size on Omarchy's type scale: `small`, `normal`, `large` | `normal` |
-| `depth` | Raised keys: how far the key's side shows, 0–10 | 4 |
-| `chamfer` | Angular: how much of each corner is cut, 0–20 | 8 |
-| `edge-fade` | pixels the background fades over with Edge set to Fade, 0–24 | 8 |
-| `size` | key size as a percentage of the usual, 60–160 | 100 |
-| `transparency` | the background over the desktop, 0 solid to 100 gone | 0 |
-| `key-transparency` | the keys over that background, 0 solid to 100 gone | 0 |
-| `special-keys` | how the keys that type nothing sit against the letters: `darker`, `lighter`, `off` | `darker` |
-| `blur` | blur what's behind the keyboard (see below) | `false` |
-
-To leave the Omarchy theme behind for one part of the look, a Ragtop theme
-can also set these outright. Only what you set stops following it:
-
-| Field | Values |
-| --- | --- |
-| `key-color`, `label-color` | a palette role (`foreground`, `background`, `accent`, `urgent`) or a hex colour |
-| `key-fill-alpha` | 0–1, how strong the key fill is |
-| `border-width` | 0–4 |
-| `radius` | corner radius in pixels, 0–30 |
-
-Anything missing, unknown or out of range is ignored, so a stray file can't
-break the keyboard. All of this lands in `~/.config/ragtop/settings.conf`,
-which you can also edit directly.
+**[THEMING.md](THEMING.md) is the full reference**: every field, its values
+and its default, the corner system, and the shipped themes read back as
+worked examples.
 
 **Blur** is Hyprland's, and Omarchy ships with it turned off. A theme with
 `blur = true` turns it on at runtime, for Ragtop's keyboard and its handle
@@ -503,6 +466,60 @@ blurs behind its keyboard.
 
 The lock screen's keyboard takes the shape, fill and measurements too,
 checked again by its own code, but never the colours or the background.
+
+## Arrange mode
+
+Omarchy windows have no title bars, and moving or resizing them needs SUPER
+and a mouse. Arrange mode gives you the same thing with a finger.
+
+Get in by tapping the tiled icon at the end of the keyboard's top row, or
+the grid icon in the bar. The keyboard steps aside and a transparent layer
+covers the real windows, outlining each one with its title and size.
+
+The windows themselves are the controls. They stay at full size with their
+own content visible, and they reflow as you work, which is the whole reason
+it happens over them rather than over a scaled-down map.
+
+| To | Do |
+| --- | --- |
+| Focus a window | Tap it. |
+| Move one | Press and hold it for a moment. It shrinks to an outline you drag. Let go over another window to swap the two. |
+| Resize | Drag the squares in a window's corners, or the bars along its edges. A corner moves both directions at once, an edge moves just that split. |
+| Move a floating window | Drag it. It goes where you put it, with no hold and no outline, because a float already has a position of its own. |
+
+Holding before dragging is what separates moving from tapping, so a tap that
+wanders slightly still counts as a tap. The outline you drag **is** the
+window, shrunk, rather than a copy left behind to explain.
+
+A tiled window dropped onto a floating one swaps them: the float takes the
+tile's place at full size and the tile becomes floating where the float was.
+The other direction is a plain move, since a float has nowhere it needs to
+be put. A float covering something you want is easiest solved by dragging
+the float out of the way first.
+
+Along the bottom, where the keyboard's handle sits, is everything a finger
+cannot say by dragging:
+
+| Control | Does |
+| --- | --- |
+| Send to | Arms the workspace keys, so the next one moves the window instead of going there. |
+| 1 to 10, Scratchpad | Go to that workspace, or send the window there when Send to is armed. |
+| Full width | Maximises without going truly full screen, so the keyboard is still reachable. |
+| Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. |
+| Split | Flips the split under the focused window. |
+| Float | Floats or unfloats it. |
+| Finish arranging | Leaves. |
+
+Turned on its side there is less width and more height, so the strip becomes
+two rows rather than hiding anything behind a scroll.
+
+Arrange mode also ends when the keyboard comes back by any route, when
+tablet mode ends, and after 90 seconds of nothing happening.
+
+One limit worth knowing before it surprises you: a boundary between two
+*groups* of tiles resizes the whole group, because the layout is a tree and
+that edge belongs to the branch rather than to one window. See
+[Known limitations](#known-limitations).
 
 ## Omarchy's overlays
 
