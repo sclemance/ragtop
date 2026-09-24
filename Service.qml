@@ -130,7 +130,9 @@ Item {
       // While a stock picker is up every touch reaches the picker, so a tap
       // on the handle would only throw it away; a cloned picker leaves the
       // handle usable, for filter typing.
-      visible: root.tabletMode && root.layerRulesReady && (!root.pickerOpen || root.pickerPatched)
+      visible: root.tabletMode && root.layerRulesReady
+        && (!root.pickerOpen || root.pickerPatched)
+        && root.screensaverAddress === ""
 
       // Under an open keyboard the handle takes the keyboard's background
       // and text colours, so the two read as one panel with the handle as
@@ -543,6 +545,19 @@ Item {
   // until the shell restarted. The switch watcher below already avoided this
   // by driving its process from a changed handler, and so does this now.
   readonly property bool wantFocusBridge: root.tabletMode && root.autoShowEnabled
+
+  // Whether a focused text field may raise the keyboard on its own. Asking
+  // for it by hand still works in each of these: they go through
+  // setOskVisible rather than through the bridge.
+  //
+  // Not while the picker is up, because the keyboard covers the preview the
+  // picker exists to show. Not while arranging, because the keyboard coming
+  // back ends the mode, and the bar's own buttons change which window has
+  // focus, so a window with a text field would close the mode out from
+  // under the button just tapped. Not while the screensaver is up, because
+  // nothing should be drawn over it.
+  readonly property bool autoShowAllowed: root.tabletMode && root.autoShowEnabled
+    && !root.pickerOpen && !root.arrangeOpen && root.screensaverAddress === ""
   onWantFocusBridgeChanged: {
     focusBridgeRestart.stop()
     focusBridgeProc.running = root.wantFocusBridge
@@ -554,15 +569,7 @@ Item {
       onRead: function(line) {
         if (line !== "show") return
         root.autoShows++
-        // Not while arranging. The keyboard coming back ends the mode, and
-        // the bar's own buttons change which window has focus, so a window
-        // with a text field in it would raise the keyboard and close the
-        // mode out from under the button that was just tapped. Asking for
-        // the keyboard still ends the mode, because that goes through
-        // setOskVisible rather than through here.
-        if (root.tabletMode && root.autoShowEnabled && !root.oskVisible
-            && !root.pickerOpen && !root.arrangeOpen)
-          root.setOskVisible(true)
+        if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
       }
     }
     onRunningChanged: if (running) root.retryStarted("autoshow")
@@ -1556,6 +1563,29 @@ Item {
 
   // Omarchy's screensaver, while it's up: its window address, or "".
   property string screensaverAddress: ""
+  property bool oskHiddenForScreensaver: false
+
+  // The screensaver is an ordinary window and everything Ragtop puts on
+  // screen is a layer surface above it, so none of it goes away on its own
+  // when the screensaver starts. The catcher next door covers the screen
+  // and swallows the touch, so the keyboard was never doing anything there,
+  // it was only sitting on top of a screensaver looking like a fault.
+  //
+  // Arranging ends rather than pausing. Coming back to an arrange layer
+  // drawn around windows that may have moved while the screen was off is
+  // worse than coming back to the desktop.
+  onScreensaverAddressChanged: {
+    if (root.screensaverAddress !== "") {
+      if (root.arrangeOpen) root.closeArrange(true)
+      if (root.oskVisible) {
+        root.oskHiddenForScreensaver = true
+        root.setOskVisible(false)
+      }
+    } else if (root.oskHiddenForScreensaver) {
+      root.oskHiddenForScreensaver = false
+      if (root.tabletMode) root.setOskVisible(true)
+    }
+  }
 
   // Window events only tell us about a screensaver that starts while the
   // shell is running, so ask once at startup as well — restarting the shell
