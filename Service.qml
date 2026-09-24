@@ -119,10 +119,6 @@ Item {
   // bottom bar keeps the edge with the handle above it, and the keyboard
   // opens above the handle, leaving the handle where it was.
   readonly property int handleHeight: 24
-  // While arranging, that strip is the controls, so it needs room for a row
-  // of them. Tall enough for a two line label, since Omarchy's own names
-  // are worth keeping whole.
-  readonly property int arrangeBarHeight: 56
 
   Variants {
     model: Quickshell.screens
@@ -150,7 +146,9 @@ Item {
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Auto
       anchors { bottom: true; left: true; right: true }
-      implicitHeight: root.arrangeOpen ? root.arrangeBarHeight : root.handleHeight
+      // The bar says how much room it needs, since a narrow screen puts it
+      // on two rows and a wide one does not.
+      implicitHeight: root.arrangeOpen ? arrangeBar.neededHeight : root.handleHeight
       color: "transparent"
 
       Rectangle {
@@ -172,6 +170,7 @@ Item {
 
       // While arranging, the strip is the controls.
       ArrangeBar {
+        id: arrangeBar
         anchors.fill: parent
         visible: root.arrangeOpen
         service: root
@@ -998,6 +997,12 @@ Item {
     if (root.sendMod === "latched") root.sendMod = "off"
   }
 
+  // Whether a special workspace is showing. The scratchpad is not the
+  // focused workspace while it is up: it is an overlay, and it lives in the
+  // monitor's own specialWorkspace rather than in focusedWorkspace, so
+  // asking the usual place says no every time.
+  property bool specialShown: false
+
   property bool arrangeOpen: false
   property var arrangeWindows: []
 
@@ -1007,6 +1012,7 @@ Item {
     // outlines would be drawn around where the windows used to be.
     root.setOskVisible(false)
     root.arrangeOpen = true
+    specialReadProc.running = true
     arrangeIdle.restart()
     arrangeSettle.restart()
   }
@@ -1156,6 +1162,24 @@ Item {
     arrangeIdle.restart()
   }
 
+  // Read once on the way in, because the event below only fires on a change
+  // and the scratchpad may already be up.
+  Process {
+    id: specialReadProc
+    command: ["hyprctl", "-j", "monitors"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var any = false
+          JSON.parse(text).forEach(function(m) {
+            if (m.specialWorkspace && m.specialWorkspace.id !== 0) any = true
+          })
+          root.specialShown = any
+        } catch (e) {}
+      }
+    }
+  }
+
   Timer {
     id: arrangeSettle
     interval: 260
@@ -1193,7 +1217,11 @@ Item {
         try {
           JSON.parse(text).forEach(function(c) {
             if (!c.mapped || c.hidden) return
-            if (!c.workspace || c.workspace.id !== ws) return
+            // A special workspace is drawn over the normal one, so while it
+            // is up its windows are on screen and belong in the layer too.
+            if (!c.workspace) return
+            if (c.workspace.id !== ws
+                && !(root.specialShown && c.workspace.id < 0)) return
             if (c.size[0] <= 0 || c.size[1] <= 0) return
             out.push({ address: c.address, x: c.at[0] - ox, y: c.at[1] - oy,
                        w: c.size[0], h: c.size[1],
@@ -1218,13 +1246,17 @@ Item {
     function onRawEvent(event) {
       if (!root.arrangeOpen) return
       var n = event.name
+      if (n === "activespecial") {
+        // "workspacename,monitorname", and an empty name means it went away.
+        root.specialShown = String(event.data).split(",")[0] !== ""
+      }
       // The monitor ones matter because a rotation from anywhere else, the
       // bar's button or a keybinding, has to be noticed too.
       if (n === "openwindow" || n === "closewindow" || n === "movewindow"
           || n === "resizewindow" || n === "activewindow" || n === "changefloatingmode"
           || n === "fullscreen" || n === "monitorlayoutchanged"
           || n === "monitoradded" || n === "monitorremoved"
-          || n === "configreloaded") {
+          || n === "configreloaded" || n === "activespecial") {
         arrangeSettle.restart()
       }
     }

@@ -8,36 +8,44 @@ import qs.Ui
 // Everything here is a thing a finger cannot express by dragging a window
 // around. Moving, swapping and resizing happen on the windows themselves,
 // so they are not repeated here. What is left is where a window goes
-// (workspaces and the scratchpad) and what shape it takes (full width,
-// tiled full screen, split, float).
+// (workspaces and the scratchpad) and what shape it takes.
 //
-// The way out sits in the middle, because it is the one control you need to
-// find without looking for it.
+// Turned on its side there is little more than half the width and nearly
+// twice the height, so it uses the axis it has: one row across when there
+// is room, two rows when there is not. Nothing is hidden behind a scroll or
+// a carousel, because the job of the workspace group is to say where you are
+// and where you can go, and a control you have to go looking for cannot.
 Item {
   id: bar
 
   // Service.qml
   required property var service
 
+  readonly property bool tight: width < 900
   readonly property int pad: Style.space(6)
-  readonly property int gap: Style.space(6)
+  readonly property int gap: tight ? Style.space(4) : Style.space(6)
+  readonly property int rowH: tight ? Style.space(38) : Style.space(44)
 
-  // Which workspaces to offer, by Omarchy's own rule, and whether a tap
-  // sends the window there rather than going there.
+  // What the strip has to be for the layout it is in. The window reads this
+  // rather than assuming, so a second row is paid for in height only when
+  // there is a second row.
+  readonly property int neededHeight: tight ? rowH * 2 + pad * 3 : rowH + pad * 2
+
   readonly property var workspaces: service.workspaceIds
   readonly property bool sending: service.sendMod !== "off"
 
-  // A control on the strip: its own pill, sized to what it says, so a long
-  // Omarchy name is not abbreviated into something nobody recognises.
+  // A control on the strip: its own pill, sized to what it says. Labels
+  // shorten rather than elide when the room runs out, since half a word is
+  // worse than a shorter one.
   component Btn: Rectangle {
     property alias text: btnText.text
     property bool lit: false
     property bool wide: false
     signal tapped()
 
-    width: Math.max(wide ? Style.space(64) : Style.space(40),
+    width: Math.max(wide ? Style.space(60) : Style.space(36),
                     btnText.implicitWidth + bar.pad * 3)
-    height: bar.height - bar.pad * 2
+    height: bar.rowH
     radius: Style.cornerRadius
     color: lit ? Color.accent : Util.alpha(Color.popups.background, 0.9)
     border.width: Math.max(1, Style.space(1))
@@ -60,15 +68,12 @@ Item {
   }
 
   // Where a window goes.
-  Row {
-    anchors.left: parent.left
-    anchors.leftMargin: bar.pad
-    anchors.verticalCenter: parent.verticalCenter
+  component Places: Row {
     spacing: bar.gap
 
     Btn {
       wide: true
-      text: "Send to…"
+      text: bar.tight ? "Send…" : "Send to…"
       lit: bar.sending
       onTapped: bar.service.stepSendMod()
     }
@@ -83,17 +88,31 @@ Item {
     }
     Btn {
       wide: true
-      text: (bar.sending ? "→" : "") + "Scratchpad"
-      lit: !bar.sending && bar.service.focusedWorkspace < 0
+      text: (bar.sending ? "→" : "") + (bar.tight ? "Scratch" : "Scratchpad")
+      lit: !bar.sending && bar.service.specialShown
       onTapped: bar.service.takeScratchpad()
     }
   }
 
-  // The way out, in the middle where it can be found without hunting.
-  Rectangle {
-    anchors.centerIn: parent
+  // What shape a window takes. Omarchy's own names where they fit.
+  component Shapes: Row {
+    spacing: bar.gap
+
+    Btn { wide: true; text: "Full width"; onTapped: bar.service.runWindowAction("wide") }
+    Btn {
+      wide: true
+      text: bar.tight ? "Full screen" : "Tiled full screen"
+      onTapped: bar.service.runWindowAction("tiled")
+    }
+    Btn { wide: true; text: "Split"; onTapped: bar.service.runWindowAction("split") }
+    Btn { wide: true; text: "Float"; onTapped: bar.service.runWindowAction("float") }
+  }
+
+  // The way out. Accent filled wherever it lands, since that is what makes
+  // it findable without hunting, rather than where it happens to sit.
+  component Finish: Rectangle {
     width: finishText.implicitWidth + Style.space(28)
-    height: bar.height - bar.pad * 2
+    height: bar.rowH
     radius: height / 2
     color: Color.accent
     opacity: finishTap.pressed ? 0.6 : 1
@@ -101,11 +120,11 @@ Item {
     Text {
       id: finishText
       anchors.centerIn: parent
-      text: "Finish arranging"
+      text: bar.tight ? "Finish" : "Finish arranging"
       color: Color.background
       font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
       font.bold: true
+      font.pixelSize: Style.font.bodySmall
     }
 
     TapHandler {
@@ -114,16 +133,37 @@ Item {
     }
   }
 
-  // What shape a window takes. Omarchy's own names, since there is room.
-  Row {
-    anchors.right: parent.right
-    anchors.rightMargin: bar.pad
-    anchors.verticalCenter: parent.verticalCenter
-    spacing: bar.gap
+  // Wide: one row, places left, shapes right, the way out in the middle.
+  Item {
+    anchors.fill: parent
+    visible: !bar.tight
 
-    Btn { wide: true; text: "Full width"; onTapped: bar.service.runWindowAction("wide") }
-    Btn { wide: true; text: "Tiled full screen"; onTapped: bar.service.runWindowAction("tiled") }
-    Btn { wide: true; text: "Split"; onTapped: bar.service.runWindowAction("split") }
-    Btn { wide: true; text: "Float"; onTapped: bar.service.runWindowAction("float") }
+    Places {
+      anchors.left: parent.left
+      anchors.leftMargin: bar.pad
+      anchors.verticalCenter: parent.verticalCenter
+    }
+    Finish { anchors.centerIn: parent }
+    Shapes {
+      anchors.right: parent.right
+      anchors.rightMargin: bar.pad
+      anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
+  // Narrow: two rows, where a window goes above what shape it takes, with
+  // the way out at the end of the second.
+  Column {
+    anchors.centerIn: parent
+    visible: bar.tight
+    spacing: bar.pad
+
+    Places { anchors.horizontalCenter: parent.horizontalCenter }
+    Row {
+      anchors.horizontalCenter: parent.horizontalCenter
+      spacing: bar.gap
+      Shapes {}
+      Finish {}
+    }
   }
 }
