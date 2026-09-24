@@ -732,9 +732,14 @@ If tablet mode is never detected:
 True today, and worth saying if you want them gone:
 
 - **No swipe typing.** Keys are tapped one at a time.
-- **No dead keys.** Accents come from holding a letter, not from a dead key
-  followed by one, so a character your layout only reaches that way is out of
-  reach.
+- **No dead keys, on purpose.** Accents come from holding a letter rather
+  than from a dead key followed by one. Ragtop types by character rather than
+  by key position, so it reaches the composed letter directly and the two
+  step route buys nothing on a screen you tap. What it would cost is a key
+  that shows nothing, an armed state to display, and a second way to do what
+  a long press already does. If your layout reaches something no long press
+  offers, say so in an issue. That is the thing worth knowing, and enough of
+  them is what would change this.
 - **One layout at a time, and it is the system's.** Ragtop follows Hyprland's
   layout instead of keeping one of its own. Holding the space bar switches
   between the layouts you set there, and there is no picker of Ragtop's.
