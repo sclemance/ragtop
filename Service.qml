@@ -957,6 +957,20 @@ Item {
     var proc = root.windowActionProc.createObject(root,
       { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
     if (proc) proc.running = true
+    // The bar's own buttons land here. Two things follow from that.
+    //
+    // Whatever this dispatched moved or resized something, and only some of
+    // them emit an event saying so. togglesplit emits nothing at all, which
+    // is why Split left the outlines drawn around the old shape while the
+    // windows underneath had already changed. Say so rather than depending
+    // on which dispatch happens to be noisy.
+    //
+    // And a tap on the bar is someone using the mode, so it is not idle.
+    // Without this the ninety second timeout ran while you were working.
+    if (root.arrangeOpen) {
+      arrangeSettle.restart()
+      arrangeIdle.restart()
+    }
   }
 
   // Which workspaces the strip offers, by Omarchy's own rule: always 1 to 5,
@@ -988,6 +1002,20 @@ Item {
     var proc = root.windowActionProc.createObject(root,
       { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
     if (proc) proc.running = true
+    // The bar's own buttons land here. Two things follow from that.
+    //
+    // Whatever this dispatched moved or resized something, and only some of
+    // them emit an event saying so. togglesplit emits nothing at all, which
+    // is why Split left the outlines drawn around the old shape while the
+    // windows underneath had already changed. Say so rather than depending
+    // on which dispatch happens to be noisy.
+    //
+    // And a tap on the bar is someone using the mode, so it is not idle.
+    // Without this the ninety second timeout ran while you were working.
+    if (root.arrangeOpen) {
+      arrangeSettle.restart()
+      arrangeIdle.restart()
+    }
   }
 
   // ---- arrange mode -------------------------------------------------------
