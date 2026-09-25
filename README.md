@@ -732,6 +732,9 @@ If tablet mode is never detected:
 True today, and worth saying if you want them gone:
 
 - **No swipe typing.** Keys are tapped one at a time.
+- **No CJK input.** Chinese, Japanese and Korean need an input method engine
+  and somewhere to put the candidates. See [Chinese, Japanese and
+  Korean](#chinese-japanese-and-korean).
 - **No dead keys, on purpose.** Accents come from holding a letter rather
   than from a dead key followed by one. Ragtop types by character rather than
   by key position, so it reaches the composed letter directly and the two
@@ -827,6 +830,32 @@ standard settles.
 The keyboard itself is mostly language-agnostic already. Its letters, symbols
 and accents come from your active Hyprland layout, and its key glyphs are
 drawn rather than written.
+
+### Chinese, Japanese and Korean
+
+Not supported yet, and worth considering rather than ruled out.
+
+The pipeline is already pointing the right way. Ragtop does not put characters
+into applications, it sends key events through a Wayland virtual keyboard, and
+every one of those passes through fcitx5, which is the thing that turns nihao
+into a list of candidates. Ragtop sits upstream of the input method rather
+than competing with it, so with an engine installed the typing half may
+already work. Nobody has tested it.
+
+What is missing is most likely the candidates rather than the keys. fcitx5
+draws its candidate list near the text cursor, and on a 768 pixel screen with
+a keyboard reserving the bottom third, a popup you have to reach with a finger
+is the part that will not fit. That is a layout problem, not an input one.
+
+If Ragtop has to draw the candidates itself, fcitx5 already has the protocol
+for it. Its `VirtualKeyboardBackend1` interface offers `SelectCandidate`,
+`NextPage` and `PrevPage`, which is the vocabulary a touch keyboard needs.
+The unsolved piece is how an on-screen keyboard receives the candidate text,
+since that interface has no signals carrying it.
+
+So this is a day of testing to find out which of those it is, and then either
+a paragraph of documentation or a candidate strip. If you would use it, say so
+in an issue. Interest is what would move it.
 
 ## Upgrading from an older Ragtop
 
