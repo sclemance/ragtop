@@ -351,8 +351,34 @@ Five things that came out of building it, worth holding on to.
 zone relayouts every window and Hyprland says nothing. Arrange mode's own
 resizes move the windows it is drawing over. Screen rotation moves
 everything. Special workspaces did have an event, `activespecial`, and the
-bug was not listening for it. Anything reading geometry needs a settle pass,
-not a single read.
+bug was not listening for it.
+
+Two more turned up after this file was first written, and both were
+Hyprland dispatches that change geometry silently. Measured on the event
+socket, `window.swap` emits no `movewindow` and no `resizewindow`, and it
+does not change focus either. `layout("togglesplit")` emits nothing at all.
+The first made arrange mode swap the wrong window, because `windowAt` reads
+the same rectangles the outlines are drawn from, so a stale one resolves a
+drop to whichever window used to be in that spot. The second left the
+outlines around the old shape.
+
+The rule that comes out of it: **an action that moves something says so
+itself**, rather than waiting for an event that may not come. Every one of
+these was fixed by having the dispatching function trigger the re-read.
+Where an action seemed to work, it was usually relying on a side effect,
+tapping a window refreshed the model only because focusing emits
+`activewindow`.
+
+To find out whether a dispatch is silent, watch `.socket2.sock` through it:
+
+```
+socat -U - "UNIX-CONNECT:$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+```
+
+Filter for `movewindow` and `resizewindow`. Ignore `windowtitle` and
+`activewindow`, which any terminal generates constantly on its own.
+
+Anything reading geometry needs a settle pass, not a single read.
 
 **One rule, one place.** Where a rule was written twice it drifted, and the
 drift was always invisible until something specific broke. Hit testing and
