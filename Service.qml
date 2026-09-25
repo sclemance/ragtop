@@ -1316,11 +1316,48 @@ Item {
                        // reads and writes, where 2 means it is on.
                        full: Number(c.fullscreen) || 0,
                        fullClient: Number(c.fullscreenClient) || 0,
+                       // A key shared by every member of a group, and "" for
+                       // a window in none. Sorted, so the members agree on it
+                       // whichever one is being read.
+                       group: Array.isArray(c.grouped) && c.grouped.length > 1
+                         ? c.grouped.slice().sort().join(",") : "",
+                       order: Number(c.focusHistoryID),
                        focused: c.focusHistoryID === 0 })
           })
         } catch (e) {
           return
         }
+        // One row per group, not one per window in it.
+        //
+        // Grouped windows are tabs sharing a tile, and Hyprland reports
+        // every member at the same geometry with hidden false on all of
+        // them. Left alone that is N outlines, N chips and N sets of
+        // handles stacked exactly on top of each other, and a tap resolves
+        // by whatever the tiebreak happens to pick, possibly a tab you
+        // cannot see.
+        //
+        // Any member will do as the handle. Measured: swapping one member
+        // with another tile moves the whole group and leaves it intact, so
+        // a group is a tile as far as the tree is concerned and the members
+        // are interchangeable for every action here.
+        //
+        // The one kept is the most recently focused, which is almost always
+        // the visible tab, so the title chip usually matches. It is only the
+        // chip: the group's own tab bar sits above this outline and is what
+        // actually says which window is on top.
+        var byGroup = {}
+        out = out.filter(function(w) {
+          if (!w.group) return true
+          var seen = byGroup[w.group]
+          if (seen === undefined || w.order < seen) {
+            byGroup[w.group] = w.order
+            return true
+          }
+          return false
+        }).filter(function(w) {
+          return !w.group || byGroup[w.group] === w.order
+        })
+
         // A stable order, so the model's rows never reshuffle when focus
         // or stacking changes. Reordering rebuilds every delegate, which
         // kills whatever gesture is in flight. What is drawn on top is
