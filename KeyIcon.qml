@@ -12,7 +12,8 @@ Item {
   id: icon
 
   // "settings", "shift", "backspace", "enter", "rotate", "keyboard",
-  // "windows", "omarchy", "check", "left", "up", "down", "right".
+  // "windows", "omarchy", "check", "float", "wide", "tiled", "split",
+  // "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
 
@@ -136,7 +137,7 @@ Item {
   }
 
   // A tiled layout: one pane on the left, two stacked on the right. It is
-  // the shape of what the windows page rearranges, which reads faster than
+  // the shape of what tiling mode rearranges, which reads faster than
   // any word would at this size.
   function windowsPath() {
     return move(0.1, 0.22) + line(0.9, 0.22) + line(0.9, 0.78)
@@ -167,6 +168,44 @@ Item {
     return move(0.88, 0.5) + line(0.16, 0.5) + " " + move(0.42, 0.26) + line(0.16, 0.5) + line(0.42, 0.74)
   }
 
+  // A floating window: one pane lifted off another. The standard windowed
+  // mark, so it reads without a label beside it.
+  function floatPath() {
+    return move(0.34, 0.16) + line(0.9, 0.16) + line(0.9, 0.62)
+      + move(0.1, 0.38) + line(0.66, 0.38) + line(0.66, 0.84)
+      + line(0.1, 0.84) + line(0.1, 0.38)
+  }
+
+  // Full width: a pane with the sides pushed out to the edges it is going
+  // to reach.
+  function widePath() {
+    return move(0.26, 0.24) + line(0.74, 0.24) + line(0.74, 0.76)
+      + line(0.26, 0.76) + line(0.26, 0.24)
+      + move(0.16, 0.5) + line(0.02, 0.5)
+      + move(0.07, 0.42) + line(0.02, 0.5) + line(0.07, 0.58)
+      + move(0.84, 0.5) + line(0.98, 0.5)
+      + move(0.93, 0.42) + line(0.98, 0.5) + line(0.93, 0.58)
+  }
+
+  // Tiled full screen: four corners opening outwards, which is what a
+  // full-screen mark looks like everywhere else.
+  function tiledPath() {
+    return move(0.1, 0.34) + line(0.1, 0.1) + line(0.34, 0.1)
+      + move(0.66, 0.1) + line(0.9, 0.1) + line(0.9, 0.34)
+      + move(0.9, 0.66) + line(0.9, 0.9) + line(0.66, 0.9)
+      + move(0.34, 0.9) + line(0.1, 0.9) + line(0.1, 0.66)
+  }
+
+  // Split: one pane divided, with the divider turned, which is what the
+  // toggle does to the next window opened beside this one.
+  function splitPath() {
+    return move(0.1, 0.16) + line(0.9, 0.16) + line(0.9, 0.84)
+      + line(0.1, 0.84) + line(0.1, 0.16)
+      + move(0.5, 0.16) + line(0.5, 0.84)
+      + move(0.34, 0.5) + line(0.2, 0.5)
+      + move(0.66, 0.5) + line(0.8, 0.5)
+  }
+
   readonly property string strokedPath: name === "shift" ? shiftPath()
     : name === "backspace" ? backspacePath()
     : name === "enter" ? enterPath()
@@ -174,6 +213,10 @@ Item {
     : name === "keyboard" ? keyboardPath()
     : name === "windows" ? windowsPath()
     : name === "check" ? checkPath()
+    : name === "float" ? floatPath()
+    : name === "wide" ? widePath()
+    : name === "tiled" ? tiledPath()
+    : name === "split" ? splitPath()
     : isArrow ? arrowPath()
     : ""
 

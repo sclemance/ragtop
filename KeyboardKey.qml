@@ -175,6 +175,11 @@ Item {
   }
 
   Text {
+    // Never rich text. A window title, a layout name and an error
+    // string all arrive from outside, and AutoText would sniff markup
+    // in them and render it, which for Qt includes fetching a remote
+    // image named in an img tag.
+    textFormat: Text.PlainText
     visible: key.labelKind === "char" || key.labelKind === "word"
     y: key.faceY
     width: key.width
@@ -189,6 +194,11 @@ Item {
   }
 
   Text {
+    // Never rich text. A window title, a layout name and an error
+    // string all arrive from outside, and AutoText would sniff markup
+    // in them and render it, which for Qt includes fetching a remote
+    // image named in an img tag.
+    textFormat: Text.PlainText
     visible: key.hint !== ""
     y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInset / 2)
     width: key.width - Math.round(key.theme.gap / 2 + key.cornerInset)
@@ -220,6 +230,11 @@ Item {
       filled: key.kind === "locked"
     }
     Text {
+      // Never rich text. A window title, a layout name and an error
+      // string all arrive from outside, and AutoText would sniff markup
+      // in them and render it, which for Qt includes fetching a remote
+      // image named in an img tag.
+      textFormat: Text.PlainText
       anchors.verticalCenter: parent.verticalCenter
       text: key.label
       color: key.labelColor

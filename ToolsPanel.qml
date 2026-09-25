@@ -58,6 +58,11 @@ Item {
           border.width: Math.max(1, panel.theme.keyBorderWidth)
           border.color: panel.theme.keyBorder
           Text {
+            // Never rich text. A window title, a layout name and an error
+            // string all arrive from outside, and AutoText would sniff markup
+            // in them and render it, which for Qt includes fetching a remote
+            // image named in an img tag.
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             text: {
               var name = panel.service.currentTheme
@@ -91,6 +96,11 @@ Item {
           color: panel.theme.specialText
         }
         Text {
+          // Never rich text. A window title, a layout name and an error
+          // string all arrive from outside, and AutoText would sniff markup
+          // in them and render it, which for Qt includes fetching a remote
+          // image named in an img tag.
+          textFormat: Text.PlainText
           width: 150
           anchors.verticalCenter: parent.verticalCenter
           text: "Screen Rotation"
@@ -124,6 +134,11 @@ Item {
               }
             }
             Text {
+              // Never rich text. A window title, a layout name and an error
+              // string all arrive from outside, and AutoText would sniff markup
+              // in them and render it, which for Qt includes fetching a remote
+              // image named in an img tag.
+              textFormat: Text.PlainText
               id: optionLabel
               anchors.verticalCenter: parent.verticalCenter
               x: dot.width + 6
@@ -152,6 +167,11 @@ Item {
           color: panel.theme.specialText
         }
         Text {
+          // Never rich text. A window title, a layout name and an error
+          // string all arrive from outside, and AutoText would sniff markup
+          // in them and render it, which for Qt includes fetching a remote
+          // image named in an img tag.
+          textFormat: Text.PlainText
           id: sizeLabel
           width: 150
           anchors.verticalCenter: parent.verticalCenter
@@ -245,6 +265,11 @@ Item {
           }
         }
         Text {
+          // Never rich text. A window title, a layout name and an error
+          // string all arrive from outside, and AutoText would sniff markup
+          // in them and render it, which for Qt includes fetching a remote
+          // image named in an img tag.
+          textFormat: Text.PlainText
           id: autoLabel
           anchors.verticalCenter: autoBox.verticalCenter
           x: 38
@@ -268,6 +293,11 @@ Item {
           border.width: Math.max(1, panel.theme.keyBorderWidth)
           border.color: panel.theme.keyBorder
           Text {
+            // Never rich text. A window title, a layout name and an error
+            // string all arrive from outside, and AutoText would sniff markup
+            // in them and render it, which for Qt includes fetching a remote
+            // image named in an img tag.
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             text: "Settings"
             color: panel.theme.specialText

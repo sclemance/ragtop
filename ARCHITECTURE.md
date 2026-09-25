@@ -35,7 +35,7 @@ directory is a symlink into the repo and the watcher does not follow it.
 | File | What it is |
 | --- | --- |
 | `Service.qml` | The whole service. State, child processes, every layer surface, the IPC socket. |
-| `BarWidget.qml` | The bar tile. Opens arrange mode, shows rotation lock. |
+| `BarWidget.qml` | The bar tile. Opens tiling mode, shows rotation lock. |
 | `Keyboard.qml` | The on-screen keyboard: layouts, pages, which key a touch means. |
 | `KeyboardKey.qml` | How one key is drawn. Nothing else. |
 | `KeyboardTheme.qml` | Reads the look settings and resolves them into colours, sizes and corners. |
@@ -43,8 +43,8 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `KeyIcon.qml` | Icons Ragtop draws itself as paths rather than taking from a font. |
 | `LockKeyboard.qml` | A second, standalone keyboard for the lock screen. See below for why it is separate. |
 | `LockKeyIcon.qml` | The same idea for the lock screen. |
-| `ArrangeLayer.qml` | The transparent layer over real windows. Move, swap and resize by finger. |
-| `ArrangeBar.qml` | The control strip along the bottom while arranging. |
+| `TilingLayer.qml` | The transparent layer over real windows. Move, swap and resize by finger. |
+| `TilingBar.qml` | The control strip along the bottom while tiling. |
 | `ToolsPanel.qml` | The settings panel that comes up over the keyboard. |
 | `PickerNav.qml` | A navigation strip for Omarchy's image picker. |
 | `SetupWizard.qml` | First-run setup, in the shell rather than the terminal. |
@@ -70,7 +70,7 @@ surface. There are six.
 | `ragtop-keyboard-handle` | Top | Auto | The grab handle when the keyboard is down. |
 | `ragtop-tools` | Top | Normal | The settings panel. |
 | `ragtop-picker-nav` | Top | Auto | The image picker strip. |
-| `ragtop-arrange` | Top | Ignore | The arrange overlay. Reserves nothing. |
+| `ragtop-tiling` | Top | Ignore | The tiling overlay. Reserves nothing. |
 | `ragtop-screensaver-catcher` | Overlay | Ignore | Swallows the first tap that dismisses the screensaver. |
 
 Two things decide what a touch hits.
@@ -88,7 +88,7 @@ ragtop-keyboard         order -3
 **Input masks** decide where a surface takes touches at all. Every surface
 sets `mask: Region { item: ... }` pointing at whatever it actually draws.
 Outside that region touches fall through to whatever is underneath. This is
-why the arrange overlay can cover the screen and still let you reach the bar
+why the tiling overlay can cover the screen and still let you reach the bar
 and the keyboard handle. Layer ordering was tried first for that and it put
 the overlay on top of both.
 
@@ -111,10 +111,34 @@ hyprctl eval 'hl.config({ input = { kb_layout = "de" } })'
 ```
 
 `hyprctl eval` returns `ok` whatever the Lua did, and swallows anything the
-Lua prints, so it cannot be used to read values back.
+Lua prints. **`hyprctl repl` does not**, and returns what the Lua returns:
+
+```
+hyprctl repl 'return 1+1'          -> 2
+hyprctl eval  'return 1+1'         -> ok
+```
+
+Worth knowing, because "you cannot read a value back out of Lua" is true of
+one of them and false of the tool sitting next to it, and believing it of
+both leads to working around a problem that is not there.
 
 Reading state is `hyprctl -j clients`, `-j monitors`, `-j activewindow`,
-`getoption`.
+`getoption`. The Lua API has its own getters that Ragtop does not use,
+including `get_windows`, `get_workspace_windows`, `get_monitors`,
+`get_layers` and `is_key_down`. The JSON is well understood and works, so
+there is no reason to move, but the second route exists.
+
+**What is not available at all: the layout tree.** Dwindle is a binary tree
+and an edge between two tiles belongs to a branch rather than to either
+window, which is why resizing a boundary between two groups moves the whole
+group. Showing that to a user would need to know the tree, and nothing
+exposes it. `hyprctl` has no tree command, `clients` carries no parent,
+sibling or node field, and the Lua `HL.Window` object answers `nil` to
+`parent`, `sibling`, `node` and `children` while `w.layout` is only
+`{name = "dwindle"}`. It could be inferred from geometry, and it is
+deliberately not: an inference that is usually right reads as a bug on the
+case where it is wrong, and that case is exactly when someone is already
+confused. It needs a change in Hyprland or it stays undone.
 
 Every address that reaches a dispatch is checked against
 `/^0x[0-9a-f]+$/` first, and every workspace id is parsed as an integer and
@@ -312,7 +336,7 @@ nothing on the socket can be handed a value to act on:
 showKeyboard  hideKeyboard  toggleKeyboard  keyboardVisible
 toggleControls  growKeyboard  shrinkKeyboard
 cycleRotation  rotationState
-toggleArrange  openSetup  closeSetup  health
+toggleTiling  openSetup  closeSetup  health
 ```
 
 A temporary probe function is the standard way to test something that needs
@@ -348,11 +372,37 @@ stopping the rest.
 Five things that came out of building it, worth holding on to.
 
 **State changes with no event to notice it by.** The keyboard's exclusive
-zone relayouts every window and Hyprland says nothing. Arrange mode's own
+zone relayouts every window and Hyprland says nothing. Tiling mode's own
 resizes move the windows it is drawing over. Screen rotation moves
 everything. Special workspaces did have an event, `activespecial`, and the
-bug was not listening for it. Anything reading geometry needs a settle pass,
-not a single read.
+bug was not listening for it.
+
+Two more turned up after this file was first written, and both were
+Hyprland dispatches that change geometry silently. Measured on the event
+socket, `window.swap` emits no `movewindow` and no `resizewindow`, and it
+does not change focus either. `layout("togglesplit")` emits nothing at all.
+The first made tiling mode swap the wrong window, because `windowAt` reads
+the same rectangles the outlines are drawn from, so a stale one resolves a
+drop to whichever window used to be in that spot. The second left the
+outlines around the old shape.
+
+The rule that comes out of it: **an action that moves something says so
+itself**, rather than waiting for an event that may not come. Every one of
+these was fixed by having the dispatching function trigger the re-read.
+Where an action seemed to work, it was usually relying on a side effect,
+tapping a window refreshed the model only because focusing emits
+`activewindow`.
+
+To find out whether a dispatch is silent, watch `.socket2.sock` through it:
+
+```
+socat -U - "UNIX-CONNECT:$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+```
+
+Filter for `movewindow` and `resizewindow`. Ignore `windowtitle` and
+`activewindow`, which any terminal generates constantly on its own.
+
+Anything reading geometry needs a settle pass, not a single read.
 
 **One rule, one place.** Where a rule was written twice it drifted, and the
 drift was always invisible until something specific broke. Hit testing and
@@ -362,9 +412,18 @@ and two of them knew about a new value. A settings key added beside a table
 instead of into it was never cleared. Prefer one function both callers use
 over two that happen to match today.
 
+**A group is one tile.** Omarchy tabs windows together with SUPER+G, and
+Hyprland then reports every member at the same geometry with `hidden` false
+on all of them. Anything drawing per window draws them stacked. Measured:
+swapping one member with another tile moves the whole group intact, so the
+members are interchangeable as handles and the fix is to keep one row per
+group rather than to work out which tab is visible. Nothing exposes which
+tab that is, so the one kept is the most recently focused, which only
+affects a label.
+
 **Touches go by the slot, not by what is drawn.** A key's touch area is its
 rectangle whatever shape the theme draws in it, so a shape can never make a
-key harder to hit. Arrange mode inverts this deliberately: there the windows
+key harder to hit. Tiling mode inverts this deliberately: there the windows
 themselves are the controls, so what you touch has to be what you get, and
 nothing reaches past what is on top.
 

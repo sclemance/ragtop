@@ -61,7 +61,7 @@ thing:
 | --- | --- | --- |
 | A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
 | An accelerometer, or `iio-sensor-proxy` | The screen following the device. The rotation-lock button has nothing to lock | The keyboard, the handle, tablet mode, the overlays |
-| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, arrange mode, the picker strip |
+| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, tiling mode, the picker strip |
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously, but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
 
@@ -93,12 +93,12 @@ space until tablet mode turns on.
   layout, emoji) still arrive.
 - **Settings one tap away.** A gear key next to the space bar opens Ragtop's
   settings.
-- **Arrange mode.** Omarchy windows have no title bars and moving or resizing
-  them needs SUPER plus a mouse. Arrange mode puts a transparent layer over
+- **Tiling mode.** Omarchy windows have no title bars and moving or resizing
+  them needs SUPER plus a mouse. Tiling mode puts a transparent layer over
   the real windows so you can tap one to focus it, hold and drag it onto
   another to swap them, and drag the squares and bars on its edges to resize.
   The windows are the controls, at full size, with their content visible and
-  reflowing as you work. See [Arrange mode](#arrange-mode).
+  reflowing as you work. See [Tiling mode](#tiling-mode).
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
@@ -266,7 +266,7 @@ In tablet mode, two icons appear in the bar:
 
 | Icon | Does |
 | --- | --- |
-| Grid | Opens arrange mode. Tap it again to leave. |
+| Grid | Opens tiling mode. Tap it again to leave. |
 | Padlock | Locks or unlocks rotation. Highlighted while locked, and stays in the bar while locked, even in laptop mode. |
 
 A slim handle, coloured like the bar, runs along the bottom of the screen in
@@ -467,10 +467,14 @@ blurs behind its keyboard.
 The lock screen's keyboard takes the shape, fill and measurements too,
 checked again by its own code, but never the colours or the background.
 
-## Arrange mode
+## Tiling mode
 
 Omarchy windows have no title bars, and moving or resizing them needs SUPER
-and a mouse. Arrange mode gives you the same thing with a finger.
+and a mouse. Tiling mode gives you the same thing with a finger.
+
+It is named after Omarchy's own `bindings/tiling.lua`, which groups exactly
+these actions: split, float, tiled full screen, full width, the scratchpad and
+the workspaces. This is that file, reachable by touch.
 
 Get in by tapping the tiled icon at the end of the keyboard's top row, or
 the grid icon in the bar. The keyboard steps aside and a transparent layer
@@ -505,15 +509,50 @@ cannot say by dragging:
 | Send to | Arms the workspace keys, so the next one moves the window instead of going there. |
 | 1 to 10, Scratchpad | Go to that workspace, or send the window there when Send to is armed. |
 | Full width | Maximises without going truly full screen, so the keyboard is still reachable. |
-| Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. |
+| Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. See below, it does something you might not expect. |
 | Split | Flips the split under the focused window. |
 | Float | Floats or unfloats it. |
-| Finish arranging | Leaves. |
+| Finish tiling | Leaves. |
+
+**The shape buttons light up when what they do is already true**, so Float
+tells you the window is floating and the two full screen buttons tell you
+which kind of full screen it is in. Both kinds can be on at once. They are
+separate settings in Hyprland and neither cancels the other.
+
+**Tiled full screen greys out while a window floats**, and so does Split.
+Neither means anything without a tile. Hyprland suspends tiled full screen
+the moment a window floats and restores it when the window tiles again, and
+Split turns the divider of the tile a floating window does not have.
+
+### What tiled full screen actually does
+
+It does not resize anything. The window keeps its tile and stays exactly
+where it is. What changes is that the window is **told** it is full screen,
+and applications react to that by hiding their own chrome. A browser drops
+its tab strip and address bar, the way it would on F11.
+
+So it means "give me the app's full screen view without giving up my tile",
+which on a small screen is worth 80 to 120 pixels of content in a browser.
+It is also easy to forget you are in, because a browser with no tabs looks
+broken until you remember why. That is what the light on the button is for.
+
+**Full width** is the other one and does the opposite: it changes the
+geometry and tells the application nothing, so a browser keeps its tabs.
+
+### Grouped windows
+
+Omarchy can tab several windows into one tile, on SUPER+G. Tiling mode draws
+a group once, as the single tile it occupies, rather than once per tab. The
+group's own tab bar sits above the outline and is what says which window is
+on top.
+
+Moving or swapping a group moves all of it and keeps it together, because
+as far as the layout is concerned a group is one tile.
 
 Turned on its side there is less width and more height, so the strip becomes
 two rows rather than hiding anything behind a scroll.
 
-Arrange mode also ends when the keyboard comes back by any route, when
+Tiling mode also ends when the keyboard comes back by any route, when
 tablet mode ends, and after 90 seconds of nothing happening.
 
 One limit worth knowing before it surprises you: a boundary between two
@@ -732,6 +771,9 @@ If tablet mode is never detected:
 True today, and worth saying if you want them gone:
 
 - **No swipe typing.** Keys are tapped one at a time.
+- **No CJK input.** Chinese, Japanese and Korean need an input method engine
+  and somewhere to put the candidates. See [Chinese, Japanese and
+  Korean](#chinese-japanese-and-korean).
 - **No dead keys, on purpose.** Accents come from holding a letter rather
   than from a dead key followed by one. Ragtop types by character rather than
   by key position, so it reaches the composed letter directly and the two
@@ -827,6 +869,32 @@ standard settles.
 The keyboard itself is mostly language-agnostic already. Its letters, symbols
 and accents come from your active Hyprland layout, and its key glyphs are
 drawn rather than written.
+
+### Chinese, Japanese and Korean
+
+Not supported yet, and worth considering rather than ruled out.
+
+The pipeline is already pointing the right way. Ragtop does not put characters
+into applications, it sends key events through a Wayland virtual keyboard, and
+every one of those passes through fcitx5, which is the thing that turns nihao
+into a list of candidates. Ragtop sits upstream of the input method rather
+than competing with it, so with an engine installed the typing half may
+already work. Nobody has tested it.
+
+What is missing is most likely the candidates rather than the keys. fcitx5
+draws its candidate list near the text cursor, and on a 768 pixel screen with
+a keyboard reserving the bottom third, a popup you have to reach with a finger
+is the part that will not fit. That is a layout problem, not an input one.
+
+If Ragtop has to draw the candidates itself, fcitx5 already has the protocol
+for it. Its `VirtualKeyboardBackend1` interface offers `SelectCandidate`,
+`NextPage` and `PrevPage`, which is the vocabulary a touch keyboard needs.
+The unsolved piece is how an on-screen keyboard receives the candidate text,
+since that interface has no signals carrying it.
+
+So this is a day of testing to find out which of those it is, and then either
+a paragraph of documentation or a candidate strip. If you would use it, say so
+in an issue. Interest is what would move it.
 
 ## Upgrading from an older Ragtop
 

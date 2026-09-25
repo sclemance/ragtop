@@ -256,6 +256,11 @@ Item {
         height: title.implicitHeight
 
         Text {
+          // Never rich text. A window title, a layout name and an error
+          // string all arrive from outside, and AutoText would sniff markup
+          // in them and render it, which for Qt includes fetching a remote
+          // image named in an img tag.
+          textFormat: Text.PlainText
           id: title
           text: "Ragtop setup"
           color: Color.popups.text
@@ -263,6 +268,11 @@ Item {
           font.pixelSize: Style.font.title
         }
         Text {
+          // Never rich text. A window title, a layout name and an error
+          // string all arrive from outside, and AutoText would sniff markup
+          // in them and render it, which for Qt includes fetching a remote
+          // image named in an img tag.
+          textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.verticalCenter: title.verticalCenter
           text: "Step " + (root.step + 1) + " of " + root.steps.length + " · " + root.steps[root.step]
@@ -325,12 +335,22 @@ Item {
   // ---- the steps --------------------------------------------------------
 
   component Body: Text {
+    // Never rich text. A window title, a layout name and an error
+    // string all arrive from outside, and AutoText would sniff markup
+    // in them and render it, which for Qt includes fetching a remote
+    // image named in an img tag.
+    textFormat: Text.PlainText
     color: Color.popups.text
     font.family: Style.font.family
     font.pixelSize: Style.font.body
     wrapMode: Text.WordWrap
   }
   component Note: Text {
+    // Never rich text. A window title, a layout name and an error
+    // string all arrive from outside, and AutoText would sniff markup
+    // in them and render it, which for Qt includes fetching a remote
+    // image named in an img tag.
+    textFormat: Text.PlainText
     color: Color.popups.text
     opacity: 0.65
     font.family: Style.font.family
@@ -340,6 +360,11 @@ Item {
   // Omarchy's shell font is already a monospace family, so a path or a udev
   // rule reads as one without asking for a second font.
   component Mono: Text {
+    // Never rich text. A window title, a layout name and an error
+    // string all arrive from outside, and AutoText would sniff markup
+    // in them and render it, which for Qt includes fetching a remote
+    // image named in an img tag.
+    textFormat: Text.PlainText
     color: Color.accent
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
@@ -394,6 +419,11 @@ Item {
           spacing: Style.space(8)
 
           Text {
+            // Never rich text. A window title, a layout name and an error
+            // string all arrive from outside, and AutoText would sniff markup
+            // in them and render it, which for Qt includes fetching a remote
+            // image named in an img tag.
+            textFormat: Text.PlainText
             text: modelData.ok ? "✓" : "✗"
             color: modelData.ok ? Color.accent : Color.urgent
             font.family: Style.font.family

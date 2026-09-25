@@ -559,6 +559,11 @@ Item {
         border.color: root.style.fill === "outline" ? root.outline : root.keyBorder
 
         Text {
+          // Never rich text. A window title, a layout name and an error
+          // string all arrive from outside, and AutoText would sniff markup
+          // in them and render it, which for Qt includes fetching a remote
+          // image named in an img tag.
+          textFormat: Text.PlainText
           anchors.fill: parent
           horizontalAlignment: Text.AlignHCenter
           verticalAlignment: Text.AlignVCenter
@@ -697,6 +702,11 @@ Item {
               Math.round(faceHeight * 0.62))
 
             Text {
+              // Never rich text. A window title, a layout name and an error
+              // string all arrive from outside, and AutoText would sniff markup
+              // in them and render it, which for Qt includes fetching a remote
+              // image named in an img tag.
+              textFormat: Text.PlainText
               visible: key.kind !== "drawn"
               y: key.faceY
               width: key.width
