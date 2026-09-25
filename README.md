@@ -509,10 +509,45 @@ cannot say by dragging:
 | Send to | Arms the workspace keys, so the next one moves the window instead of going there. |
 | 1 to 10, Scratchpad | Go to that workspace, or send the window there when Send to is armed. |
 | Full width | Maximises without going truly full screen, so the keyboard is still reachable. |
-| Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. |
+| Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. See below, it does something you might not expect. |
 | Split | Flips the split under the focused window. |
 | Float | Floats or unfloats it. |
 | Finish tiling | Leaves. |
+
+**The shape buttons light up when what they do is already true**, so Float
+tells you the window is floating and the two full screen buttons tell you
+which kind of full screen it is in. Both kinds can be on at once. They are
+separate settings in Hyprland and neither cancels the other.
+
+**Tiled full screen greys out while a window floats**, and so does Split.
+Neither means anything without a tile. Hyprland suspends tiled full screen
+the moment a window floats and restores it when the window tiles again, and
+Split turns the divider of the tile a floating window does not have.
+
+### What tiled full screen actually does
+
+It does not resize anything. The window keeps its tile and stays exactly
+where it is. What changes is that the window is **told** it is full screen,
+and applications react to that by hiding their own chrome. A browser drops
+its tab strip and address bar, the way it would on F11.
+
+So it means "give me the app's full screen view without giving up my tile",
+which on a small screen is worth 80 to 120 pixels of content in a browser.
+It is also easy to forget you are in, because a browser with no tabs looks
+broken until you remember why. That is what the light on the button is for.
+
+**Full width** is the other one and does the opposite: it changes the
+geometry and tells the application nothing, so a browser keeps its tabs.
+
+### Grouped windows
+
+Omarchy can tab several windows into one tile, on SUPER+G. Tiling mode draws
+a group once, as the single tile it occupies, rather than once per tab. The
+group's own tab bar sits above the outline and is what says which window is
+on top.
+
+Moving or swapping a group moves all of it and keeps it together, because
+as far as the layout is concerned a group is one tile.
 
 Turned on its side there is less width and more height, so the strip becomes
 two rows rather than hiding anything behind a scroll.

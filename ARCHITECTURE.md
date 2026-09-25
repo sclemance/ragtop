@@ -412,6 +412,15 @@ and two of them knew about a new value. A settings key added beside a table
 instead of into it was never cleared. Prefer one function both callers use
 over two that happen to match today.
 
+**A group is one tile.** Omarchy tabs windows together with SUPER+G, and
+Hyprland then reports every member at the same geometry with `hidden` false
+on all of them. Anything drawing per window draws them stacked. Measured:
+swapping one member with another tile moves the whole group intact, so the
+members are interchangeable as handles and the fix is to keep one row per
+group rather than to work out which tab is visible. Nothing exposes which
+tab that is, so the one kept is the most recently focused, which only
+affects a label.
+
 **Touches go by the slot, not by what is drawn.** A key's touch area is its
 rectangle whatever shape the theme draws in it, so a shape can never make a
 key harder to hit. Tiling mode inverts this deliberately: there the windows
