@@ -74,8 +74,17 @@ QtObject {
   property var borderSpec: Border.hyprlandActiveSpec(Color.accent, 2)
   property color borderColor: Border.color(borderSpec)
   // Two or more colours when the theme's border is a gradient.
-  property var borderColors: borderSpec.gradient && borderSpec.gradient.enabled
-    ? borderSpec.gradient.colors : [borderColor]
+  //
+  // Faded with the background rather than held at full strength. The edge is
+  // part of the panel, not a thing sitting on top of it, so a keyboard turned
+  // see-through that kept a solid line along its top read as a stray rule
+  // across the screen with nothing under it.
+  property var borderColors: {
+    var base = borderSpec.gradient && borderSpec.gradient.enabled
+      ? borderSpec.gradient.colors : [borderColor]
+    var a = backgroundOpacity
+    return base.map(function (c) { return Qt.rgba(c.r, c.g, c.b, c.a * a) })
+  }
   property real edgeFade: edgeStyle === "fade" ? look.edgeFade : 0
   property real edgeBorder: edgeStyle === "border" ? Math.max(0, Border.top(borderSpec)) : 0
   property color backgroundClear: Qt.rgba(backgroundTop.r, backgroundTop.g, backgroundTop.b, 0)
