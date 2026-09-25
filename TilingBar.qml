@@ -91,6 +91,11 @@ Item {
         color: btn.lit ? Color.background : Color.popups.text
       }
       Text {
+        // Never rich text. A window title, a layout name and an error
+        // string all arrive from outside, and AutoText would sniff markup
+        // in them and render it, which for Qt includes fetching a remote
+        // image named in an img tag.
+        textFormat: Text.PlainText
         id: btnText
         anchors.verticalCenter: parent.verticalCenter
         visible: !btn.iconOnly
@@ -193,6 +198,11 @@ Item {
     opacity: finishTap.pressed ? 0.6 : 1
 
     Text {
+      // Never rich text. A window title, a layout name and an error
+      // string all arrive from outside, and AutoText would sniff markup
+      // in them and render it, which for Qt includes fetching a remote
+      // image named in an img tag.
+      textFormat: Text.PlainText
       id: finishText
       anchors.centerIn: parent
       text: bar.tight ? "Finish" : "Finish tiling"

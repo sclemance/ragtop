@@ -185,6 +185,11 @@ Item {
     visible: chipText.text !== ""
 
     Text {
+      // Never rich text. A window title, a layout name and an error
+      // string all arrive from outside, and AutoText would sniff markup
+      // in them and render it, which for Qt includes fetching a remote
+      // image named in an img tag.
+      textFormat: Text.PlainText
       id: chipText
       anchors.centerIn: parent
       width: Math.min(implicitWidth, Math.max(0, parent.maxWidth))
