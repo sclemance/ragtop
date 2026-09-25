@@ -137,7 +137,7 @@ Item {
   }
 
   // A tiled layout: one pane on the left, two stacked on the right. It is
-  // the shape of what the windows page rearranges, which reads faster than
+  // the shape of what tiling mode rearranges, which reads faster than
   // any word would at this size.
   function windowsPath() {
     return move(0.1, 0.22) + line(0.9, 0.22) + line(0.9, 0.78)

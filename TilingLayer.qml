@@ -3,7 +3,7 @@ import QtQuick.Shapes
 import qs.Commons
 import qs.Ui
 
-// The inside of arrange mode: an outline around every window on the
+// The inside of tiling mode: an outline around every window on the
 // workspace, and a way out.
 //
 // Nothing here is drawn solid. The reason to do this over the real windows

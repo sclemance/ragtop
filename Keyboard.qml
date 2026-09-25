@@ -484,10 +484,10 @@ Item {
   function press(key) {
     if (key in mods) { tapModifier(key); return }
     if (key === "windows") {
-      // Straight into arranging, rather than to a page of keys that say the
+      // Straight into tiling, rather than to a page of keys that say the
       // same things. It waits for the finger to lift because it takes the
       // keyboard off the screen: see liftKeys.
-      root.service.openArrange()
+      root.service.openTiling()
       return
     }
     switch (key) {

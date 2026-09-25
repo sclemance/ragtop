@@ -81,15 +81,15 @@ BarWidget {
 
     // Both drawn by KeyIcon rather than set as a Nerd Font glyph, which is
     // what the keyboard's own keys use. That makes the button that opens
-    // arrange mode the same mark as the key that opens it, so the bar and
+    // tiling mode the same mark as the key that opens it, so the bar and
     // the keyboard are visibly the same control, and it means neither one
     // depends on the bar's font carrying an icon at all.
     BarIconButton {
       id: shortcutsButton
       visible: root.tabletMode
       bar: root.bar
-      tooltipText: "Arrange and resize windows"
-      active: root.service !== null && root.service.arrangeOpen
+      tooltipText: "Tiling: move and resize windows"
+      active: root.service !== null && root.service.tilingOpen
       iconComponent: Component {
         KeyIcon {
           name: "windows"
@@ -97,7 +97,7 @@ BarWidget {
             ? shortcutsButton.activeColor : shortcutsButton.foreground
         }
       }
-      onPressed: if (root.service) root.service.toggleArrangeMode()
+      onPressed: if (root.service) root.service.toggleTilingMode()
     }
 
     // A padlock said whether rotation was held, which is the state, not the

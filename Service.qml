@@ -150,7 +150,7 @@ Item {
       anchors { bottom: true; left: true; right: true }
       // The bar says how much room it needs, since a narrow screen puts it
       // on two rows and a wide one does not.
-      implicitHeight: root.arrangeOpen ? arrangeBar.neededHeight : root.handleHeight
+      implicitHeight: root.tilingOpen ? tilingBar.neededHeight : root.handleHeight
       color: "transparent"
 
       Rectangle {
@@ -163,18 +163,18 @@ Item {
       // target reads touch instead of a mouse event synthesised from it.
       TapHandler {
         id: handleTap
-        // Only a handle when it is a handle. While arranging, the bar's own
+        // Only a handle when it is a handle. While tiling, the bar's own
         // controls take the taps and a miss between them should do nothing
         // rather than drop you out of the mode.
-        enabled: !root.arrangeOpen
+        enabled: !root.tilingOpen
         onTapped: root.toggleOsk()
       }
 
-      // While arranging, the strip is the controls.
-      ArrangeBar {
-        id: arrangeBar
+      // While tiling, the strip is the controls.
+      TilingBar {
+        id: tilingBar
         anchors.fill: parent
-        visible: root.arrangeOpen
+        visible: root.tilingOpen
         service: root
       }
 
@@ -182,7 +182,7 @@ Item {
       Shape {
         id: chevron
         anchors.centerIn: parent
-        visible: !root.arrangeOpen
+        visible: !root.tilingOpen
         width: 56
         height: 8
         opacity: handleTap.pressed ? 0.5 : 1
@@ -463,9 +463,9 @@ Item {
     // shape the screen had before. Same trap as the keyboard's exclusive
     // zone. Read the geometry back once the transform has landed.
     onExited: {
-      if (!root.arrangeOpen) return
-      arrangeSettle.again = 2
-      arrangeSettle.restart()
+      if (!root.tilingOpen) return
+      tilingSettle.again = 2
+      tilingSettle.restart()
     }
   }
   // The interval is set by wantSensor, from the deadline.
@@ -551,13 +551,13 @@ Item {
   // setOskVisible rather than through the bridge.
   //
   // Not while the picker is up, because the keyboard covers the preview the
-  // picker exists to show. Not while arranging, because the keyboard coming
+  // picker exists to show. Not while tiling, because the keyboard coming
   // back ends the mode, and the bar's own buttons change which window has
   // focus, so a window with a text field would close the mode out from
   // under the button just tapped. Not while the screensaver is up, because
   // nothing should be drawn over it.
   readonly property bool autoShowAllowed: root.tabletMode && root.autoShowEnabled
-    && !root.pickerOpen && !root.arrangeOpen && root.screensaverAddress === ""
+    && !root.pickerOpen && !root.tilingOpen && root.screensaverAddress === ""
   onWantFocusBridgeChanged: {
     focusBridgeRestart.stop()
     focusBridgeProc.running = root.wantFocusBridge
@@ -967,7 +967,7 @@ Item {
     //
     // And a tap on the bar is someone using the mode, so it is not idle.
     // Without this the ninety second timeout ran while you were working.
-    if (root.arrangeOpen) {
+    if (root.tilingOpen) {
       // Read twice for the two that change a window's fullscreen state.
       // What the bar shows there is fullscreenClient, which is Hyprland's
       // record of what it last told the window rather than anything the
@@ -975,9 +975,9 @@ Item {
       // schedule. One read 260ms later can land between the two and latch a
       // value that is already wrong. A second read a beat behind costs one
       // hyprctl call and catches it.
-      if (name === "tiled" || name === "wide") arrangeSettle.again = 1
-      arrangeSettle.restart()
-      arrangeIdle.restart()
+      if (name === "tiled" || name === "wide") tilingSettle.again = 1
+      tilingSettle.restart()
+      tilingIdle.restart()
     }
   }
 
@@ -1020,13 +1020,13 @@ Item {
     //
     // And a tap on the bar is someone using the mode, so it is not idle.
     // Without this the ninety second timeout ran while you were working.
-    if (root.arrangeOpen) {
-      arrangeSettle.restart()
-      arrangeIdle.restart()
+    if (root.tilingOpen) {
+      tilingSettle.restart()
+      tilingIdle.restart()
     }
   }
 
-  // ---- arrange mode -------------------------------------------------------
+  // ---- tiling mode -------------------------------------------------------
 
   // A transparent layer over the real windows, for rearranging them by hand.
   // It draws outlines and nothing solid: the whole reason to do this over the
@@ -1067,36 +1067,36 @@ Item {
 
   property bool specialShown: false
 
-  property bool arrangeOpen: false
-  property var arrangeWindows: []
+  property bool tilingOpen: false
+  property var tilingWindows: []
   // The window the shape buttons act on, so the bar can say what is already
   // true rather than offering a toggle with no state on it.
-  readonly property var arrangeFocused: {
-    for (var i = 0; i < root.arrangeWindows.length; i++)
-      if (root.arrangeWindows[i].focused) return root.arrangeWindows[i]
+  readonly property var tilingFocused: {
+    for (var i = 0; i < root.tilingWindows.length; i++)
+      if (root.tilingWindows[i].focused) return root.tilingWindows[i]
     return null
   }
 
-  function openArrange() {
+  function openTiling() {
     // The keyboard's strip is reserved, so hiding it first lets the windows
     // reflow to the full screen. The list is read after that settles, or the
     // outlines would be drawn around where the windows used to be.
     root.setOskVisible(false)
-    root.arrangeOpen = true
+    root.tilingOpen = true
     specialReadProc.running = true
-    arrangeIdle.restart()
-    arrangeSettle.restart()
+    tilingIdle.restart()
+    tilingSettle.restart()
   }
   // Done came from the keyboard, so it goes back to it. A timeout or tablet
   // mode ending did not, and putting a keyboard up for nobody would only
   // shrink the windows again.
-  function closeArrange(restore) {
+  function closeTiling(restore) {
     // Cleared before the keyboard is asked for, or the rule below would see
     // it come up and call this a second time.
-    root.arrangeOpen = false
+    root.tilingOpen = false
     root.sendMod = "off"
-    arrangeIdle.stop()
-    arrangeSettle.stop()
+    tilingIdle.stop()
+    tilingSettle.stop()
     if (restore) root.setOskVisible(true)
   }
 
@@ -1117,7 +1117,7 @@ Item {
       { command: ["hyprctl", "eval",
                   "hl.dispatch(hl.dsp.focus({ window = \"address:" + address + "\" }))"] })
     if (proc) proc.running = true
-    arrangeIdle.restart()
+    tilingIdle.restart()
   }
 
   // Resize by a relative delta, as fast as a finger can ask for it.
@@ -1156,8 +1156,8 @@ Item {
     // an outline drawn where a window used to be is not only wrong to look
     // at: windowAt reads these same rectangles to decide what a drag lands
     // on, so a stale one picks the wrong window to swap with.
-    arrangeIdle.restart()
-    arrangeSettle.restart()
+    tilingIdle.restart()
+    tilingSettle.restart()
   }
 
   Process {
@@ -1175,8 +1175,8 @@ Item {
       // well, so guessing the new shape locally would draw one of them
       // right and the other wrong. This rides the resize rate, which is
       // already limited to one at a time.
-      if (root.arrangeOpen && !arrangeClientsProc.running)
-        arrangeClientsProc.running = true
+      if (root.tilingOpen && !tilingClientsProc.running)
+        tilingClientsProc.running = true
     }
   }
 
@@ -1207,8 +1207,8 @@ Item {
     geomProc.running = true
     // As above. Setting a floating window's geometry moves it with no event
     // to say so.
-    arrangeIdle.restart()
-    arrangeSettle.restart()
+    tilingIdle.restart()
+    tilingSettle.restart()
   }
 
   Process {
@@ -1221,8 +1221,8 @@ Item {
         root.sendGeom(held.address, held.x, held.y, held.w, held.h)
         return
       }
-      if (root.arrangeOpen && !arrangeClientsProc.running)
-        arrangeClientsProc.running = true
+      if (root.tilingOpen && !tilingClientsProc.running)
+        tilingClientsProc.running = true
     }
   }
 
@@ -1242,8 +1242,8 @@ Item {
     // and it does not change focus either, so nothing arrives to notice it
     // by. Tapping a window first happened to fix it only because focusing
     // does emit activewindow. Say so directly instead.
-    arrangeIdle.restart()
-    arrangeSettle.restart()
+    tilingIdle.restart()
+    tilingSettle.restart()
   }
 
   // Read once on the way in, because the event below only fires on a change
@@ -1265,34 +1265,34 @@ Item {
   }
 
   Timer {
-    id: arrangeSettle
+    id: tilingSettle
     interval: 260
     // Twice, a beat apart: a rotation is still settling when the first read
     // happens, and one stale set of outlines is worth a second look.
     property int again: 0
     onTriggered: {
-      arrangeClientsProc.running = true
+      tilingClientsProc.running = true
       if (again > 0) {
         again--
-        arrangeSettle.restart()
+        tilingSettle.restart()
       }
     }
   }
   Timer {
-    id: arrangeIdle
+    id: tilingIdle
     interval: 90000
-    onTriggered: root.closeArrange()
+    onTriggered: root.closeTiling()
   }
   // Tablet mode ending takes the mode with it, along with everything else
   // that only makes sense with a screen you are holding.
-  onTabletModeChanged: if (!root.tabletMode) root.closeArrange()
+  onTabletModeChanged: if (!root.tabletMode) root.closeTiling()
 
   Process {
-    id: arrangeClientsProc
+    id: tilingClientsProc
     command: ["hyprctl", "clients", "-j"]
     stdout: StdioCollector {
       onStreamFinished: {
-        if (!root.arrangeOpen) return
+        if (!root.tilingOpen) return
         var monitor = Hyprland.focusedMonitor
         var ox = monitor ? monitor.x : 0
         var oy = monitor ? monitor.y : 0
@@ -1363,7 +1363,7 @@ Item {
         // kills whatever gesture is in flight. What is drawn on top is
         // decided in the layer instead.
         out.sort(function(a, b) { return a.address < b.address ? -1 : 1 })
-        root.arrangeWindows = out
+        root.tilingWindows = out
       }
     }
   }
@@ -1371,7 +1371,7 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (!root.arrangeOpen) return
+      if (!root.tilingOpen) return
       var n = event.name
       if (n === "activespecial") {
         // "workspacename,monitorname", and an empty name means it went away.
@@ -1384,28 +1384,28 @@ Item {
           || n === "fullscreen" || n === "monitorlayoutchanged"
           || n === "monitoradded" || n === "monitorremoved"
           || n === "configreloaded" || n === "activespecial") {
-        arrangeSettle.restart()
+        tilingSettle.restart()
       }
     }
   }
 
   // What the bar's window button does, and the socket below with it: one
-  // way in and out of arranging, so both agree about what a second tap
+  // way in and out of tiling, so both agree about what a second tap
   // means.
-  function toggleArrangeMode() {
-    if (root.arrangeOpen) root.closeArrange(true)
-    else root.openArrange()
+  function toggleTilingMode() {
+    if (root.tilingOpen) root.closeTiling(true)
+    else root.openTiling()
   }
   onOskVisibleChanged: {
     if (!root.oskVisible) root.toolsOpen = false
-    // The keyboard and arrange mode are exclusive: entering hides the
+    // The keyboard and tiling mode are exclusive: entering hides the
     // keyboard, and the keyboard coming back by any route ends the mode.
     // That covers the handle, auto-show on a text field, and the bar's own
     // button, and it is also the fix for a real fault: the keyboard's
     // exclusive zone changing relayouts every window, Hyprland emits no
     // resizewindow for that, so the outlines used to sit over a keyboard,
     // drawn around windows that had already shrunk away from them.
-    if (root.oskVisible && root.arrangeOpen) root.closeArrange()
+    if (root.oskVisible && root.tilingOpen) root.closeTiling()
   }
 
 
@@ -1677,12 +1677,12 @@ Item {
   // and swallows the touch, so the keyboard was never doing anything there,
   // it was only sitting on top of a screensaver looking like a fault.
   //
-  // Arranging ends rather than pausing. Coming back to an arrange layer
+  // Tiling ends rather than pausing. Coming back to a tiling layer
   // drawn around windows that may have moved while the screen was off is
   // worse than coming back to the desktop.
   onScreensaverAddressChanged: {
     if (root.screensaverAddress !== "") {
-      if (root.arrangeOpen) root.closeArrange(true)
+      if (root.tilingOpen) root.closeTiling(true)
       if (root.oskVisible) {
         root.oskHiddenForScreensaver = true
         root.setOskVisible(false)
@@ -1798,7 +1798,7 @@ Item {
     }
   }
 
-  // Arrange mode's surface. Top rather than Overlay, and ordered below the
+  // Tiling mode's surface. Top rather than Overlay, and ordered below the
   // bar and the keyboard's handle, so both of those stay tappable the whole
   // time it is up. The screensaver catcher next door is Overlay because it
   // has to cover everything. This one must not: a full-screen layer that
@@ -1806,9 +1806,9 @@ Item {
   // is folded shut, and those two surfaces are two more ways back out.
   PanelWindow {
     screen: keyboardWindow.screen
-    visible: root.arrangeOpen && root.layerRulesReady
+    visible: root.tilingOpen && root.layerRulesReady
 
-    WlrLayershell.namespace: "ragtop-arrange"
+    WlrLayershell.namespace: "ragtop-tiling"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
@@ -1821,13 +1821,13 @@ Item {
     // how the bar and the keyboard's handle stay usable underneath it
     // without depending on layer ordering to arrange that. Layer order was
     // the first attempt and it put this on top of both.
-    mask: Region { item: arrangeLayer.touchArea }
+    mask: Region { item: tilingLayer.touchArea }
 
-    ArrangeLayer {
-      id: arrangeLayer
+    TilingLayer {
+      id: tilingLayer
       anchors.fill: parent
       service: root
-      windows: root.arrangeWindows
+      windows: root.tilingWindows
     }
   }
 
@@ -2023,9 +2023,9 @@ Item {
       })
     }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
-    function toggleArrange(): string {
-      root.toggleArrangeMode()
-      return root.arrangeOpen ? "open" : "closed"
+    function toggleTiling(): string {
+      root.toggleTilingMode()
+      return root.tilingOpen ? "open" : "closed"
     }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.

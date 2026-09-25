@@ -35,7 +35,7 @@ directory is a symlink into the repo and the watcher does not follow it.
 | File | What it is |
 | --- | --- |
 | `Service.qml` | The whole service. State, child processes, every layer surface, the IPC socket. |
-| `BarWidget.qml` | The bar tile. Opens arrange mode, shows rotation lock. |
+| `BarWidget.qml` | The bar tile. Opens tiling mode, shows rotation lock. |
 | `Keyboard.qml` | The on-screen keyboard: layouts, pages, which key a touch means. |
 | `KeyboardKey.qml` | How one key is drawn. Nothing else. |
 | `KeyboardTheme.qml` | Reads the look settings and resolves them into colours, sizes and corners. |
@@ -43,8 +43,8 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `KeyIcon.qml` | Icons Ragtop draws itself as paths rather than taking from a font. |
 | `LockKeyboard.qml` | A second, standalone keyboard for the lock screen. See below for why it is separate. |
 | `LockKeyIcon.qml` | The same idea for the lock screen. |
-| `ArrangeLayer.qml` | The transparent layer over real windows. Move, swap and resize by finger. |
-| `ArrangeBar.qml` | The control strip along the bottom while arranging. |
+| `TilingLayer.qml` | The transparent layer over real windows. Move, swap and resize by finger. |
+| `TilingBar.qml` | The control strip along the bottom while tiling. |
 | `ToolsPanel.qml` | The settings panel that comes up over the keyboard. |
 | `PickerNav.qml` | A navigation strip for Omarchy's image picker. |
 | `SetupWizard.qml` | First-run setup, in the shell rather than the terminal. |
@@ -70,7 +70,7 @@ surface. There are six.
 | `ragtop-keyboard-handle` | Top | Auto | The grab handle when the keyboard is down. |
 | `ragtop-tools` | Top | Normal | The settings panel. |
 | `ragtop-picker-nav` | Top | Auto | The image picker strip. |
-| `ragtop-arrange` | Top | Ignore | The arrange overlay. Reserves nothing. |
+| `ragtop-tiling` | Top | Ignore | The tiling overlay. Reserves nothing. |
 | `ragtop-screensaver-catcher` | Overlay | Ignore | Swallows the first tap that dismisses the screensaver. |
 
 Two things decide what a touch hits.
@@ -88,7 +88,7 @@ ragtop-keyboard         order -3
 **Input masks** decide where a surface takes touches at all. Every surface
 sets `mask: Region { item: ... }` pointing at whatever it actually draws.
 Outside that region touches fall through to whatever is underneath. This is
-why the arrange overlay can cover the screen and still let you reach the bar
+why the tiling overlay can cover the screen and still let you reach the bar
 and the keyboard handle. Layer ordering was tried first for that and it put
 the overlay on top of both.
 
@@ -336,7 +336,7 @@ nothing on the socket can be handed a value to act on:
 showKeyboard  hideKeyboard  toggleKeyboard  keyboardVisible
 toggleControls  growKeyboard  shrinkKeyboard
 cycleRotation  rotationState
-toggleArrange  openSetup  closeSetup  health
+toggleTiling  openSetup  closeSetup  health
 ```
 
 A temporary probe function is the standard way to test something that needs
@@ -372,7 +372,7 @@ stopping the rest.
 Five things that came out of building it, worth holding on to.
 
 **State changes with no event to notice it by.** The keyboard's exclusive
-zone relayouts every window and Hyprland says nothing. Arrange mode's own
+zone relayouts every window and Hyprland says nothing. Tiling mode's own
 resizes move the windows it is drawing over. Screen rotation moves
 everything. Special workspaces did have an event, `activespecial`, and the
 bug was not listening for it.
@@ -381,7 +381,7 @@ Two more turned up after this file was first written, and both were
 Hyprland dispatches that change geometry silently. Measured on the event
 socket, `window.swap` emits no `movewindow` and no `resizewindow`, and it
 does not change focus either. `layout("togglesplit")` emits nothing at all.
-The first made arrange mode swap the wrong window, because `windowAt` reads
+The first made tiling mode swap the wrong window, because `windowAt` reads
 the same rectangles the outlines are drawn from, so a stale one resolves a
 drop to whichever window used to be in that spot. The second left the
 outlines around the old shape.
@@ -414,7 +414,7 @@ over two that happen to match today.
 
 **Touches go by the slot, not by what is drawn.** A key's touch area is its
 rectangle whatever shape the theme draws in it, so a shape can never make a
-key harder to hit. Arrange mode inverts this deliberately: there the windows
+key harder to hit. Tiling mode inverts this deliberately: there the windows
 themselves are the controls, so what you touch has to be what you get, and
 nothing reaches past what is on top.
 

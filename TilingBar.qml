@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// The controls for arrange mode, along the bottom of the screen in place of
+// The controls for tiling mode, along the bottom of the screen in place of
 // the keyboard's handle.
 //
 // Everything here is a thing a finger cannot express by dragging a window
@@ -144,7 +144,7 @@ Item {
   // Split lights for nothing. It flips the split of the dwindle node this
   // window sits in rather than changing the window, so there is no state on
   // the window to show.
-  readonly property var focused: service.arrangeFocused
+  readonly property var focused: service.tilingFocused
 
   component Shapes: Row {
     spacing: bar.gap
@@ -195,7 +195,7 @@ Item {
     Text {
       id: finishText
       anchors.centerIn: parent
-      text: bar.tight ? "Finish" : "Finish arranging"
+      text: bar.tight ? "Finish" : "Finish tiling"
       color: Color.background
       font.family: Style.font.family
       font.bold: true
@@ -204,7 +204,7 @@ Item {
 
     TapHandler {
       id: finishTap
-      onTapped: bar.service.closeArrange(true)
+      onTapped: bar.service.closeTiling(true)
     }
   }
 

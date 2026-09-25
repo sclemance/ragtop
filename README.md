@@ -61,7 +61,7 @@ thing:
 | --- | --- | --- |
 | A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
 | An accelerometer, or `iio-sensor-proxy` | The screen following the device. The rotation-lock button has nothing to lock | The keyboard, the handle, tablet mode, the overlays |
-| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, arrange mode, the picker strip |
+| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, tiling mode, the picker strip |
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously, but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
 
@@ -93,12 +93,12 @@ space until tablet mode turns on.
   layout, emoji) still arrive.
 - **Settings one tap away.** A gear key next to the space bar opens Ragtop's
   settings.
-- **Arrange mode.** Omarchy windows have no title bars and moving or resizing
-  them needs SUPER plus a mouse. Arrange mode puts a transparent layer over
+- **Tiling mode.** Omarchy windows have no title bars and moving or resizing
+  them needs SUPER plus a mouse. Tiling mode puts a transparent layer over
   the real windows so you can tap one to focus it, hold and drag it onto
   another to swap them, and drag the squares and bars on its edges to resize.
   The windows are the controls, at full size, with their content visible and
-  reflowing as you work. See [Arrange mode](#arrange-mode).
+  reflowing as you work. See [Tiling mode](#tiling-mode).
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
@@ -266,7 +266,7 @@ In tablet mode, two icons appear in the bar:
 
 | Icon | Does |
 | --- | --- |
-| Grid | Opens arrange mode. Tap it again to leave. |
+| Grid | Opens tiling mode. Tap it again to leave. |
 | Padlock | Locks or unlocks rotation. Highlighted while locked, and stays in the bar while locked, even in laptop mode. |
 
 A slim handle, coloured like the bar, runs along the bottom of the screen in
@@ -467,10 +467,14 @@ blurs behind its keyboard.
 The lock screen's keyboard takes the shape, fill and measurements too,
 checked again by its own code, but never the colours or the background.
 
-## Arrange mode
+## Tiling mode
 
 Omarchy windows have no title bars, and moving or resizing them needs SUPER
-and a mouse. Arrange mode gives you the same thing with a finger.
+and a mouse. Tiling mode gives you the same thing with a finger.
+
+It is named after Omarchy's own `bindings/tiling.lua`, which groups exactly
+these actions: split, float, tiled full screen, full width, the scratchpad and
+the workspaces. This is that file, reachable by touch.
 
 Get in by tapping the tiled icon at the end of the keyboard's top row, or
 the grid icon in the bar. The keyboard steps aside and a transparent layer
@@ -508,12 +512,12 @@ cannot say by dragging:
 | Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. |
 | Split | Flips the split under the focused window. |
 | Float | Floats or unfloats it. |
-| Finish arranging | Leaves. |
+| Finish tiling | Leaves. |
 
 Turned on its side there is less width and more height, so the strip becomes
 two rows rather than hiding anything behind a scroll.
 
-Arrange mode also ends when the keyboard comes back by any route, when
+Tiling mode also ends when the keyboard comes back by any route, when
 tablet mode ends, and after 90 seconds of nothing happening.
 
 One limit worth knowing before it surprises you: a boundary between two
