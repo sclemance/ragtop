@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import qs.Commons
 import qs.Ui
 
@@ -353,6 +354,7 @@ Item {
       Repeater {
         model: 8
         Rectangle {
+          id: handle
           required property int index
           readonly property var spec: frame.handleSpec(index)
           visible: frame.showHandles && spec.on
@@ -360,8 +362,68 @@ Item {
           y: spec.hy
           width: spec.hw
           height: spec.hh
-          radius: Style.space(3)
+          // Rounded on the corner squares, sharp on the edge bars. A bar
+          // stands for the whole split it moves, and a rounded end reads as
+          // a thing with a length of its own rather than as the edge it is.
+          // Specs 0 to 3 are the corners, 4 to 7 the bars.
+          radius: index < 4 ? Style.space(3) : 0
+          // The corner facing into the window is rounded harder than the
+          // three sitting against its edges, so a square reads as tucked
+          // into the corner rather than stuck onto it. It is the one
+          // diagonally opposite the window corner the square occupies, so
+          // 0 is top left and wants its bottom right, and so on round.
+          // The bars have no inside corner and keep radius, which is 0.
+          readonly property real inner: Style.space(9)
+          topLeftRadius: index === 3 ? inner : radius
+          topRightRadius: index === 2 ? inner : radius
+          bottomLeftRadius: index === 1 ? inner : radius
+          bottomRightRadius: index === 0 ? inner : radius
           color: grip.active ? Color.accent : Util.alpha(Color.accent, 0.55)
+
+          // A double headed arrow across the corner, saying which way this
+          // one drags before you touch it. Both heads because both
+          // directions are live: on a tiled window a corner moves two
+          // splits, either way.
+          //
+          // Corners only. A bar is long and thin and its arrow would have
+          // to point across the thin axis, which does not survive a small
+          // tile, and by the time you have read one corner the bars explain
+          // themselves.
+          //
+          // Opposite corners share an axis, so there are two shapes rather
+          // than four: 0 and 3 run top left to bottom right, 1 and 2 the
+          // other way. `parent` does not resolve inside a ShapePath, hence
+          // the id above.
+          //
+          // No handlers on any of this. It is drawn inside the grip and
+          // must never take a point away from it.
+          function arrowPath() {
+            var w = handle.width, h = handle.height
+            var m = Math.min(w, h) * 0.28, b = Math.min(w, h) * 0.2
+            var down = handle.index === 0 || handle.index === 3
+            var x1 = down ? m : w - m, y1 = m
+            var x2 = down ? w - m : m, y2 = h - m
+            var dx = down ? 1 : -1
+            return "M " + x1 + " " + y1 + " L " + x2 + " " + y2
+              + " M " + x1 + " " + y1 + " L " + (x1 + b * dx) + " " + y1
+              + " M " + x1 + " " + y1 + " L " + x1 + " " + (y1 + b)
+              + " M " + x2 + " " + y2 + " L " + (x2 - b * dx) + " " + y2
+              + " M " + x2 + " " + y2 + " L " + x2 + " " + (y2 - b)
+          }
+
+          Shape {
+            anchors.fill: parent
+            visible: handle.index < 4
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+              strokeColor: Color.background
+              strokeWidth: Math.max(2, Math.min(handle.width, handle.height) * 0.09)
+              fillColor: "transparent"
+              capStyle: ShapePath.RoundCap
+              joinStyle: ShapePath.RoundJoin
+              PathSvg { path: handle.arrowPath() }
+            }
+          }
 
           // DragHandler, not PointHandler: the handle moves as the window
           // resizes, and a PointHandler stops the moment its own item is no

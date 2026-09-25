@@ -968,6 +968,14 @@ Item {
     // And a tap on the bar is someone using the mode, so it is not idle.
     // Without this the ninety second timeout ran while you were working.
     if (root.arrangeOpen) {
+      // Read twice for the two that change a window's fullscreen state.
+      // What the bar shows there is fullscreenClient, which is Hyprland's
+      // record of what it last told the window rather than anything the
+      // window has confirmed, and the application repaints on its own
+      // schedule. One read 260ms later can land between the two and latch a
+      // value that is already wrong. A second read a beat behind costs one
+      // hyprctl call and catches it.
+      if (name === "tiled" || name === "wide") arrangeSettle.again = 1
       arrangeSettle.restart()
       arrangeIdle.restart()
     }
@@ -1061,6 +1069,13 @@ Item {
 
   property bool arrangeOpen: false
   property var arrangeWindows: []
+  // The window the shape buttons act on, so the bar can say what is already
+  // true rather than offering a toggle with no state on it.
+  readonly property var arrangeFocused: {
+    for (var i = 0; i < root.arrangeWindows.length; i++)
+      if (root.arrangeWindows[i].focused) return root.arrangeWindows[i]
+    return null
+  }
 
   function openArrange() {
     // The keyboard's strip is reserved, so hiding it first lets the windows
@@ -1295,6 +1310,12 @@ Item {
             out.push({ address: c.address, x: c.at[0] - ox, y: c.at[1] - oy,
                        w: c.size[0], h: c.size[1],
                        name: c.title || c["class"] || "", floating: !!c.floating,
+                       // What the bar's shape buttons light from. `fullscreen`
+                       // is the internal state, which maximized sets, and
+                       // `fullscreenClient` is the one Omarchy's tiled toggle
+                       // reads and writes, where 2 means it is on.
+                       full: Number(c.fullscreen) || 0,
+                       fullClient: Number(c.fullscreenClient) || 0,
                        focused: c.focusHistoryID === 0 })
           })
         } catch (e) {
