@@ -111,10 +111,34 @@ hyprctl eval 'hl.config({ input = { kb_layout = "de" } })'
 ```
 
 `hyprctl eval` returns `ok` whatever the Lua did, and swallows anything the
-Lua prints, so it cannot be used to read values back.
+Lua prints. **`hyprctl repl` does not**, and returns what the Lua returns:
+
+```
+hyprctl repl 'return 1+1'          -> 2
+hyprctl eval  'return 1+1'         -> ok
+```
+
+Worth knowing, because "you cannot read a value back out of Lua" is true of
+one of them and false of the tool sitting next to it, and believing it of
+both leads to working around a problem that is not there.
 
 Reading state is `hyprctl -j clients`, `-j monitors`, `-j activewindow`,
-`getoption`.
+`getoption`. The Lua API has its own getters that Ragtop does not use,
+including `get_windows`, `get_workspace_windows`, `get_monitors`,
+`get_layers` and `is_key_down`. The JSON is well understood and works, so
+there is no reason to move, but the second route exists.
+
+**What is not available at all: the layout tree.** Dwindle is a binary tree
+and an edge between two tiles belongs to a branch rather than to either
+window, which is why resizing a boundary between two groups moves the whole
+group. Showing that to a user would need to know the tree, and nothing
+exposes it. `hyprctl` has no tree command, `clients` carries no parent,
+sibling or node field, and the Lua `HL.Window` object answers `nil` to
+`parent`, `sibling`, `node` and `children` while `w.layout` is only
+`{name = "dwindle"}`. It could be inferred from geometry, and it is
+deliberately not: an inference that is usually right reads as a bug on the
+case where it is wrong, and that case is exactly when someone is already
+confused. It needs a change in Hyprland or it stays undone.
 
 Every address that reaches a dispatch is checked against
 `/^0x[0-9a-f]+$/` first, and every workspace id is parsed as an integer and
