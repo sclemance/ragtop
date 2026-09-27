@@ -24,6 +24,11 @@ Item {
   // A second character printed small in a corner, the way a keycap prints
   // what AltGr types on it. Empty on a key that has nothing there.
   property string hint: ""
+  // The same on the top left, for the character the symbol pages put in
+  // this key's place. Two legends because they are two different things
+  // behind the key, and a keycap that carries several prints them apart
+  // rather than running them together.
+  property string hintLeft: ""
   // Draw the fill at full strength whatever Key Transparency says. The
   // setting is there to let the desktop show through the keyboard; behind a
   // key in a long-press popup is the popup's own panel, so being see-through
@@ -65,15 +70,19 @@ Item {
   readonly property bool boxy: theme.cornersAllRound
   readonly property real chamfer: Math.min(theme.keyChamfer, width / 3, height / 3)
 
-  // How far the corner eats into the face where the hint sits, which is the
-  // top right one. A pill's radius is half the key, so its corner is nowhere
-  // near the corner of the box and a hint placed by the box alone ends up on
-  // the curve. Roughly the horizontal reach of the arc where the hint's own
-  // line crosses it.
-  readonly property real cornerInset: corners[1] === "cut"
-    ? chamfer * 0.5
-    : corners[1] === "square" ? 0
-    : (shape === "pill" ? faceHeight / 2 : theme.keyRadius) * 0.3
+  // How far a corner eats into the face where a hint sits. A pill's radius
+  // is half the key, so its corner is nowhere near the corner of the box
+  // and a hint placed by the box alone ends up on the curve. Roughly the
+  // horizontal reach of the arc where the hint's own line crosses it.
+  function insetOf(corner) {
+    return corner === "cut" ? chamfer * 0.5
+      : corner === "square" ? 0
+      : (shape === "pill" ? faceHeight / 2 : theme.keyRadius) * 0.3
+  }
+  // Clockwise from the top left, so 0 is the left hint's corner and 1 the
+  // right one's.
+  readonly property real cornerInset: insetOf(corners[1])
+  readonly property real cornerInsetLeft: insetOf(corners[0])
 
   // The key's outline with each corner drawn the way its style asks. The
   // same path serves the face and the side, so a raised key keeps whatever
@@ -207,6 +216,20 @@ Item {
     color: key.labelColor
     // Quieter than the label it sits beside: it says what the key can also
     // do, and should not compete with what it does now.
+    opacity: 0.5
+    font.family: key.theme.fontFamily
+    font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
+  }
+
+  Text {
+    // Outside strings reach this one too: see the note above.
+    textFormat: Text.PlainText
+    visible: key.hintLeft !== ""
+    x: Math.round(key.theme.gap / 2 + key.cornerInsetLeft)
+    y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInsetLeft / 2)
+    horizontalAlignment: Text.AlignLeft
+    text: key.hintLeft
+    color: key.labelColor
     opacity: 0.5
     font.family: key.theme.fontFamily
     font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))

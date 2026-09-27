@@ -235,20 +235,74 @@ Item {
     return map
   }
 
-  // What a hold on this key offers: the key itself first, then its
-  // variants, in the case the keyboard is currently typing.
+  // A key that types itself, as against Esc, Shift or the page keys, which
+  // are the ones the labels table names.
+  function isCharacter(key) { return !(key in root.labels) }
+
+  // What each letter key carries from another page: the character that page
+  // draws in the same place. Matched by where the keys sit and not by how
+  // far along the row they are, because the rows are different lengths and
+  // each is centred on its own, so only the geometry lines them up. The
+  // letters' second row is nine keys against ten symbols, and the third is
+  // seven against five between a wide key at either end.
+  //
+  // What falls out of that is worth knowing: the top row pairs off exactly,
+  // so the digits sit where they look like they sit, and on the third row
+  // the punctuation lands under the letters it sits beneath, which is how
+  // a comma comes to be a hold on C. The ends can pair with nothing, and
+  // a key with nothing there simply has nothing there.
+  function overlayOf(page) {
+    var mine = root.slotsOf("letters")
+    var theirs = root.slotsOf(page)
+    var map = {}
+    mine.forEach(function(a) {
+      // Row 0 is the desktop keys and the last is the space bar's, and both
+      // pages already share them.
+      if (a.row < 1 || a.row > 3 || !root.isCharacter(a.key)) return
+      var best = "", most = 0
+      theirs.forEach(function(b) {
+        if (b.row !== a.row || !root.isCharacter(b.key)) return
+        var over = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+        if (over > most) { most = over; best = b.key }
+      })
+      if (best !== "") map[a.key] = best
+    })
+    return map
+  }
+  readonly property var symbolOf: root.overlayOf("symbols")
+  readonly property var moreOf: root.overlayOf("more")
+
+  // The accented letters behind a key, in the case the keyboard is typing.
+  // The key itself is not among them: nobody holds O to type an O, and
+  // leaving it out is what lets the card be shoved sideways to fit without
+  // the finger ever resting on a cell it did not aim for.
   function variantsFor(key) {
     var list = root.variantsOf[key]
     if (!list || list.length === 0) return []
-    return [key].concat(list).slice(0, 9).map(function(c) { return root.upper ? c.toUpperCase() : c })
+    return list.map(function(c) { return root.upper ? c.toUpperCase() : c })
   }
 
-  // What a hold on a key offers: the characters behind a letter, or the
-  // layouts behind the space bar. Fewer than two and there is nothing to
-  // show, so the key types on the way down as usual.
+  // What a hold on a key offers: everything behind it, in one card, in the
+  // order the two legends on the cap promise. The symbols first, on the
+  // left, then what AltGr reaches, then the accents, which are the ones
+  // that give way when a key has more than the card can hold.
   function holdItems(key) {
     if (key === "space") return root.layoutList.length > 1 ? root.layoutList : []
-    return root.variantsFor(key)
+    if (!root.isCharacter(key)) return []
+    var out = []
+    function add(c) { if (c && out.indexOf(c) === -1) out.push(c) }
+    add(root.symbolOf[key])
+    add(root.moreOf[key])
+    // AltGr's characters are here one key at a time, and on the AltGr key a
+    // whole layer at a time. Not while that key is on, since the cap is
+    // already showing them and a plain tap already types them: offering
+    // them again would be offering a choice that is not one.
+    if (!root.altgrOn) {
+      add(root.level3Of[key])
+      add(root.level4Of[key])
+    }
+    root.variantsFor(key).forEach(add)
+    return out.slice(0, 9)
   }
 
 
@@ -320,8 +374,11 @@ Item {
     return widths
   }
 
-  readonly property var slots: {
-    var rows = [root.topRow].concat(root.pages[root.page])
+  // Where every key of a page sits. Taken by name rather than read off the
+  // current page, so the letters page can ask where the symbol pages put
+  // their characters without being on one (see overlayOf).
+  function slotsOf(page) {
+    var rows = [root.topRow].concat(root.pages[page])
     var gap = root.theme.gap
     var out = []
     var y = root.topPadding
@@ -346,13 +403,14 @@ Item {
       var h = i === 0 ? root.topRowHeight : root.keyHeight
       var x = (root.width - widths.reduce(function(a, b) { return a + b }, 0)) / 2
       row.forEach(function(k, j) {
-        out.push({ key: k, x: x + gap / 2, y: y, width: widths[j] - gap, height: h })
+        out.push({ key: k, row: i, x: x + gap / 2, y: y, width: widths[j] - gap, height: h })
         x += widths[j]
       })
       y += h + gap
     })
     return out
   }
+  readonly property var slots: root.slotsOf(root.page)
   readonly property real slotsBottom: slots.length > 0
     ? slots[slots.length - 1].y + slots[slots.length - 1].height : 0
 
@@ -572,6 +630,40 @@ Item {
     root.pendingKey = ""
   }
 
+  // Everything a finger was in the middle of, dropped. The card keeps its
+  // geometry as plain numbers rather than bindings, so a screen that
+  // reshapes under it leaves it pointing at places that have moved: the
+  // cell under a finger that never moved would not be the one it went to.
+  // Re-aiming it would type a character nobody chose, which is worse than
+  // typing nothing, so a rotation cancels outright and the tap is made
+  // again. The pending hold goes with it, since the key it belongs to is
+  // somewhere else now too.
+  function cancelTouches() {
+    if (root.popup === null && root.pendingPoint === -1) return
+    root.popup = null
+    holdTimer.stop()
+    root.pendingPoint = -1
+    root.pendingKey = ""
+    var was = root.held
+    root.held = ({})
+    // A key sent down has to be sent up whatever else happens, or it
+    // repeats for as long as the shell is running.
+    for (var id in was)
+      if (root.holdable.indexOf(was[id]) !== -1)
+        root.service.sendKeys("up " + root.keysyms[was[id]])
+  }
+  onWidthChanged: root.cancelTouches()
+  onHeightChanged: root.cancelTouches()
+
+  // A hold that never became a card, settled as the tap it turned out to
+  // be. The space bar typed on the way down and has nothing left to say.
+  function commitPending() {
+    if (root.pendingPoint === -1) return
+    var key = root.pendingKey
+    root.endHold()
+    if (key !== "space") root.press(key)
+  }
+
   // Whether this finger has gone far enough from where it came down to have
   // meant it. One measure for both the hold that has not opened yet and the
   // card that has, so a finger cannot count as still for one and moving for
@@ -588,7 +680,7 @@ Item {
   function openPopup() {
     var key = root.pendingKey
     var items = root.holdItems(key)
-    if (items.length < 2 || root.pendingPoint === -1) return
+    if (items.length < 1 || root.pendingPoint === -1) return
     var layouts = key === "space"
     var slot = null
     for (var i = 0; i < root.slots.length; i++) if (root.slots[i].key === key) { slot = root.slots[i]; break }
@@ -682,6 +774,10 @@ Item {
       height: modelData.height
       label: root.label(modelData.key)
       hint: root.altgrOn ? "" : (root.level3Of[modelData.key] || "")
+      // Only on the letters page, where the symbol pages are somewhere
+      // else. On the symbol pages themselves the character is already the
+      // label, and saying so twice would be noise.
+      hintLeft: root.page === "letters" ? (root.symbolOf[modelData.key] || "") : ""
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconFor(modelData.key)
@@ -756,21 +852,26 @@ Item {
       var next = Object.assign({}, root.held)
       var pressed = []
       points.forEach(function(p) {
-        // While a popup is open the other fingers wait their turn. A pending
-        // space hold is not one to wait for, since space has already typed.
-        if (root.popup !== null
-            || (root.pendingPoint !== -1 && root.pendingKey !== "space")) return
+        // While a card is open the other fingers wait their turn.
+        if (root.popup !== null) return
         var key = root.keyAt(p.x, p.y)
         if (key === null) return
+        // Another finger arriving settles whatever hold is still waiting:
+        // it was a tap, and it types now, in the order it was pressed.
+        // Rolling from one letter into the next is most of typing, and
+        // without this the second of them would be dropped.
+        root.commitPending()
         next[p.pointId] = key
-        // A key with variants types on release instead, so a hold can turn
-        // into a popup rather than a letter that's already been typed. The
-        // space bar is not one of those. It types on the way down as it
-        // always has, and its hold runs alongside, because a thumb resting
-        // on space must not swallow the letter rolling in after it.
-        if (root.holdItems(key).length > 1) root.startHold(p, key)
+        // Every key that types a character now types on release, so that a
+        // hold has room to become a card first. Whether this one has
+        // anything behind it or not, they all answer at the same moment:
+        // keys that reply on the way down beside keys that reply on the way
+        // up is worse than either on its own. The space bar is the
+        // exception, and types on the way down as it always has, because a
+        // thumb resting on it must not swallow the letter rolling in after.
+        if (key === "space" || root.isCharacter(key)) root.startHold(p, key)
         if (root.liftKeys.indexOf(key) === -1
-            && (key === "space" || root.holdItems(key).length <= 1)) pressed.push(key)
+            && (key === "space" || !root.isCharacter(key))) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
