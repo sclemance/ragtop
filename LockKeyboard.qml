@@ -46,21 +46,27 @@ Item {
   // could pass for a control or run away with the layout.
   property var layoutSymbols: []
 
+  // One printable character and nothing else: not two, not whitespace,
+  // nothing that could pass for a control. Everything this keyboard takes
+  // from the layout file goes through this before it can be typed.
+  function cleanChar(c) {
+    return typeof c === "string" && Array.from(c).length === 1 && c.trim() === c
+      && c.charCodeAt(0) >= 0x20 && c.charCodeAt(0) !== 0x7f ? c : ""
+  }
+
   function cleanSymbols(raw) {
     if (!Array.isArray(raw)) return []
-    return raw.filter(function(c) {
-      return typeof c === "string" && Array.from(c).length === 1 && c.trim() === c
-        && c.charCodeAt(0) >= 0x20 && c.charCodeAt(0) !== 0x7f
-    }).slice(0, 24)
+    return raw.filter(function(c) { return root.cleanChar(c) !== "" }).slice(0, 24)
   }
 
   function validLayout(layout) {
     if (!layout || !Array.isArray(layout.rows) || layout.rows.length !== 3) return false
     return layout.rows.every(function(row) {
       return Array.isArray(row) && row.length > 0 && row.length <= 13 && row.every(function(k) {
-        // Four now, of which this keyboard reads the first two: it has no
-        // AltGr key, and a password's deeper levels are not worth the
-        // surface on a lock screen.
+        // Four, of which the first two have to be there. The deeper two are
+        // optional and checked one at a time where they are read (level3Of),
+        // so a layout with something odd on a third level still types its
+        // letters rather than falling back to US and losing them.
         return Array.isArray(k) && k.length >= 2 && k.slice(0, 2).every(function(c) {
           return typeof c === "string" && c.length >= 1 && c.length <= 2 && c.trim() === c
         })
@@ -96,6 +102,25 @@ Item {
     layoutRows.forEach(function(row) { row.forEach(function(k) { map[k[0]] = k[1] }) })
     return map
   }
+
+  // What AltGr, and AltGr with Shift, type on each letter key. This
+  // keyboard has no AltGr key and is not getting one, so a hold is the only
+  // way to reach them, and it has to reach them: a password was set on a
+  // physical keyboard, and on a Polish one ą ć ę ł ń ó ś ź ż are all AltGr
+  // and none of them is on any page here. Each character is checked on its
+  // own, since these arrive from the same file as everything else.
+  function levelOf(index) {
+    var map = {}
+    layoutRows.forEach(function(row) {
+      row.forEach(function(k) {
+        var c = root.cleanChar(k[index])
+        if (c !== "" && c !== k[0] && c !== k[1]) map[k[0]] = c
+      })
+    })
+    return map
+  }
+  readonly property var level3Of: root.levelOf(2)
+  readonly property var level4Of: root.levelOf(3)
   function letters(row) { return row.map(function(k) { return k[0] }) }
 
   // Rows of keys; a key is its text, or one of the named keys below. Widths
@@ -169,9 +194,17 @@ Item {
   }
 
   function variantsFor(key) {
-    var list = root.variantsOf[key]
-    if (!list || list.length === 0) return []
-    return [key].concat(list).slice(0, 9).map(function(c) { return root.upper ? c.toUpperCase() : c })
+    var out = []
+    function add(c) { if (c !== "" && c !== undefined && out.indexOf(c) === -1) out.push(c) }
+    add(root.upper ? key.toUpperCase() : key)
+    // The two deeper levels are already a pair, the second being the first
+    // with Shift, so they go on as they are rather than through the case
+    // the keyboard happens to be typing in.
+    add(root.level3Of[key])
+    add(root.level4Of[key])
+    var list = root.variantsOf[key] || []
+    list.forEach(function(c) { add(root.upper ? c.toUpperCase() : c) })
+    return out.length > 1 ? out.slice(0, 9) : []
   }
 
   // The open popup: { key, items, index, x, y, cellWidth, cellHeight }, or
@@ -717,6 +750,33 @@ Item {
               color: key.labelColor
               font.family: Style.font.family
               font.pixelSize: key.labelPixelSize
+            }
+
+            // What AltGr types on this key, printed small in the corner the
+            // way a keycap prints it. A hold is the only way to it here, and
+            // nobody holds a key to look for something they have not been
+            // told is there, which on a lock screen means not getting in.
+            Text {
+              // Never rich text, for the reason given above.
+              textFormat: Text.PlainText
+              readonly property string hint: root.page === "letters"
+                ? (root.level3Of[key.modelData] || "") : ""
+              // How far the corner eats into the face, so the mark clears a
+              // rounded or cut one instead of sitting on the curve.
+              readonly property real inset: key.corners[1] === "cut" ? key.chamfer * 0.5
+                : key.corners[1] === "square" ? 0
+                : (key.shape === "pill" ? key.faceHeight / 2 : root.keyRadius) * 0.3
+              visible: hint !== ""
+              y: key.faceY + Math.round(root.gap / 2 + inset / 2)
+              width: key.width - Math.round(root.gap / 2 + inset)
+              horizontalAlignment: Text.AlignRight
+              text: hint
+              color: key.labelColor
+              // Quieter than the label beside it: it says what the key can
+              // also do, not what it does now.
+              opacity: 0.5
+              font.family: Style.font.family
+              font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
             }
 
             LockKeyIcon {
