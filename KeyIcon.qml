@@ -238,6 +238,27 @@ Item {
     }
   }
 
+  // Shift fills in while it is locked on. The fill is its own shape, shown
+  // and hidden, rather than one path whose fillColor is coloured in and
+  // emptied again: emptying it left the old fill painted, so an unlocked
+  // Shift kept a solid dark arrow while every other colour on the key had
+  // already changed. Hiding a shape takes its node out and cannot be
+  // missed. Drawn under the outline, which is the same path, so the two
+  // can never disagree about where the arrow is.
+  Shape {
+    anchors.fill: parent
+    visible: icon.filled && icon.name === "shift" && icon.strokedPath !== ""
+    rotation: icon.isArrow ? icon.arrowTurn[icon.name] : 0
+    preferredRendererType: Shape.CurveRenderer
+
+    ShapePath {
+      fillColor: icon.color
+      strokeWidth: 0
+      strokeColor: "transparent"
+      PathSvg { path: icon.strokedPath }
+    }
+  }
+
   Shape {
     anchors.fill: parent
     visible: icon.strokedPath !== ""
@@ -245,8 +266,10 @@ Item {
     preferredRendererType: Shape.CurveRenderer
 
     ShapePath {
-      // Shift fills in when it's locked on; the open shapes stay outlines.
-      fillColor: icon.filled && icon.name === "shift" ? icon.color : "transparent"
+      // Never filled, and empty in the icon's own colour rather than in
+      // "transparent", which is transparent BLACK and antialiases the
+      // inside edge of every outline towards it.
+      fillColor: Qt.rgba(icon.color.r, icon.color.g, icon.color.b, 0)
       strokeColor: icon.color
       strokeWidth: icon.stroke
       capStyle: ShapePath.RoundCap

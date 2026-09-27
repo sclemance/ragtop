@@ -58,14 +58,34 @@ Item {
     : name === "enter" ? enterPath()
     : ""
 
+  // Shift fills in while Caps is locked. Its own shape, shown and hidden
+  // rather than one path coloured in and emptied again: emptying it left
+  // the old fill painted, so an unlocked Shift kept a solid dark arrow
+  // after every other colour on the key had changed. Hiding a shape takes
+  // its node out and cannot be missed.
+  Shape {
+    anchors.fill: parent
+    visible: icon.filled && icon.name === "shift" && icon.strokedPath !== ""
+    preferredRendererType: Shape.CurveRenderer
+
+    ShapePath {
+      fillColor: icon.color
+      strokeWidth: 0
+      strokeColor: "transparent"
+      PathSvg { path: icon.strokedPath }
+    }
+  }
+
   Shape {
     anchors.fill: parent
     visible: icon.strokedPath !== ""
     preferredRendererType: Shape.CurveRenderer
 
     ShapePath {
-      // Shift fills in when Caps is locked; the open shapes stay outlines.
-      fillColor: icon.filled && icon.name === "shift" ? icon.color : "transparent"
+      // Never filled, and empty in the icon's own colour rather than in
+      // "transparent", which is transparent BLACK and antialiases the
+      // inside edge of every outline towards it.
+      fillColor: Qt.rgba(icon.color.r, icon.color.g, icon.color.b, 0)
       strokeColor: icon.color
       strokeWidth: icon.stroke
       capStyle: ShapePath.RoundCap
