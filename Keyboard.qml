@@ -544,6 +544,12 @@ Item {
   // replacing it. Only one at a time, as on a phone.
   property var popup: null
 
+  // Whether the finger has gone anywhere since the popup opened. A hold
+  // that never moved was a slow tap and still types the key it came down
+  // on. One that went to the card and came away from it again meant to
+  // change its mind, and types nothing.
+  property bool popupTravelled: false
+
   // As high as a popup can sit: where the card it is drawn on begins at the
   // same place the keys do. The card reaches theme.gap past the popup on
   // every side, so a popup at the very top of the keyboard puts the card's
@@ -566,9 +572,19 @@ Item {
     root.pendingKey = ""
   }
 
-  // The popup sits above its key, its first cell over the key so the finger
-  // starts on the letter it's already holding, and it slides along the row
-  // to stay on the keyboard. Where it can't fit at all it's centred.
+  // Whether this finger has gone far enough from where it came down to have
+  // meant it. One measure for both the hold that has not opened yet and the
+  // card that has, so a finger cannot count as still for one and moving for
+  // the other.
+  function travelled(point) {
+    return Math.abs(point.x - root.pendingX) + Math.abs(point.y - root.pendingY) > root.unit * 0.4
+  }
+
+  // The popup sits above its key and slides along the row to stay on the
+  // keyboard. Where it can't fit at all it's centred. Nothing is chosen
+  // when it opens, whatever it had to slide past to fit: a card pushed
+  // away from its key leaves the finger over a cell it never aimed at,
+  // and choosing that one silently would type it on the way out.
   function openPopup() {
     var key = root.pendingKey
     var items = root.holdItems(key)
@@ -582,16 +598,16 @@ Item {
       : Math.max(slot.width + root.theme.gap, root.unit * 0.92)
     var total = items.length * cell
     // Characters start their first cell over the key being held, so the
-    // finger is already on the one it holds. Layout names are a list rather
-    // than a row of keys, so they sit centred on the space bar.
+    // finger has the shortest reach to the one nearest it. Layout names are
+    // a list rather than a row of keys, so they sit centred on the space bar.
     var from = layouts ? slot.x + (slot.width - total) / 2 : slot.x
     var x = total > room ? (root.width - total) / 2
       : Math.min(Math.max(from, root.theme.padding), root.width - root.theme.padding - total)
+    root.popupTravelled = false
     root.popup = { key: key, kind: layouts ? "layouts" : "chars",
-                   items: items, pointId: root.pendingPoint, index: 0,
+                   items: items, pointId: root.pendingPoint, index: -1,
                    x: x, y: Math.max(root.popupTop, slot.y - slot.height - root.theme.gap),
                    cellWidth: cell, cellHeight: slot.height }
-    root.selectAt(root.pendingX, root.pendingY)
   }
 
   // Which cell the finger is on. Sliding well below the popup takes
@@ -600,15 +616,15 @@ Item {
     var p = root.popup
     if (!p) return
     var index = -1
-    // Characters reach a cell from the key below, since the popup's first
-    // cell sits over the key being held and the finger is already on it.
-    // Layouts are centred on the space bar instead and none of them is the
-    // one you are on, so nothing is chosen until the finger is actually on
-    // the card. Otherwise holding space and lifting would change the
-    // system's layout without the finger ever moving.
+    // Nothing is chosen until the finger is on the card, for either kind.
+    // Resting on the key it came down on is not a choice: that is the slow
+    // tap choosePopup types the plain key for. Characters get a little
+    // grace above, where a finger reaching up can overshoot, and down to
+    // the gap between the card and the key, so there is no dead band at
+    // the edge the finger arrives through.
     var within = p.kind === "layouts"
       ? (y >= p.y && y <= p.y + p.cellHeight)
-      : y < p.y + p.cellHeight + root.keyHeight
+      : (y >= p.y - p.cellHeight / 2 && y <= p.y + p.cellHeight + root.theme.gap)
     if (within) {
       index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
     }
@@ -620,9 +636,18 @@ Item {
 
   function choosePopup() {
     var p = root.popup
+    var key = root.pendingKey
+    var travelled = root.popupTravelled
     root.popup = null
     root.endHold()
-    if (!p || p.index < 0) return
+    if (!p) return
+    if (p.index < 0) {
+      // A finger that never went anywhere was a slow tap on the key, and
+      // types it. The space bar has already typed by the time its hold
+      // opens anything, so it is the one key this must not type again.
+      if (!travelled && key !== "space") root.press(key)
+      return
+    }
     if (p.kind === "layouts") {
       if (p.index !== root.activeLayout) root.service.switchLayout(p.index)
       return
@@ -757,14 +782,14 @@ Item {
 
   function moved(point) {
     if (root.popup !== null && point.pointId === root.popup.pointId) {
+      if (root.travelled(point)) root.popupTravelled = true
       root.selectAt(point.x, point.y)
       return
     }
     // A finger that wanders off the key it came down on was never holding
     // it: the key still types when it lifts, as it always has.
     if (point.pointId !== root.pendingPoint) return
-    if (Math.abs(point.x - root.pendingX) + Math.abs(point.y - root.pendingY) > root.unit * 0.4)
-      holdTimer.stop()
+    if (root.travelled(point)) holdTimer.stop()
   }
 
   function lift(points) {
