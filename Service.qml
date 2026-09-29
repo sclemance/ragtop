@@ -121,7 +121,17 @@ Item {
   // height and still gives way on width, because a board too wide for the
   // screen cannot be drawn at all. Keyboard.qml does the choosing, since the
   // shapes and what they cost are its to know.
-  readonly property var keyboardLayouts: ["auto", "60", "phone"]
+  // One list, so the controls panel and anything else offering a choice
+  // cannot drift apart from what the setting accepts. Automatic at the head,
+  // then the boards from the simplest to the fullest, which is the order
+  // somebody reads them in rather than the order the fallback walks them.
+  readonly property var keyboardLayoutOptions: [
+    { value: "auto", label: "Auto" },
+    { value: "phone", label: "Phone" },
+    { value: "60", label: "60%" }
+  ]
+  readonly property var keyboardLayouts:
+    root.keyboardLayoutOptions.map(function(o) { return o.value })
   readonly property string keyboardLayout:
     root.keyboardLayouts.indexOf(root.settings["keyboard-layout"]) !== -1
       ? root.settings["keyboard-layout"] : "auto"
@@ -540,6 +550,8 @@ Item {
   // on by the bar widget; the keyboard handle and, by default, the keyboard's
   // background follow it.
   property bool barTransparent: false
+  // Set by the bar widget, which is the only thing that can ask the bar.
+  property int barSize: Style.bar.sizeHorizontal
   // Both files below are watched — settings.conf by this service, and the
   // mode file by every patched overlay clone. A watcher on a path that does
   // not exist yet never learns that it appeared: on a machine where Ragtop
@@ -1966,7 +1978,18 @@ Item {
     implicitWidth: Math.min(toolsPanel.implicitWidth,
                             (toolsWindow.screen ? toolsWindow.screen.width : 768)
                               - 2 * Style.gapsOut)
-    implicitHeight: toolsPanel.implicitHeight
+    // As tall as its contents, but never past halfway down the screen, and
+    // the panel scrolls what does not fit. Halfway is exactly where Automatic
+    // stops the keyboard growing, so the two cannot meet.
+    //
+    // It deliberately does NOT measure the space above the keyboard, which
+    // would be the obvious way to do it. The keyboard's height changes on
+    // every step of the size slider, so a panel sized from it would resize
+    // under the finger doing the dragging, which is the bug this window was
+    // moved to the top of the screen to escape in the first place.
+    readonly property real room: (toolsWindow.screen ? toolsWindow.screen.height : 768) / 2
+      - root.barSize - toolsWindow.margins.top - Style.gapsOut
+    implicitHeight: Math.min(toolsPanel.implicitHeight, Math.max(120, toolsWindow.room))
     margins.top: 22
     color: "transparent"
 

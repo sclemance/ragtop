@@ -351,14 +351,30 @@ and a plain Alt where it has not, which is what that key is on a US board. It
 is the same call the phone board makes by leaving its AltGr key out
 altogether: a key that reaches nothing is worse than no key.
 
-**The Menu key** is the context menu key, which is the keyboard's right
-click. On a screen with no mouse that is the only way to ask for one.
+**There is one Super, and an Fn key where the second one would be**, which
+is what a 60% does with that key and the reason it can reach anything at all.
+A second Super exists so a touch typist can hit one without leaving home
+position, and nobody touch types on this. Holding the Super opens Ragtop's
+controls, as it does on the phone board.
 
-**Both Super keys carry something behind a hold**, and not the same thing,
-because a board with two of them does not need two gears. The left one opens
-Ragtop's controls. The right one opens tiling mode, which the phone board
-reaches from a key of its own on its extra row and this one would otherwise
-only reach from the bar. Each says which in its own corner.
+**Fn is a layer, and it latches like the other modifiers**: tap it for the
+next key, tap it again to lock it on. Holding a physical Fn is easy and
+holding one corner of a screen while tapping another is not. While it is on,
+the caps change to say what they do, so there is nothing to memorise:
+
+```
+        F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12  Del
+                          PgUp  Up   PgDn
+                    Home  Left  Down Right  End
+                                        tiling -> Menu
+```
+
+The arrows are an inverted T rather than a row of four, because a finger aims
+by shape even when the key says what it is.
+
+**Tiling mode is a tap and the context menu is behind Fn.** A screen has no
+right click, so Menu is worth having at all, but arranging windows by touch
+is something you do constantly and Menu does nothing whatever in a terminal.
 
 ### What every board has
 
@@ -420,8 +436,9 @@ omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 ### The controls
 
 Holding Super opens a small panel that sits below Omarchy's bar and holds
-what you reach for while actually holding the machine. On a board with two
-Super keys it is the left one, and the right one opens tiling mode. The keyboard stays
+what you reach for while actually holding the machine. It is never taller
+than half the screen, which is where Automatic stops the keyboard growing, so
+the two cannot meet; anything that does not fit scrolls. The keyboard stays
 drawn underneath, so changing the theme or the key size shows you the result
 as you do it. Tap anywhere on the keyboard to put it away.
 
@@ -442,6 +459,7 @@ wins.
 | Control | What it does |
 | --- | --- |
 | Theme | Steps through your themes, redrawing the keyboard behind each one |
+| Keyboard Layout | Automatic, Phone or 60%, the same choice as Setup › Tablet › Layout |
 | Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode |
 | Keyboard Size | The five-step nudge against whatever size the theme asks for |
 | Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |

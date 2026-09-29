@@ -16,7 +16,8 @@ Item {
   property string page: "letters"
 
   // Modifiers: "off", "latched" (applies to the next key) or "locked".
-  property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off", "altgr": "off" })
+  property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off",
+                       "altgr": "off", "fn": "off" })
   readonly property bool upper: root.mods.shift !== "off"
   readonly property bool altgrOn: root.mods.altgr !== "off"
 
@@ -94,7 +95,38 @@ Item {
   // same thing whichever side of the space bar it is on. Everything that
   // acts on a key asks for its role first, so one Shift and the other are
   // one Shift as far as the modifier state is concerned.
+  // What each key becomes while Fn is on. Keyed by position, so it holds for
+  // any board that draws an Fn key. Nothing moves: the slots are the drawn
+  // keys and only their meaning changes, so no key slides out from under a
+  // finger when the layer comes on.
+  readonly property var fnMap: {
+    // Tiling mode is the tap and the context menu is behind Fn, not the other
+    // way round. A tablet has no right click, so Menu is worth having at all,
+    // but arranging windows by touch is something you do constantly and Menu
+    // does nothing whatever in a terminal.
+    var map = ({ "BKSP": "delete", "windows": "menu" })
+    // The number row carries the function keys, as it does on every board
+    // with no row of its own for them.
+    for (var i = 1; i <= 12; i++) map["AE" + (i < 10 ? "0" + i : "" + i)] = "f" + i
+    // An inverted T for the arrows, with the page and line keys either side
+    // of it. The caps say what they do while the layer is on, so none of it
+    // has to be remembered, but a finger still aims by shape and a row of
+    // four arrows in a line is not a shape you can aim at.
+    //
+    //        U    I    O          PgUp  Up    PgDn
+    //   H    J    K    L    ;     Home  Left  Down  Right  End
+    map["AD07"] = "pgup";  map["AD08"] = "up";    map["AD09"] = "pgdn"
+    map["AC06"] = "home";  map["AC07"] = "left";  map["AC08"] = "down"
+    map["AC09"] = "right"; map["AC10"] = "end"
+    return map
+  }
+  readonly property bool fnOn: root.mods.fn !== "off"
+  // The key a touch means once the layer has had its say. Everything that
+  // labels, colours, presses or releases a key asks for this first.
+  function effectiveKey(key) { return root.fnOn ? (root.fnMap[key] || key) : key }
+
   readonly property var roles: ({
+    "FN": "fn",
     "LFSH": "shift", "RTSH": "shift", "LCTL": "ctrl", "RCTL": "ctrl",
     "LALT": "alt", "RALT": "altgr", "LWIN": "super", "RWIN": "super",
     "BKSP": "backspace", "RTRN": "enter", "TAB": "tab", "SPCE": "space",
@@ -189,22 +221,41 @@ Item {
     return all.length >= 3 ? all.slice(0, 3).join("").toUpperCase() : "ABC"
   }
 
-  readonly property var labels: ({
+  readonly property var labelsBase: ({
     "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "", "altgr": "AltGr",
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
-    "windows": "", "caps": "Caps", "menu": "Menu"
+    "windows": "", "caps": "Caps", "menu": "Menu",
+    "fn": "Fn", "delete": "Del", "home": "Home", "end": "End",
+    "pgup": "PgUp", "pgdn": "PgDn"
   })
+  // The function keys, built rather than written out twelve times over.
+  readonly property var fnLabels: {
+    var map = ({})
+    for (var i = 1; i <= 12; i++) map["f" + i] = "F" + i
+    return map
+  }
+  readonly property var labels: Object.assign({}, root.labelsBase, root.fnLabels)
   readonly property var widths: ({
     "shift": 1.5, "backspace": 1.5, "symbols": 1.5, "more": 1.5, "letters": 1.5,
     "space": 4.5, "enter": 2
   })
   // Keys sent as key events, by the name xkb gives them.
-  readonly property var keysyms: ({
+  readonly property var keysymsBase: ({
     "esc": "Escape", "tab": "Tab", "left": "Left", "up": "Up", "down": "Down", "right": "Right",
-    "backspace": "BackSpace", "enter": "Return", "space": "space", "menu": "Menu"
+    "backspace": "BackSpace", "enter": "Return", "space": "space", "menu": "Menu",
+    "delete": "Delete", "home": "Home", "end": "End",
+    // X11 has called these Prior and Next since before anyone called them
+    // page keys, and the keymap still does.
+    "pgup": "Prior", "pgdn": "Next"
   })
+  readonly property var fnKeysyms: {
+    var map = ({})
+    for (var i = 1; i <= 12; i++) map["f" + i] = "F" + i
+    return map
+  }
+  readonly property var keysyms: Object.assign({}, root.keysymsBase, root.fnKeysyms)
   // Keys Ragtop draws an icon for (KeyIcon.qml) instead of a label, so they
   // don't depend on the font carrying a glyph and scale with the keys.
   readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace",
@@ -216,7 +267,7 @@ Item {
     "super": "omarchy"
   })
   function iconFor(key) {
-    var role = root.roleOf(key)
+    var role = root.roleOf(root.effectiveKey(key))
     if (role in root.iconNames) return root.iconNames[role]
     return root.iconKeys.indexOf(role) !== -1 ? role : ""
   }
@@ -238,7 +289,8 @@ Item {
   readonly property var liftKeys: ["windows"]
 
   // Keys that repeat while held: pressed and released with the finger.
-  readonly property var holdable: ["backspace", "left", "up", "down", "right"]
+  readonly property var holdable: ["backspace", "left", "up", "down", "right",
+                                   "delete", "pgup", "pgdn"]
 
   // Keys whose hold reaches something that is not a character, drawn small in
   // the key's corner the way a cap prints what AltGr types on it. Super holds
@@ -252,23 +304,16 @@ Item {
   // another finger arriving settles the hold as the tap it was. Hold Super,
   // tap B, and the browser opens with Super latched by commitPending.
   // Keyed by the drawn key where a board has more than one of something, and
-  // by role otherwise. A real board has two Super keys and does not need two
-  // gears, so the right one carries tiling mode instead. On the phone board
-  // there is one Super and the tiling key is a key of its own on the extra
-  // row, so only the role entry applies there.
-  readonly property var holdOpensByKey: ({ "LWIN": "settings", "RWIN": "windows" })
+  // by role otherwise. Tiling mode briefly lived on a hold on the right
+  // Super, which was a use found for a key that had no business existing:
+  // that position is Fn now, and tiling is on the layer where it can be
+  // labelled.
+  readonly property var holdOpensByKey: ({ "LWIN": "settings" })
   readonly property var holdOpensByRole: ({ "super": "settings" })
   function holdOpenFor(key) {
     if (key in root.holdOpensByKey) return root.holdOpensByKey[key]
     return root.holdOpensByRole[root.roleOf(key)] || ""
   }
-
-  // A hold that has come due on a key whose action cannot run while a finger
-  // is still down (liftKeys), kept until that finger lifts. Tiling mode is
-  // the one: it takes the keyboard off the screen, and a touch left with
-  // nowhere to end swallows the next tap anywhere on the machine.
-  property string armedAction: ""
-  property int armedPoint: -1
 
   // Keys that are not a character themselves but offer one behind a hold,
   // named by the position whose characters they carry. A 60% board puts Esc
@@ -448,6 +493,8 @@ Item {
   // that give way when a key has more than the card can hold.
   function holdItems(key) {
     if (root.roleOf(key) === "space") return root.layoutList.length > 1 ? root.layoutList : []
+    // A key the layer has taken over is not the key its accents belong to.
+    if (root.fnOn && (key in root.fnMap)) return []
     if (!root.isCharacter(key) && !(key in root.holdGrid)) return []
     var out = []
     function add(c) { if (c && out.indexOf(c) === -1) out.push(c) }
@@ -670,8 +717,12 @@ Item {
       [key("TAB", 1.5)].concat(have(root.positions("AD", 1, 12)), [key("BKSL", 1.5)]),
       [key("CAPS", 1.75)].concat(have(root.positions("AC", 1, 11)), [key("RTRN", 2.25)]),
       shift.concat([key("RTSH", 2.75)]),
+      // Fn where a full board keeps its right Super, which is what a 60%
+      // does with that key and the reason it can reach anything at all. A
+      // second Super is there so a touch typist can hit one without leaving
+      // home position, and nobody touch types on this.
       [key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-       key("RALT", 1.25), key("RWIN", 1.25), key("MENU", 1.25), key("RCTL", 1.25)]
+       key("RALT", 1.25), key("FN", 1.25), key("windows", 1.25), key("RCTL", 1.25)]
     ]
     // TLDE and BKSL are positions too, and a layout without one leaves a hole
     // at the end of its row rather than in the middle of it.
@@ -781,7 +832,7 @@ Item {
   }
 
   function label(key) {
-    var role = root.roleOf(key)
+    var role = root.roleOf(root.effectiveKey(key))
     if (role === "space") return layoutName
     if (role in labels) return labels[role]
     return root.charFor(key)
@@ -791,7 +842,9 @@ Item {
   // on it. A real board reads it off the position, the phone layout off the
   // letter.
   function hintFor(key) {
-    if (root.altgrOn) return ""
+    // The layer replaces what a key does, so what it would otherwise reach
+    // with AltGr is not what it reaches now.
+    if (root.altgrOn || (root.fnOn && (key in root.fnMap))) return ""
     var lv = root.grid[key]
     return lv ? lv[2] : (root.level3Of[key] || "")
   }
@@ -805,6 +858,7 @@ Item {
   // A key with nothing on its third level types its own character, the way
   // it would with AltGr held on a physical keyboard that has nothing there.
   function charFor(key) {
+    key = root.effectiveKey(key)
     // A real board's key is a position, and what it types is whatever the
     // active layout puts at that position. Shift comes from the keymap and
     // not from upper casing, because the shifted level of a number row is
@@ -828,7 +882,7 @@ Item {
   // character is drawn as a letter, and one that acts on the next key or on
   // the keyboard itself is drawn apart from them.
   function kind(key) {
-    var role = root.roleOf(key)
+    var role = root.roleOf(root.effectiveKey(key))
     // Caps Lock holds the keyboard's own Shift, so it is drawn locked when
     // that is what it has done.
     if (role === "caps") return root.mods.shift === "locked" ? "locked" : "special"
@@ -844,7 +898,7 @@ Item {
     // The space bar goes with them rather than with the letters, though it
     // does type a character: it is part of the frame around the letters, it
     // carries the layout's name instead of a legend, and no one hunts for it.
-    return root.roleOf(key) in labels ? "special" : "normal"
+    return root.roleOf(root.effectiveKey(key)) in labels ? "special" : "normal"
   }
 
   // Modifiers applied to the next key, as the helper names them. AltGr is
@@ -854,7 +908,8 @@ Item {
   function activeMods(includeShift) {
     var names = []
     for (var m in mods)
-      if (m !== "altgr" && mods[m] !== "off" && (includeShift || m !== "shift")) names.push(m)
+      if (m !== "altgr" && m !== "fn" && mods[m] !== "off"
+          && (includeShift || m !== "shift")) names.push(m)
     return names
   }
 
@@ -896,6 +951,7 @@ Item {
   }
 
   function press(key) {
+    key = root.effectiveKey(key)
     var role = root.roleOf(key)
     // Caps Lock holds the keyboard's own Shift rather than sending the
     // keysym. A real Caps Lock sets a state in the compositor that the caps
@@ -910,6 +966,7 @@ Item {
       // Straight into tiling, rather than to a page of keys that say the
       // same things. It waits for the finger to lift because it takes the
       // keyboard off the screen: see liftKeys.
+      root.afterKey()
       root.service.openTiling()
       return
     }
@@ -947,7 +1004,7 @@ Item {
   }
 
   function release(key) {
-    var role = root.roleOf(key)
+    var role = root.roleOf(root.effectiveKey(key))
     if (root.liftKeys.indexOf(role) !== -1) {
       root.press(key)
       return
@@ -1009,8 +1066,6 @@ Item {
   // again. The pending hold goes with it, since the key it belongs to is
   // somewhere else now too.
   function cancelTouches() {
-    root.armedAction = ""
-    root.armedPoint = -1
     if (root.popup === null && root.pendingPoint === -1) return
     root.popup = null
     holdTimer.stop()
@@ -1058,16 +1113,8 @@ Item {
     // open, the finger falls through to release(), which Super ignores.
     var opens = root.holdOpenFor(key)
     if (opens !== "") {
-      var point = root.pendingPoint
       root.endHold()
-      // Something that takes the keyboard away waits for the finger, the
-      // same way the tiling key itself does when it is tapped.
-      if (root.liftKeys.indexOf(opens) !== -1) {
-        root.armedAction = opens
-        root.armedPoint = point
-      } else {
-        root.press(opens)
-      }
+      root.press(opens)
       return
     }
     var items = root.holdItems(key)
@@ -1270,15 +1317,17 @@ Item {
         // up is worse than either on its own. The space bar is the
         // exception, and types on the way down as it always has, because a
         // thumb resting on it must not swallow the letter rolling in after.
-        var role = root.roleOf(key)
+        // What the key means now, which the Fn layer may have changed.
+        var eff = root.effectiveKey(key)
+        var role = root.roleOf(eff)
         // A key with anything behind it waits for the finger to lift, so the
         // hold has room to become a card first. Esc on a 60% board is one of
         // those, though it is no character itself.
         var deep = root.holdOpenFor(key) !== "" || (key in root.holdGrid)
-        if (role === "space" || root.isCharacter(key) || deep)
+        if (role === "space" || root.isCharacter(eff) || deep)
           root.startHold(p, key)
         if (root.liftKeys.indexOf(role) === -1 && !deep
-            && (role === "space" || !root.isCharacter(key))) pressed.push(key)
+            && (role === "space" || !root.isCharacter(eff))) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
@@ -1304,12 +1353,7 @@ Item {
     var next = Object.assign({}, root.held)
     var lifted = []
     points.forEach(function(p) {
-      if (p.pointId === root.armedPoint) {
-        var action = root.armedAction
-        root.armedAction = ""
-        root.armedPoint = -1
-        root.press(action)
-      } else if (root.popup !== null && p.pointId === root.popup.pointId) {
+      if (root.popup !== null && p.pointId === root.popup.pointId) {
         root.choosePopup()
       } else if (p.pointId === root.pendingPoint) {
         var key = root.pendingKey

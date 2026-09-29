@@ -35,6 +35,7 @@ BarWidget {
   onServiceChanged: {
     pushConfig()
     pushBarTransparent()
+    pushBarSize()
     // The keyboard's tools page has a rotation lock key. The lock is kept
     // here, so the keyboard asks and this answers.
   }
@@ -44,6 +45,14 @@ BarWidget {
   onBarTransparentChanged: pushBarTransparent()
   function pushBarTransparent() {
     if (root.service) root.service.barTransparent = root.barTransparent
+  }
+
+  // How thick the bar is, which only a widget can ask. The service needs it
+  // to know how much screen is left above the keyboard for the controls
+  // panel, and has no bar of its own to ask.
+  onBarSizeChanged: pushBarSize()
+  function pushBarSize() {
+    if (root.service && root.barSize > 0) root.service.barSize = root.barSize
   }
   onTabletSwitchDeviceChanged: pushConfig()
 
