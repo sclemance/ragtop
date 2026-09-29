@@ -25,8 +25,9 @@ Item {
   //
   // Measured with the icons in: one row needs about 980px, so the old 900
   // would have overflowed between 900 and 980. Icons made each shape button
-  // wider, not narrower, and the threshold had to follow them.
-  readonly property bool tight: width < Style.space(1020)
+  // wider, not narrower, and the threshold had to follow them. The layout
+  // toggle is a fifth shape button and moved it again.
+  readonly property bool tight: width < Style.space(1140)
 
   // Words dropped in favour of the icon alone, which is a last resort. In
   // portrait the shapes row needs about 450px and gets 768, so there is room
@@ -185,6 +186,21 @@ Item {
       wide: true; icon: "float"; text: "Float"
       lit: bar.focused !== null && bar.focused.floating
       onTapped: bar.service.runWindowAction("float")
+    }
+    // The odd one out on this row, and it says so by lighting for a mode
+    // rather than for the focused window. Everything left of it changes one
+    // window; this changes how every window is arranged, because Hyprland
+    // keeps the layout globally rather than per workspace. It earns its place
+    // here anyway: it is the same question the rest of the row asks, which is
+    // what shape the things on screen take.
+    //
+    // Off while a window floats would be wrong, since the layout still
+    // governs everything that is not floating.
+    Btn {
+      wide: true; icon: "scroll"
+      text: bar.tight ? "Scroll" : "Scrolling"
+      lit: bar.service.scrollingLayout
+      onTapped: bar.service.toggleWorkspaceLayout()
     }
   }
 

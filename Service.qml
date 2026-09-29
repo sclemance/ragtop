@@ -1091,6 +1091,62 @@ Item {
   })
   // One process per tap, so quick repeated taps are not dropped.
   property Component windowActionProc: Component { Process { onExited: destroy() } }
+  // How the workspace arranges its windows, which Hyprland keeps as
+  // general:layout. Read rather than assumed, because Omarchy ships dwindle
+  // and a user may already be on something else.
+  //
+  // This is Hyprland's global layout, not one workspace's. Nothing in
+  // Hyprland lets a workspace carry its own without a rule written ahead of
+  // time, so the button says what it does and does not pretend otherwise.
+  property string workspaceLayout: ""
+  // What to go back to. Coming off scrolling on a machine set up for master
+  // should give master back rather than quietly converting it to dwindle,
+  // which is what a plain two way toggle would have done.
+  property string layoutBefore: ""
+  readonly property bool scrollingLayout: root.workspaceLayout === "scrolling"
+
+  Process {
+    id: layoutReadProc
+    command: ["hyprctl", "getoption", "general:layout", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var v = JSON.parse(text)
+          if (v && typeof v.str === "string") root.workspaceLayout = v.str.trim()
+        } catch (e) {}
+      }
+    }
+  }
+
+  function toggleWorkspaceLayout() {
+    if (layoutSetProc.running) return
+    var next
+    if (root.scrollingLayout) {
+      next = root.layoutBefore !== "" ? root.layoutBefore : "dwindle"
+    } else {
+      root.layoutBefore = root.workspaceLayout
+      next = "scrolling"
+    }
+    layoutSetProc.command = ["hyprctl", "eval",
+      "hl.config({ general = { layout = \"" + next + "\" } })"]
+    layoutSetProc.running = true
+  }
+
+  Process {
+    id: layoutSetProc
+    onExited: {
+      // Read it back rather than assuming it took. A layout Hyprland does not
+      // have would leave the button lit for something that never happened.
+      layoutReadProc.running = true
+      // Changing the layout rearranges every window, and Hyprland sends no
+      // event for it, so the outlines have to be told to catch up.
+      if (root.tilingOpen) {
+        tilingIdle.restart()
+        tilingSettle.restart()
+      }
+    }
+  }
+
   function runWindowAction(name) {
     var lua = root.windowActions[name]
     if (!lua) return
@@ -1223,6 +1279,7 @@ Item {
     // outlines would be drawn around where the windows used to be.
     root.setOskVisible(false)
     root.tilingOpen = true
+    layoutReadProc.running = true
     specialReadProc.running = true
     tilingIdle.restart()
     tilingSettle.restart()

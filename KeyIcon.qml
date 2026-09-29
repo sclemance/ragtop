@@ -12,7 +12,7 @@ Item {
   id: icon
 
   // "settings", "shift", "backspace", "enter", "rotate", "keyboard",
-  // "windows", "omarchy", "check", "float", "wide", "tiled", "split",
+  // "windows", "omarchy", "check", "float", "wide", "tiled", "split", "scroll",
   // "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
@@ -198,6 +198,17 @@ Item {
 
   // Split: one pane divided, with the divider turned, which is what the
   // toggle does to the next window opened beside this one.
+  // A scrolling workspace: a full pane in the middle with one running off
+  // each edge, because the row is wider than the screen and you move along
+  // it. The clipped sides are the whole point, so they are left open rather
+  // than closed into boxes.
+  function scrollPath() {
+    return move(0.02, 0.22) + line(0.18, 0.22) + line(0.18, 0.78) + line(0.02, 0.78)
+      + move(0.32, 0.16) + line(0.68, 0.16) + line(0.68, 0.84)
+      + line(0.32, 0.84) + line(0.32, 0.16)
+      + move(0.98, 0.22) + line(0.82, 0.22) + line(0.82, 0.78) + line(0.98, 0.78)
+  }
+
   function splitPath() {
     return move(0.1, 0.16) + line(0.9, 0.16) + line(0.9, 0.84)
       + line(0.1, 0.84) + line(0.1, 0.16)
@@ -217,6 +228,7 @@ Item {
     : name === "wide" ? widePath()
     : name === "tiled" ? tiledPath()
     : name === "split" ? splitPath()
+    : name === "scroll" ? scrollPath()
     : isArrow ? arrowPath()
     : ""
 

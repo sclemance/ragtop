@@ -667,6 +667,7 @@ cannot say by dragging:
 | Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. See below, it does something you might not expect. |
 | Split | Flips the split under the focused window. |
 | Float | Floats or unfloats it. |
+| Scrolling | Switches Hyprland to its scrolling layout, and back to the one you were on. This is the compositor's own layout setting, so it changes every workspace and not just this one. |
 | Finish tiling | Leaves. |
 
 **The shape buttons light up when what they do is already true**, so Float
