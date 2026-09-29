@@ -1,312 +1,291 @@
 import QtQuick
+import qs.Commons
+import qs.Ui
 
 // Ragtop's own controls: the inside of a tile that is a window of its own.
-// It is drawn in pixels and its window is anchored only to the top of the
-// screen at a fixed size, so nothing the keyboard does can move or resize it.
-// That matters more than it sounds: while this window shared an edge with the
-// keyboard, every step of the size slider relaid it out mid-drag and took the
-// touch grab with it, which made the slider unusable.
+// Its window is anchored only to the top of the screen, so nothing the
+// keyboard does can move or resize it. That matters more than it sounds:
+// while this window shared an edge with the keyboard, every step of the size
+// slider relaid it out mid-drag and took the touch grab with it, which made
+// the slider unusable.
 //
 // What is here is what you change while holding the machine, with the
 // keyboard still drawn underneath so you can see what each change does.
+//
+// It is built from Omarchy's own panel kit (BorderSurface, Button,
+// ButtonGroup, Toggle, PanelSeparator, PanelSectionHeader and its
+// Color/Style/Border tokens), the same way SetupWizard.qml is, so it reads as
+// one of Omarchy's popup menus rather than as a panel of Ragtop's own. That
+// includes its corners: Style.cornerRadius mirrors Hyprland's
+// decoration:rounding, which Omarchy ships at 0, so the card is square here
+// and rounds only on a machine whose windows are rounded too.
+//
+// The colours are Omarchy's popup palette and not the keyboard's theme. The
+// keyboard below is themeable down to its key shapes. Its controls are not
+// part of that, and a panel that restyled itself with every preset would be
+// the one thing on screen you could not recognise.
 Item {
   id: panel
 
   required property var service
-  required property var theme
 
   signal dismissed()
 
-  readonly property color faceOff: panel.theme.specialKey
+  implicitWidth: card.implicitWidth
+  implicitHeight: card.implicitHeight
 
-  Rectangle {
+  readonly property string themeName: {
+    var name = panel.service.currentTheme
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  }
+
+  // A note that outlived the code it explained, because the trap has not gone
+  // anywhere. Every tap target in Omarchy's kit is a MouseArea with an
+  // onClicked, which needs Qt to synthesise a mouse press and release out of
+  // a touch, and the first touch on a surface that has not been touched yet
+  // was measured getting lost somewhere in that synthesis: the first tap on a
+  // panel that had only just opened did nothing. What stood here used
+  // TapHandlers, which read touch points directly, for exactly that reason.
+  // The keyboard has never had the problem because it reads them too.
+  //
+  // Conforming to Omarchy's components means taking its MouseAreas with them.
+  // If the first tap after the gear is opened goes missing again, this is why,
+  // and the fix is to keep this window mapped whenever the keyboard is up with
+  // its input masked to nothing until it opens (the keyboard surface already
+  // masks itself that way), so the surface is warm before it is needed.
+  // Service.qml's handle still uses a TapHandler and points here.
+  BorderSurface {
     id: card
     anchors.fill: parent
-    radius: 16
-    color: panel.theme.solidBase
-    border.width: Math.max(1, panel.theme.keyBorderWidth)
-    border.color: panel.theme.accent
+    implicitWidth: Style.space(560)
+    implicitHeight: body.implicitHeight + card.contentTopInset + card.contentBottomInset
+    radius: Style.cornerRadius
+    color: Color.popups.background
+    borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
+                                          Color.popups.border, Math.max(1, Style.space(2)))
+    padding: Style.spacing.popupPadding
 
     Column {
-      anchors.centerIn: parent
-      spacing: 14
+      id: body
+      x: card.contentLeftInset
+      y: card.contentTopInset
+      width: card.width - card.contentLeftInset - card.contentRightInset
+      spacing: Style.space(8)
 
-      // Tap targets here are TapHandlers rather than MouseAreas. MouseArea's
-      // onClicked needs Qt to synthesise a mouse press and release out of a
-      // touch, and the first touch on a surface that has not been touched
-      // yet is lost somewhere in that synthesis, so the first tap on a panel
-      // that has only just opened does nothing. The keyboard never had the
-      // problem because it reads touch points directly, which is what a
-      // TapHandler does too. The size slider below stays a MouseArea: it is
-      // a drag, not a tap, and its handling is already tuned for that.
-      //
       // The theme, stepped rather than listed: the keyboard behind redraws
       // as you go, which is a better way to choose one than reading names.
+      PanelSectionHeader {
+        text: "Keyboard theme"
+        foreground: Color.popups.text
+      }
+
       Row {
-        spacing: 8
-        Rectangle {
-          width: 44; height: 44; radius: 12
-          color: panel.faceOff
-          border.width: Math.max(1, panel.theme.keyBorderWidth)
-          border.color: panel.theme.keyBorder
-          KeyIcon { anchors.centerIn: parent; height: 20; name: "left"; color: panel.theme.text }
-          TapHandler { onTapped: panel.service.stepTheme(-1) }
-        }
-        Rectangle {
-          width: 444; height: 44; radius: 12
-          color: panel.faceOff
-          border.width: Math.max(1, panel.theme.keyBorderWidth)
-          border.color: panel.theme.keyBorder
-          Text {
-            // Never rich text. A window title, a layout name and an error
-            // string all arrive from outside, and AutoText would sniff markup
-            // in them and render it, which for Qt includes fetching a remote
-            // image named in an img tag.
-            textFormat: Text.PlainText
+        width: parent.width
+        spacing: Style.spacing.controlGap
+
+        Button {
+          id: themeBack
+          width: Style.space(40)
+          height: Style.spacing.controlHeight
+          bordered: true
+          foreground: Color.popups.text
+          onClicked: panel.service.stepTheme(-1)
+          // Drawn rather than set as a font glyph, the way the keyboard's own
+          // keys are, so it never depends on the panel's font carrying an
+          // icon. Button sizes itself from its label and this is not one, so
+          // the button is given a size of its own.
+          KeyIcon {
             anchors.centerIn: parent
-            text: {
-              var name = panel.service.currentTheme
-              return name.charAt(0).toUpperCase() + name.slice(1)
-            }
-            color: panel.theme.text
-            font.family: panel.theme.fontFamily
-            font.pixelSize: 16
+            height: Style.font.icon
+            name: "left"
+            color: Color.popups.text
           }
         }
-        Rectangle {
-          width: 44; height: 44; radius: 12
-          color: panel.faceOff
-          border.width: Math.max(1, panel.theme.keyBorderWidth)
-          border.color: panel.theme.keyBorder
-          KeyIcon { anchors.centerIn: parent; height: 20; name: "right"; color: panel.theme.text }
-          TapHandler { onTapped: panel.service.stepTheme(1) }
+
+        Text {
+          // Never rich text. A theme name arrives from outside, and AutoText
+          // would sniff markup in it and render it, which for Qt includes
+          // fetching a remote image named in an img tag.
+          textFormat: Text.PlainText
+          width: parent.width - 2 * (themeBack.width + Style.spacing.controlGap)
+          height: Style.spacing.controlHeight
+          horizontalAlignment: Text.AlignHCenter
+          verticalAlignment: Text.AlignVCenter
+          elide: Text.ElideRight
+          text: panel.themeName
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+        }
+
+        Button {
+          width: themeBack.width
+          height: Style.spacing.controlHeight
+          bordered: true
+          foreground: Color.popups.text
+          onClicked: panel.service.stepTheme(1)
+          KeyIcon {
+            anchors.centerIn: parent
+            height: Style.font.icon
+            name: "right"
+            color: Color.popups.text
+          }
         }
       }
+
+      PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
 
       // Screen rotation, named rather than implied. Automatic follows the
       // machine: it turns in tablet mode and holds still in laptop mode.
-      // Three exclusive states, so radios rather than three buttons that
-      // each look like something you do.
-      Row {
-        spacing: 14
-        KeyIcon {
-          anchors.verticalCenter: parent.verticalCenter
-          height: 20
-          name: "rotate"
-          color: panel.theme.specialText
-        }
-        Text {
-          // Never rich text. A window title, a layout name and an error
-          // string all arrive from outside, and AutoText would sniff markup
-          // in them and render it, which for Qt includes fetching a remote
-          // image named in an img tag.
-          textFormat: Text.PlainText
-          width: 150
-          anchors.verticalCenter: parent.verticalCenter
-          text: "Screen Rotation"
-          color: panel.theme.text
-          font.family: panel.theme.fontFamily
-          font.pixelSize: 15
-        }
-        Repeater {
-          model: [{ mode: "locked", label: "Locked" },
-                  { mode: "unlocked", label: "Unlocked" },
-                  { mode: "auto", label: "Automatic" }]
-          Item {
-            id: radio
-            required property var modelData
-            readonly property bool on: panel.service.rotationMode === modelData.mode
-            width: dot.width + 6 + optionLabel.width
-            height: 44
-
-            Rectangle {
-              id: dot
-              anchors.verticalCenter: parent.verticalCenter
-              width: 22; height: 22; radius: 11
-              color: "transparent"
-              border.width: Math.max(1, panel.theme.keyBorderWidth)
-              border.color: parent.on ? panel.theme.accent : panel.theme.keyBorder
-              Rectangle {
-                anchors.centerIn: parent
-                width: 12; height: 12; radius: 6
-                color: panel.theme.accent
-                visible: dot.parent.on
-              }
-            }
-            Text {
-              // Never rich text. A window title, a layout name and an error
-              // string all arrive from outside, and AutoText would sniff markup
-              // in them and render it, which for Qt includes fetching a remote
-              // image named in an img tag.
-              textFormat: Text.PlainText
-              id: optionLabel
-              anchors.verticalCenter: parent.verticalCenter
-              x: dot.width + 6
-              text: parent.modelData.label
-              color: panel.theme.text
-              font.family: panel.theme.fontFamily
-              font.pixelSize: 15
-            }
-            // The label belongs to the radio, as the sentence does below.
-            TapHandler {
-              onTapped: panel.service.setRotationMode(radio.modelData.mode)
-            }
-          }
-        }
+      // Three exclusive states, which is what a ButtonGroup is for.
+      PanelSectionHeader {
+        text: "Screen rotation"
+        foreground: Color.popups.text
       }
 
-      // Key size, on a line of its own and saying which step it is on. The
-      // icon and the label width match the row above, so the two read as a
-      // pair rather than as two rows that happen to be near each other.
-      Row {
-        spacing: 14
-        KeyIcon {
-          anchors.verticalCenter: parent.verticalCenter
-          height: 20
-          name: "keyboard"
-          color: panel.theme.specialText
-        }
-        Text {
-          // Never rich text. A window title, a layout name and an error
-          // string all arrive from outside, and AutoText would sniff markup
-          // in them and render it, which for Qt includes fetching a remote
-          // image named in an img tag.
-          textFormat: Text.PlainText
-          id: sizeLabel
-          width: 150
-          anchors.verticalCenter: parent.verticalCenter
-          text: "Keyboard Size"
-          color: panel.theme.text
-          font.family: panel.theme.fontFamily
-          font.pixelSize: 15
-        }
+      ButtonGroup {
+        options: [{ value: "auto", label: "Automatic" },
+                  { value: "locked", label: "Locked" },
+                  { value: "unlocked", label: "Unlocked" }]
+        value: panel.service.rotationMode
+        foreground: Color.popups.text
+        background: Color.popups.background
+        accent: Color.accent
+        // Nothing here takes keyboard focus: the panel is held rather than
+        // tabbed through, and the keyboard underneath is what has the keys.
+        focusable: false
+        onChanged: function(mode) { panel.service.setRotationMode(mode) }
+      }
 
-        Item {
-          id: sizeSlider
-          width: 350
-          height: 44
-          readonly property int steps: panel.service.sizeSteps.length
-          readonly property int index: Math.max(0,
-            panel.service.sizeSteps.indexOf(panel.service.look.sizeAdjust))
-          readonly property real span: width - 28
-          readonly property real stepWidth: span / (steps - 1)
-          // Where the finger has put it, while a finger is on it. The settled
-          // value comes back through settings.conf, which is quick but not
-          // instant, and a handle that waits for it stutters under the thumb.
-          property int dragIndex: -1
-          readonly property int shown: dragIndex >= 0 ? dragIndex : index
-          // The finger's answer stands until the settled one agrees with it,
-          // so a write still in flight cannot look like a spring back.
-          onIndexChanged: if (dragIndex === index) dragIndex = -1
+      PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
 
-          Rectangle { y: 20; x: 14; width: sizeSlider.span; height: 4; radius: 2
-                      color: panel.faceOff }
-          Repeater {
-            model: sizeSlider.steps
-            Rectangle {
-              required property int index
-              width: 6; height: 6; radius: 3; y: 19
-              x: 11 + index * sizeSlider.stepWidth
-              color: panel.theme.specialText
-            }
-          }
+      // Key size.
+      //
+      // This one is not Omarchy's PanelSlider, and deliberately. That slider
+      // is built for a pointer. It sets no preventStealing, so on a
+      // touchscreen the surface underneath can steal the drag. It has no
+      // hysteresis, so a thumb resting on a step boundary flips back and
+      // forth. And on release it puts its handle back to the value it was
+      // given, which here only arrives a moment later through settings.conf,
+      // so the handle would spring back and then jump. The geometry and the
+      // colours are PanelSlider's, so it looks like Omarchy's sliders, but
+      // the handling is the one that was measured against a thumb.
+      PanelSectionHeader {
+        text: "Keyboard size"
+        foreground: Color.popups.text
+      }
+
+      Item {
+        id: sizeSlider
+        width: parent.width
+        height: Style.spacing.controlHeight
+        readonly property int steps: panel.service.sizeSteps.length
+        readonly property int index: Math.max(0,
+          panel.service.sizeSteps.indexOf(panel.service.look.sizeAdjust))
+        readonly property real knobSize: Math.max(14, Math.round(Style.spacing.controlHeight * 0.38))
+        readonly property real trackHeight: Math.max(4, Math.round(Style.spacing.controlHeight * 0.11))
+        readonly property real span: width - knobSize
+        readonly property real stepWidth: steps > 1 ? span / (steps - 1) : span
+        // Where the finger has put it, while a finger is on it. The settled
+        // value comes back through settings.conf, which is quick but not
+        // instant, and a handle that waits for it stutters under the thumb.
+        property int dragIndex: -1
+        readonly property int shown: dragIndex >= 0 ? dragIndex : index
+        // The finger's answer stands until the settled one agrees with it,
+        // so a write still in flight cannot look like a spring back.
+        onIndexChanged: if (dragIndex === index) dragIndex = -1
+
+        Rectangle {
+          id: track
+          x: sizeSlider.knobSize / 2
+          width: sizeSlider.span
+          height: sizeSlider.trackHeight
+          radius: Style.cornerRadius > 0 ? height / 2 : 0
+          anchors.verticalCenter: parent.verticalCenter
+          color: Style.selectedFillFor(Color.popups.text, Color.accent)
+
           Rectangle {
-            width: 28; height: 28; radius: 14; y: 8
-            x: sizeSlider.shown * sizeSlider.stepWidth
-            color: panel.theme.accent
-            border.width: 1
-            border.color: panel.theme.accentText
-            Behavior on x { NumberAnimation { duration: 90 } }
-          }
-          MouseArea {
-            anchors.fill: parent
-            preventStealing: true
-            // A step is only given up once the finger is well past the middle
-            // of the gap, so a wobble at a boundary cannot flip it back and
-            // forth. A long drag still crosses several at once.
-            function at(mx) {
-              var pos = (mx - 14) / sizeSlider.stepWidth
-              var current = sizeSlider.dragIndex
-              var want = (current < 0 || Math.abs(pos - current) > 0.6) ? Math.round(pos) : current
-              return Math.max(0, Math.min(sizeSlider.steps - 1, want))
-            }
-            function moveTo(i) {
-              if (i === sizeSlider.dragIndex) return
-              sizeSlider.dragIndex = i
-              panel.service.setSize(i)
-            }
-            onPressed: function(m) { moveTo(at(m.x)) }
-            onPositionChanged: function(m) { if (pressed) moveTo(at(m.x)) }
-            onReleased: function(m) { moveTo(at(m.x)) }
-            onCanceled: sizeSlider.dragIndex = -1
+            width: track.width * (sizeSlider.steps > 1
+              ? sizeSlider.shown / (sizeSlider.steps - 1) : 0)
+            height: track.height
+            radius: track.radius
+            color: Color.accent
           }
         }
+
+        Repeater {
+          model: sizeSlider.steps
+
+          Rectangle {
+            required property int index
+            width: Math.max(1, Style.space(2))
+            height: sizeSlider.trackHeight + Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+            x: sizeSlider.knobSize / 2 + index * sizeSlider.stepWidth - width / 2
+            color: Color.popups.background
+          }
+        }
+
+        BorderSurface {
+          id: knob
+          width: sizeSlider.knobSize
+          height: sizeSlider.knobSize
+          radius: width / 2
+          anchors.verticalCenter: parent.verticalCenter
+          x: sizeSlider.shown * sizeSlider.stepWidth
+          color: Color.popups.text
+          borderSpec: Border.flat(Color.popups.background, Math.max(1, Style.space(2)))
+          Behavior on x { NumberAnimation { duration: 90 } }
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          preventStealing: true
+          // A step is only given up once the finger is well past the middle
+          // of the gap, so a wobble at a boundary cannot flip it back and
+          // forth. A long drag still crosses several at once.
+          function at(mx) {
+            var pos = (mx - sizeSlider.knobSize / 2) / sizeSlider.stepWidth
+            var current = sizeSlider.dragIndex
+            var want = (current < 0 || Math.abs(pos - current) > 0.6) ? Math.round(pos) : current
+            return Math.max(0, Math.min(sizeSlider.steps - 1, want))
+          }
+          function moveTo(i) {
+            if (i === sizeSlider.dragIndex) return
+            sizeSlider.dragIndex = i
+            panel.service.setSize(i)
+          }
+          onPressed: function(m) { moveTo(at(m.x)) }
+          onPositionChanged: function(m) { if (pressed) moveTo(at(m.x)) }
+          onReleased: function(m) { moveTo(at(m.x)) }
+          onCanceled: sizeSlider.dragIndex = -1
+        }
       }
+
+      PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
 
       // Whether the keyboard comes up by itself on a text field, and the way
       // through to everything that does not belong on a surface you hold.
+      Toggle {
+        width: parent.width
+        label: "Auto-expand keyboard on text fields"
+        checked: panel.service.autoShowEnabled
+        foreground: Color.popups.text
+        accent: Color.accent
+        onClicked: panel.service.toggleAutoShow()
+      }
+
       Item {
-        width: 548
-        height: 44
+        width: parent.width
+        height: settingsButton.implicitHeight
 
-        Rectangle {
-          id: autoBox
-          y: 9
-          width: 26; height: 26; radius: 7
-          color: panel.service.autoShowEnabled ? panel.theme.accent : "transparent"
-          border.width: Math.max(1, panel.theme.keyBorderWidth)
-          border.color: panel.service.autoShowEnabled ? panel.theme.accent : panel.theme.keyBorder
-          KeyIcon {
-            anchors.centerIn: parent
-            height: 16
-            name: "check"
-            color: panel.theme.accentText
-            visible: panel.service.autoShowEnabled
-          }
-        }
-        Text {
-          // Never rich text. A window title, a layout name and an error
-          // string all arrive from outside, and AutoText would sniff markup
-          // in them and render it, which for Qt includes fetching a remote
-          // image named in an img tag.
-          textFormat: Text.PlainText
-          id: autoLabel
-          anchors.verticalCenter: autoBox.verticalCenter
-          x: 38
-          text: "Auto-expand keyboard on text fields"
-          color: panel.theme.text
-          font.family: panel.theme.fontFamily
-          font.pixelSize: 15
-        }
-        // The sentence is part of the control, not a caption beside it.
-        Item {
-          width: autoLabel.x + autoLabel.width
-          height: parent.height
-          TapHandler { onTapped: panel.service.toggleAutoShow() }
-        }
-
-        Rectangle {
+        Button {
+          id: settingsButton
           anchors.right: parent.right
-          y: 0
-          width: 84; height: 44; radius: 12
-          color: panel.faceOff
-          border.width: Math.max(1, panel.theme.keyBorderWidth)
-          border.color: panel.theme.keyBorder
-          Text {
-            // Never rich text. A window title, a layout name and an error
-            // string all arrive from outside, and AutoText would sniff markup
-            // in them and render it, which for Qt includes fetching a remote
-            // image named in an img tag.
-            textFormat: Text.PlainText
-            anchors.centerIn: parent
-            text: "Settings"
-            color: panel.theme.specialText
-            font.family: panel.theme.fontFamily
-            font.pixelSize: 14
-          }
-          TapHandler {
-            onTapped: { panel.dismissed(); panel.service.openSettings() }
-          }
+          text: "Settings"
+          bordered: true
+          foreground: Color.popups.text
+          onClicked: { panel.dismissed(); panel.service.openSettings() }
         }
       }
     }

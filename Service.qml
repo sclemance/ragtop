@@ -1877,22 +1877,42 @@ Item {
     visible: root.oskVisible && root.toolsOpen && root.layerRulesReady
 
     WlrLayershell.namespace: "ragtop-tools"
-    WlrLayershell.layer: WlrLayer.Top
+    // On the same layer as Omarchy's notifications rather than under it.
+    // Notifications are an Overlay layer anchored top right, so on a portrait
+    // screen one of them lands on top of this panel and covers the very
+    // control being dragged. Surfaces on one layer stack in the order they
+    // map, so this now comes out in front of a notification that was already
+    // up when the panel was opened.
+    //
+    // It does NOT fix the other way round, and measured: Omarchy's
+    // notification window is `visible: popupModel.count > 0`, so it maps when
+    // a notification arrives, which is after this one and therefore on top.
+    // Fixing that needs a choice nobody has made yet. Either hold
+    // notifications while the panel is open, which means a plugin writing
+    // Omarchy's persisted `dnd`, or drop the panel down the screen far
+    // enough to clear the toast column, which no fixed margin can promise
+    // for two toasts.
+    WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     // Reserves nothing of its own, but sits below Omarchy's bar rather than
     // under it. Anchored to one edge, so its size is its own.
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
     anchors { top: true }
-    implicitWidth: 596
-    implicitHeight: 258
+    // Its own size, from what the controls need, and never wider than the
+    // screen: a fixed 596 all but filled a 768 pixel portrait screen edge to
+    // edge, leaving the card's border against it.
+    implicitWidth: Math.min(toolsPanel.implicitWidth,
+                            (toolsWindow.screen ? toolsWindow.screen.width : 768)
+                              - 2 * Style.gapsOut)
+    implicitHeight: toolsPanel.implicitHeight
     margins.top: 22
     color: "transparent"
 
     ToolsPanel {
+      id: toolsPanel
       anchors.fill: parent
       service: root
-      theme: keyboardTheme
       onDismissed: root.toolsOpen = false
     }
   }
