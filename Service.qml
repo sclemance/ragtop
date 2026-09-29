@@ -108,6 +108,32 @@ Item {
     if (!tablet && !root.keyboardAvailable) root.setOskVisible(false)
   }
 
+  // Which keyboard the on-screen keyboard draws, from the
+  // "keyboard-layout" setting.
+  //
+  //   auto   the widest board that fits the screen, which is what it does
+  //          unless told otherwise, and what makes a fold into portrait
+  //          change the keyboard rather than shrink it
+  //   60     a real keyboard's five rows, no function row and no arrows
+  //   phone  the three letter rows and the symbol pages
+  //
+  // Auto weighs both width and height. A named one is taken at its word on
+  // height and still gives way on width, because a board too wide for the
+  // screen cannot be drawn at all. Keyboard.qml does the choosing, since the
+  // shapes and what they cost are its to know.
+  readonly property var keyboardLayouts: ["auto", "60", "phone"]
+  readonly property string keyboardLayout:
+    root.keyboardLayouts.indexOf(root.settings["keyboard-layout"]) !== -1
+      ? root.settings["keyboard-layout"] : "auto"
+
+  function setKeyboardLayout(name) {
+    if (root.keyboardLayouts.indexOf(name) === -1 || keyboardLayoutProc.running) return
+    keyboardLayoutProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                                  "keyboard-layout", "set", name]
+    keyboardLayoutProc.running = true
+  }
+  Process { id: keyboardLayoutProc }
+
   // Whether the on-screen keyboard is on offer at all: the "keyboard"
   // setting, cycled from the bar button and Setup › Tablet › Keyboard.
   //
@@ -1888,6 +1914,11 @@ Item {
       anchors.fill: parent
       service: root
       theme: keyboardTheme
+      // How much of the screen the keyboard may take when it is choosing a
+      // form factor for itself. Half, so the window it comes up over keeps
+      // at least the other half. A form factor asked for by name ignores
+      // this: asking for it is asking for the height it needs.
+      maxHeight: keyboardWindow.screen ? keyboardWindow.screen.height / 2 : 0
     }
   }
 

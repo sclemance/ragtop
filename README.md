@@ -302,10 +302,55 @@ open laptop should work too. It's specific to Omarchy's own screensaver (the
 ## The keyboard
 
 Ragtop's keyboard is drawn by the Omarchy shell, so it follows your theme's
-colours and font, and the Transparency setting, without restarting. It has:
+colours and font, and the Transparency setting, without restarting.
 
-- **An extra row** of Esc, Tab, Ctrl, Alt and the arrow keys. Held arrows and
-  Backspace repeat.
+### Which board
+
+There is more than one. **Phone** is the three letter rows with symbol pages
+behind a `?123` key, which is what a phone keyboard is and what Ragtop drew
+for its whole life until now. **60%** is a real keyboard: five rows, fifteen
+units across, every symbol on the board where your fingers already know it
+is, and no function row, no nav cluster and no arrows, which is what 60%
+means.
+
+**Automatic**, the default, draws the widest board the screen can carry and
+changes its mind when the screen turns. A key may not go below 48 pixels,
+which is Material's minimum touch target, and that minimum scales with Key
+Size, because Key Size is exactly how big keys need to be for your fingers:
+asking for larger keys asks for a simpler board sooner. A board may also not
+take more than half the height, so the window underneath keeps the other
+half.
+
+Pick one by name and it is taken at its word on height, since asking for it
+is asking for the height it needs. It still gives way on width, because a
+board too wide for the screen cannot be drawn at all.
+
+On a 1366 by 768 machine at the default Key Size that works out as:
+
+| Key Size | landscape | portrait |
+| --- | --- | --- |
+| Smaller | 60% | 60% |
+| Regular | 60% | 60% |
+| Larger | Phone, since 60% would cross half the height | Phone |
+| Largest | Phone | Phone |
+
+The 60% board is drawn ANSI shaped whatever your layout. An ISO board's tall
+Enter is a keycap shape and nothing on a screen you tap is better for
+reproducing it. What an ISO layout does get is its extra key beside the left
+Shift, and only where that key reaches something the rest of the board
+cannot: measured across layouts, a US or Dvorak one only repeats what `,` `.`
+and `\` already type, while German, French, Spanish, Italian and Swedish
+reach `<` and `>`, British `\` and `|`, and Russian `|`.
+
+**Esc sits where the tilde key would**, as it does on a real 60%, and holding
+it gives you `` ` `` and `~`. A desktop with no Escape is worse off than one
+that reaches a backtick by holding.
+
+### What every board has
+
+- **An extra row**, on the phone board, of Esc, Tab, Ctrl, Alt and the arrow
+  keys. Held arrows and Backspace repeat. A real board has those keys in
+  their own places instead.
 - **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C, and the Ctrl turns
   off by itself. Tap a modifier a second time to lock it on until you tap it
   again, however long you take over it.
@@ -740,6 +785,7 @@ the Settings button on the keyboard's own panel opens directly:
 | Setting | Default | Where |
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hardware, folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
+| Which board the keyboard draws: Automatic, 60% or Phone | Automatic | Setup › Tablet › Layout |
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
@@ -756,6 +802,7 @@ keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
+`keyboard-layout set auto|60|phone`,
 `auto-show toggle` (or `enable`, `disable`),
 `size-adjust set smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and

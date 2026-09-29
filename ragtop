@@ -9,6 +9,7 @@
 #        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop keyboard (get | is <mode> | set <mode>)
+#        ragtop keyboard-layout (get | is <name> | set <name>)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop size-adjust (get | is <adjust> | set <adjust>)
 #        ragtop rotation (get | is <mode> | set <mode>)
@@ -32,6 +33,13 @@
 # (always, laptop mode included) or off (never), and it decides only the
 # keyboard: tiling mode and the patched overlays still follow tablet mode.
 #
+# keyboard-layout <name> is which board is drawn: auto, which takes the
+# widest that fits the screen and so changes when the screen turns, 60 for a
+# real keyboard's five rows with no function row and no arrows, or phone for
+# the three letter rows and the symbol pages. Auto weighs width and height
+# both. A board asked for by name is taken at its word on height and still
+# gives way on width, because one too wide for the screen cannot be drawn.
+#
 # A theme is a TOML file of those same settings, laid out the way Omarchy
 # lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
 # ~/.config/ragtop/themes/<slug>/ragtop.toml for your own, where yours wins.
@@ -51,7 +59,13 @@ clones="$repo/overlay-clones.sh"
 settings="$HOME/.config/ragtop/settings.conf"
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 
-usage() { sed -n '4,30p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+# The usage block is everything from the first line of it down to the
+# paragraph about themes, found rather than counted: it was a line range once
+# and went on printing half a sentence for two releases after the header grew.
+usage() {
+  sed -n '4,/^# A theme is/p' "$0" | head -n -2 | sed 's/^# \{0,1\}//' >&2
+  exit 2
+}
 
 label() {
   case "$1" in
@@ -173,6 +187,9 @@ choice_notice() {
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
     "size-adjust smallest"|"size-adjust smaller"|"size-adjust regular"\
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
+    "keyboard-layout auto") echo "The keyboard picks the biggest board that fits." ;;
+    "keyboard-layout 60") echo "A 60% keyboard, where the screen is wide enough." ;;
+    "keyboard-layout phone") echo "The phone style keyboard, with its symbol pages." ;;
     "keyboard sensor") echo "The keyboard follows tablet mode again." ;;
     "keyboard on") echo "The keyboard is on offer in laptop mode too." ;;
     "keyboard off") echo "The keyboard is off until you turn it back on." ;;
@@ -489,7 +506,7 @@ PYEOF
   row "Tablet mode" "$(get tablet-mode auto)${mode:+, now $mode}"
   # Whether there is a keyboard on offer at all, which is the first thing to
   # rule out behind "the keyboard never comes up".
-  row Keyboard "$(get keyboard sensor)"
+  row Keyboard "$(get keyboard sensor), layout $(get keyboard-layout auto)"
   switch=$("$repo/find-tablet-switch.py" 2>/dev/null || true)
   if [[ -n $switch ]]; then
     row Switch "$(bash "$repo/udev-rule.sh" status 2>/dev/null || echo unknown), ${switch#*$'\t'}"
@@ -586,6 +603,7 @@ PYEOF
 }
 
 case "${1:-} ${2:-}" in
+  "keyboard-layout "*) choice keyboard-layout auto "${2:-}" "${3:-}" ;;
   "keyboard "*) choice keyboard sensor "${2:-}" "${3:-}" ;;
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "size-adjust "*) choice size-adjust regular "${2:-}" "${3:-}" ;;

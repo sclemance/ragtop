@@ -74,6 +74,16 @@ rows = {
         checked=f'"{cmd}" keyboard is on', action=f'"{cmd}" keyboard set on'),
     "setup.tablet.keyboard.off": dict(icon="\U000f0322", label="Always Off",
         checked=f'"{cmd}" keyboard is off', action=f'"{cmd}" keyboard set off'),
+    # Which board the keyboard draws. Auto is the default and changes with
+    # the screen, which is the point of it: folding into portrait can take a
+    # real keyboard down to the phone one rather than shrinking the keys.
+    "setup.tablet.keyboard-layout": dict(icon="\U000f030c", label="Layout"),
+    "setup.tablet.keyboard-layout.auto": dict(icon="\U000f006a", label="Automatic",
+        checked=f'"{cmd}" keyboard-layout is auto', action=f'"{cmd}" keyboard-layout set auto'),
+    "setup.tablet.keyboard-layout.60": dict(icon="\U000f030c", label="60%",
+        checked=f'"{cmd}" keyboard-layout is 60', action=f'"{cmd}" keyboard-layout set 60'),
+    "setup.tablet.keyboard-layout.phone": dict(icon="\U000f004c", label="Phone",
+        checked=f'"{cmd}" keyboard-layout is phone', action=f'"{cmd}" keyboard-layout set phone'),
     "setup.tablet.auto-show": dict(icon="\U000f030c", label="Auto Keyboard",
         checked=f'"{cmd}" auto-show enabled',
         action=f'"{cmd}" auto-show toggle'),

@@ -66,6 +66,42 @@ Item {
   }
   readonly property bool hasLevel3: Object.keys(root.level3Of).length > 0
 
+  // Every printed key of the physical board, by the xkb name for its
+  // position, as [plain, shift, altgr, both] (see keyboard-helper.py). The
+  // real form factors are drawn from this: they name positions and the
+  // active layout says what each one types, so one description draws every
+  // language.
+  readonly property var grid: root.service.keyLabels && root.service.keyLabels.keys
+    ? root.service.keyLabels.keys : ({})
+
+  // The key an ISO board keeps beside the left Shift, and an ANSI board does
+  // not. Drawn only where it reaches something the rest of the board cannot,
+  // which is the test the AltGr key already passes. Having the position says
+  // nothing: Hyprland compiles its keymap for a 105 key model, so every
+  // layout here has one. Measured across layouts: US and Dvorak only repeat
+  // what , . and \ already type, while German, French, Spanish, Italian and
+  // Swedish reach < and >, British \ and |, and Russian |.
+  readonly property bool hasIsoKey: {
+    var g = root.grid
+    if (!g["LSGT"]) return false
+    var elsewhere = {}
+    for (var n in g)
+      if (n !== "LSGT") g[n].slice(0, 2).forEach(function(c) { if (c) elsewhere[c] = true })
+    return g["LSGT"].slice(0, 2).some(function(c) { return c && !(c in elsewhere) })
+  }
+
+  // A real board names its keys by position, and the same position means the
+  // same thing whichever side of the space bar it is on. Everything that
+  // acts on a key asks for its role first, so one Shift and the other are
+  // one Shift as far as the modifier state is concerned.
+  readonly property var roles: ({
+    "LFSH": "shift", "RTSH": "shift", "LCTL": "ctrl", "RCTL": "ctrl",
+    "LALT": "alt", "RALT": "altgr", "LWIN": "super", "RWIN": "super",
+    "BKSP": "backspace", "RTRN": "enter", "TAB": "tab", "SPCE": "space",
+    "CAPS": "caps", "MENU": "menu", "ESC": "esc"
+  })
+  function roleOf(key) { return root.roles[key] || key }
+
   // The symbol pages, which are the same whatever the layout: every
   // character here types in any of them, because the helper types by
   // character rather than by key.
@@ -131,7 +167,7 @@ Item {
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
-    "windows": ""
+    "windows": "", "caps": "Caps", "menu": "Menu"
   })
   readonly property var widths: ({
     "shift": 1.5, "backspace": 1.5, "symbols": 1.5, "more": 1.5, "letters": 1.5,
@@ -140,7 +176,7 @@ Item {
   // Keys sent as key events, by the name xkb gives them.
   readonly property var keysyms: ({
     "esc": "Escape", "tab": "Tab", "left": "Left", "up": "Up", "down": "Down", "right": "Right",
-    "backspace": "BackSpace", "enter": "Return", "space": "space"
+    "backspace": "BackSpace", "enter": "Return", "space": "space", "menu": "Menu"
   })
   // Keys Ragtop draws an icon for (KeyIcon.qml) instead of a label, so they
   // don't depend on the font carrying a glyph and scale with the keys.
@@ -153,8 +189,9 @@ Item {
     "super": "omarchy"
   })
   function iconFor(key) {
-    if (key in root.iconNames) return root.iconNames[key]
-    return root.iconKeys.indexOf(key) !== -1 ? key : ""
+    var role = root.roleOf(key)
+    if (role in root.iconNames) return root.iconNames[role]
+    return root.iconKeys.indexOf(role) !== -1 ? role : ""
   }
   function labelKind(key) {
     if (root.iconFor(key) !== "") return "drawn"
@@ -188,6 +225,14 @@ Item {
   // another finger arriving settles the hold as the tap it was. Hold Super,
   // tap B, and the browser opens with Super latched by commitPending.
   readonly property var holdOpens: ({ "super": "settings" })
+
+  // Keys that are not a character themselves but offer one behind a hold,
+  // named by the position whose characters they carry. A 60% board puts Esc
+  // where the tilde key sits on a bigger one, which is what the board is
+  // made to and also the right call here: a desktop without an Escape is
+  // worse off than one that reaches a backtick by holding. Nothing is lost,
+  // because holding it gives back exactly what the position types.
+  readonly property var holdGrid: ({ "ESC": "TLDE" })
 
   // Hold a letter to reach the characters that belong to it, as every phone
   // keyboard does. Ragtop needs it more than most: the letter rows are the
@@ -247,7 +292,7 @@ Item {
 
   // A key that types itself, as against Esc, Shift or the page keys, which
   // are the ones the labels table names.
-  function isCharacter(key) { return !(key in root.labels) }
+  function isCharacter(key) { return !(root.roleOf(key) in root.labels) }
 
   // What each letter key carries from another page: the characters that page
   // draws in the same place. Matched by where the keys sit and not by how
@@ -294,8 +339,9 @@ Item {
   function overlaid(slot) {
     return slot.row >= 1 && slot.row <= 3 && root.isCharacter(slot.key)
   }
-  readonly property var symbolLists: root.overlayOf("symbols")
-  readonly property var moreLists: root.overlayOf("more")
+  // Only the phone layout has pages for a key to stand in for.
+  readonly property var symbolLists: root.form === "phone" ? root.overlayOf("symbols") : ({})
+  readonly property var moreLists: root.form === "phone" ? root.overlayOf("more") : ({})
   // The one a cap prints in its corner, of however many the key carries.
   function firstOf(lists) {
     var map = {}
@@ -350,11 +396,23 @@ Item {
   // left, then what AltGr reaches, then the accents, which are the ones
   // that give way when a key has more than the card can hold.
   function holdItems(key) {
-    if (key === "space") return root.layoutList.length > 1 ? root.layoutList : []
-    if (!root.isCharacter(key)) return []
+    if (root.roleOf(key) === "space") return root.layoutList.length > 1 ? root.layoutList : []
+    if (!root.isCharacter(key) && !(key in root.holdGrid)) return []
     var out = []
     function add(c) { if (c && out.indexOf(c) === -1) out.push(c) }
     function addAll(list) { if (list) list.forEach(add) }
+    // A real board draws every symbol it has, so nothing here stands in for
+    // a page somewhere else. What is left behind a key is what a cap prints
+    // in its corner and the accents that belong to the letter on it.
+    var lv = root.grid[key] || root.grid[root.holdGrid[key]]
+    if (lv) {
+      // A key standing in for a position offers what that position types
+      // first, since reaching it is the whole reason the hold is there.
+      if (key in root.holdGrid) { add(lv[0]); add(lv[1]) }
+      if (!root.altgrOn) { add(lv[2]); add(lv[3]) }
+      root.variantsFor(lv[0]).forEach(add)
+      return out.slice(0, root.cardLimit)
+    }
     // A punctuation key offers punctuation and nothing else, on whichever
     // page it is standing. It sits on the bottom row, which no page overlays
     // (see overlaid), so there is nothing here to keep anyway; and a card of
@@ -411,16 +469,74 @@ Item {
     return Math.ceil(widest) + 3 * root.theme.gap
   }
 
-  // Sized so the longest row fits. Layouts differ, 10 to 12 letter keys.
+  // How wide the phone layout is, in key units: its longest row. Layouts
+  // differ, 10 to 12 letter keys.
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
-  readonly property real unit: Math.min((width - 2 * theme.padding) / rowUnits, Math.round(84 * theme.keyScale))
+  // Sized so the widest row of the board being drawn fits, which is why this
+  // divides by the form's own width and not by the phone layout's. A key is
+  // never larger than the size setting asks for, so a board narrower than
+  // the screen sits centred with a margin rather than growing into it.
+  readonly property real unit: Math.min((width - 2 * theme.padding) / root.formUnits,
+                                        Math.round(84 * theme.keyScale))
   // Height follows the size setting, not the width a key happens to get. On
   // a narrow screen the width is spent long before the ladder runs out, so
   // pinning height to it made Larger and Largest render identically to
   // Regular. The cap against `unit` only stops a key becoming a tall ribbon.
   readonly property real keyHeight: Math.max(30,
     Math.min(Math.round(60 * theme.keyScale), Math.round(unit * 1.4)))
-  readonly property real topRowHeight: Math.round(keyHeight * 0.62)
+  // The extra row is shorter than a row of letters: it is reached for rather
+  // than typed on. Held as a fraction so it travels with the row.
+  readonly property real topRowFraction: 0.62
+  readonly property real topRowHeight: Math.round(keyHeight * root.topRowFraction)
+  // The form factors, widest first, which is the order a fallback walks.
+  // A real board is 15 units across its main block, which is what a keycap
+  // set is made to, and the phone layout is as wide as its widest row needs.
+  readonly property var formLadder: ["60", "phone"]
+  function formUnitsOf(form) { return form === "phone" ? root.rowUnits : 15 }
+  // The height of each row, as a fraction of a full one. Only the phone
+  // layout has a short row, and only its first.
+  function rowHeightsOf(form) {
+    return form === "phone" ? [root.topRowFraction, 1, 1, 1, 1] : [1, 1, 1, 1, 1]
+  }
+  function formHeightOf(form) {
+    var rows = root.rowHeightsOf(form)
+    var h = 0
+    rows.forEach(function(f) { h += Math.round(root.keyHeight * f) })
+    return root.topPadding + h + (rows.length - 1) * root.theme.gap + root.theme.padding
+  }
+
+  // The narrowest a key may get before a layout is not worth drawing. 48 is
+  // Material's minimum touch target, and it scales with the Key Size setting
+  // because that setting is exactly how big keys need to be for these
+  // fingers: asking for larger keys asks for a simpler board sooner.
+  readonly property real minKeyWidth: 48 * root.theme.keyScale
+  // How much height the keyboard may take when it is choosing for itself.
+  // The service sets it from the screen. Zero means no limit.
+  property real maxHeight: 0
+
+  // Which board is drawn. Auto takes the widest that fits the screen both
+  // ways. A named one is taken at its word on height, since asking for it is
+  // asking for the height it needs, but still gives way on width: a board
+  // too wide for the screen cannot be drawn at all. The phone layout is the
+  // floor and always fits.
+  readonly property string wanted: root.service.keyboardLayout || "auto"
+  readonly property string form: {
+    var ladder = root.formLadder
+    var auto = root.wanted === "auto"
+    var from = auto ? 0 : Math.max(0, ladder.indexOf(root.wanted))
+    for (var i = from; i < ladder.length; i++)
+      if (root.formFits(ladder[i], auto)) return ladder[i]
+    return ladder[ladder.length - 1]
+  }
+  function formFits(form, checkHeight) {
+    if (form === "phone") return true
+    if ((root.width - 2 * root.theme.padding) / root.formUnitsOf(form) < root.minKeyWidth)
+      return false
+    return !(checkHeight && root.maxHeight > 0 && root.formHeightOf(form) > root.maxHeight)
+  }
+
+  // How wide the whole keyboard is, in key units.
+  readonly property real formUnits: root.formUnitsOf(root.form)
 
   // Where each key sits: { key, x, y, width, height } for every key of the
   // top row and the current page, rows centred. A key's slot is this
@@ -449,8 +565,8 @@ Item {
   // symbol pages' third row is short everywhere, and its page key and
   // Backspace take the slack on any layout.
   function stretch(row, widths) {
-    var slack = root.unit * root.rowUnits - widths.reduce(function(a, b) { return a + b }, 0)
-    if (slack <= 1) return widths
+    var slack = root.formUnits - widths.reduce(function(a, b) { return a + b }, 0)
+    if (slack * root.unit <= 1) return widths
     var space = row.indexOf("space")
     if (space !== -1) {
       widths[space] += slack
@@ -461,37 +577,108 @@ Item {
     return widths
   }
 
+  // A keyboard's shape, as rows of keys with the width each one holds.
+  // Everything that differs between one form factor and another is decided
+  // here, in key units, and slotsOf below is the same geometry pass for all
+  // of them. An entry is { key, w, h }: w in key units, h as a fraction of a
+  // full row, so the phone layout's shorter extra row is a property of that
+  // row rather than a case inside the geometry.
+  function formRows(page) {
+    return root.form === "phone" ? root.phoneRows(page) : root.blockRows()
+  }
+
+  // Positions, in the order a row draws them: AE01 through AE12 and so on.
+  function positions(prefix, from, to) {
+    var out = []
+    for (var i = from; i <= to; i++) out.push(prefix + (i < 10 ? "0" + i : "" + i))
+    return out
+  }
+
+  // A real board: five rows, fifteen units across, with the widths a keycap
+  // set is made to, so it reads as the board it is rather than as a grid.
+  //
+  // It is drawn ANSI shaped whatever the layout. An ISO board's tall Enter
+  // and shifted backslash are a keycap shape, and nothing on a screen you
+  // tap is better for reproducing them: every key is here and reachable
+  // either way. What an ISO layout does get is its extra key beside the left
+  // Shift, where it reaches something nothing else does, and the left Shift
+  // gives up the width for it exactly as on the real board.
+  //
+  // A position the layout has no key for is dropped and its width shared out
+  // to the ends of its row, so a short row still reaches both edges.
+  function blockRows() {
+    function key(k, w) { return { key: k, w: w === undefined ? 1 : w, h: 1 } }
+    function have(list) {
+      return list.filter(function(k) { return k in root.grid }).map(function(k) { return key(k) })
+    }
+    var shift = root.hasIsoKey
+      ? [key("LFSH", 1.25), key("LSGT")].concat(have(root.positions("AB", 1, 10)))
+      : [key("LFSH", 2.25)].concat(have(root.positions("AB", 1, 10)))
+    var rows = [
+      [key("ESC")].concat(have(root.positions("AE", 1, 12)), [key("BKSP", 2)]),
+      [key("TAB", 1.5)].concat(have(root.positions("AD", 1, 12)), [key("BKSL", 1.5)]),
+      [key("CAPS", 1.75)].concat(have(root.positions("AC", 1, 11)), [key("RTRN", 2.25)]),
+      shift.concat([key("RTSH", 2.75)]),
+      [key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
+       key("RALT", 1.25), key("RWIN", 1.25), key("MENU", 1.25), key("RCTL", 1.25)]
+    ]
+    // TLDE and BKSL are positions too, and a layout without one leaves a hole
+    // at the end of its row rather than in the middle of it.
+    rows = rows.map(function(row) {
+      return row.filter(function(e) {
+        return !(e.key in root.roles) && e.key.length === 4 && !(e.key in root.grid) ? false : true
+      })
+    })
+    var units = root.formUnitsOf(root.form)
+    return rows.map(function(row) {
+      var slack = units - row.reduce(function(a, e) { return a + e.w }, 0)
+      if (slack * root.unit > 1 && row.length > 1) {
+        row[0] = { key: row[0].key, w: row[0].w + slack / 2, h: 1 }
+        var last = row.length - 1
+        row[last] = { key: row[last].key, w: row[last].w + slack / 2, h: 1 }
+      }
+      return row
+    })
+  }
+
+  // The phone layout: an extra row of desktop keys over the page's own rows.
+  // The extra row spreads over the full width, less whatever the windows
+  // toggle holds at the end of it, and the page rows take their widths from
+  // the table and then stretch to reach the edges.
+  function phoneRows(page) {
+    var fixed = 0, sharers = 0
+    root.topRow.forEach(function(k) {
+      if (k in root.topRowFixed) fixed += root.topRowFixed[k]
+      else sharers++
+    })
+    var share = sharers > 0 ? (root.formUnits - fixed) / sharers
+      : root.formUnits / root.topRow.length
+    var rows = [root.topRow.map(function(k) {
+      return { key: k, w: (k in root.topRowFixed) ? root.topRowFixed[k] : share,
+               h: root.topRowFraction }
+    })]
+    root.pages[page].forEach(function(row) {
+      var w = root.stretch(row, row.map(function(k) { return root.widths[k] || 1 }))
+      rows.push(row.map(function(k, i) { return { key: k, w: w[i], h: 1 } }))
+    })
+    return rows
+  }
+
   // Where every key of a page sits. Taken by name rather than read off the
   // current page, so the letters page can ask where the symbol pages put
   // their characters without being on one (see overlayOf).
   function slotsOf(page) {
-    var rows = [root.topRow].concat(root.pages[page])
     var gap = root.theme.gap
     var out = []
     var y = root.topPadding
-    rows.forEach(function(row, i) {
-      // The top row spreads its keys over the full width, less whatever the
-      // windows toggle holds at the end of it.
-      var fixedUnits = 0, sharers = 0
-      if (i === 0) {
-        row.forEach(function(k) {
-          if (k in root.topRowFixed) fixedUnits += root.topRowFixed[k]
-          else sharers++
-        })
-      }
-      var share = sharers > 0
-        ? root.unit * (root.rowUnits - fixedUnits) / sharers
-        : root.unit * root.rowUnits / row.length
-      var widths = row.map(function(k) {
-        if (i !== 0) return root.unit * (root.widths[k] || 1)
-        return k in root.topRowFixed ? root.unit * root.topRowFixed[k] : share
-      })
-      if (i > 0) widths = root.stretch(row, widths)
-      var h = i === 0 ? root.topRowHeight : root.keyHeight
-      var x = (root.width - widths.reduce(function(a, b) { return a + b }, 0)) / 2
-      row.forEach(function(k, j) {
-        out.push({ key: k, row: i, x: x + gap / 2, y: y, width: widths[j] - gap, height: h })
-        x += widths[j]
+    root.formRows(page).forEach(function(row, i) {
+      var total = row.reduce(function(a, e) { return a + e.w }, 0)
+      var h = Math.round(root.keyHeight * row[0].h)
+      var x = (root.width - total * root.unit) / 2
+      row.forEach(function(e) {
+        out.push({ key: e.key, row: i, x: x + gap / 2, y: y,
+                   width: e.w * root.unit - gap, height: h })
+        x += e.w * root.unit
       })
       y += h + gap
     })
@@ -543,9 +730,19 @@ Item {
   }
 
   function label(key) {
-    if (key === "space") return layoutName
-    if (key in labels) return labels[key]
+    var role = root.roleOf(key)
+    if (role === "space") return layoutName
+    if (role in labels) return labels[role]
     return root.charFor(key)
+  }
+
+  // What a cap prints small in its right corner: the character AltGr types
+  // on it. A real board reads it off the position, the phone layout off the
+  // letter.
+  function hintFor(key) {
+    if (root.altgrOn) return ""
+    var lv = root.grid[key]
+    return lv ? lv[2] : (root.level3Of[key] || "")
   }
 
   function shifted(key) {
@@ -557,6 +754,18 @@ Item {
   // A key with nothing on its third level types its own character, the way
   // it would with AltGr held on a physical keyboard that has nothing there.
   function charFor(key) {
+    // A real board's key is a position, and what it types is whatever the
+    // active layout puts at that position. Shift comes from the keymap and
+    // not from upper casing, because the shifted level of a number row is
+    // not the upper case of anything.
+    var lv = root.grid[key]
+    if (lv) {
+      if (root.altgrOn) {
+        var level = root.upper ? (lv[3] || lv[2]) : lv[2]
+        if (level) return level
+      }
+      return root.upper ? (lv[1] || lv[0]) : lv[0]
+    }
     if (root.altgrOn) {
       var deep = root.upper ? (root.level4Of[key] || root.level3Of[key]) : root.level3Of[key]
       if (deep) return deep
@@ -568,19 +777,23 @@ Item {
   // character is drawn as a letter, and one that acts on the next key or on
   // the keyboard itself is drawn apart from them.
   function kind(key) {
+    var role = root.roleOf(key)
+    // Caps Lock holds the keyboard's own Shift, so it is drawn locked when
+    // that is what it has done.
+    if (role === "caps") return root.mods.shift === "locked" ? "locked" : "special"
     // Super is the key Omarchy is built around, so at rest it is drawn the
     // way Enter is rather than as another grey modifier. Armed, it drops
     // back to the latched and locked colours, because what it is doing then
     // matters more than how important it is.
-    if (key === "super")
+    if (role === "super")
       return mods["super"] === "locked" ? "locked"
         : mods["super"] === "latched" ? "latched" : "accent"
-    if (key in mods) return mods[key] === "locked" ? "locked" : mods[key] === "latched" ? "latched" : "special"
-    if (key === "enter") return "accent"
+    if (role in mods) return mods[role] === "locked" ? "locked" : mods[role] === "latched" ? "latched" : "special"
+    if (role === "enter") return "accent"
     // The space bar goes with them rather than with the letters, though it
     // does type a character: it is part of the frame around the letters, it
     // carries the layout's name instead of a legend, and no one hunts for it.
-    return key in labels ? "special" : "normal"
+    return root.roleOf(key) in labels ? "special" : "normal"
   }
 
   // Modifiers applied to the next key, as the helper names them. AltGr is
@@ -626,17 +839,26 @@ Item {
   }
 
   function press(key) {
-    if (key in mods) { tapModifier(key); return }
-    if (key === "windows") {
+    var role = root.roleOf(key)
+    // Caps Lock holds the keyboard's own Shift rather than sending the
+    // keysym. A real Caps Lock sets a state in the compositor that the caps
+    // drawn here cannot see, and a keyboard that types what it shows has to
+    // own that state itself.
+    if (role === "caps") {
+      root.setMod("shift", root.mods.shift === "locked" ? "off" : "locked")
+      return
+    }
+    if (role in mods) { tapModifier(role); return }
+    if (role === "windows") {
       // Straight into tiling, rather than to a page of keys that say the
       // same things. It waits for the finger to lift because it takes the
       // keyboard off the screen: see liftKeys.
       root.service.openTiling()
       return
     }
-    switch (key) {
+    switch (role) {
     case "symbols": case "more": case "letters":
-      page = key
+      page = role
       return
     case "settings":
       // Ragtop's controls come up over the keyboard rather than in place of
@@ -646,18 +868,21 @@ Item {
       root.service.toolsOpen = !root.service.toolsOpen
       return
     }
-    if (holdable.indexOf(key) !== -1) {
-      service.sendKeys(["down", keysyms[key]].concat(activeMods(true)).join(" "))
+    if (holdable.indexOf(role) !== -1) {
+      service.sendKeys(["down", keysyms[role]].concat(activeMods(true)).join(" "))
       return
     }
-    if (key in keysyms) {
-      service.sendKeys(["key", keysyms[key]].concat(activeMods(true)).join(" "))
+    if (role in keysyms) {
+      service.sendKeys(["key", keysyms[role]].concat(activeMods(true)).join(" "))
     } else {
       // A character: typed as itself unless Ctrl, Alt or Super make it a
-      // shortcut, which goes by the key (Ctrl+C, not Ctrl+"C").
+      // shortcut, which goes by the key (Ctrl+C, not Ctrl+"C"). A real
+      // board's key is a position, so the character it types unshifted is
+      // what stands for it: Ctrl and the 3 key is "key 3 ctrl".
       var combo = activeMods(false)
+      var named = root.grid[key] ? root.grid[key][0] : key
       if (combo.length > 0)
-        service.sendKeys(["key", key].concat(activeMods(true)).join(" "))
+        service.sendKeys(["key", named].concat(activeMods(true)).join(" "))
       else
         service.sendKeys("type " + root.charFor(key))
     }
@@ -665,12 +890,13 @@ Item {
   }
 
   function release(key) {
-    if (root.liftKeys.indexOf(key) !== -1) {
+    var role = root.roleOf(key)
+    if (root.liftKeys.indexOf(role) !== -1) {
       root.press(key)
       return
     }
-    if (holdable.indexOf(key) !== -1) {
-      service.sendKeys("up " + keysyms[key])
+    if (holdable.indexOf(role) !== -1) {
+      service.sendKeys("up " + keysyms[role])
       afterKey()
     }
   }
@@ -748,7 +974,7 @@ Item {
     if (root.pendingPoint === -1) return
     var key = root.pendingKey
     root.endHold()
-    if (key !== "space") root.press(key)
+    if (root.roleOf(key) !== "space") root.press(key)
   }
 
   // Whether this finger has gone far enough from where it came down to have
@@ -771,14 +997,14 @@ Item {
     // straight away and the finger has nothing left to do. endHold is what
     // stops the lift also counting as a tap: with no hold pending and no card
     // open, the finger falls through to release(), which Super ignores.
-    if (key in root.holdOpens) {
+    if (root.roleOf(key) in root.holdOpens) {
       root.endHold()
-      root.press(root.holdOpens[key])
+      root.press(root.holdOpens[root.roleOf(key)])
       return
     }
     var items = root.holdItems(key)
     if (items.length < 1 || root.pendingPoint === -1) return
-    var layouts = key === "space"
+    var layouts = root.roleOf(key) === "space"
     var slot = null
     for (var i = 0; i < root.slots.length; i++) if (root.slots[i].key === key) { slot = root.slots[i]; break }
     if (!slot) return
@@ -840,7 +1066,7 @@ Item {
       // A finger that never went anywhere was a slow tap on the key, and
       // types it. The space bar has already typed by the time its hold
       // opens anything, so it is the one key this must not type again.
-      if (!travelled && key !== "space") root.press(key)
+      if (!travelled && root.roleOf(key) !== "space") root.press(key)
       return
     }
     if (p.kind === "layouts") {
@@ -876,14 +1102,15 @@ Item {
       width: modelData.width
       height: modelData.height
       label: root.label(modelData.key)
-      hint: root.altgrOn ? "" : (root.level3Of[modelData.key] || "")
+      hint: root.hintFor(modelData.key)
       // Only on the letters page, where the symbol pages are somewhere
       // else. On the symbol pages themselves the character is already the
       // label, and saying so twice would be noise.
-      hintLeft: root.page === "letters" ? (root.symbolOf[modelData.key] || "") : ""
+      hintLeft: root.form === "phone" && root.page === "letters"
+        ? (root.symbolOf[modelData.key] || "") : ""
       // What a hold reaches, drawn rather than written: the gear is an icon
       // and there is no character that says "settings".
-      hintIcon: root.iconFor(root.holdOpens[modelData.key] || "")
+      hintIcon: root.iconFor(root.holdOpens[root.roleOf(modelData.key)] || "")
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconFor(modelData.key)
@@ -975,10 +1202,15 @@ Item {
         // up is worse than either on its own. The space bar is the
         // exception, and types on the way down as it always has, because a
         // thumb resting on it must not swallow the letter rolling in after.
-        if (key === "space" || root.isCharacter(key) || (key in root.holdOpens))
+        var role = root.roleOf(key)
+        // A key with anything behind it waits for the finger to lift, so the
+        // hold has room to become a card first. Esc on a 60% board is one of
+        // those, though it is no character itself.
+        var deep = (role in root.holdOpens) || (key in root.holdGrid)
+        if (role === "space" || root.isCharacter(key) || deep)
           root.startHold(p, key)
-        if (root.liftKeys.indexOf(key) === -1 && !(key in root.holdOpens)
-            && (key === "space" || !root.isCharacter(key))) pressed.push(key)
+        if (root.liftKeys.indexOf(role) === -1 && !deep
+            && (role === "space" || !root.isCharacter(key))) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
@@ -1009,7 +1241,7 @@ Item {
       } else if (p.pointId === root.pendingPoint) {
         var key = root.pendingKey
         root.endHold()
-        if (key !== "space") root.press(key)  // a tap after all, and space already did
+        if (root.roleOf(key) !== "space") root.press(key)  // a tap after all, and space already did
       } else if (p.pointId in next) {
         lifted.push(next[p.pointId])
       }
