@@ -346,6 +346,14 @@ reach `<` and `>`, British `\` and `|`, and Russian `|`.
 it gives you `` ` `` and `~`. A desktop with no Escape is worse off than one
 that reaches a backtick by holding.
 
+**The right Alt is AltGr only where your layout has a third level to reach**,
+and a plain Alt where it has not, which is what that key is on a US board. It
+is the same call the phone board makes by leaving its AltGr key out
+altogether: a key that reaches nothing is worse than no key.
+
+**The Menu key** is the context menu key, which is the keyboard's right
+click. On a screen with no mouse that is the only way to ask for one.
+
 ### What every board has
 
 - **An extra row**, on the phone board, of Esc, Tab, Ctrl, Alt and the arrow

@@ -100,7 +100,34 @@ Item {
     "BKSP": "backspace", "RTRN": "enter", "TAB": "tab", "SPCE": "space",
     "CAPS": "caps", "MENU": "menu", "ESC": "esc"
   })
-  function roleOf(key) { return root.roles[key] || key }
+  // Whether anything the board actually draws has a third level. The phone
+  // layout asks a narrower question (hasLevel3), and rightly: its AltGr key
+  // switches the letter caps, so a layout with a third level only on its
+  // number row would give it nothing to show. A real board draws the number
+  // row too, so the question here is the whole board's.
+  //
+  // Keys the board leaves out do not count, and that is the whole difficulty.
+  // Measured: the only key a US layout gives a third level to is LSGT, the
+  // ISO key, which an ANSI board does not draw. Counting it would have said
+  // every layout on earth has an AltGr worth a key.
+  readonly property bool hasAltGr: {
+    var g = root.grid
+    for (var n in g) {
+      if (n === "LSGT" && !root.hasIsoKey) continue
+      if (g[n][2]) return true
+    }
+    return root.hasLevel3
+  }
+  function roleOf(key) {
+    // The right Alt is AltGr where the layout has a third level to reach,
+    // and a plain Alt where it has not, which is what that key is on a US
+    // board. It is the same call the phone layout makes by leaving its AltGr
+    // key out: a key that reaches nothing is worse than no key. Here the
+    // position exists on any real board, so it does the other thing it is
+    // for rather than nothing.
+    if (key === "RALT") return root.hasAltGr ? "altgr" : "alt"
+    return root.roles[key] || key
+  }
 
   // The symbol pages, which are the same whatever the layout: every
   // character here types in any of them, because the helper types by
