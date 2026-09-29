@@ -847,6 +847,42 @@ True today, and worth saying if you want them gone:
   undoes itself once upstream lands a fix. See
   [The menu's Apps list](#the-menus-apps-list).
 
+## What might come next
+
+Not built, not promised, and written down so the thinking isn't done twice.
+Each of these is here because it has a shape already, not because it is next.
+
+- **Function keys, and second meanings for the arrows.** The likely answer is
+  one **Fn** key on the extra row that holds the row as F1 to F12 and
+  re-labels the arrows Home, End, PgUp and PgDn, latching and locking the way
+  Ctrl and Shift already do. A layer rather than a long press, for two
+  reasons. The arrows and Backspace repeat while held, and a hold card would
+  take that away. And it is what the keyboard you just folded behind the
+  screen does, so there is nothing to learn. Nothing sends the keys today, and
+  nothing needs to change in `keyboard-helper.py` to make it: `key F5` already
+  works.
+- **A number row of its own.** The digits a hold on a letter reaches come from
+  where the two rows sit, which only lines up when a layout puts ten letters
+  on its top row. Hebrew puts eight there and Dvorak seven, so on those the
+  digits no longer sit under the letters that print them. None is out of
+  reach, since the leftovers go on the nearest letter's card, two to a card,
+  but a row of digits you can turn on, the way a phone keyboard offers one,
+  is the honest fix.
+- **Spellcheck and word prediction**, through Hunspell for the dictionary and
+  fcitx5 for the plumbing. The unsolved part is not the spelling, it is where
+  the suggestions would live on a screen whose bottom third is already keys.
+  Hunspell would have to be installed separately, and the setting would appear
+  only once it is, the way the rotation setting does with `iio-sensor-proxy`.
+- **Chinese, Japanese and Korean.** See [Chinese, Japanese and
+  Korean](#chinese-japanese-and-korean), which has the research and the one
+  test that decides the size of it.
+- **Whether a folded machine silences its own keyboard.** On a Lenovo Yoga the
+  built-in keyboard and touchpad appear to stop reporting when the screen is
+  folded back, which would mean Ragtop has nothing to do. Whether that is the
+  hardware, the firmware or the kernel, and whether other convertibles do it
+  at all, is unknown. If yours types into things while folded, please say so in
+  an issue with the model: that is the report that would turn this into work.
+
 ## Troubleshooting
 
 - **Changes to Ragtop's code don't take effect.** Run
@@ -935,6 +971,12 @@ since that interface has no signals carrying it.
 So this is a day of testing to find out which of those it is, and then either
 a paragraph of documentation or a candidate strip. If you would use it, say so
 in an issue. Interest is what would move it.
+
+Two things are already decided about how it would look. Switching engines
+would be Ctrl+Space and not Super+Space, because Omarchy has Super+Space
+already. And the characters need a font that carries them, which on Arch means
+something like `noto-fonts-cjk`. Ragtop would say so rather than render
+boxes, the way setup already does for its other dependencies.
 
 ## Upgrading from an older Ragtop
 
