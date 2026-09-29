@@ -283,7 +283,7 @@ class XkbLabels:
         {"AE04": ["4", "$", "", ""], ...}, as [plain, shift, altgr, both].
 
         The letter rows above are a projection of this, letters only and in
-        three rows, which is what the phone layout draws. A real layout draws
+        three rows, which is what the mobile layout draws. A real layout draws
         the board itself, so it needs the positions as they are, including the
         ones no phone keyboard has: the number row with its own symbols, the
         punctuation keys around the letters, and the backslash.

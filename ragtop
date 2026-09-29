@@ -36,7 +36,7 @@
 # keyboard-layout <name> is which board is drawn: auto, which takes the
 # widest that fits the screen and so changes when the screen turns, 80 for a
 # tenkeyless, 75 for the compressed one, 60 for a real keyboard's five rows
-# with no function row and no arrows, or phone for the three letter rows and
+# with no function row and no arrows, or mobile for the three letter rows and
 # the symbol pages. Auto weighs width and height
 # both. A board asked for by name is taken at its word on height and still
 # gives way on width, because one too wide for the screen cannot be drawn.
@@ -192,7 +192,7 @@ choice_notice() {
     "keyboard-layout 60") echo "A 60% keyboard, where the screen is wide enough." ;;
     "keyboard-layout 75") echo "A 75% keyboard, where the screen is wide enough." ;;
     "keyboard-layout 80") echo "A tenkeyless keyboard, where the screen is wide enough." ;;
-    "keyboard-layout phone") echo "The phone style keyboard, with its symbol pages." ;;
+    "keyboard-layout mobile") echo "The mobile keyboard, with its symbol pages." ;;
     "keyboard sensor") echo "The keyboard follows tablet mode again." ;;
     "keyboard on") echo "The keyboard is on offer in laptop mode too." ;;
     "keyboard off") echo "The keyboard is off until you turn it back on." ;;

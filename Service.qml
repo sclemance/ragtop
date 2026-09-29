@@ -115,7 +115,7 @@ Item {
   //          unless told otherwise, and what makes a fold into portrait
   //          change the keyboard rather than shrink it
   //   60     a real keyboard's five rows, no function row and no arrows
-  //   phone  the three letter rows and the symbol pages
+  //   mobile the three letter rows and the symbol pages
   //
   // Auto weighs both width and height. A named one is taken at its word on
   // height and still gives way on width, because a board too wide for the
@@ -127,7 +127,7 @@ Item {
   // somebody reads them in rather than the order the fallback walks them.
   readonly property var keyboardLayoutOptions: [
     { value: "auto", label: "Auto" },
-    { value: "phone", label: "Phone" },
+    { value: "mobile", label: "Mobile" },
     { value: "60", label: "60%" },
     { value: "75", label: "75%" },
     { value: "80", label: "80%" }
@@ -137,7 +137,6 @@ Item {
   readonly property string keyboardLayout:
     root.keyboardLayouts.indexOf(root.settings["keyboard-layout"]) !== -1
       ? root.settings["keyboard-layout"] : "auto"
-
   function setKeyboardLayout(name) {
     if (root.keyboardLayouts.indexOf(name) === -1 || keyboardLayoutProc.running) return
     keyboardLayoutProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),

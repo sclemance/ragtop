@@ -308,7 +308,7 @@ colours and font, and the Transparency setting, without restarting.
 
 There is more than one, and they are the boards those names mean.
 
-**Phone** is the three letter rows with symbol pages behind a `?123` key,
+**Mobile** is the three letter rows with symbol pages behind a `?123` key,
 which is what a phone keyboard is and what Ragtop drew for its whole life
 until now.
 
@@ -323,7 +323,7 @@ units. Arrows in the bottom row, Del, Home, PgUp, PgDn and End down the right.
 It has no room for a Menu key, so the tiling key holds it.
 
 The function row on both of these is drawn shorter than a row of letters, the
-way the phone board's extra row is, because it is the same class of key: one
+way the mobile board's extra row is, because it is the same class of key: one
 you reach for rather than type on. That is not only tidier. A six row board
 is stopped by the height cap long before it runs out of width, so the short
 row is what buys the other five their place.
@@ -351,14 +351,14 @@ Measured on a 1366 by 768 machine, Automatic works out as:
 | --- | --- | --- |
 | Smaller | 80% | 75%, since 80% wants 787px of width |
 | Regular | 80% | 60% |
-| Larger | Phone | Phone |
+| Larger | Mobile | Mobile |
 
 Landscape is decided by height and portrait by width, which is worth knowing
 when one of them surprises you. At Regular there is width to spare for a
 tenkeyless either way round, and in portrait it still falls to the 60%
 because 768 pixels will not carry eighteen units of board at that key size.
 At Larger nothing with six rows fits the height cap at all, and even the 60%
-is over, so both orientations land on the phone board.
+is over, so both orientations land on the mobile board.
 
 Every row of a real board is built as the fifteen unit main block and then
 whatever clusters that form factor puts to the right of it, so the block ends
@@ -380,14 +380,14 @@ that reaches a backtick by holding.
 
 **The right Alt is AltGr only where your layout has a third level to reach**,
 and a plain Alt where it has not, which is what that key is on a US board. It
-is the same call the phone board makes by leaving its AltGr key out
+is the same call the mobile board makes by leaving its AltGr key out
 altogether: a key that reaches nothing is worse than no key.
 
 **There is one Super, and an Fn key where the second one would be**, which
 is what a 60% does with that key and the reason it can reach anything at all.
 A second Super exists so a touch typist can hit one without leaving home
 position, and nobody touch types on this. Holding the Super opens Ragtop's
-controls, as it does on the phone board.
+controls, as it does on the mobile board.
 
 **Fn is a layer, and it latches like the other modifiers**: tap it for the
 next key, tap it again to lock it on. Holding a physical Fn is easy and
@@ -414,7 +414,7 @@ well, and does.
 
 ### What every board has
 
-- **An extra row**, on the phone board, of Esc, Tab, Ctrl, Alt and the arrow
+- **An extra row**, on the mobile board, of Esc, Tab, Ctrl, Alt and the arrow
   keys. Held arrows and Backspace repeat. A real board has those keys in
   their own places instead.
 - **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C, and the Ctrl turns
@@ -495,7 +495,7 @@ wins.
 | Control | What it does |
 | --- | --- |
 | Theme | Steps through your themes, redrawing the keyboard behind each one |
-| Keyboard Layout | Automatic, Phone or 60%, the same choice as Setup › Tablet › Layout |
+| Keyboard Layout | Automatic, Mobile, 60%, 75% or 80%, the same choice as Setup › Tablet › Layout |
 | Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode |
 | Keyboard Size | The five-step nudge against whatever size the theme asks for |
 | Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
@@ -857,7 +857,7 @@ the Settings button on the keyboard's own panel opens directly:
 | Setting | Default | Where |
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hardware, folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
-| Which board the keyboard draws: Automatic, 60% or Phone | Automatic | Setup › Tablet › Layout |
+| Which board the keyboard draws: Automatic, Mobile, 60%, 75% or 80% | Automatic | Setup › Tablet › Layout |
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
@@ -874,7 +874,7 @@ keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
-`keyboard-layout set auto|60|phone`,
+`keyboard-layout set auto|mobile|60|75|80`,
 `auto-show toggle` (or `enable`, `disable`),
 `size-adjust set smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and

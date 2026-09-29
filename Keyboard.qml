@@ -139,7 +139,7 @@ Item {
     "BKSP": "backspace", "RTRN": "enter", "TAB": "tab", "SPCE": "space",
     "CAPS": "caps", "MENU": "menu", "ESC": "esc"
   })
-  // Whether anything the board actually draws has a third level. The phone
+  // Whether anything the board actually draws has a third level. The mobile
   // layout asks a narrower question (hasLevel3), and rightly: its AltGr key
   // switches the letter caps, so a layout with a third level only on its
   // number row would give it nothing to show. A real board draws the number
@@ -166,7 +166,7 @@ Item {
   function roleOf(key) {
     // The right Alt is AltGr where the layout has a third level to reach,
     // and a plain Alt where it has not, which is what that key is on a US
-    // board. It is the same call the phone layout makes by leaving its AltGr
+    // board. It is the same call the mobile layout makes by leaving its AltGr
     // key out: a key that reaches nothing is worse than no key. Here the
     // position exists on any real board, so it does the other thing it is
     // for rather than nothing.
@@ -453,9 +453,9 @@ Item {
   function overlaid(slot) {
     return slot.row >= 1 && slot.row <= 3 && root.isCharacter(slot.key)
   }
-  // Only the phone layout has pages for a key to stand in for.
-  readonly property var symbolLists: root.form === "phone" ? root.overlayOf("symbols") : ({})
-  readonly property var moreLists: root.form === "phone" ? root.overlayOf("more") : ({})
+  // Only the mobile layout has pages for a key to stand in for.
+  readonly property var symbolLists: root.form === "mobile" ? root.overlayOf("symbols") : ({})
+  readonly property var moreLists: root.form === "mobile" ? root.overlayOf("more") : ({})
   // The one a cap prints in its corner, of however many the key carries.
   function firstOf(lists) {
     var map = {}
@@ -585,11 +585,11 @@ Item {
     return Math.ceil(widest) + 3 * root.theme.gap
   }
 
-  // How wide the phone layout is, in key units: its longest row. Layouts
+  // How wide the mobile layout is, in key units: its longest row. Layouts
   // differ, 10 to 12 letter keys.
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
   // Sized so the widest row of the board being drawn fits, which is why this
-  // divides by the form's own width and not by the phone layout's. A key is
+  // divides by the form's own width and not by the mobile layout's. A key is
   // never larger than the size setting asks for, so a board narrower than
   // the screen sits centred with a margin rather than growing into it.
   readonly property real unit: Math.min((width - 2 * theme.padding) / root.formUnits,
@@ -606,25 +606,25 @@ Item {
   readonly property real topRowHeight: Math.round(keyHeight * root.topRowFraction)
   // The form factors, widest first, which is the order a fallback walks.
   // A real board is 15 units across its main block, which is what a keycap
-  // set is made to, and the phone layout is as wide as its widest row needs.
-  readonly property var formLadder: ["80", "75", "60", "phone"]
+  // set is made to, and the mobile layout is as wide as its widest row needs.
+  readonly property var formLadder: ["80", "75", "60", "mobile"]
   // Every real board is the same 15 unit main block. A 60% is only that. A
   // 75% is compressed: one more column hard against it with no gap. A
   // tenkeyless keeps the gap and the full three wide cluster, which is what
   // makes it look like the board it is.
   function formUnitsOf(form) {
-    return form === "phone" ? root.rowUnits
+    return form === "mobile" ? root.rowUnits
       : form === "60" ? 15
       : form === "75" ? 16 : 18.25
   }
-  // The height of each row, as a fraction of a full one. Only the phone
+  // The height of each row, as a fraction of a full one. Only the mobile
   // layout has a short row, and only its first. The boards with a function
   // row have six.
   function rowHeightsOf(form) {
-    return form === "phone" ? [root.topRowFraction, 1, 1, 1, 1]
+    return form === "mobile" ? [root.topRowFraction, 1, 1, 1, 1]
       : form === "60" ? [1, 1, 1, 1, 1]
       // A function row is reached for rather than typed on, which is what
-      // the phone board's extra row already says about the same class of
+      // the mobile board's extra row already says about the same class of
       // key, so it is the same fraction of a row. It is not only tidier: a
       // six row board is stopped by the height cap long before it runs out
       // of width, so this is the row that buys the others their place.
@@ -649,7 +649,7 @@ Item {
   // Which board is drawn. Auto takes the widest that fits the screen both
   // ways. A named one is taken at its word on height, since asking for it is
   // asking for the height it needs, but still gives way on width: a board
-  // too wide for the screen cannot be drawn at all. The phone layout is the
+  // too wide for the screen cannot be drawn at all. The mobile layout is the
   // floor and always fits.
   readonly property string wanted: root.service.keyboardLayout || "auto"
   readonly property string form: {
@@ -661,7 +661,7 @@ Item {
     return ladder[ladder.length - 1]
   }
   function formFits(form, checkHeight) {
-    if (form === "phone") return true
+    if (form === "mobile") return true
     if ((root.width - 2 * root.theme.padding) / root.formUnitsOf(form) < root.minKeyWidth)
       return false
     return !(checkHeight && root.maxHeight > 0 && root.formHeightOf(form) > root.maxHeight)
@@ -713,10 +713,10 @@ Item {
   // Everything that differs between one form factor and another is decided
   // here, in key units, and slotsOf below is the same geometry pass for all
   // of them. An entry is { key, w, h }: w in key units, h as a fraction of a
-  // full row, so the phone layout's shorter extra row is a property of that
+  // full row, so the mobile layout's shorter extra row is a property of that
   // row rather than a case inside the geometry.
   function formRows(page) {
-    return root.form === "phone" ? root.phoneRows(page) : root.blockRowsFor(root.form)
+    return root.form === "mobile" ? root.mobileRows(page) : root.blockRowsFor(root.form)
   }
 
   // Positions, in the order a row draws them: AE01 through AE12 and so on.
@@ -822,7 +822,7 @@ Item {
     // line with the row above. With every dead key now reported there
     // should be nothing to stretch, and this is what keeps a layout nobody
     // has tried from coming out ragged.
-    var block = form === "phone" ? units : 15
+    var block = form === "mobile" ? units : 15
     var heights = root.rowHeightsOf(form)
     return rows.map(function(pair, i) {
       var main = pair[0].filter(function(e) {
@@ -839,11 +839,11 @@ Item {
     })
   }
 
-  // The phone layout: an extra row of desktop keys over the page's own rows.
+  // The mobile layout: an extra row of desktop keys over the page's own rows.
   // The extra row spreads over the full width, less whatever the windows
   // toggle holds at the end of it, and the page rows take their widths from
   // the table and then stretch to reach the edges.
-  function phoneRows(page) {
+  function mobileRows(page) {
     var fixed = 0, sharers = 0
     root.topRow.forEach(function(k) {
       if (k in root.topRowFixed) fixed += root.topRowFixed[k]
@@ -939,7 +939,7 @@ Item {
   }
 
   // What a cap prints small in its right corner: the character AltGr types
-  // on it. A real board reads it off the position, the phone layout off the
+  // on it. A real board reads it off the position, the mobile layout off the
   // letter.
   function hintFor(key) {
     // The layer replaces what a key does, so what it would otherwise reach
@@ -1321,7 +1321,7 @@ Item {
       // Only on the letters page, where the symbol pages are somewhere
       // else. On the symbol pages themselves the character is already the
       // label, and saying so twice would be noise.
-      hintLeft: root.form === "phone" && root.page === "letters"
+      hintLeft: root.form === "mobile" && root.page === "letters"
         ? (root.symbolOf[modelData.key] || "") : ""
       // What a hold reaches, drawn rather than written: the gear is an icon
       // and there is no character that says "settings".
