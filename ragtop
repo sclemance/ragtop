@@ -8,6 +8,7 @@
 #        ragtop overlay status
 #        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
+#        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop size-adjust (get | is <adjust> | set <adjust>)
 #        ragtop rotation (get | is <mode> | set <mode>)
@@ -26,7 +27,10 @@
 # smallest, smaller, regular, larger or largest, which sizes the keys
 # against whatever the theme asked for and is never written by applying one.
 # Rotation <mode> is locked, unlocked, or auto, which turns the screen while
-# in tablet mode and holds it still in laptop mode.
+# in tablet mode and holds it still in laptop mode. The keyboard's own <mode>
+# is sensor (on offer in tablet mode, which is what it has always done), on
+# (always, laptop mode included) or off (never), and it decides only the
+# keyboard: tiling mode and the patched overlays still follow tablet mode.
 #
 # A theme is a TOML file of those same settings, laid out the way Omarchy
 # lays its own themes out: themes/<slug>/ragtop.toml under Ragtop, and
@@ -169,6 +173,9 @@ choice_notice() {
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
     "size-adjust smallest"|"size-adjust smaller"|"size-adjust regular"\
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
+    "keyboard sensor") echo "The keyboard follows tablet mode again." ;;
+    "keyboard on") echo "The keyboard is on offer in laptop mode too." ;;
+    "keyboard off") echo "The keyboard is off until you turn it back on." ;;
     "rotation locked") echo "The screen will not rotate." ;;
     "rotation unlocked") echo "The screen follows the sensor." ;;
     "rotation auto") echo "The screen rotates while in tablet mode." ;;
@@ -480,6 +487,9 @@ PYEOF
   echo
   mode=$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ragtop-mode" 2>/dev/null || true)
   row "Tablet mode" "$(get tablet-mode auto)${mode:+, now $mode}"
+  # Whether there is a keyboard on offer at all, which is the first thing to
+  # rule out behind "the keyboard never comes up".
+  row Keyboard "$(get keyboard sensor)"
   switch=$("$repo/find-tablet-switch.py" 2>/dev/null || true)
   if [[ -n $switch ]]; then
     row Switch "$(bash "$repo/udev-rule.sh" status 2>/dev/null || echo unknown), ${switch#*$'\t'}"
@@ -576,6 +586,7 @@ PYEOF
 }
 
 case "${1:-} ${2:-}" in
+  "keyboard "*) choice keyboard sensor "${2:-}" "${3:-}" ;;
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;
   "size-adjust "*) choice size-adjust regular "${2:-}" "${3:-}" ;;
   "rotation "*) choice rotation auto "${2:-}" "${3:-}" ;;

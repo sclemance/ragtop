@@ -10,6 +10,8 @@ BarWidget {
   // the controls on the keyboard are the same switch rather than two copies.
   readonly property string rotationMode: root.service ? root.service.rotationMode : "auto"
   readonly property bool rotationLocked: root.service ? root.service.rotationLocked : false
+  readonly property string keyboardMode: root.service ? root.service.keyboardMode : "sensor"
+  readonly property bool keyboardAvailable: root.service ? root.service.keyboardAvailable : false
   readonly property string tabletSwitchDevice: String(root.setting("tabletSwitchDevice", ""))
   readonly property bool tabletMode: root.service ? root.service.tabletMode : false
   // A machine with no switch to read never reports laptop, and Automatic must
@@ -54,6 +56,15 @@ BarWidget {
     root.service.setRotationMode(order[(order.indexOf(root.rotationMode) + 1) % order.length])
   }
 
+  // Sensor, then on, then off, then round again. Kept in Ragtop's settings by
+  // the service, like the rotation mode, so this button and Setup › Tablet ›
+  // Keyboard are one switch and not two.
+  function cycleKeyboardMode() {
+    if (!root.service) return
+    var order = root.service.keyboardModes
+    root.service.setKeyboardMode(order[(order.indexOf(root.keyboardMode) + 1) % order.length])
+  }
+
   // What stood here forced the lock off on unfolding, because a lock was
   // never wanted in laptop mode and the button could not be reached there to
   // undo one. Automatic says that properly now, and the button is always
@@ -77,9 +88,12 @@ BarWidget {
 
   Grid {
     id: grid
-    columns: root.vertical ? 1 : 2
+    // Three across, though only two of them are there in laptop mode: Grid
+    // leaves out an invisible child rather than leaving a hole for it, so the
+    // row closes up on its own.
+    columns: root.vertical ? 1 : 3
 
-    // Both drawn by KeyIcon rather than set as a Nerd Font glyph, which is
+    // All drawn by KeyIcon rather than set as a Nerd Font glyph, which is
     // what the keyboard's own keys use. That makes the button that opens
     // tiling mode the same mark as the key that opens it, so the bar and
     // the keyboard are visibly the same control, and it means neither one
@@ -98,6 +112,34 @@ BarWidget {
         }
       }
       onPressed: if (root.service) root.service.toggleTilingMode()
+    }
+
+    // Whether there is an on-screen keyboard on offer. Always here, like the
+    // rotation button and for the same reason: the one control that turns the
+    // keyboard on must not itself be somewhere you need the keyboard's mode to
+    // reach. It cycles rather than toggles, because "follows the switch" is a
+    // third answer and not the absence of one.
+    //
+    // The accent says a keyboard is available now, which is what the icon can
+    // honestly show. Off and "follows the switch, in laptop mode" look the
+    // same here because on screen they are the same thing. The tooltip is
+    // what tells them apart. Drawing a difference the icon cannot carry would
+    // only read as a bug.
+    BarIconButton {
+      id: keyboardButton
+      bar: root.bar
+      tooltipText: root.keyboardMode === "on" ? "Keyboard: always on"
+        : root.keyboardMode === "off" ? "Keyboard: off"
+        : "Keyboard: on in tablet mode, follows the switch"
+      active: root.keyboardAvailable
+      iconComponent: Component {
+        KeyIcon {
+          name: "keyboard"
+          color: keyboardButton.active && keyboardButton.useActiveColor
+            ? keyboardButton.activeColor : keyboardButton.foreground
+        }
+      }
+      onPressed: root.cycleKeyboardMode()
     }
 
     // A padlock said whether rotation was held, which is the state, not the

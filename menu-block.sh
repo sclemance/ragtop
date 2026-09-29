@@ -62,6 +62,18 @@ rows = {
         checked=f'"{cmd}" tablet-mode is on', action=f'"{cmd}" tablet-mode set on'),
     "setup.tablet.mode.off": dict(icon="\U000f0322", label="Always Off",
         checked=f'"{cmd}" tablet-mode is off', action=f'"{cmd}" tablet-mode set off'),
+    # Whether there is an on-screen keyboard at all. Separate from Tablet
+    # Mode, which still decides tiling mode and the patched overlays: a
+    # machine can be a tablet and still not want keys, or be a laptop and
+    # want them. Icons are reused from the rows above rather than picked by
+    # codepoint, since a guessed Nerd Font codepoint draws the wrong thing.
+    "setup.tablet.keyboard": dict(icon="\U000f030c", label="Keyboard"),
+    "setup.tablet.keyboard.sensor": dict(icon="\U000f006a", label="Follow Sensor",
+        checked=f'"{cmd}" keyboard is sensor', action=f'"{cmd}" keyboard set sensor'),
+    "setup.tablet.keyboard.on": dict(icon="\U000f030c", label="Always On",
+        checked=f'"{cmd}" keyboard is on', action=f'"{cmd}" keyboard set on'),
+    "setup.tablet.keyboard.off": dict(icon="\U000f0322", label="Always Off",
+        checked=f'"{cmd}" keyboard is off', action=f'"{cmd}" keyboard set off'),
     "setup.tablet.auto-show": dict(icon="\U000f030c", label="Auto Keyboard",
         checked=f'"{cmd}" auto-show enabled',
         action=f'"{cmd}" auto-show toggle'),

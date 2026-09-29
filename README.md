@@ -371,11 +371,23 @@ it away.
 Tablet Mode is deliberately not here. Turning it off takes the keyboard away
 with it, and the way back would be the menu this panel exists to save you
 from. It stays in Setup › Tablet, where you can reach it without a keyboard.
+The keyboard's own On / Off / Follow Sensor is not here either, for the same
+reason: turning it off would take away the panel you turned it off from. It is
+the bar button, which is always there whether or not there is a keyboard.
 
 **Screen rotation** is also in the bar, always visible, and the button there
 cycles the same three states. Rotation follows the sensor whether or not the
 machine is in tablet mode, so the screen can start turning while it is still
 a laptop, which is why Unlocked and Automatic are different things.
+
+**The keyboard button** sits beside it, also always visible, and cycles
+whether there is an on-screen keyboard at all: **Follow Sensor**, which is
+tablet mode as before, **Always On**, which offers it in laptop mode too, and
+**Always Off**. It takes the accent while a keyboard is available. Turning it
+off is not the same as leaving tablet mode: tiling mode, the patched overlays
+and the rotation rules all still follow the switch. The same three are in
+Setup › Tablet › Keyboard, and `omarchy-shell ragtop cycleKeyboardMode` binds
+to a key.
 
 ### Keybindings
 
@@ -712,6 +724,7 @@ the gear key on the on-screen keyboard opens directly:
 | Setting | Default | Where |
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hardware, folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
+| On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key size against the theme's, in five steps from Smallest to Largest | Regular | Setup › Tablet › Key Size |
@@ -726,7 +739,8 @@ bottom follows the bar the same way while the keyboard is closed, and the
 keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
-`tablet-mode set auto|on|off`, `auto-show toggle` (or `enable`, `disable`),
+`tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
+`auto-show toggle` (or `enable`, `disable`),
 `size-adjust set smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the

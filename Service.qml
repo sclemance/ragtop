@@ -99,18 +99,48 @@ Item {
       "--", tablet ? "tablet" : "laptop"
     ]
     modeWriteProc.running = true
-    // The keyboard toggle is hidden outside tablet mode, so the keyboard
-    // must be put away here. The first reading counts too: the shell may
-    // (re)start while already in laptop mode with the keyboard up.
-    if (!tablet) root.setOskVisible(false)
+    // The keyboard's handle is hidden where the keyboard is not available, so
+    // the keyboard has to be put away with it. That used to happen here on
+    // every drop out of tablet mode. It is onKeyboardAvailableChanged's job
+    // now, because whether laptop mode is reason enough depends on the
+    // keyboard's own setting. The first reading is covered too: the shell may
+    // (re)start in laptop mode, and setOskVisible refuses to raise it.
+    if (!tablet && !root.keyboardAvailable) root.setOskVisible(false)
   }
+
+  // Whether the on-screen keyboard is on offer at all: the "keyboard"
+  // setting, cycled from the bar button and Setup › Tablet › Keyboard.
+  //
+  //   sensor  follow the tablet-mode switch, which is what it has always done
+  //   on      always, laptop mode included, for a machine whose switch says
+  //           nothing or someone who wants touch keys at a desk
+  //   off      never, for a machine with a keyboard attached for good
+  //
+  // Only the keyboard reads this. Tablet mode itself still decides tiling
+  // mode, the overlay clones and whether rotation follows the sensor, because
+  // turning the keys off is not the same as saying this is a laptop.
+  readonly property var keyboardModes: ["sensor", "on", "off"]
+  readonly property string keyboardMode:
+    ["on", "off"].indexOf(root.settings["keyboard"]) !== -1 ? root.settings["keyboard"] : "sensor"
+  readonly property bool keyboardAvailable: root.keyboardMode === "on"
+    || (root.keyboardMode === "sensor" && root.tabletMode)
+  // Turning it off puts away one that is already up.
+  onKeyboardAvailableChanged: if (!root.keyboardAvailable) root.setOskVisible(false)
+
+  function setKeyboardMode(mode) {
+    if (root.keyboardModes.indexOf(mode) === -1 || keyboardModeProc.running) return
+    keyboardModeProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                                "keyboard", "set", mode]
+    keyboardModeProc.running = true
+  }
+  Process { id: keyboardModeProc }
 
   function toggleOsk() {
     setOskVisible(!root.oskVisible)
   }
 
   function setOskVisible(visible) {
-    root.oskVisible = visible
+    root.oskVisible = visible && root.keyboardAvailable
   }
 
   // A handle along the bottom edge in tablet mode: tap it to show or hide
@@ -130,7 +160,7 @@ Item {
       // While a stock picker is up every touch reaches the picker, so a tap
       // on the handle would only throw it away; a cloned picker leaves the
       // handle usable, for filter typing.
-      visible: root.tabletMode && root.layerRulesReady
+      visible: root.keyboardAvailable && root.layerRulesReady
         && (!root.pickerOpen || root.pickerPatched)
         && root.screensaverAddress === ""
 
@@ -544,7 +574,7 @@ Item {
   // bridge stopped following tablet mode at all and auto-show stayed dead
   // until the shell restarted. The switch watcher below already avoided this
   // by driving its process from a changed handler, and so does this now.
-  readonly property bool wantFocusBridge: root.tabletMode && root.autoShowEnabled
+  readonly property bool wantFocusBridge: root.keyboardAvailable && root.autoShowEnabled
 
   // Whether a focused text field may raise the keyboard on its own. Asking
   // for it by hand still works in each of these: they go through
@@ -556,7 +586,7 @@ Item {
   // focus, so a window with a text field would close the mode out from
   // under the button just tapped. Not while the screensaver is up, because
   // nothing should be drawn over it.
-  readonly property bool autoShowAllowed: root.tabletMode && root.autoShowEnabled
+  readonly property bool autoShowAllowed: root.keyboardAvailable && root.autoShowEnabled
     && !root.pickerOpen && !root.tilingOpen && root.screensaverAddress === ""
   onWantFocusBridgeChanged: {
     focusBridgeRestart.stop()
@@ -706,7 +736,7 @@ Item {
       }
     } else if (root.oskHiddenForPicker) {
       root.oskHiddenForPicker = false
-      if (root.tabletMode) root.setOskVisible(true)
+      if (root.keyboardAvailable) root.setOskVisible(true)
     }
   }
 
@@ -774,7 +804,7 @@ Item {
       if (name === "openlayer") open.push(ns)
       root.openOverlays = open
       if (name === "openlayer") {
-        if (open.length === 1 && root.tabletMode && !root.oskVisible) {
+        if (open.length === 1 && root.keyboardAvailable && !root.oskVisible) {
           root.oskShownForOverlay = true
           root.setOskVisible(true)
         }
@@ -1689,7 +1719,7 @@ Item {
       }
     } else if (root.oskHiddenForScreensaver) {
       root.oskHiddenForScreensaver = false
-      if (root.tabletMode) root.setOskVisible(true)
+      if (root.keyboardAvailable) root.setOskVisible(true)
     }
   }
 
@@ -2023,6 +2053,13 @@ Item {
       root.setRotationMode(order[(order.indexOf(root.rotationMode) + 1) % order.length])
       return root.rotationMode
     }
+    // Sensor, then on, then off, the same three the bar button cycles.
+    function cycleKeyboardMode(): string {
+      var order = root.keyboardModes
+      root.setKeyboardMode(order[(order.indexOf(root.keyboardMode) + 1) % order.length])
+      return root.keyboardMode
+    }
+    function keyboardModeState(): string { return root.keyboardMode }
     function growKeyboard(): string { root.stepSize(1); return "ok" }
     function shrinkKeyboard(): string { root.stepSize(-1); return "ok" }
     function rotationState(): string { return root.rotationMode }
