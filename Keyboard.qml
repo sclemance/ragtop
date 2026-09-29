@@ -251,7 +251,24 @@ Item {
   // thing first. Rolling from it into the next key still works, because
   // another finger arriving settles the hold as the tap it was. Hold Super,
   // tap B, and the browser opens with Super latched by commitPending.
-  readonly property var holdOpens: ({ "super": "settings" })
+  // Keyed by the drawn key where a board has more than one of something, and
+  // by role otherwise. A real board has two Super keys and does not need two
+  // gears, so the right one carries tiling mode instead. On the phone board
+  // there is one Super and the tiling key is a key of its own on the extra
+  // row, so only the role entry applies there.
+  readonly property var holdOpensByKey: ({ "LWIN": "settings", "RWIN": "windows" })
+  readonly property var holdOpensByRole: ({ "super": "settings" })
+  function holdOpenFor(key) {
+    if (key in root.holdOpensByKey) return root.holdOpensByKey[key]
+    return root.holdOpensByRole[root.roleOf(key)] || ""
+  }
+
+  // A hold that has come due on a key whose action cannot run while a finger
+  // is still down (liftKeys), kept until that finger lifts. Tiling mode is
+  // the one: it takes the keyboard off the screen, and a touch left with
+  // nowhere to end swallows the next tap anywhere on the machine.
+  property string armedAction: ""
+  property int armedPoint: -1
 
   // Keys that are not a character themselves but offer one behind a hold,
   // named by the position whose characters they carry. A 60% board puts Esc
@@ -992,6 +1009,8 @@ Item {
   // again. The pending hold goes with it, since the key it belongs to is
   // somewhere else now too.
   function cancelTouches() {
+    root.armedAction = ""
+    root.armedPoint = -1
     if (root.popup === null && root.pendingPoint === -1) return
     root.popup = null
     holdTimer.stop()
@@ -1037,9 +1056,18 @@ Item {
     // straight away and the finger has nothing left to do. endHold is what
     // stops the lift also counting as a tap: with no hold pending and no card
     // open, the finger falls through to release(), which Super ignores.
-    if (root.roleOf(key) in root.holdOpens) {
+    var opens = root.holdOpenFor(key)
+    if (opens !== "") {
+      var point = root.pendingPoint
       root.endHold()
-      root.press(root.holdOpens[root.roleOf(key)])
+      // Something that takes the keyboard away waits for the finger, the
+      // same way the tiling key itself does when it is tapped.
+      if (root.liftKeys.indexOf(opens) !== -1) {
+        root.armedAction = opens
+        root.armedPoint = point
+      } else {
+        root.press(opens)
+      }
       return
     }
     var items = root.holdItems(key)
@@ -1150,7 +1178,7 @@ Item {
         ? (root.symbolOf[modelData.key] || "") : ""
       // What a hold reaches, drawn rather than written: the gear is an icon
       // and there is no character that says "settings".
-      hintIcon: root.iconFor(root.holdOpens[root.roleOf(modelData.key)] || "")
+      hintIcon: root.iconFor(root.holdOpenFor(modelData.key))
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconFor(modelData.key)
@@ -1246,7 +1274,7 @@ Item {
         // A key with anything behind it waits for the finger to lift, so the
         // hold has room to become a card first. Esc on a 60% board is one of
         // those, though it is no character itself.
-        var deep = (role in root.holdOpens) || (key in root.holdGrid)
+        var deep = root.holdOpenFor(key) !== "" || (key in root.holdGrid)
         if (role === "space" || root.isCharacter(key) || deep)
           root.startHold(p, key)
         if (root.liftKeys.indexOf(role) === -1 && !deep
@@ -1276,7 +1304,12 @@ Item {
     var next = Object.assign({}, root.held)
     var lifted = []
     points.forEach(function(p) {
-      if (root.popup !== null && p.pointId === root.popup.pointId) {
+      if (p.pointId === root.armedPoint) {
+        var action = root.armedAction
+        root.armedAction = ""
+        root.armedPoint = -1
+        root.press(action)
+      } else if (root.popup !== null && p.pointId === root.popup.pointId) {
         root.choosePopup()
       } else if (p.pointId === root.pendingPoint) {
         var key = root.pendingKey

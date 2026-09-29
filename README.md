@@ -354,6 +354,12 @@ altogether: a key that reaches nothing is worse than no key.
 **The Menu key** is the context menu key, which is the keyboard's right
 click. On a screen with no mouse that is the only way to ask for one.
 
+**Both Super keys carry something behind a hold**, and not the same thing,
+because a board with two of them does not need two gears. The left one opens
+Ragtop's controls. The right one opens tiling mode, which the phone board
+reaches from a key of its own on its extra row and this one would otherwise
+only reach from the bar. Each says which in its own corner.
+
 ### What every board has
 
 - **An extra row**, on the phone board, of Esc, Tab, Ctrl, Alt and the arrow
@@ -414,7 +420,8 @@ omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 ### The controls
 
 Holding Super opens a small panel that sits below Omarchy's bar and holds
-what you reach for while actually holding the machine. The keyboard stays
+what you reach for while actually holding the machine. On a board with two
+Super keys it is the left one, and the right one opens tiling mode. The keyboard stays
 drawn underneath, so changing the theme or the key size shows you the result
 as you do it. Tap anywhere on the keyboard to put it away.
 
