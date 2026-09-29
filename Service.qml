@@ -1720,9 +1720,61 @@ Item {
   // because a second copy is how Smallest and Largest came to do nothing.
   readonly property var sizeNudges: ({ "smallest": 0.78, "smaller": 0.88, "regular": 1,
                                        "larger": 1.15, "largest": 1.3 })
+  // The size setting is a percentage now, anywhere from 60 to 160, so the
+  // slider moves smoothly instead of snapping through five stops. The five
+  // names are still read, because they are what is written in every
+  // settings.conf that existed before this and in the menu rows, which cannot
+  // offer a slider. They resolve to the percentages they always meant.
+  readonly property real sizeMin: 60
+  readonly property real sizeMax: 160
+  function sizePercent(value) {
+    var raw = String(value === undefined ? root.settings["size-adjust"] : value).trim()
+    if (raw in root.sizeNudges) return root.sizeNudges[raw] * 100
+    var n = Number(raw)
+    if (isFinite(n) && n >= root.sizeMin && n <= root.sizeMax) return n
+    return 100
+  }
+  readonly property bool sizeAuto:
+    String(root.settings["size-adjust"] || "").trim() === "auto"
+
+  // What the screen itself says the size should be.
+  //
+  // Quickshell reports physicalPixelDensity in device pixels per millimetre,
+  // which is the one number that makes a key the same size in the hand on any
+  // screen. Measured here: 5.37 px/mm over 1366 pixels is a 254mm panel,
+  // which is the 11.6 inch screen this was written on, so the number is real
+  // and not a guess.
+  //
+  // 84 logical pixels is the widest Ragtop ever draws a key at scale 1, so
+  // that is what the target is measured against. A key of about a centimetre
+  // and a half is a keycap, which is what a finger expects.
+  //
+  // It is a preference and not a promise. A key is the smaller of that cap
+  // and the room the board has, so a board already filling the width cannot
+  // grow into it: measured here, a tenkeyless across 1366 pixels gets 74px
+  // keys whatever the scale asks for, because eighteen and a quarter units
+  // have to fit. What Auto still decides there is the row height and the
+  // smallest a key may be, which is what picks the board in the first place.
+  readonly property real targetKeyMm: 16
+  readonly property real autoSizePercent: {
+    var scr = root.keyboardScreen
+    if (!scr) return 100
+    var density = scr.physicalPixelDensity || 0
+    var dpr = scr.devicePixelRatio || 1
+    // A monitor whose EDID lies about its size is worse than no answer, so
+    // anything outside what a real screen can be falls back to the default.
+    if (!(density > 2 && density < 25) || !(dpr > 0)) return 100
+    var scale = root.targetKeyMm * density / (84 * dpr)
+    // Expressed against the theme's own size, so Auto lands on the target
+    // whatever a theme asked for rather than being multiplied by it.
+    var themeSize = Number(root.settings["size"]) || 100
+    var pct = scale / (themeSize / 100) * 100
+    return Math.max(root.sizeMin, Math.min(root.sizeMax, Math.round(pct)))
+  }
+
   function stepSize(by) {
-    var at = root.sizeSteps.indexOf(root.look.sizeAdjust)
-    root.setSize((at < 0 ? 2 : at) + by)
+    root.setSize(root.sizePercent(root.lastAskedSize !== "" ? root.lastAskedSize
+      : root.settings["size-adjust"]) + by * 5)
   }
   // Dragging the slider asks for a size faster than a process can write one,
   // and reassigning a Process that is still running drops the write. So the
@@ -1731,9 +1783,12 @@ Item {
   // when it lifts is the one that lands.
   property string pendingSize: ""
   property string lastAskedSize: ""
-  function setSize(index) {
-    var next = root.sizeSteps[Math.max(0, Math.min(root.sizeSteps.length - 1, index))]
-    if (!next) return
+  // A percentage, or the word auto. Rounded, because a slider hands over
+  // fractions nobody needs written to a file.
+  function setSize(percent) {
+    var next = percent === "auto" ? "auto"
+      : String(Math.round(Math.max(root.sizeMin, Math.min(root.sizeMax, Number(percent)))))
+    if (next === "NaN") return
     // Against what was last asked for, not what has settled. The settled
     // value lags a drag, so dragging away and back again used to look like
     // no change at all and leave the handle somewhere the keyboard was not.
@@ -1866,8 +1921,13 @@ Item {
       // top of it that is the user's alone. A theme cannot write size-adjust,
       // so how big the keys are for these eyes survives changing theme.
       size: num("size", 60, 160, 100),
-      sizeAdjust: pick("size-adjust", root.sizeSteps, "regular"),
-      sizeNudge: root.sizeNudges[pick("size-adjust", root.sizeSteps, "regular")] || 1,
+      // The setting as written, which is a percentage, the word auto, or one
+      // of the five names an older Ragtop wrote. The nudge is what that comes
+      // out as, and it is the only one of the two anything downstream reads,
+      // including the lock screen through its style file.
+      sizeAdjust: String(root.settings["size-adjust"] || "regular").trim(),
+      sizeNudge: (root.sizeAuto ? root.autoSizePercent
+        : root.sizePercent(root.settings["size-adjust"])) / 100,
       background: pick("background", ["tint", "gradient"], "tint"),
       edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),

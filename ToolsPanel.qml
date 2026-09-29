@@ -256,90 +256,115 @@ Item {
           foreground: Color.popups.text
         }
 
-        Item {
-          id: sizeSlider
+        Row {
           width: parent.width
-          height: Style.spacing.controlHeight
-          readonly property int steps: panel.service.sizeSteps.length
-          readonly property int index: Math.max(0,
-            panel.service.sizeSteps.indexOf(panel.service.look.sizeAdjust))
-          readonly property real knobSize: Math.max(14, Math.round(Style.spacing.controlHeight * 0.38))
-          readonly property real trackHeight: Math.max(4, Math.round(Style.spacing.controlHeight * 0.11))
-          readonly property real span: width - knobSize
-          readonly property real stepWidth: steps > 1 ? span / (steps - 1) : span
-          // Where the finger has put it, while a finger is on it. The settled
-          // value comes back through settings.conf, which is quick but not
-          // instant, and a handle that waits for it stutters under the thumb.
-          property int dragIndex: -1
-          readonly property int shown: dragIndex >= 0 ? dragIndex : index
-          // The finger's answer stands until the settled one agrees with it,
-          // so a write still in flight cannot look like a spring back.
-          onIndexChanged: if (dragIndex === index) dragIndex = -1
+          spacing: Style.spacing.controlGap
 
-          Rectangle {
-            id: track
-            x: sizeSlider.knobSize / 2
-            width: sizeSlider.span
-            height: sizeSlider.trackHeight
-            radius: Style.cornerRadius > 0 ? height / 2 : 0
-            anchors.verticalCenter: parent.verticalCenter
-            color: Style.selectedFillFor(Color.popups.text, Color.accent)
-
-            Rectangle {
-              width: track.width * (sizeSlider.steps > 1
-                ? sizeSlider.shown / (sizeSlider.steps - 1) : 0)
-              height: track.height
-              radius: track.radius
-              color: Color.accent
-            }
+          // Auto asks the screen instead of asking you. It sits in front of
+          // the slider because it is the answer you want first, and it lights
+          // rather than moving the handle, so it is clear that nothing was
+          // picked by hand.
+          Button {
+            id: autoSize
+            width: Style.space(52)
+            height: Style.spacing.controlHeight
+            bordered: true
+            text: "Auto"
+            selected: panel.service.sizeAuto
+            foreground: Color.popups.text
+            onClicked: panel.service.setSize("auto")
           }
 
-          Repeater {
-            model: sizeSlider.steps
+          Item {
+            id: sizeSlider
+            width: parent.width - autoSize.width - Style.spacing.controlGap
+            height: Style.spacing.controlHeight
+            readonly property real min: panel.service.sizeMin
+            readonly property real max: panel.service.sizeMax
+            // What the setting says, or what the screen worked out while Auto
+            // is on, so the handle shows where Auto put it rather than sitting
+            // wherever it was left.
+            readonly property real value: panel.service.sizeAuto
+              ? panel.service.autoSizePercent
+              : panel.service.sizePercent(panel.service.look.sizeAdjust)
+            readonly property real knobSize: Math.max(14, Math.round(Style.spacing.controlHeight * 0.38))
+            readonly property real trackHeight: Math.max(4, Math.round(Style.spacing.controlHeight * 0.11))
+            readonly property real span: width - knobSize
+            // Where the finger has put it, while a finger is on it. The
+            // settled value comes back through settings.conf, which is quick
+            // but not instant, and a handle that waits for it stutters under
+            // the thumb.
+            property real dragValue: -1
+            readonly property real shown: dragValue >= 0 ? dragValue : value
+            readonly property real fraction:
+              Math.max(0, Math.min(1, (shown - min) / (max - min)))
+            // The finger's answer stands until the settled one agrees with it,
+            // so a write still in flight cannot look like a spring back.
+            onValueChanged: if (Math.abs(dragValue - value) < 0.5) dragValue = -1
 
             Rectangle {
-              required property int index
+              id: track
+              x: sizeSlider.knobSize / 2
+              width: sizeSlider.span
+              height: sizeSlider.trackHeight
+              radius: Style.cornerRadius > 0 ? height / 2 : 0
+              anchors.verticalCenter: parent.verticalCenter
+              color: Style.selectedFillFor(Color.popups.text, Color.accent)
+
+              Rectangle {
+                width: track.width * sizeSlider.fraction
+                height: track.height
+                radius: track.radius
+                color: Color.accent
+              }
+            }
+
+            // One tick at the middle, which is the size a theme asks for when
+            // it asks for nothing. The five stops are gone: they were the
+            // setting, and the setting is a number now.
+            Rectangle {
               width: Math.max(1, Style.space(2))
               height: sizeSlider.trackHeight + Style.space(4)
               anchors.verticalCenter: parent.verticalCenter
-              x: sizeSlider.knobSize / 2 + index * sizeSlider.stepWidth - width / 2
+              x: sizeSlider.knobSize / 2
+                + sizeSlider.span * (100 - sizeSlider.min) / (sizeSlider.max - sizeSlider.min)
+                - width / 2
               color: Color.popups.background
             }
-          }
 
-          BorderSurface {
-            id: knob
-            width: sizeSlider.knobSize
-            height: sizeSlider.knobSize
-            radius: width / 2
-            anchors.verticalCenter: parent.verticalCenter
-            x: sizeSlider.shown * sizeSlider.stepWidth
-            color: Color.popups.text
-            borderSpec: Border.flat(Color.popups.background, Math.max(1, Style.space(2)))
-            Behavior on x { NumberAnimation { duration: 90 } }
-          }
+            BorderSurface {
+              width: sizeSlider.knobSize
+              height: sizeSlider.knobSize
+              radius: width / 2
+              anchors.verticalCenter: parent.verticalCenter
+              x: sizeSlider.span * sizeSlider.fraction
+              color: Color.popups.text
+              borderSpec: Border.flat(Color.popups.background, Math.max(1, Style.space(2)))
+              Behavior on x { NumberAnimation { duration: 90 } }
+            }
 
-          MouseArea {
-            anchors.fill: parent
-            preventStealing: true
-            // A step is only given up once the finger is well past the middle
-            // of the gap, so a wobble at a boundary cannot flip it back and
-            // forth. A long drag still crosses several at once.
-            function at(mx) {
-              var pos = (mx - sizeSlider.knobSize / 2) / sizeSlider.stepWidth
-              var current = sizeSlider.dragIndex
-              var want = (current < 0 || Math.abs(pos - current) > 0.6) ? Math.round(pos) : current
-              return Math.max(0, Math.min(sizeSlider.steps - 1, want))
+            MouseArea {
+              anchors.fill: parent
+              preventStealing: true
+              function at(mx) {
+                var f = (mx - sizeSlider.knobSize / 2) / Math.max(1, sizeSlider.span)
+                return sizeSlider.min
+                  + Math.max(0, Math.min(1, f)) * (sizeSlider.max - sizeSlider.min)
+              }
+              // No hysteresis any more. That was there to stop a wobble
+              // flipping between two named stops, and a continuous value has
+              // no stops to flip between. A whole percent of movement is the
+              // smallest change worth writing.
+              function moveTo(v) {
+                if (sizeSlider.dragValue >= 0 && Math.abs(v - sizeSlider.dragValue) < 1) return
+                sizeSlider.dragValue = v
+                panel.service.setSize(v)
+              }
+              onPressed: function(m) { moveTo(at(m.x)) }
+              onPositionChanged: function(m) { if (pressed) moveTo(at(m.x)) }
+              onReleased: function(m) { moveTo(at(m.x)) }
+              onCanceled: sizeSlider.dragValue = -1
             }
-            function moveTo(i) {
-              if (i === sizeSlider.dragIndex) return
-              sizeSlider.dragIndex = i
-              panel.service.setSize(i)
-            }
-            onPressed: function(m) { moveTo(at(m.x)) }
-            onPositionChanged: function(m) { if (pressed) moveTo(at(m.x)) }
-            onReleased: function(m) { moveTo(at(m.x)) }
-            onCanceled: sizeSlider.dragIndex = -1
           }
         }
 

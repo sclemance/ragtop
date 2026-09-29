@@ -26,8 +26,11 @@
 # background, edge and both transparencies have no verb here and no menu
 # row. Whether the keyboard has a background at all follows Omarchy's bar,
 # which a double tap on it toggles. What is left is <adjust>, one of
-# smallest, smaller, regular, larger or largest, which sizes the keys
-# against whatever the theme asked for and is never written by applying one.
+# smallest, smaller, regular, larger or largest, or a percentage from 60 to
+# 160, or auto. It sizes the keys against whatever the theme asked for and is
+# never written by applying one. Auto asks the screen: Ragtop reads how many
+# pixels it has to the millimetre and picks the scale that makes a key about
+# a centimetre and a half wide, which is a keycap.
 # Rotation <mode> is locked, unlocked, or auto, which turns the screen while
 # in tablet mode and holds it still in laptop mode. The keyboard's own <mode>
 # is sensor (on offer in tablet mode, which is what it has always done), on
@@ -194,8 +197,17 @@ choice_notice() {
     "tablet-mode auto") echo "Tablet mode now follows the hardware: fold the screen back, or take the keyboard off." ;;
     "tablet-mode on") echo "Tablet mode is on until you change it back." ;;
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
+    # A percentage from 60 to 160, the word auto, or one of the five names an
+    # older Ragtop wrote. None of them says anything: the keyboard resizes
+    # under the slider as you drag it, so it announces itself.
+    "size-adjust auto") echo "" ;;
     "size-adjust smallest"|"size-adjust smaller"|"size-adjust regular"\
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
+    "size-adjust "*)
+      case "$2" in
+        ''|*[!0-9]*) return 1 ;;
+        *) (( $2 >= 60 && $2 <= 160 )) || return 1; echo "" ;;
+      esac ;;
     "display auto") echo "Ragtop follows the touchscreen, or the built-in panel." ;;
     "display "*) echo "Ragtop moves to $2." ;;
     "keyboard-layout auto") echo "The keyboard picks the biggest board that fits." ;;

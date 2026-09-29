@@ -101,7 +101,11 @@ rows = {
     # What is left here is what no theme author can know: how big the keys
     # need to be on this screen for these eyes, and how much of the window
     # behind them has to stay readable.
+    # The panel has a slider for this. A menu cannot slide, so the five names
+    # stay as the coarse way in, and Auto joins them.
     "setup.tablet.size-adjust": dict(icon="\U000f004c", label="Key Size"),
+    "setup.tablet.size-adjust.auto": dict(icon="\U000f006a", label="Automatic",
+        checked=f'"{cmd}" size-adjust is auto', action=f'"{cmd}" size-adjust set auto'),
     **{f"setup.tablet.size-adjust.{name}": dict(icon="\U000f004c", label=label,
         checked=f'"{cmd}" size-adjust is {name}', action=f'"{cmd}" size-adjust set {name}')
        for name, label in (("smallest", "Smallest"), ("smaller", "Smaller"),

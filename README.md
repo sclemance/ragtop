@@ -497,7 +497,7 @@ wins.
 | Theme | Steps through your themes, redrawing the keyboard behind each one |
 | Keyboard Layout | Automatic, Mobile, 60%, 75% or 80%, the same choice as Setup › Tablet › Layout |
 | Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode. Locked adds Rotate left and Rotate right, since with the sensor held off there is nothing to undo a turn by hand |
-| Keyboard Size | The five-step nudge against whatever size the theme asks for |
+| Keyboard Size | A slider against whatever size the theme asks for, with an Auto that asks the screen instead. Auto reads how many pixels the display has to the millimetre and aims for a key about a centimetre and a half wide, which is a keycap. It is a preference rather than a promise: a board already filling the width cannot grow into it |
 | Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
 | Settings | Opens Setup › Tablet for everything else |
 
@@ -864,7 +864,7 @@ the Settings button on the keyboard's own panel opens directly:
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
-| Key size against the theme's, in five steps from Smallest to Largest | Regular | Setup › Tablet › Key Size |
+| Key size against the theme's: Automatic, a percentage from 60 to 160, or one of five names | Automatic where you have not set one | the controls panel's slider, or Setup › Tablet › Key Size |
 | Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
 | Whether the keyboard has a background | follows the bar | double-tap Omarchy's bar |
 | Touch typing in each overlay, the picker nav strip, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
@@ -879,7 +879,7 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
 `keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
-`size-adjust set smallest|smaller|regular|larger|largest`,
+`size-adjust set auto|<60-160>|smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
 overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
