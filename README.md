@@ -322,6 +322,12 @@ against the right of the main block, no gap, which is the whole idea. Sixteen
 units. Arrows in the bottom row, Del, Home, PgUp, PgDn and End down the right.
 It has no room for a Menu key, so the tiling key holds it.
 
+The function row on both of these is drawn shorter than a row of letters, the
+way the phone board's extra row is, because it is the same class of key: one
+you reach for rather than type on. That is not only tidier. A six row board
+is stopped by the height cap long before it runs out of width, so the short
+row is what buys the other five their place.
+
 **80%** is a tenkeyless: the function row grouped in fours and the full three
 wide nav cluster past a gap, with the arrows in an inverted T below it.
 Eighteen and a quarter units, and the only board with room for a Menu key of
@@ -344,13 +350,15 @@ Measured on a 1366 by 768 machine, Automatic works out as:
 | Key Size | landscape | portrait |
 | --- | --- | --- |
 | Smaller | 80% | 75%, since 80% wants 787px of width |
-| Regular | 60% | 60% |
+| Regular | 80% | 60% |
 | Larger | Phone | Phone |
 
-Landscape at Regular is the interesting one. There is width to spare for a
-tenkeyless, and it drops two rungs to the 60% anyway, because a six row board
-at that key size is 418 pixels tall against a 384 pixel cap. That is the case
-the 60% exists for.
+Landscape is decided by height and portrait by width, which is worth knowing
+when one of them surprises you. At Regular there is width to spare for a
+tenkeyless either way round, and in portrait it still falls to the 60%
+because 768 pixels will not carry eighteen units of board at that key size.
+At Larger nothing with six rows fits the height cap at all, and even the 60%
+is over, so both orientations land on the phone board.
 
 The 60% board is drawn ANSI shaped whatever your layout. An ISO board's tall
 Enter is a keycap shape and nothing on a screen you tap is better for

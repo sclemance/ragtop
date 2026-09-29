@@ -623,7 +623,12 @@ Item {
   function rowHeightsOf(form) {
     return form === "phone" ? [root.topRowFraction, 1, 1, 1, 1]
       : form === "60" ? [1, 1, 1, 1, 1]
-      : [1, 1, 1, 1, 1, 1]
+      // A function row is reached for rather than typed on, which is what
+      // the phone board's extra row already says about the same class of
+      // key, so it is the same fraction of a row. It is not only tidier: a
+      // six row board is stopped by the height cap long before it runs out
+      // of width, so this is the row that buys the others their place.
+      : [root.topRowFraction, 1, 1, 1, 1, 1]
   }
   function formHeightOf(form) {
     var rows = root.rowHeightsOf(form)
@@ -813,14 +818,16 @@ Item {
         return !root.isPrintedPosition(e.key) || (e.key in root.grid)
       })
     })
-    return rows.map(function(row) {
+    var heights = root.rowHeightsOf(form)
+    return rows.map(function(row, i) {
       var slack = units - row.reduce(function(a, e) { return a + e.w }, 0)
       if (slack * root.unit > 1 && row.length > 1) {
         row[0] = { key: row[0].key, w: row[0].w + slack / 2, h: 1 }
         var last = row.length - 1
         row[last] = { key: row[last].key, w: row[last].w + slack / 2, h: 1 }
       }
-      return row
+      var h = heights[i] === undefined ? 1 : heights[i]
+      return row.map(function(e) { return { key: e.key, w: e.w, h: h } })
     })
   }
 
