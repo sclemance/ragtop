@@ -496,7 +496,7 @@ wins.
 | --- | --- |
 | Theme | Steps through your themes, redrawing the keyboard behind each one |
 | Keyboard Layout | Automatic, Mobile, 60%, 75% or 80%, the same choice as Setup › Tablet › Layout |
-| Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode |
+| Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode. Locked adds Rotate left and Rotate right, since with the sensor held off there is nothing to undo a turn by hand |
 | Keyboard Size | The five-step nudge against whatever size the theme asks for |
 | Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
 | Settings | Opens Setup › Tablet for everything else |
@@ -860,6 +860,7 @@ the Settings button on the keyboard's own panel opens directly:
 | Tablet mode: Automatic (follow the hardware, folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Which board the keyboard draws: Automatic, Mobile, 60%, 75% or 80% | Automatic | Setup › Tablet › Layout |
 | Which monitor Ragtop uses: Automatic, or a monitor by name | Automatic | the controls panel, where there is more than one |
+| Turn the screen a quarter turn by hand | n/a | the controls panel, while Screen Rotation is Locked |
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
@@ -957,6 +958,13 @@ True today, and worth saying if you want them gone:
 - **The keyboard takes every tap inside it.** A theme that draws no background
   at all is the exception, and then only the keys take one. There is no gap
   between keys to reach the window underneath.
+- **Monitors are named by their maker, not their connector.** DP-1 is a
+  socket rather than a screen, so the controls panel says LG or Samsung where
+  the monitor reports something a person would recognise, and Built-in for the
+  panel in the lid. It falls back to the connector where a monitor reports
+  nothing useful, and keeps the connector alongside where two screens share a
+  maker. Your laptop panel almost certainly reports its panel vendor and a hex
+  model, which is why it is not called that.
 - **Ragtop lives on one monitor.** The keyboard, its handle, the controls and
   tiling mode all go to the same screen: the one the compositor binds your
   touchscreen to if you have bound one, otherwise the built-in panel, and you

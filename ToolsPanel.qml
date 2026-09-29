@@ -171,6 +171,32 @@ Item {
           onChanged: function(mode) { panel.service.setRotationMode(mode) }
         }
 
+        // Only while it is locked. Unlocked, the sensor would undo a turn on
+        // the next tilt, and offering a button that gets overruled a second
+        // later is worse than not offering one.
+        Row {
+          visible: panel.service.rotationMode === "locked"
+          width: parent.width
+          spacing: Style.spacing.controlGap
+
+          Button {
+            width: (parent.width - Style.spacing.controlGap) / 2
+            height: Style.spacing.controlHeight
+            bordered: true
+            text: "Rotate left"
+            foreground: Color.popups.text
+            onClicked: panel.service.rotateBy(-1)
+          }
+          Button {
+            width: (parent.width - Style.spacing.controlGap) / 2
+            height: Style.spacing.controlHeight
+            bordered: true
+            text: "Rotate right"
+            foreground: Color.popups.text
+            onClicked: panel.service.rotateBy(1)
+          }
+        }
+
         PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
 
         // Which monitor Ragtop lives on. Only where there is more than one,

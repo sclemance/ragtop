@@ -128,10 +128,36 @@ Item {
   // Every monitor, for the controls panel, with Auto at the head. Only worth
   // offering where there is more than one, which is why the panel asks how
   // many there are before drawing the row.
+  // What to call a monitor. DP-1 is the connector, not the screen, and on a
+  // desk with two of them it says nothing about which is which.
+  //
+  // Hyprland reports make and model per monitor, and how useful they are
+  // varies wildly. An external panel usually gives something a person would
+  // recognise, LG or Samsung. A built-in one gives its panel vendor, which
+  // this machine reports as "AU Optronics" with a model of "0x635C", and
+  // nobody thinks of their laptop that way. So the built-in panel is called
+  // what it is and the rest take their maker's name, with the connector kept
+  // wherever the label would not be unique or there is nothing better.
+  function monitorLabel(m) {
+    if (/^(eDP|DSI|LVDS)-/.test(m.name)) return "Built-in"
+    var make = String(m.make || "").trim().split(/\s+/)[0]
+    // A maker that is blank, or a hex blob, is worse than the connector.
+    if (!make || /^0x/i.test(make)) return m.name
+    return make
+  }
   readonly property var displayOptions: {
     var out = [{ value: "auto", label: "Auto" }]
-    Hyprland.monitors.values.forEach(function(m) {
-      out.push({ value: m.name, label: m.name })
+    var monitors = Hyprland.monitors.values
+    var counts = {}
+    monitors.forEach(function(m) {
+      var l = root.monitorLabel(m)
+      counts[l] = (counts[l] || 0) + 1
+    })
+    monitors.forEach(function(m) {
+      var l = root.monitorLabel(m)
+      // Two screens from the same maker need the connector to tell them
+      // apart, and only then.
+      out.push({ value: m.name, label: counts[l] > 1 ? l + " " + m.name : l })
     })
     return out
   }
@@ -583,6 +609,64 @@ Item {
 
   // The same transform for the display, touchscreen and pen, so touches
   // land where they're drawn.
+  // Turning the screen by hand, which is only offered while rotation is
+  // locked: unlocked, the sensor would undo it on the next tilt.
+  //
+  // It turns the display Ragtop is on, which is not always the one the sensor
+  // turns. The sensor's is the built-in panel, because that is the panel the
+  // accelerometer is bolted to. This one is the screen the panel you are
+  // tapping is drawn on, which on a kiosk or a desk is the screen you mean.
+  // On a convertible with one display they are the same screen.
+  //
+  // The current transform is read at the moment the button is tapped rather
+  // than tracked, because a tracked one that has drifted would turn the
+  // screen somewhere nobody asked for.
+  property int rotateStep: 0
+  function rotateBy(step) {
+    if (rotateReadProc.running || rotateManualProc.running) return
+    root.rotateStep = step
+    rotateReadProc.running = true
+  }
+
+  Process {
+    id: rotateReadProc
+    command: ["hyprctl", "monitors", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var name = root.keyboardMonitorName
+        if (name === "") return
+        var cur = -1
+        try {
+          JSON.parse(text).forEach(function(m) {
+            if (m.name === name) cur = Number(m.transform) || 0
+          })
+        } catch (e) { return }
+        if (cur < 0) return
+        var t = ((cur + root.rotateStep) % 4 + 4) % 4
+        rotateManualProc.command = ["hyprctl", "eval",
+          "hl.monitor({ output = '" + name + "', transform = " + t + " }) " +
+          "hl.config({ input = { touchdevice = { transform = " + t + " }, tablet = { transform = " + t + " } } })"]
+        rotateManualProc.running = true
+        // Whatever the sensor last thought is no longer what the screen is
+        // doing, so unlocking later re-applies rather than deciding it is
+        // already there.
+        root.appliedOrientation = ""
+      }
+    }
+  }
+
+  Process {
+    id: rotateManualProc
+    // Same as the sensor's own apply: turning the screen moves every window
+    // on it and Hyprland says nothing per window, so the outlines are told.
+    onExited: {
+      if (root.tilingOpen) {
+        tilingIdle.restart()
+        tilingSettle.restart()
+      }
+    }
+  }
+
   function rotateNow(orientation) {
     if (root.rotationLocked || orientation === "" || orientation === root.appliedOrientation) return
     var output = root.internalMonitorName()
