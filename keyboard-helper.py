@@ -24,8 +24,9 @@ layout's name, the characters on its letter keys, row by row, as
 letters of its own that those rows don't reach, for the keyboard to draw. The
 two AltGr levels are empty strings where the layout has nothing there. It also
 reports what else sits on the key that types each digit, so a hold on the
-number row offers that layout's own symbols, and the punctuation the layout
-carries, for the hold on the period. Finally it names every layout Hyprland
+number row offers that layout's own symbols, the punctuation the layout
+carries, for the hold on the period, and every printed key by its xkb name
+with all four of its levels, which is what the real keyboard layouts draw. Finally it names every layout Hyprland
 has configured, and which of them is active.
 
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
@@ -154,6 +155,20 @@ class XkbLabels:
     # already, or a generic placeholder nearly every layout carries.
     COMMON_CURRENCY = "$€£¥¢¤"
 
+    # Every key that prints something, by the xkb name for its position. This
+    # is what a real keyboard layout is made of: the 60%, 75% and 80% form
+    # factors name these positions and the keyboard fills in what the active
+    # layout types at each one, so one description draws every layout.
+    #
+    # LSGT is the extra key an ISO board has beside the left Shift and an ANSI
+    # board does not. It is reported when the layout has it and left out when
+    # it does not, the way the AltGr key is, and the form factor gives its
+    # width back to Shift.
+    PRINTED = (["TLDE"] + [f"AE{i:02d}" for i in range(1, 13)]
+               + [f"AD{i:02d}" for i in range(1, 13)] + ["BKSL"]
+               + [f"AC{i:02d}" for i in range(1, 12)]
+               + ["LSGT"] + [f"AB{i:02d}" for i in range(1, 11)])
+
     def letter_rows(self, keymap_text, group):
         """{"name": layout name, "rows": [[[normal, shifted, altgr, both], ...],
         ...]}, with the keys that type letters. Punctuation keys are left to
@@ -199,6 +214,7 @@ class XkbLabels:
         letters = self._stray_letters(keymap, char, rows)
         digits = self._digits(keymap, deeper)
         punctuation = self._punctuation(keymap, deeper)
+        keys = self._grid(keymap, char, deeper)
         # Every layout Hyprland has configured, in its order, so the keyboard
         # can offer the others. One entry means there is nothing to switch to.
         layouts = []
@@ -208,7 +224,7 @@ class XkbLabels:
         lib.xkb_keymap_unref(keymap)
         return {"name": localized_layout_name(name.decode() if name else ""),
                 "rows": rows, "symbols": symbols, "letters": letters,
-                "digits": digits, "punctuation": punctuation,
+                "digits": digits, "punctuation": punctuation, "keys": keys,
                 "layouts": layouts, "active": group}
 
     def _stray_letters(self, keymap, char, rows):
@@ -233,6 +249,33 @@ class XkbLabels:
                     if c not in on_rows and c not in out:
                         out.append(c)
         return out[:12]
+
+    def _grid(self, keymap, char, deeper):
+        """What the active layout types at each printed key position:
+        {"AE04": ["4", "$", "", ""], ...}, as [plain, shift, altgr, both].
+
+        The letter rows above are a projection of this, letters only and in
+        three rows, which is what the phone layout draws. A real layout draws
+        the board itself, so it needs the positions as they are, including the
+        ones no phone keyboard has: the number row with its own symbols, the
+        punctuation keys around the letters, and the backslash.
+
+        Shift comes from the keymap and not from upper casing, because a
+        number row's shifted level is not the upper case of anything. The two
+        deeper levels are what a cap prints in its corner, empty where the
+        layout puts nothing there, and a key missing from the layout is left
+        out entirely rather than reported blank."""
+        lib = self.lib
+        out = {}
+        for name in self.PRINTED:
+            code = lib.xkb_keymap_key_by_name(keymap, name.encode())
+            if code == 0xFFFFFFFF:
+                continue
+            plain = char(code, 0)
+            if not plain or not plain.isprintable() or plain.isspace():
+                continue
+            out[name] = [plain, char(code, 1) or plain, deeper(code, 2), deeper(code, 3)]
+        return out
 
     def _digits(self, keymap, deeper):
         """What else sits on the key that types each digit: {"4": ["$"]} on a
