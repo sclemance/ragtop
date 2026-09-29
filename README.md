@@ -353,7 +353,10 @@ that reaches a backtick by holding.
   their own places instead.
 - **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C, and the Ctrl turns
   off by itself. Tap a modifier a second time to lock it on until you tap it
-  again, however long you take over it.
+  again, however long you take over it. **Shift is the exception on a board
+  that has a Caps key**, where it only ever latches: locking is what Caps is
+  for, and one keyboard offering two ways to do one thing is one too many.
+  Tapping Shift while Caps holds it still lets go.
 - **Your layout's letters:** the letter keys follow the active Hyprland
   layout, and the space bar shows its name. **Hold the space bar** to switch
   to another of the layouts you have configured in Hyprland, if you have

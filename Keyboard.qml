@@ -234,6 +234,13 @@ Item {
   // because holding it gives back exactly what the position types.
   readonly property var holdGrid: ({ "ESC": "TLDE" })
 
+  // Whether the board being drawn has a Caps key of its own. Read off the
+  // keys rather than named per form factor, so every real board that gains
+  // one gets the same Shift without being listed here.
+  readonly property bool hasCapsKey: root.slots.some(function(s) {
+    return root.roleOf(s.key) === "caps"
+  })
+
   // Hold a letter to reach the characters that belong to it, as every phone
   // keyboard does. Ragtop needs it more than most: the letter rows are the
   // three rows of a physical keyboard, and a layout can keep letters
@@ -827,11 +834,17 @@ Item {
   // timer used to say, without asking anyone to be quick about it: Super,
   // Shift, Super locks Super, and the B that follows launches the browser,
   // drops the latched Shift and leaves Super on.
+  //
+  // Shift is the exception on a board that has a Caps key. Locking is what
+  // that key is for, and one keyboard offering two ways to do one thing is
+  // one too many, so there Shift only ever latches: off, on for the next
+  // key, off. A tap while it is locked still lets go, because the lock can
+  // only have come from Caps and a second way out of it costs nothing.
   function tapModifier(name) {
     var state = mods[name]
     if (state === "off") {
       setMod(name, "latched")
-    } else if (state === "latched") {
+    } else if (state === "latched" && !(name === "shift" && root.hasCapsKey)) {
       setMod(name, "locked")
     } else {
       setMod(name, "off")
