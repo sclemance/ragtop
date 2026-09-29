@@ -744,16 +744,19 @@ Item {
     function have(list) {
       return list.filter(function(k) { return k in root.grid }).map(function(k) { return key(k) })
     }
+    function opt(k, w) { return (k in root.grid) ? [key(k, w)] : [] }
     var units = root.formUnitsOf(form)
 
-    // The rows the letters live on are the same on every real board. Only
-    // what sits above and to the right of them changes.
+    // Every real board is the same 15 unit main block with its own clusters
+    // to the right. A row is built as those two parts and joined below, so
+    // the block always ends where the block above it ended and a cluster
+    // cannot be handed width that belongs to a letter.
     var shift = root.hasIsoKey
       ? [key("LFSH", 1.25), key("LSGT")].concat(have(root.positions("AB", 1, 10)))
       : [key("LFSH", 2.25)].concat(have(root.positions("AB", 1, 10)))
-    var main = [
-      [key("TLDE")].concat(have(root.positions("AE", 1, 12)), [key("BKSP", 2)]),
-      [key("TAB", 1.5)].concat(have(root.positions("AD", 1, 12)), [key("BKSL", 1.5)]),
+    var mainRows = [
+      opt("TLDE").concat(have(root.positions("AE", 1, 12)), [key("BKSP", 2)]),
+      [key("TAB", 1.5)].concat(have(root.positions("AD", 1, 12)), opt("BKSL", 1.5)),
       [key("CAPS", 1.75)].concat(have(root.positions("AC", 1, 11)), [key("RTRN", 2.25)])
     ]
     var rows
@@ -761,73 +764,78 @@ Item {
     if (form === "60") {
       // Esc takes the corner the tilde key would have, as it does on a real
       // 60%, and a hold on it gives the backtick back (see holdGrid).
-      main[0][0] = key("ESC")
-      rows = main.concat([
-        shift.concat([key("RTSH", 2.75)]),
+      mainRows[0][0] = key("ESC")
+      rows = [
+        [mainRows[0], []], [mainRows[1], []], [mainRows[2], []],
+        [shift.concat([key("RTSH", 2.75)]), []],
         // Fn where a full board keeps its right Super, which is what a 60%
         // does with that key and the reason it can reach anything at all. A
         // second Super is there so a touch typist can hit one without
         // leaving home position, and nobody touch types on this.
-        [key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-         key("RALT", 1.25), key("FN", 1.25), key("windows", 1.25), key("RCTL", 1.25)]
-      ])
+        [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
+          key("RALT", 1.25), key("FN", 1.25), key("windows", 1.25), key("RCTL", 1.25)], []]
+      ]
     } else if (form === "75") {
       // Compressed: the extra column sits hard against the main block with
       // no gap, which is the whole idea of a 75%. The function row is spread
-      // evenly across the width rather than grouped in fours, for the same
-      // reason and because a bigger key is worth more here than a familiar
-      // gap. There is no room for a Menu key, so the tiling key holds it.
-      var top = ["ESC"].concat(root.positions("FK", 1, 12), ["delete"])
-      rows = [top.map(function(k) { return key(k, units / top.length) })]
-        .concat(main)
-      rows[1] = rows[1].concat([key("home")])
-      rows[2] = rows[2].concat([key("pgup")])
-      rows[3] = rows[3].concat([key("pgdn")])
-      rows.push(shift.concat([key("RTSH", 1.75), key("up"), key("end")]))
-      rows.push([key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.75),
-                 key("RALT", 1.25), key("windows", 1.25),
-                 key("left"), key("down"), key("right")])
+      // across the block rather than grouped in fours, for the same reason
+      // and because a bigger key is worth more here than a familiar gap, but
+      // it stops where the block stops so Del sits over the column below it.
+      // There is no room for a Menu key, so the tiling key holds it.
+      var fRow = ["ESC"].concat(root.positions("FK", 1, 12))
+      rows = [
+        [fRow.map(function(k) { return key(k, 15 / fRow.length) }), [key("delete")]],
+        [mainRows[0], [key("home")]],
+        [mainRows[1], [key("pgup")]],
+        [mainRows[2], [key("pgdn")]],
+        [shift.concat([key("RTSH", 1.75), key("up")]), [key("end")]],
+        [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.75),
+          key("RALT", 1.25), key("windows", 1.25), key("left"), key("down")],
+         [key("right")]]
+      ]
     } else {
       // Tenkeyless: the function row grouped in fours and the nav cluster
       // three wide past a gap, which is what the board looks like and half
       // the reason anyone asks for one.
-      rows = [[key("ESC"), gap(1),
-               key("FK01"), key("FK02"), key("FK03"), key("FK04"), gap(0.5),
-               key("FK05"), key("FK06"), key("FK07"), key("FK08"), gap(0.5),
-               key("FK09"), key("FK10"), key("FK11"), key("FK12"),
-               gap(0.25), key("prtsc"), key("scrlk"), key("pause")]]
-        .concat(main)
-      rows[1] = rows[1].concat([gap(0.25), key("insert"), key("home"), key("pgup")])
-      rows[2] = rows[2].concat([gap(0.25), key("delete"), key("end"), key("pgdn")])
-      rows[3] = rows[3].concat([gap(3.25)])
-      rows.push(shift.concat([key("RTSH", 2.75), gap(1.25), key("up"), gap(1)]))
-      // The right Super gives way to tiling here as it does everywhere else,
-      // and this board has the room to keep its Menu key as well.
-      rows.push([key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-                 key("RALT", 1.25), key("windows", 1.25), key("menu", 1.25), key("RCTL", 1.25),
-                 gap(0.25), key("left"), key("down"), key("right")])
+      rows = [
+        [[key("ESC"), gap(1),
+          key("FK01"), key("FK02"), key("FK03"), key("FK04"), gap(0.5),
+          key("FK05"), key("FK06"), key("FK07"), key("FK08"), gap(0.5),
+          key("FK09"), key("FK10"), key("FK11"), key("FK12")],
+         [gap(0.25), key("prtsc"), key("scrlk"), key("pause")]],
+        [mainRows[0], [gap(0.25), key("insert"), key("home"), key("pgup")]],
+        [mainRows[1], [gap(0.25), key("delete"), key("end"), key("pgdn")]],
+        [mainRows[2], [gap(3.25)]],
+        [shift.concat([key("RTSH", 2.75)]), [gap(1.25), key("up"), gap(1)]],
+        // The right Super gives way to tiling here as it does everywhere
+        // else, and this board has the room to keep its Menu key as well.
+        [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
+          key("RALT", 1.25), key("windows", 1.25), key("menu", 1.25), key("RCTL", 1.25)],
+         [gap(0.25), key("left"), key("down"), key("right")]]
+      ]
     }
 
-    // A position the layout has no key for is dropped and its width shared
-    // out to the ends of its row, so a short row still reaches both edges.
-    // Only the positions that come from the keymap can go missing: a
-    // function key is a position too and is never in the grid, because it
-    // prints nothing.
-    rows = rows.map(function(row) {
-      return row.filter(function(e) {
+    // Anything the layout turned out not to have comes off the block, and
+    // the block is then stretched back to its 15 units by the keys at its
+    // own ends. It has to be its own ends: stretching the whole row would
+    // hand the width to a nav key and walk the block's right edge out of
+    // line with the row above. With every dead key now reported there
+    // should be nothing to stretch, and this is what keeps a layout nobody
+    // has tried from coming out ragged.
+    var block = form === "phone" ? units : 15
+    var heights = root.rowHeightsOf(form)
+    return rows.map(function(pair, i) {
+      var main = pair[0].filter(function(e) {
         return !root.isPrintedPosition(e.key) || (e.key in root.grid)
       })
-    })
-    var heights = root.rowHeightsOf(form)
-    return rows.map(function(row, i) {
-      var slack = units - row.reduce(function(a, e) { return a + e.w }, 0)
-      if (slack * root.unit > 1 && row.length > 1) {
-        row[0] = { key: row[0].key, w: row[0].w + slack / 2, h: 1 }
-        var last = row.length - 1
-        row[last] = { key: row[last].key, w: row[last].w + slack / 2, h: 1 }
+      var slack = block - main.reduce(function(a, e) { return a + e.w }, 0)
+      if (slack * root.unit > 1 && main.length > 1) {
+        main[0] = { key: main[0].key, w: main[0].w + slack / 2 }
+        var last = main.length - 1
+        main[last] = { key: main[last].key, w: main[last].w + slack / 2 }
       }
       var h = heights[i] === undefined ? 1 : heights[i]
-      return row.map(function(e) { return { key: e.key, w: e.w, h: h } })
+      return main.concat(pair[1]).map(function(e) { return { key: e.key, w: e.w, h: h } })
     })
   }
 

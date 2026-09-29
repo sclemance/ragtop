@@ -360,6 +360,12 @@ because 768 pixels will not carry eighteen units of board at that key size.
 At Larger nothing with six rows fits the height cap at all, and even the 60%
 is over, so both orientations land on the phone board.
 
+Every row of a real board is built as the fifteen unit main block and then
+whatever clusters that form factor puts to the right of it, so the block ends
+in the same place on every row and the clusters line up down the edge. If your
+layout turns out not to have some key, the block stretches back to fifteen
+units by its own ends rather than handing the width to a nav key.
+
 The 60% board is drawn ANSI shaped whatever your layout. An ISO board's tall
 Enter is a keycap shape and nothing on a screen you tap is better for
 reproducing it. What an ISO layout does get is its extra key beside the left
@@ -928,7 +934,10 @@ True today, and worth saying if you want them gone:
   and somewhere to put the candidates. See [Chinese, Japanese and
   Korean](#chinese-japanese-and-korean).
 - **No dead keys, on purpose.** Accents come from holding a letter rather
-  than from a dead key followed by one. Ragtop types by character rather than
+  than from a dead key followed by one. A real board still *draws* the dead
+  keys your layout has, in their own places and showing the mark they apply,
+  because a keyboard with a hole in the middle of a row is worse than either
+  answer. Tapping one types the mark itself. Ragtop types by character rather than
   by key position, so it reaches the composed letter directly and the two
   step route buys nothing on a screen you tap. What it would cost is a key
   that shows nothing, an armed state to display, and a second way to do what

@@ -138,6 +138,8 @@ class XkbLabels:
             ctypes.POINTER(ctypes.POINTER(ctypes.c_uint32))]
         lib.xkb_keysym_to_utf32.restype = ctypes.c_uint32
         lib.xkb_keysym_to_utf32.argtypes = [ctypes.c_uint32]
+        lib.xkb_keysym_get_name.restype = ctypes.c_int
+        lib.xkb_keysym_get_name.argtypes = [ctypes.c_uint32, ctypes.c_char_p, ctypes.c_size_t]
         lib.xkb_keymap_layout_get_name.restype = ctypes.c_char_p
         lib.xkb_keymap_layout_get_name.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
         lib.xkb_keymap_num_layouts.restype = ctypes.c_uint32
@@ -151,6 +153,25 @@ class XkbLabels:
     # number row and the letter rows, plus the odd ones out around them.
     ALL_KEYS = (("AE", 12), ("AD", 12), ("AC", 11), ("AB", 10),
                 ("TLDE", 0), ("BKSL", 0), ("LSGT", 0))
+    # A dead key produces no character of its own, so xkb_keysym_to_utf32
+    # gives nothing for one and the key would go missing from the board. It
+    # is a real key in a real place: French keeps its circumflex on AD11,
+    # German on the tilde key, Spanish and Swedish each lose two. Leaving a
+    # hole in the middle of a row is worse than any answer about what the key
+    # should type, so it is drawn with the mark it applies.
+    #
+    # Ragtop reaches accented letters by holding the base letter, which is a
+    # decision already made and not revisited here. This only fills the slot.
+    DEAD = {
+        "dead_grave": "`", "dead_acute": "\u00b4", "dead_circumflex": "^",
+        "dead_tilde": "~", "dead_macron": "\u00af", "dead_breve": "\u02d8",
+        "dead_abovedot": "\u02d9", "dead_diaeresis": "\u00a8",
+        "dead_abovering": "\u00b0", "dead_doubleacute": "\u02dd",
+        "dead_caron": "\u02c7", "dead_cedilla": "\u00b8", "dead_ogonek": "\u02db",
+        "dead_horn": "\u031b", "dead_belowdot": "\u0323", "dead_hook": "\u0309",
+        "dead_stroke": "/", "dead_currency": "\u00a4",
+    }
+
     # Currency that says nothing about the layout: on the keyboard's pages
     # already, or a generic placeholder nearly every layout carries.
     COMMON_CURRENCY = "$€£¥¢¤"
@@ -185,7 +206,14 @@ class XkbLabels:
             if lib.xkb_keymap_key_get_syms_by_level(keymap, code, group, level, ctypes.byref(syms)) < 1:
                 return ""
             u = lib.xkb_keysym_to_utf32(syms[0])
-            return chr(u) if u else ""
+            if u:
+                return chr(u)
+            # No character of its own: a dead key, and it still holds a place
+            # on the board (see DEAD).
+            buf = ctypes.create_string_buffer(64)
+            if lib.xkb_keysym_get_name(syms[0], buf, len(buf)) > 0:
+                return self.DEAD.get(buf.value.decode(), "")
+            return ""
 
         def deeper(code, level):
             """A key's AltGr character, or "" when there is nothing a cap can
