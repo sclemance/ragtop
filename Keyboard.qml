@@ -120,7 +120,23 @@ Item {
     map["AC09"] = "right"; map["AC10"] = "end"
     return map
   }
-  readonly property bool fnOn: root.mods.fn !== "off"
+  // Whether the board being drawn has an Fn key of its own, read off the keys
+  // rather than named per form factor, the same way hasCapsKey is.
+  readonly property bool hasFnKey: root.slots.some(function(s) {
+    return root.roleOf(s.key) === "fn"
+  })
+  // The layer is only ever on where there is a key to turn it off again.
+  //
+  // Lock Fn on a 60%, then turn the machine so the board changes to a 75% or
+  // a tenkeyless, and the state used to survive a board that has no Fn key.
+  // Those boards have the same positions the layer remaps, so the number row
+  // stayed F1 to F12 and the letters stayed arrows, with nothing on screen to
+  // undo it. Asking whether the key is there costs nothing and makes the
+  // state unable to outlive its key.
+  readonly property bool fnOn: root.hasFnKey && root.mods.fn !== "off"
+  // And the state itself is dropped, so going back to a 60% starts it off
+  // rather than resuming a lock nobody asked for twice.
+  onHasFnKeyChanged: if (!root.hasFnKey && root.mods.fn !== "off") root.setMod("fn", "off")
   // The key a touch means once the layer has had its say. Everything that
   // labels, colours, presses or releases a key asks for this first.
   function effectiveKey(key) { return root.fnOn ? (root.fnMap[key] || key) : key }
