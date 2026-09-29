@@ -10,6 +10,7 @@
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop keyboard-layout (get | is <name> | set <name>)
+#        ragtop display (get | is <name> | set <name>)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop size-adjust (get | is <adjust> | set <adjust>)
 #        ragtop rotation (get | is <mode> | set <mode>)
@@ -32,6 +33,13 @@
 # is sensor (on offer in tablet mode, which is what it has always done), on
 # (always, laptop mode included) or off (never), and it decides only the
 # keyboard: tiling mode and the patched overlays still follow tablet mode.
+#
+# display <name> is which monitor Ragtop puts itself on: auto, or a monitor
+# name as hyprctl monitors prints it. Auto takes the monitor the compositor
+# binds the touchscreen to if one is bound, then the built-in panel, which on
+# a convertible is the touchscreen. The keyboard, its handle, the controls and
+# tiling mode all go to the same one. Rotation is the exception and stays with
+# the built-in panel, because that is the screen that physically turns.
 #
 # keyboard-layout <name> is which board is drawn: auto, which takes the
 # widest that fits the screen and so changes when the screen turns, 80 for a
@@ -188,6 +196,8 @@ choice_notice() {
     "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
     "size-adjust smallest"|"size-adjust smaller"|"size-adjust regular"\
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
+    "display auto") echo "Ragtop follows the touchscreen, or the built-in panel." ;;
+    "display "*) echo "Ragtop moves to $2." ;;
     "keyboard-layout auto") echo "The keyboard picks the biggest board that fits." ;;
     "keyboard-layout 60") echo "A 60% keyboard, where the screen is wide enough." ;;
     "keyboard-layout 75") echo "A 75% keyboard, where the screen is wide enough." ;;
@@ -510,6 +520,10 @@ PYEOF
   # Whether there is a keyboard on offer at all, which is the first thing to
   # rule out behind "the keyboard never comes up".
   row Keyboard "$(get keyboard sensor), layout $(get keyboard-layout auto)"
+  row Display "$(get display auto)$(hyprctl monitors -j 2>/dev/null \
+    | python3 -c 'import json,sys
+ms=json.load(sys.stdin)
+print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 2>/dev/null || true)"
   switch=$("$repo/find-tablet-switch.py" 2>/dev/null || true)
   if [[ -n $switch ]]; then
     row Switch "$(bash "$repo/udev-rule.sh" status 2>/dev/null || echo unknown), ${switch#*$'\t'}"
@@ -606,6 +620,7 @@ PYEOF
 }
 
 case "${1:-} ${2:-}" in
+  "display "*) choice display auto "${2:-}" "${3:-}" ;;
   "keyboard-layout "*) choice keyboard-layout auto "${2:-}" "${3:-}" ;;
   "keyboard "*) choice keyboard sensor "${2:-}" "${3:-}" ;;
   "tablet-mode "*) choice tablet-mode auto "${2:-}" "${3:-}" ;;

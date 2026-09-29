@@ -125,6 +125,26 @@ Item {
   // cannot drift apart from what the setting accepts. Automatic at the head,
   // then the boards from the simplest to the fullest, which is the order
   // somebody reads them in rather than the order the fallback walks them.
+  // Every monitor, for the controls panel, with Auto at the head. Only worth
+  // offering where there is more than one, which is why the panel asks how
+  // many there are before drawing the row.
+  readonly property var displayOptions: {
+    var out = [{ value: "auto", label: "Auto" }]
+    Hyprland.monitors.values.forEach(function(m) {
+      out.push({ value: m.name, label: m.name })
+    })
+    return out
+  }
+  readonly property int monitorCount: Hyprland.monitors.values.length
+
+  function setDisplay(name) {
+    if (displayProc.running) return
+    displayProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                           "display", "set", name]
+    displayProc.running = true
+  }
+  Process { id: displayProc }
+
   readonly property var keyboardLayoutOptions: [
     { value: "auto", label: "Auto" },
     { value: "mobile", label: "Mobile" },
@@ -197,7 +217,11 @@ Item {
       // While a stock picker is up every touch reaches the picker, so a tap
       // on the handle would only throw it away; a cloned picker leaves the
       // handle usable, for filter typing.
-      visible: root.keyboardAvailable && root.layerRulesReady
+      // Only on the screen the keyboard itself uses. One per screen is how
+      // Variants works, and a handle on a monitor the keyboard will never
+      // appear on is a switch wired to another room.
+      visible: modelData === root.keyboardScreen
+        && root.keyboardAvailable && root.layerRulesReady
         && (!root.pickerOpen || root.pickerPatched)
         && root.screensaverAddress === ""
 
@@ -478,6 +502,53 @@ Item {
   }
 
   // The built-in panel, which is the one with the accelerometer.
+  // Which display Ragtop puts itself on. Every one of its surfaces asks this,
+  // so the keyboard, its handle, the controls, the picker strip, setup and
+  // tiling mode can never end up on different screens.
+  //
+  //   the "display" setting, when it names a monitor that is actually there
+  //   the monitor the compositor binds the touchscreen to, if the user has
+  //     bound one (input:touchdevice:output, which reads [[Auto]] unset)
+  //   the built-in panel, which on a convertible is the touchscreen
+  //   whatever is first, so there is always an answer
+  readonly property string displaySetting: String(root.settings["display"] || "auto")
+  property string touchOutput: ""
+  readonly property string keyboardMonitorName: {
+    var monitors = Hyprland.monitors.values
+    function named(n) {
+      for (var i = 0; i < monitors.length; i++) if (monitors[i].name === n) return n
+      return ""
+    }
+    return named(root.displaySetting) || named(root.touchOutput)
+      || root.internalMonitorName()
+  }
+  readonly property var keyboardScreen:
+    Quickshell.screens.find(function(s) { return s.name === root.keyboardMonitorName })
+      || Quickshell.screens[0]
+  // The same monitor as Hyprland knows it, for its origin and its workspace.
+  readonly property var keyboardMonitor: {
+    var monitors = Hyprland.monitors.values
+    for (var i = 0; i < monitors.length; i++)
+      if (monitors[i].name === root.keyboardMonitorName) return monitors[i]
+    return Hyprland.focusedMonitor
+  }
+
+  // Asked once at startup and whenever monitors change. Unset it reads
+  // "[[Auto]]", which is not a monitor name and so falls through.
+  Process {
+    id: touchOutputProc
+    running: true
+    command: ["hyprctl", "getoption", "input:touchdevice:output", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var v = JSON.parse(text)
+          root.touchOutput = v && v.set && typeof v.str === "string" ? v.str.trim() : ""
+        } catch (e) { root.touchOutput = "" }
+      }
+    }
+  }
+
   function internalMonitorName() {
     var monitors = Hyprland.monitors.values
     for (var i = 0; i < monitors.length; i++)
@@ -1841,7 +1912,7 @@ Item {
   // Another screensaver wouldn't be recognised, and might not quit on Escape
   // even if it were.
   PanelWindow {
-    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    screen: root.keyboardScreen
     visible: root.screensaverAddress !== "" && root.layerRulesReady
 
     WlrLayershell.namespace: "ragtop-screensaver-catcher"
@@ -1905,7 +1976,7 @@ Item {
   // underneath. Created when shown, so it stacks above the handle.
   PanelWindow {
     id: keyboardWindow
-    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    screen: root.keyboardScreen
     visible: root.oskVisible && root.layerRulesReady
 
     // Where the keyboard takes touches (see Keyboard's touchArea): the whole
@@ -2007,7 +2078,7 @@ Item {
   // so the strip would be there but untappable.
   PanelWindow {
     id: pickerNavWindow
-    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    screen: root.keyboardScreen
     visible: root.tabletMode && root.pickerOpen && root.pickerPatched && root.layerRulesReady
 
     WlrLayershell.namespace: "ragtop-picker-nav"
@@ -2054,7 +2125,7 @@ Item {
 
   PanelWindow {
     id: setupWindow
-    screen: Quickshell.screens.find(function(s) { return s.name === root.internalMonitorName() }) || Quickshell.screens[0]
+    screen: root.keyboardScreen
     visible: root.setupOpen
 
     WlrLayershell.namespace: "ragtop-setup"

@@ -173,6 +173,25 @@ Item {
 
         PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
 
+        // Which monitor Ragtop lives on. Only where there is more than one,
+        // since a row offering a single screen is a row saying nothing.
+        PanelSectionHeader {
+          visible: panel.service.monitorCount > 1
+          text: "Display"
+          foreground: Color.popups.text
+        }
+
+        ButtonGroup {
+          visible: panel.service.monitorCount > 1
+          options: panel.service.displayOptions
+          value: panel.service.displaySetting
+          foreground: Color.popups.text
+          background: Color.popups.background
+          accent: Color.accent
+          focusable: false
+          onChanged: function(name) { panel.service.setDisplay(name) }
+        }
+
         // Which board the keyboard draws. Here as well as in the menu because
         // it is a thing you change while looking at the keyboard and deciding
         // you want more of it or less, which is exactly what this panel is for.

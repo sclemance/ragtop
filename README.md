@@ -858,6 +858,7 @@ the Settings button on the keyboard's own panel opens directly:
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hardware, folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Which board the keyboard draws: Automatic, Mobile, 60%, 75% or 80% | Automatic | Setup › Tablet › Layout |
+| Which monitor Ragtop uses: Automatic, or a monitor by name | Automatic | the controls panel, where there is more than one |
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
@@ -874,7 +875,7 @@ keyboard while it's open.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
-`keyboard-layout set auto|mobile|60|75|80`,
+`keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
 `size-adjust set smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
@@ -955,6 +956,14 @@ True today, and worth saying if you want them gone:
 - **The keyboard takes every tap inside it.** A theme that draws no background
   at all is the exception, and then only the keys take one. There is no gap
   between keys to reach the window underneath.
+- **Ragtop lives on one monitor.** The keyboard, its handle, the controls and
+  tiling mode all go to the same screen: the one the compositor binds your
+  touchscreen to if you have bound one, otherwise the built-in panel, and you
+  can name a monitor yourself. Two screens of keyboard is not a thing anyone
+  asked for. What it does cost is tiling mode, which shows the windows on
+  Ragtop's own screen, so windows on another monitor cannot be arranged from
+  it. Rotation is the exception and stays with the built-in panel, because
+  that is the screen that physically turns.
 - **The screen does not rotate while locked.** Omarchy's lock screen is not
   redrawn for a rotated display, so it keeps the orientation it was locked in
   and catches up when you unlock.
