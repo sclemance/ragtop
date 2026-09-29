@@ -329,6 +329,16 @@ colours and font, and the Transparency setting, without restarting. It has:
   a German keyboard, ¡ and ¿ on a Spanish one, № and ₽ on a Russian one, ₹ on
   an Indian one. Up to four go in the free slots on the pages' third rows. A
   US layout adds nothing, so its pages look exactly as they always did.
+- **Hold a letter for the digit and symbol above it:** the letter rows carry
+  what the symbol pages draw in the same place, so on a US layout holding r
+  gives `4` and `$`, the way the key on your desk prints both. Which symbols a
+  letter carries comes from your layout, so holding 4 on the `?123` page gives
+  `$` on a US keyboard and `'` and `{` on a French one, where the digit is the
+  shifted level and the symbol is the plain one.
+- **Hold the period for punctuation:** `,` `?` `!` `:` `;` `"` `'` `-`, with
+  your layout's own marks first, ¡ and ¿ on a Spanish keyboard, « » on a
+  French one, ، and ؛ on an Arabic one. Punctuation is nearly universal and
+  not quite, so the ones that are yours alone come first.
 - **Any character** your layout can't type still arrives, and every key types
   what it shows whatever your Hyprland layout is.
 - **A gear key** that opens Ragtop's own controls over the keyboard, so the

@@ -239,38 +239,91 @@ Item {
   // are the ones the labels table names.
   function isCharacter(key) { return !(key in root.labels) }
 
-  // What each letter key carries from another page: the character that page
+  // What each letter key carries from another page: the characters that page
   // draws in the same place. Matched by where the keys sit and not by how
   // far along the row they are, because the rows are different lengths and
   // each is centred on its own, so only the geometry lines them up. The
   // letters' second row is nine keys against ten symbols, and the third is
   // seven against five between a wide key at either end.
   //
-  // What falls out of that is worth knowing: the top row pairs off exactly,
-  // so the digits sit where they look like they sit, and on the third row
-  // the punctuation lands under the letters it sits beneath, which is how
-  // a comma comes to be a hold on C. The ends can pair with nothing, and
-  // a key with nothing there simply has nothing there.
+  // What falls out of that is worth knowing: on a layout with ten keys on
+  // its top row the digits pair off exactly and sit where they look like
+  // they sit, and on the third row the punctuation lands under the letters
+  // it sits beneath, which is how a comma comes to be a hold on C.
+  //
+  // It goes the other way round. Every symbol picks the letter nearest it,
+  // rather than every letter picking a symbol, so that no symbol is left
+  // with no letter to reach it from. Hebrew types eight letters on its top
+  // row and Dvorak seven, and against ten digits the letter row is the
+  // narrower of the two, so the outer digits used to overlap nothing and
+  // fell off the ends: on a Hebrew layout there was no way to hold a letter
+  // and get a 0. Now they go on the nearest letter's card with its own, two
+  // to a card, which is why a key maps to a list and not to one character.
+  // A letter no symbol chose still has nothing there.
   function overlayOf(page) {
+    // Laid out once and reused. slotsOf builds the whole keyboard every call,
+    // and this runs for both pages on every change of key size.
     var mine = root.slotsOf("letters")
-    var theirs = root.slotsOf(page)
     var map = {}
-    mine.forEach(function(a) {
-      // Row 0 is the desktop keys and the last is the space bar's, and both
-      // pages already share them.
-      if (a.row < 1 || a.row > 3 || !root.isCharacter(a.key)) return
-      var best = "", most = 0
-      theirs.forEach(function(b) {
-        if (b.row !== a.row || !root.isCharacter(b.key)) return
-        var over = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
-        if (over > most) { most = over; best = b.key }
+    mine.forEach(function(a) { if (root.overlaid(a)) map[a.key] = [] })
+    root.slotsOf(page).forEach(function(b) {
+      if (!root.overlaid(b)) return
+      var best = "", nearest = Infinity
+      mine.forEach(function(a) {
+        if (a.row !== b.row || !(a.key in map)) return
+        var gap = Math.abs((a.x + a.width / 2) - (b.x + b.width / 2))
+        if (gap < nearest) { nearest = gap; best = a.key }
       })
-      if (best !== "") map[a.key] = best
+      if (best !== "") map[best].push(b.key)
     })
     return map
   }
-  readonly property var symbolOf: root.overlayOf("symbols")
-  readonly property var moreOf: root.overlayOf("more")
+  // Row 0 is the desktop keys and the last row is the space bar's, and both
+  // pages already share them. So does anything that isn't a character, which
+  // is a page or an edit key standing in the same place on both.
+  function overlaid(slot) {
+    return slot.row >= 1 && slot.row <= 3 && root.isCharacter(slot.key)
+  }
+  readonly property var symbolLists: root.overlayOf("symbols")
+  readonly property var moreLists: root.overlayOf("more")
+  // The one a cap prints in its corner, of however many the key carries.
+  function firstOf(lists) {
+    var map = {}
+    for (var k in lists) if (lists[k].length > 0) map[k] = lists[k][0]
+    return map
+  }
+  readonly property var symbolOf: root.firstOf(root.symbolLists)
+
+  // What else sits on the key that types each digit, as the helper reads it
+  // off the keymap: $ on a US 4, and ' and { on a French one, where the
+  // digit is the shifted level and the symbol is the plain one. The
+  // keyboard's own number row is the same ten characters whatever the
+  // layout, so this is the only way a hold on one of them can offer what
+  // that layout really keeps there.
+  readonly property var digitLevels: root.service.keyLabels && root.service.keyLabels.digits
+    ? root.service.keyLabels.digits : ({})
+
+  // The punctuation the active layout carries, in keyboard order (see
+  // keyboard-helper.py). Punctuation is nearly universal and not quite:
+  // Spanish opens a question with ¿, Greek asks one with ;, French quotes
+  // with « », Arabic separates with ، and asks with ؟. So a hold on a
+  // punctuation key offers the layout's own marks first, the way a hold on
+  // a letter offers that layout's own accents first, since those are the
+  // ones it alone can reach, and then the marks every layout shares. CJK's
+  // full-width marks are not here: they come from the input method and not
+  // from the keymap.
+  readonly property var layoutPunctuation: root.service.keyLabels
+    && Array.isArray(root.service.keyLabels.punctuation)
+    ? root.service.keyLabels.punctuation : []
+  readonly property var punctuationCore: [".", ",", "?", "!", ":", ";", "\"", "'", "-"]
+  readonly property var punctuationExtras: root.layoutPunctuation.filter(function(c) {
+    // Not what the pages already draw, which on a US layout is all of it.
+    return root.pageCharacters.indexOf(c) === -1 && root.extraSymbols.indexOf(c) === -1
+  }).slice(0, 4)
+  function punctuationCard(key) {
+    return root.punctuationExtras.concat(
+      root.punctuationCore.filter(function(c) { return c !== key }))
+  }
 
   // The accented letters behind a key, in the case the keyboard is typing.
   // The key itself is not among them: nobody holds O to type an O, and
@@ -291,8 +344,26 @@ Item {
     if (!root.isCharacter(key)) return []
     var out = []
     function add(c) { if (c && out.indexOf(c) === -1) out.push(c) }
-    add(root.symbolOf[key])
-    add(root.moreOf[key])
+    function addAll(list) { if (list) list.forEach(add) }
+    // A punctuation key offers punctuation and nothing else, on whichever
+    // page it is standing. It sits on the bottom row, which no page overlays
+    // (see overlaid), so there is nothing here to keep anyway; and a card of
+    // brackets behind the period would bury the marks a sentence is made of.
+    if (root.punctuation.indexOf(key) !== -1) {
+      addAll(root.punctuationCard(key))
+      return out.slice(0, root.cardLimit)
+    }
+    // A digit offers what else its own layout keeps on the key that types
+    // it, which is how a hold on 4 reaches $.
+    addAll(root.digitLevels[key])
+    // Then what this key carries from the symbol page, and for each digit
+    // among them the rest of that digit's key straight after it, so 4 and $
+    // come up side by side under the letter they sit above.
+    ;(root.symbolLists[key] || []).forEach(function(c) {
+      add(c)
+      addAll(root.digitLevels[c])
+    })
+    addAll(root.moreLists[key])
     // AltGr's characters are here one key at a time, and on the AltGr key a
     // whole layer at a time. Not while that key is on, since the cap is
     // already showing them and a plain tap already types them: offering
@@ -302,8 +373,16 @@ Item {
       add(root.level4Of[key])
     }
     root.variantsFor(key).forEach(add)
-    return out.slice(0, 9)
+    return out.slice(0, root.cardLimit)
   }
+
+  // As much as a card is ever worth offering. What actually fits is decided
+  // where the card is placed and the width is known (openPopup): a key now
+  // carries up to four symbols from the other pages, where it used to carry
+  // two, and on a landscape screen there is room for those and the accents
+  // both. A fixed nine would have thrown the last accents away on a screen
+  // with plenty of room for them.
+  readonly property int cardLimit: 12
 
 
   // Wide enough for the longest word in a list, measured rather than
@@ -688,6 +767,12 @@ Item {
     var room = root.width - 2 * root.theme.padding
     var cell = layouts ? Math.min(root.wordCell(items), room / items.length)
       : Math.max(slot.width + root.theme.gap, root.unit * 0.92)
+    // Characters are cut to what the keyboard is wide enough to show, so a
+    // card never runs off both edges at once. The ones at the end are the
+    // accents, which is the order holdItems puts them in. Layout names are
+    // squeezed to fit instead: dropping one would leave a layout that is
+    // configured with no way to reach it.
+    if (!layouts) items = items.slice(0, Math.max(1, Math.floor(room / cell)))
     var total = items.length * cell
     // Characters start their first cell over the key being held, so the
     // finger has the shortest reach to the one nearest it. Layout names are

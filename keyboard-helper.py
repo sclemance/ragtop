@@ -23,7 +23,10 @@ layout's name, the characters on its letter keys, row by row, as
 [normal, shifted, altgr, shift+altgr], the symbols its keys carry, and any
 letters of its own that those rows don't reach, for the keyboard to draw. The
 two AltGr levels are empty strings where the layout has nothing there. It also
-names every layout Hyprland has configured, and which of them is active.
+reports what else sits on the key that types each digit, so a hold on the
+number row offers that layout's own symbols, and the punctuation the layout
+carries, for the hold on the period. Finally it names every layout Hyprland
+has configured, and which of them is active.
 
 where mod is shift, ctrl, alt, super or altgr. Prints "ok" or "error: ..."
 for each command.
@@ -194,6 +197,8 @@ class XkbLabels:
         name = lib.xkb_keymap_layout_get_name(keymap, group)
         symbols = self._symbols(keymap, group, char)
         letters = self._stray_letters(keymap, char, rows)
+        digits = self._digits(keymap, deeper)
+        punctuation = self._punctuation(keymap, deeper)
         # Every layout Hyprland has configured, in its order, so the keyboard
         # can offer the others. One entry means there is nothing to switch to.
         layouts = []
@@ -203,6 +208,7 @@ class XkbLabels:
         lib.xkb_keymap_unref(keymap)
         return {"name": localized_layout_name(name.decode() if name else ""),
                 "rows": rows, "symbols": symbols, "letters": letters,
+                "digits": digits, "punctuation": punctuation,
                 "layouts": layouts, "active": group}
 
     def _stray_letters(self, keymap, char, rows):
@@ -227,6 +233,64 @@ class XkbLabels:
                     if c not in on_rows and c not in out:
                         out.append(c)
         return out[:12]
+
+    def _digits(self, keymap, deeper):
+        """What else sits on the key that types each digit: {"4": ["$"]} on a
+        US layout, {"4": ["'", "{"]} on a French one, where the digit is the
+        shifted level and the symbol is the plain one. The keyboard's number
+        row is the same ten characters in every layout, so this is the only
+        way a hold on one of them can offer what that layout really has
+        there."""
+        lib = self.lib
+        out = {}
+        for i in range(1, 13):
+            code = lib.xkb_keymap_key_by_name(keymap, f"AE{i:02d}".encode())
+            if code == 0xFFFFFFFF:
+                continue
+            # The first three levels only. What a physical cap prints is the
+            # first two, plus the AltGr level, which French and German
+            # keyboards do print on the number row ({ [ ] } € and the rest).
+            # Above that is the same generic run on every layout (⅛ ⅜ ™ ±)
+            # and belongs to no layout in particular.
+            levels = [deeper(code, level) for level in range(3)]
+            digit = next((c for c in levels if c.isdigit()), "")
+            if not digit or digit in out:
+                continue
+            rest = []
+            for c in levels:
+                if c and c != digit and not c.isdigit() and c not in rest:
+                    rest.append(c)
+            if rest:
+                out[digit] = rest
+        return out
+
+    # The punctuation a hold on the period offers. Brackets are left out (Ps
+    # and Pe): they are a pair, they live on the #+= page, and a card of them
+    # would crowd out the marks a sentence is actually made of.
+    PUNCTUATION_CATEGORIES = ("Po", "Pd", "Pi", "Pf", "Pc")
+
+    def _punctuation(self, keymap, deeper):
+        """The punctuation this layout carries, in keyboard order: ¡ and ¿ on
+        a Spanish one, « » on a French one, ، ؛ ؟ on an Arabic one, nothing
+        a US layout doesn't already have. Punctuation is close to universal
+        but not quite, and a layout's own marks are the ones its user cannot
+        reach any other way, so the keyboard puts them first (Keyboard.qml,
+        punctuationFor)."""
+        lib = self.lib
+        out = []
+        for prefix, count in self.ALL_KEYS:
+            names = [prefix] if count == 0 else [f"{prefix}{i:02d}" for i in range(1, count + 1)]
+            for name in names:
+                code = lib.xkb_keymap_key_by_name(keymap, name.encode())
+                if code == 0xFFFFFFFF:
+                    continue
+                for level in range(4):
+                    c = deeper(code, level)
+                    if not c or c in out:
+                        continue
+                    if unicodedata.category(c) in self.PUNCTUATION_CATEGORIES:
+                        out.append(c)
+        return out[:24]
 
     def _symbols(self, keymap, group, char):
         """The symbols this layout puts on its keys, in keyboard order: what
