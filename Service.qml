@@ -1433,10 +1433,20 @@ Item {
     stdout: StdioCollector {
       onStreamFinished: {
         if (!root.tilingOpen) return
-        var monitor = Hyprland.focusedMonitor
+        // The monitor this surface is actually on, not whichever one has
+        // focus. Hyprland reports a window at its place across the whole
+        // desktop, so the origin subtracted here has to belong to the screen
+        // the outlines are drawn on. Taking the focused monitor's origin drew
+        // another screen's windows onto this one, at that screen's
+        // coordinates: the handles appeared over the wrong display, and
+        // dragging them resized windows you were not looking at.
+        var monitor = root.keyboardMonitor
         var ox = monitor ? monitor.x : 0
         var oy = monitor ? monitor.y : 0
-        var ws = root.focusedWorkspace
+        // And its workspace, for the same reason. The focused workspace is on
+        // whichever monitor has focus, which need not be this one.
+        var ws = monitor && monitor.activeWorkspace ? monitor.activeWorkspace.id
+          : root.focusedWorkspace
         var out = []
         try {
           JSON.parse(text).forEach(function(c) {
