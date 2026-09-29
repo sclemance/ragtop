@@ -25,7 +25,7 @@ Item {
   // AltGr is only there on a layout that puts something on its third level.
   // On a plain US layout there is nothing to reach, so the key would do
   // nothing and the row is better without it.
-  readonly property var topRow: ["esc", "tab", "ctrl", "alt", "super"]
+  readonly property var topRow: ["esc", "tab", "ctrl", "alt"]
     .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"], ["windows"])
   readonly property var fallbackRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
@@ -96,19 +96,19 @@ Item {
       letters(layoutRows[0]),
       letters(layoutRows[1]),
       ["shift"].concat(letters(layoutRows[2]), ["backspace"]),
-      ["symbols", "settings", "space", ".", "enter"]
+      ["symbols", "super", "space", ".", "enter"]
     ],
     "symbols": [
       symbolRows[0],
       symbolRows[1],
       ["more"].concat(punctuation, extraSymbols.slice(0, 2), ["backspace"]),
-      ["letters", "settings", "space", ",", "enter"]
+      ["letters", "super", "space", ",", "enter"]
     ],
     "more": [
       moreRows[0],
       moreRows[1],
       ["symbols"].concat(punctuation, extraSymbols.slice(2, 4), ["backspace"]),
-      ["letters", "settings", "space", ",", "enter"]
+      ["letters", "super", "space", ",", "enter"]
     ],
   })
   // The key back to the letters page names the script, not a language: the
@@ -127,7 +127,7 @@ Item {
   }
 
   readonly property var labels: ({
-    "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "Super", "altgr": "AltGr",
+    "esc": "Esc", "tab": "Tab", "ctrl": "Ctrl", "alt": "Alt", "super": "", "altgr": "AltGr",
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
@@ -157,9 +157,6 @@ Item {
     return root.iconKeys.indexOf(key) !== -1 ? key : ""
   }
   function labelKind(key) {
-    // Super is the key every Omarchy binding is written around, and the mark
-    // is on nobody's hardware to learn it from, so it carries both.
-    if (key === "super") return "markword"
     if (root.iconFor(key) !== "") return "drawn"
     return root.label(key).length > 1 ? "word" : "char"
   }
@@ -178,6 +175,19 @@ Item {
 
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right"]
+
+  // Keys whose hold reaches something that is not a character, drawn small in
+  // the key's corner the way a cap prints what AltGr types on it. Super holds
+  // the gear: Ragtop's controls used to have a key of their own beside the
+  // space bar, and Super took that place, so the gear moved into Super's
+  // corner rather than onto a row that has no room to spare.
+  //
+  // A key here acts on release rather than on the way down, for the same
+  // reason every character key does: the hold needs room to become the other
+  // thing first. Rolling from it into the next key still works, because
+  // another finger arriving settles the hold as the tap it was. Hold Super,
+  // tap B, and the browser opens with Super latched by commitPending.
+  readonly property var holdOpens: ({ "super": "settings" })
 
   // Hold a letter to reach the characters that belong to it, as every phone
   // keyboard does. Ragtop needs it more than most: the letter rows are the
@@ -423,10 +433,8 @@ Item {
   // Keys that hold a width of their own on the top row, whatever else is
   // sharing it. The windows toggle keeps one place and one size on every
   // page, which is what makes it read as a switch rather than another key,
-  // the way the gear does on the row below. Super takes more than its share
-  // because it carries a mark and a word, and because it is the key every
-  // Omarchy binding is written around.
-  readonly property var topRowFixed: ({ "windows": 1, "super": 1.5 })
+  // the way Super does on the row below.
+  readonly property var topRowFixed: ({ "windows": 1 })
 
   // A row that comes up short is stretched to the keyboard's width by its
   // own stretchy keys, rather than floating in the middle with a gap at
@@ -560,7 +568,6 @@ Item {
   // character is drawn as a letter, and one that acts on the next key or on
   // the keyboard itself is drawn apart from them.
   function kind(key) {
-    if (key === "settings" && root.service.toolsOpen) return "locked"
     // Super is the key Omarchy is built around, so at rest it is drawn the
     // way Enter is rather than as another grey modifier. Armed, it drops
     // back to the latched and locked colours, because what it is doing then
@@ -633,8 +640,9 @@ Item {
       return
     case "settings":
       // Ragtop's controls come up over the keyboard rather than in place of
-      // it, so the keys stay under them while you change how they look. The
-      // gear stays where it is and reads as held down while they are open.
+      // it, so the keys stay under them while you change how they look. No
+      // key of its own reaches this any more: it is what a hold on Super
+      // does (see holdOpens), and a touch anywhere on the keys puts it away.
       root.service.toolsOpen = !root.service.toolsOpen
       return
     }
@@ -758,6 +766,16 @@ Item {
   // and choosing that one silently would type it on the way out.
   function openPopup() {
     var key = root.pendingKey
+    // One thing behind a key is not a card. A card of a single cell would ask
+    // for a slide onto it and give nothing back for the trouble, so this acts
+    // straight away and the finger has nothing left to do. endHold is what
+    // stops the lift also counting as a tap: with no hold pending and no card
+    // open, the finger falls through to release(), which Super ignores.
+    if (key in root.holdOpens) {
+      root.endHold()
+      root.press(root.holdOpens[key])
+      return
+    }
     var items = root.holdItems(key)
     if (items.length < 1 || root.pendingPoint === -1) return
     var layouts = key === "space"
@@ -863,6 +881,9 @@ Item {
       // else. On the symbol pages themselves the character is already the
       // label, and saying so twice would be noise.
       hintLeft: root.page === "letters" ? (root.symbolOf[modelData.key] || "") : ""
+      // What a hold reaches, drawn rather than written: the gear is an icon
+      // and there is no character that says "settings".
+      hintIcon: root.iconFor(root.holdOpens[modelData.key] || "")
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconFor(modelData.key)
@@ -954,8 +975,9 @@ Item {
         // up is worse than either on its own. The space bar is the
         // exception, and types on the way down as it always has, because a
         // thumb resting on it must not swallow the letter rolling in after.
-        if (key === "space" || root.isCharacter(key)) root.startHold(p, key)
-        if (root.liftKeys.indexOf(key) === -1
+        if (key === "space" || root.isCharacter(key) || (key in root.holdOpens))
+          root.startHold(p, key)
+        if (root.liftKeys.indexOf(key) === -1 && !(key in root.holdOpens)
             && (key === "space" || !root.isCharacter(key))) pressed.push(key)
       })
       root.held = next

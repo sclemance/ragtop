@@ -91,8 +91,8 @@ space until tablet mode turns on.
   your active Hyprland layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), accents
   are a long press away, and characters your layout can't type (é on a US
   layout, emoji) still arrive.
-- **Settings one tap away.** A gear key next to the space bar opens Ragtop's
-  settings.
+- **Settings one hold away.** Hold the Super key, next to the space bar, and
+  Ragtop's settings come up over the keyboard.
 - **Tiling mode.** Omarchy windows have no title bars and moving or resizing
   them needs SUPER plus a mouse. Tiling mode puts a transparent layer over
   the real windows so you can tap one to focus it, hold and drag it onto
@@ -304,8 +304,8 @@ open laptop should work too. It's specific to Omarchy's own screensaver (the
 Ragtop's keyboard is drawn by the Omarchy shell, so it follows your theme's
 colours and font, and the Transparency setting, without restarting. It has:
 
-- **An extra row** of Esc, Tab, Ctrl, Alt, Super and the arrow keys. Held
-  arrows and Backspace repeat.
+- **An extra row** of Esc, Tab, Ctrl, Alt and the arrow keys. Held arrows and
+  Backspace repeat.
 - **One-shot modifiers:** tap Ctrl, then C, for Ctrl+C, and the Ctrl turns
   off by itself. Tap a modifier a second time to lock it on until you tap it
   again, however long you take over it.
@@ -341,8 +341,11 @@ colours and font, and the Transparency setting, without restarting. It has:
   not quite, so the ones that are yours alone come first.
 - **Any character** your layout can't type still arrives, and every key types
   what it shows whatever your Hyprland layout is.
-- **A gear key** that opens Ragtop's own controls over the keyboard, so the
-  keys stay in view while you change them. See below.
+- **Super beside the space bar**, carrying Omarchy's own mark, where the key
+  every Omarchy binding is written around sits on the keyboard you just folded
+  away. **Hold it** for Ragtop's own controls, which come up over the keyboard
+  so the keys stay in view while you change them. A small gear in the corner
+  of the key says so, the way a cap prints what AltGr types on it. See below.
 
 `keyboard-helper.py` sends the keys: it registers a Wayland virtual keyboard
 with the same keymap as your physical keyboard, which is also why your SUPER
@@ -354,11 +357,24 @@ omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 
 ### The controls
 
-The gear on the keyboard opens a small panel that sits below Omarchy's bar
-and holds what you reach for while actually holding the machine. The keyboard
-stays drawn underneath, so changing the theme or the key size shows you the
-result as you do it. Tap the gear again, or anywhere on the keyboard, to put
-it away.
+Holding Super opens a small panel that sits below Omarchy's bar and holds
+what you reach for while actually holding the machine. The keyboard stays
+drawn underneath, so changing the theme or the key size shows you the result
+as you do it. Tap anywhere on the keyboard to put it away.
+
+A tap on Super is still Super, and rolling off it into another key still
+works: hold Super, tap B, and the browser opens with Super applied. Only a
+hold that stays put long enough to be a hold reaches the panel.
+
+It is built from Omarchy's own panel components, so it is one of Omarchy's
+popup menus rather than a panel of Ragtop's: square cornered where your
+windows are square, rounded where they are rounded, and in the popup palette
+rather than in the keyboard's theme. It is also only as tall as its contents
+and never wider than the screen, which on a portrait display it used not to
+be. It now draws over a notification that was already up when you opened it.
+One that arrives while it is open still lands on top, because Omarchy maps
+its notification surface when a notification appears and the newer surface
+wins.
 
 | Control | What it does |
 | --- | --- |
@@ -397,7 +413,7 @@ worth having, in `~/.config/hypr/bindings.lua`:
 ```lua
 -- The keyboard, whatever the tablet switch thinks
 bind("SUPER SHIFT", "K", "exec", "omarchy-shell ragtop toggleKeyboard")
--- The panel the gear opens
+-- The panel a hold on Super opens
 bind("SUPER SHIFT", "T", "exec", "omarchy-shell ragtop toggleControls")
 -- Locked, unlocked, automatic, round again
 bind("SUPER SHIFT", "R", "exec", "omarchy-shell ragtop cycleRotation")
@@ -432,9 +448,9 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Run Setup | Opens setup in the shell |
 | Diagnostics | Copies everything a bug report needs to the clipboard |
 
-Theme, Key Size and the keyboard's own auto-expand are also on the panel the
-gear opens, which is the quicker way to them while you are holding the
-machine.
+Theme, Key Size and the keyboard's own auto-expand are also on the panel a
+hold on Super opens, which is the quicker way to them while you are holding
+the machine.
 
 What a key looks like, its shape, relief, fill, how see-through it is, the
 background behind it and the top edge, belongs to the theme, so it is set in
@@ -719,7 +735,7 @@ Always On, so the physical keyboard is there if anything goes wrong.
 ## Settings
 
 Ragtop's settings are in the Omarchy menu under **Setup › Tablet**, which
-the gear key on the on-screen keyboard opens directly:
+the Settings button on the keyboard's own panel opens directly:
 
 | Setting | Default | Where |
 | --- | --- | --- |

@@ -17,6 +17,10 @@ Item {
   // "char" (a letter), "word" (Esc, ?123), "icon" (a glyph) or "drawn" (an
   // icon Ragtop draws itself), which picks how the label is rendered and
   // its size on Omarchy's scales.
+  //
+  // There was a fifth, "markword", a mark and its name side by side, for the
+  // Super key while it sat on the extra row and carried both. Super is on the
+  // bottom row now with the mark alone, so it draws like any other icon key.
   property string labelKind: "char"
   // The drawn icon's name, for labelKind "drawn" (see KeyIcon.qml).
   property string icon: ""
@@ -29,6 +33,11 @@ Item {
   // behind the key, and a keycap that carries several prints them apart
   // rather than running them together.
   property string hintLeft: ""
+  // A drawn icon in the right hint's place, for a key whose hold reaches
+  // something no character can name: the gear in Super's corner. It takes
+  // that corner instead of `hint`, never as well, since one corner cannot
+  // print two things.
+  property string hintIcon: ""
   // Draw the fill at full strength whatever Key Transparency says. The
   // setting is there to let the desktop show through the keyboard; behind a
   // key in a long-press popup is the popup's own panel, so being see-through
@@ -166,7 +175,7 @@ Item {
   // The label's size on Omarchy's scales, kept inside the key.
   readonly property int labelPixelSize: Math.min(
     labelKind === "icon" || labelKind === "drawn" ? theme.iconSize
-      : labelKind === "word" || labelKind === "markword" ? theme.wordSize
+      : labelKind === "word" ? theme.wordSize
       : theme.labelSize,
     Math.round(faceHeight * 0.62))
 
@@ -208,7 +217,7 @@ Item {
     // in them and render it, which for Qt includes fetching a remote
     // image named in an img tag.
     textFormat: Text.PlainText
-    visible: key.hint !== ""
+    visible: key.hint !== "" && key.hintIcon === ""
     y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInset / 2)
     width: key.width - Math.round(key.theme.gap / 2 + key.cornerInset)
     horizontalAlignment: Text.AlignRight
@@ -235,35 +244,27 @@ Item {
     font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
   }
 
-  // A mark and its name together, for a key whose symbol nobody has on
-  // their hardware to learn it from. The pair is centred as one thing, so
-  // the key still reads as a single label rather than two.
-  Row {
-    visible: key.labelKind === "markword"
-    y: key.faceY
-    height: key.faceHeight
-    x: Math.max(0, (key.width - implicitWidth) / 2)
-    spacing: Math.max(7, key.theme.gap)
-
-    KeyIcon {
-      anchors.verticalCenter: parent.verticalCenter
-      height: Math.round(key.labelPixelSize * 1.05)
-      name: key.icon
-      color: key.labelColor
-      filled: key.kind === "locked"
-    }
-    Text {
-      // Never rich text. A window title, a layout name and an error
-      // string all arrive from outside, and AutoText would sniff markup
-      // in them and render it, which for Qt includes fetching a remote
-      // image named in an img tag.
-      textFormat: Text.PlainText
-      anchors.verticalCenter: parent.verticalCenter
-      text: key.label
-      color: key.labelColor
-      font.family: key.theme.fontFamily
-      font.pixelSize: key.labelPixelSize
-    }
+  // The right hint as a drawn icon. Same corner and the same quietness as the
+  // text it stands in for, but drawn a little larger than a character would
+  // be at that size. A letter is one stroke and reads at any size. The gear
+  // is a ring with teeth and a hole through it, and below about ten pixels
+  // the hole fills in and the whole thing reads as a smudge.
+  //
+  // The floor is what does the work at the usual key sizes, where the icon
+  // scale is capped. The fraction takes over once the keys are big enough
+  // for it to matter. Neither may outgrow the label beside it, which is what the
+  // cap is for: at the smallest key size the floor alone would have put an
+  // eleven pixel gear next to a ten pixel mark, and a legend that big is no
+  // longer a legend.
+  KeyIcon {
+    visible: key.hintIcon !== ""
+    height: Math.min(key.labelPixelSize,
+                     Math.max(11, Math.round(key.labelPixelSize * 0.64)))
+    x: key.width - Math.round(key.theme.gap / 2 + key.cornerInset) - width
+    y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInset / 2)
+    name: key.hintIcon
+    color: key.labelColor
+    opacity: 0.5
   }
 
   KeyIcon {
