@@ -34,9 +34,10 @@
 # keyboard: tiling mode and the patched overlays still follow tablet mode.
 #
 # keyboard-layout <name> is which board is drawn: auto, which takes the
-# widest that fits the screen and so changes when the screen turns, 60 for a
-# real keyboard's five rows with no function row and no arrows, or phone for
-# the three letter rows and the symbol pages. Auto weighs width and height
+# widest that fits the screen and so changes when the screen turns, 80 for a
+# tenkeyless, 75 for the compressed one, 60 for a real keyboard's five rows
+# with no function row and no arrows, or phone for the three letter rows and
+# the symbol pages. Auto weighs width and height
 # both. A board asked for by name is taken at its word on height and still
 # gives way on width, because one too wide for the screen cannot be drawn.
 #
@@ -189,6 +190,8 @@ choice_notice() {
       |"size-adjust larger"|"size-adjust largest") echo "" ;;
     "keyboard-layout auto") echo "The keyboard picks the biggest board that fits." ;;
     "keyboard-layout 60") echo "A 60% keyboard, where the screen is wide enough." ;;
+    "keyboard-layout 75") echo "A 75% keyboard, where the screen is wide enough." ;;
+    "keyboard-layout 80") echo "A tenkeyless keyboard, where the screen is wide enough." ;;
     "keyboard-layout phone") echo "The phone style keyboard, with its symbol pages." ;;
     "keyboard sensor") echo "The keyboard follows tablet mode again." ;;
     "keyboard on") echo "The keyboard is on offer in laptop mode too." ;;

@@ -128,7 +128,9 @@ Item {
   readonly property var keyboardLayoutOptions: [
     { value: "auto", label: "Auto" },
     { value: "phone", label: "Phone" },
-    { value: "60", label: "60%" }
+    { value: "60", label: "60%" },
+    { value: "75", label: "75%" },
+    { value: "80", label: "80%" }
   ]
   readonly property var keyboardLayouts:
     root.keyboardLayoutOptions.map(function(o) { return o.value })

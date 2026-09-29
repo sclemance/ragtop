@@ -125,7 +125,14 @@ Item {
   // labels, colours, presses or releases a key asks for this first.
   function effectiveKey(key) { return root.fnOn ? (root.fnMap[key] || key) : key }
 
-  readonly property var roles: ({
+  readonly property var roles: {
+    var map = root.rolesBase
+    // The function row is named by position like everything else on a real
+    // board, so FK05 is the key and f5 is what it does.
+    for (var i = 1; i <= 12; i++) map["FK" + (i < 10 ? "0" + i : "" + i)] = "f" + i
+    return map
+  }
+  readonly property var rolesBase: ({
     "FN": "fn",
     "LFSH": "shift", "RTSH": "shift", "LCTL": "ctrl", "RCTL": "ctrl",
     "LALT": "alt", "RALT": "altgr", "LWIN": "super", "RWIN": "super",
@@ -149,6 +156,12 @@ Item {
       if (g[n][2]) return true
     }
     return root.hasLevel3
+  }
+  // Names the keymap is asked about: the letter and number rows, and the
+  // three odd ones out around them.
+  function isPrintedPosition(key) {
+    return /^(AE|AD|AC|AB)[0-9][0-9]$/.test(key)
+      || key === "TLDE" || key === "BKSL" || key === "LSGT"
   }
   function roleOf(key) {
     // The right Alt is AltGr where the layout has a third level to reach,
@@ -228,7 +241,8 @@ Item {
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
     "windows": "", "caps": "Caps", "menu": "Menu",
     "fn": "Fn", "delete": "Del", "home": "Home", "end": "End",
-    "pgup": "PgUp", "pgdn": "PgDn"
+    "pgup": "PgUp", "pgdn": "PgDn", "insert": "Ins",
+    "prtsc": "PrtSc", "scrlk": "ScrLk", "pause": "Pause"
   })
   // The function keys, built rather than written out twelve times over.
   readonly property var fnLabels: {
@@ -245,7 +259,8 @@ Item {
   readonly property var keysymsBase: ({
     "esc": "Escape", "tab": "Tab", "left": "Left", "up": "Up", "down": "Down", "right": "Right",
     "backspace": "BackSpace", "enter": "Return", "space": "space", "menu": "Menu",
-    "delete": "Delete", "home": "Home", "end": "End",
+    "delete": "Delete", "home": "Home", "end": "End", "insert": "Insert",
+    "prtsc": "Print", "scrlk": "Scroll_Lock", "pause": "Pause",
     // X11 has called these Prior and Next since before anyone called them
     // page keys, and the keymap still does.
     "pgup": "Prior", "pgdn": "Next"
@@ -308,7 +323,10 @@ Item {
   // Super, which was a use found for a key that had no business existing:
   // that position is Fn now, and tiling is on the layer where it can be
   // labelled.
-  readonly property var holdOpensByKey: ({ "LWIN": "settings" })
+  // The tiling key holds the context menu. A 75% has no room for a Menu key
+  // and a tablet has no right click, so the one board that would otherwise
+  // lose it keeps it, and the others gain a second way to it for nothing.
+  readonly property var holdOpensByKey: ({ "LWIN": "settings", "windows": "menu" })
   readonly property var holdOpensByRole: ({ "super": "settings" })
   function holdOpenFor(key) {
     if (key in root.holdOpensByKey) return root.holdOpensByKey[key]
@@ -589,12 +607,23 @@ Item {
   // The form factors, widest first, which is the order a fallback walks.
   // A real board is 15 units across its main block, which is what a keycap
   // set is made to, and the phone layout is as wide as its widest row needs.
-  readonly property var formLadder: ["60", "phone"]
-  function formUnitsOf(form) { return form === "phone" ? root.rowUnits : 15 }
+  readonly property var formLadder: ["80", "75", "60", "phone"]
+  // Every real board is the same 15 unit main block. A 60% is only that. A
+  // 75% is compressed: one more column hard against it with no gap. A
+  // tenkeyless keeps the gap and the full three wide cluster, which is what
+  // makes it look like the board it is.
+  function formUnitsOf(form) {
+    return form === "phone" ? root.rowUnits
+      : form === "60" ? 15
+      : form === "75" ? 16 : 18.25
+  }
   // The height of each row, as a fraction of a full one. Only the phone
-  // layout has a short row, and only its first.
+  // layout has a short row, and only its first. The boards with a function
+  // row have six.
   function rowHeightsOf(form) {
-    return form === "phone" ? [root.topRowFraction, 1, 1, 1, 1] : [1, 1, 1, 1, 1]
+    return form === "phone" ? [root.topRowFraction, 1, 1, 1, 1]
+      : form === "60" ? [1, 1, 1, 1, 1]
+      : [1, 1, 1, 1, 1, 1]
   }
   function formHeightOf(form) {
     var rows = root.rowHeightsOf(form)
@@ -682,7 +711,7 @@ Item {
   // full row, so the phone layout's shorter extra row is a property of that
   // row rather than a case inside the geometry.
   function formRows(page) {
-    return root.form === "phone" ? root.phoneRows(page) : root.blockRows()
+    return root.form === "phone" ? root.phoneRows(page) : root.blockRowsFor(root.form)
   }
 
   // Positions, in the order a row draws them: AE01 through AE12 and so on.
@@ -704,34 +733,86 @@ Item {
   //
   // A position the layout has no key for is dropped and its width shared out
   // to the ends of its row, so a short row still reaches both edges.
-  function blockRows() {
+  function blockRowsFor(form) {
     function key(k, w) { return { key: k, w: w === undefined ? 1 : w, h: 1 } }
+    function gap(w) { return { key: "", w: w, h: 1 } }
     function have(list) {
       return list.filter(function(k) { return k in root.grid }).map(function(k) { return key(k) })
     }
+    var units = root.formUnitsOf(form)
+
+    // The rows the letters live on are the same on every real board. Only
+    // what sits above and to the right of them changes.
     var shift = root.hasIsoKey
       ? [key("LFSH", 1.25), key("LSGT")].concat(have(root.positions("AB", 1, 10)))
       : [key("LFSH", 2.25)].concat(have(root.positions("AB", 1, 10)))
-    var rows = [
-      [key("ESC")].concat(have(root.positions("AE", 1, 12)), [key("BKSP", 2)]),
+    var main = [
+      [key("TLDE")].concat(have(root.positions("AE", 1, 12)), [key("BKSP", 2)]),
       [key("TAB", 1.5)].concat(have(root.positions("AD", 1, 12)), [key("BKSL", 1.5)]),
-      [key("CAPS", 1.75)].concat(have(root.positions("AC", 1, 11)), [key("RTRN", 2.25)]),
-      shift.concat([key("RTSH", 2.75)]),
-      // Fn where a full board keeps its right Super, which is what a 60%
-      // does with that key and the reason it can reach anything at all. A
-      // second Super is there so a touch typist can hit one without leaving
-      // home position, and nobody touch types on this.
-      [key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-       key("RALT", 1.25), key("FN", 1.25), key("windows", 1.25), key("RCTL", 1.25)]
+      [key("CAPS", 1.75)].concat(have(root.positions("AC", 1, 11)), [key("RTRN", 2.25)])
     ]
-    // TLDE and BKSL are positions too, and a layout without one leaves a hole
-    // at the end of its row rather than in the middle of it.
+    var rows
+
+    if (form === "60") {
+      // Esc takes the corner the tilde key would have, as it does on a real
+      // 60%, and a hold on it gives the backtick back (see holdGrid).
+      main[0][0] = key("ESC")
+      rows = main.concat([
+        shift.concat([key("RTSH", 2.75)]),
+        // Fn where a full board keeps its right Super, which is what a 60%
+        // does with that key and the reason it can reach anything at all. A
+        // second Super is there so a touch typist can hit one without
+        // leaving home position, and nobody touch types on this.
+        [key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
+         key("RALT", 1.25), key("FN", 1.25), key("windows", 1.25), key("RCTL", 1.25)]
+      ])
+    } else if (form === "75") {
+      // Compressed: the extra column sits hard against the main block with
+      // no gap, which is the whole idea of a 75%. The function row is spread
+      // evenly across the width rather than grouped in fours, for the same
+      // reason and because a bigger key is worth more here than a familiar
+      // gap. There is no room for a Menu key, so the tiling key holds it.
+      var top = ["ESC"].concat(root.positions("FK", 1, 12), ["delete"])
+      rows = [top.map(function(k) { return key(k, units / top.length) })]
+        .concat(main)
+      rows[1] = rows[1].concat([key("home")])
+      rows[2] = rows[2].concat([key("pgup")])
+      rows[3] = rows[3].concat([key("pgdn")])
+      rows.push(shift.concat([key("RTSH", 1.75), key("up"), key("end")]))
+      rows.push([key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.75),
+                 key("RALT", 1.25), key("windows", 1.25),
+                 key("left"), key("down"), key("right")])
+    } else {
+      // Tenkeyless: the function row grouped in fours and the nav cluster
+      // three wide past a gap, which is what the board looks like and half
+      // the reason anyone asks for one.
+      rows = [[key("ESC"), gap(1),
+               key("FK01"), key("FK02"), key("FK03"), key("FK04"), gap(0.5),
+               key("FK05"), key("FK06"), key("FK07"), key("FK08"), gap(0.5),
+               key("FK09"), key("FK10"), key("FK11"), key("FK12"),
+               gap(0.25), key("prtsc"), key("scrlk"), key("pause")]]
+        .concat(main)
+      rows[1] = rows[1].concat([gap(0.25), key("insert"), key("home"), key("pgup")])
+      rows[2] = rows[2].concat([gap(0.25), key("delete"), key("end"), key("pgdn")])
+      rows[3] = rows[3].concat([gap(3.25)])
+      rows.push(shift.concat([key("RTSH", 2.75), gap(1.25), key("up"), gap(1)]))
+      // The right Super gives way to tiling here as it does everywhere else,
+      // and this board has the room to keep its Menu key as well.
+      rows.push([key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
+                 key("RALT", 1.25), key("windows", 1.25), key("menu", 1.25), key("RCTL", 1.25),
+                 gap(0.25), key("left"), key("down"), key("right")])
+    }
+
+    // A position the layout has no key for is dropped and its width shared
+    // out to the ends of its row, so a short row still reaches both edges.
+    // Only the positions that come from the keymap can go missing: a
+    // function key is a position too and is never in the grid, because it
+    // prints nothing.
     rows = rows.map(function(row) {
       return row.filter(function(e) {
-        return !(e.key in root.roles) && e.key.length === 4 && !(e.key in root.grid) ? false : true
+        return !root.isPrintedPosition(e.key) || (e.key in root.grid)
       })
     })
-    var units = root.formUnitsOf(root.form)
     return rows.map(function(row) {
       var slack = units - row.reduce(function(a, e) { return a + e.w }, 0)
       if (slack * root.unit > 1 && row.length > 1) {
@@ -778,8 +859,12 @@ Item {
       var h = Math.round(root.keyHeight * row[0].h)
       var x = (root.width - total * root.unit) / 2
       row.forEach(function(e) {
-        out.push({ key: e.key, row: i, x: x + gap / 2, y: y,
-                   width: e.w * root.unit - gap, height: h })
+        // An entry with no key is the space between clusters on a board that
+        // has them. It holds width and takes no touches, so keyAt can never
+        // return one and nothing draws there.
+        if (e.key !== "")
+          out.push({ key: e.key, row: i, x: x + gap / 2, y: y,
+                     width: e.w * root.unit - gap, height: h })
         x += e.w * root.unit
       })
       y += h + gap

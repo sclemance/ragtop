@@ -306,12 +306,26 @@ colours and font, and the Transparency setting, without restarting.
 
 ### Which board
 
-There is more than one. **Phone** is the three letter rows with symbol pages
-behind a `?123` key, which is what a phone keyboard is and what Ragtop drew
-for its whole life until now. **60%** is a real keyboard: five rows, fifteen
-units across, every symbol on the board where your fingers already know it
-is, and no function row, no nav cluster and no arrows, which is what 60%
-means.
+There is more than one, and they are the boards those names mean.
+
+**Phone** is the three letter rows with symbol pages behind a `?123` key,
+which is what a phone keyboard is and what Ragtop drew for its whole life
+until now.
+
+**60%** is five rows and fifteen units across, every symbol on the board
+where your fingers already know it is, and no function row, no nav cluster
+and no arrows. An **Fn** key sits where a full board keeps its right Super
+and reaches all of it.
+
+**75%** is the compressed one: a function row on top and one more column hard
+against the right of the main block, no gap, which is the whole idea. Sixteen
+units. Arrows in the bottom row, Del, Home, PgUp, PgDn and End down the right.
+It has no room for a Menu key, so the tiling key holds it.
+
+**80%** is a tenkeyless: the function row grouped in fours and the full three
+wide nav cluster past a gap, with the arrows in an inverted T below it.
+Eighteen and a quarter units, and the only board with room for a Menu key of
+its own.
 
 **Automatic**, the default, draws the widest board the screen can carry and
 changes its mind when the screen turns. A key may not go below 48 pixels,
@@ -325,14 +339,18 @@ Pick one by name and it is taken at its word on height, since asking for it
 is asking for the height it needs. It still gives way on width, because a
 board too wide for the screen cannot be drawn at all.
 
-On a 1366 by 768 machine at the default Key Size that works out as:
+Measured on a 1366 by 768 machine, Automatic works out as:
 
 | Key Size | landscape | portrait |
 | --- | --- | --- |
-| Smaller | 60% | 60% |
+| Smaller | 80% | 75%, since 80% wants 787px of width |
 | Regular | 60% | 60% |
-| Larger | Phone, since 60% would cross half the height | Phone |
-| Largest | Phone | Phone |
+| Larger | Phone | Phone |
+
+Landscape at Regular is the interesting one. There is width to spare for a
+tenkeyless, and it drops two rungs to the 60% anyway, because a six row board
+at that key size is 418 pixels tall against a 384 pixel cap. That is the case
+the 60% exists for.
 
 The 60% board is drawn ANSI shaped whatever your layout. An ISO board's tall
 Enter is a keycap shape and nothing on a screen you tap is better for
@@ -372,9 +390,13 @@ the caps change to say what they do, so there is nothing to memorise:
 The arrows are an inverted T rather than a row of four, because a finger aims
 by shape even when the key says what it is.
 
-**Tiling mode is a tap and the context menu is behind Fn.** A screen has no
-right click, so Menu is worth having at all, but arranging windows by touch
-is something you do constantly and Menu does nothing whatever in a terminal.
+**Tiling mode is a tap on every real board**, in the place a full keyboard
+keeps its right Super, for the same reason Fn takes that key on the 60%. The
+context menu is behind it: hold the tiling key for Menu, or on the 60% reach
+it with Fn. A screen has no right click, so Menu is worth having at all, but
+arranging windows by touch is something you do constantly and Menu does
+nothing whatever in a terminal. The 80% has the room to keep a Menu key as
+well, and does.
 
 ### What every board has
 
