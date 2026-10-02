@@ -1,4 +1,5 @@
 import QtQuick
+import qs.Commons
 import qs.Ui
 
 BarWidget {
@@ -129,21 +130,31 @@ BarWidget {
     // reach. It cycles rather than toggles, because "follows the switch" is a
     // third answer and not the absence of one.
     //
-    // The accent says a keyboard is available now, which is what the icon can
-    // honestly show. Off and "follows the switch, in laptop mode" look the
-    // same here because on screen they are the same thing. The tooltip is
-    // what tells them apart. Drawing a difference the icon cannot carry would
-    // only read as a bug.
+    // What this shows is the setting, not whether a keyboard happens to be up.
+    //
+    // It used to light for keyboardAvailable, and `active` on a bar widget
+    // means urgent in Omarchy: WidgetButton defaults activeColor to
+    // bar.urgent, so "a keyboard exists right now" was painted the red a bar
+    // keeps for things that want attention. A working keyboard is not an
+    // alarm.
+    //
+    // It lights for the setting being overridden instead, in the accent, and
+    // the two overrides are told apart by the icon rather than by the colour.
+    // A bar has no hover on a touchscreen, so a tooltip cannot be the thing
+    // that distinguishes them, which is what the comment here used to assume
+    // and got wrong: off and "waiting for tablet mode" looked identical, and
+    // the only way to find out which was to tap it.
     BarIconButton {
       id: keyboardButton
       bar: root.bar
       tooltipText: root.keyboardMode === "on" ? "Keyboard: always on"
         : root.keyboardMode === "off" ? "Keyboard: off"
         : "Keyboard: on in tablet mode, follows the switch"
-      active: root.keyboardAvailable
+      active: root.keyboardMode !== "sensor"
+      activeColor: Color.accent
       iconComponent: Component {
         KeyIcon {
-          name: "keyboard"
+          name: root.keyboardMode === "off" ? "keyboard-off" : "keyboard"
           color: keyboardButton.active && keyboardButton.useActiveColor
             ? keyboardButton.activeColor : keyboardButton.foreground
         }

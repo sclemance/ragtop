@@ -215,9 +215,9 @@ choice_notice() {
     "keyboard-layout 75") echo "A 75% keyboard, where the screen is wide enough." ;;
     "keyboard-layout 80") echo "A tenkeyless keyboard, where the screen is wide enough." ;;
     "keyboard-layout mobile") echo "The mobile keyboard, with its symbol pages." ;;
-    "keyboard sensor") echo "The keyboard follows tablet mode again." ;;
-    "keyboard on") echo "The keyboard is on offer in laptop mode too." ;;
-    "keyboard off") echo "The keyboard is off until you turn it back on." ;;
+    "keyboard sensor") echo "The keyboard comes up in tablet mode." ;;
+    "keyboard on") echo "The keyboard is on offer whatever mode you are in." ;;
+    "keyboard off") echo "The keyboard is off. The bar icon is struck through while it is." ;;
     "rotation locked") echo "The screen will not rotate." ;;
     "rotation unlocked") echo "The screen follows the sensor." ;;
     "rotation auto") echo "The screen rotates while in tablet mode." ;;

@@ -13,6 +13,7 @@ Item {
 
   // "settings", "shift", "backspace", "enter", "rotate", "keyboard",
   // "windows", "omarchy", "check", "float", "wide", "tiled", "split", "scroll",
+  // "keyboard-off",
   // "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
@@ -159,6 +160,13 @@ Item {
     return path + move(0.34, 0.60) + line(0.66, 0.60)
   }
 
+  // The same keyboard with a line through it, for a keyboard that is off.
+  // The shape says so, rather than the colour, because on a bar there is no
+  // hover to explain a colour and nothing else to compare it against.
+  function keyboardOffPath() {
+    return keyboardPath() + move(0.14, 0.82) + line(0.86, 0.18)
+  }
+
   function checkPath() {
     return move(0.2, 0.52) + line(0.42, 0.74) + line(0.8, 0.28)
   }
@@ -222,6 +230,7 @@ Item {
     : name === "enter" ? enterPath()
     : name === "rotate" ? rotatePath()
     : name === "keyboard" ? keyboardPath()
+    : name === "keyboard-off" ? keyboardOffPath()
     : name === "windows" ? windowsPath()
     : name === "check" ? checkPath()
     : name === "float" ? floatPath()
