@@ -1756,10 +1756,53 @@ Item {
   // have to fit. What Auto still decides there is the row height and the
   // smallest a key may be, which is what picks the board in the first place.
   readonly property real targetKeyMm: 16
+
+  // How many pixels the screen has to the millimetre, from Hyprland rather
+  // than from Qt.
+  //
+  // Qt's physicalPixelDensity changes when the screen is rotated, which a
+  // panel cannot do: measured on this machine it reads 5.37 landscape and
+  // 6.36 in portrait. Auto believed the second one, asked for keys a fifth
+  // larger than it meant to, and that raised the minimum a key may be far
+  // enough to throw out every real board. Turning the screen chose a
+  // different keyboard, which is the opposite of what Auto is for.
+  //
+  // Hyprland reports the panel's millimetres and its MODE, and neither of
+  // those turns with the transform, so the number is the same whichever way
+  // up the machine is. Taken on the diagonal because a panel's millimetres
+  // are rounded to whole numbers and the two axes disagree slightly: 260 by
+  // 140 gives 5.25 across and 5.49 down, and 5.31 on the diagonal.
+  property real monitorDensity: 0
+  Process {
+    id: densityProc
+    running: true
+    command: ["hyprctl", "monitors", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var want = root.keyboardMonitorName
+        var found = 0
+        try {
+          JSON.parse(text).forEach(function(m) {
+            if (m.name !== want) return
+            var pw = Number(m.physicalWidth) || 0, ph = Number(m.physicalHeight) || 0
+            var w = Number(m.width) || 0, h = Number(m.height) || 0
+            if (pw > 0 && ph > 0 && w > 0 && h > 0)
+              found = Math.sqrt(w * w + h * h) / Math.sqrt(pw * pw + ph * ph)
+          })
+        } catch (e) { return }
+        root.monitorDensity = found
+      }
+    }
+  }
+  // Re-read when the screen Ragtop lives on changes, since the panel does.
+  onKeyboardMonitorNameChanged: densityProc.running = true
+
   readonly property real autoSizePercent: {
     var scr = root.keyboardScreen
     if (!scr) return 100
-    var density = scr.physicalPixelDensity || 0
+    // Hyprland's first, and Qt's only if Hyprland gave nothing.
+    var density = root.monitorDensity > 0 ? root.monitorDensity
+      : (scr.physicalPixelDensity || 0)
     var dpr = scr.devicePixelRatio || 1
     // A monitor whose EDID lies about its size is worse than no answer, so
     // anything outside what a real screen can be falls back to the default.
