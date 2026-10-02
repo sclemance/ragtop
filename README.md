@@ -6,15 +6,21 @@ Fold the screen back, like a ragtop's roof, or take the keyboard off, which
 the hardware reports the same way, and Ragtop switches your
 [Omarchy 4](https://github.com/omacom/omarchy) desktop into a touch-friendly
 mode: the screen rotates with the device, an on-screen keyboard themed like
-the rest of Omarchy is one tap away, and the things that normally need a
-keyboard shortcut or a mouse work by touch. Your windows can be rearranged by
-dragging them around, and the Omarchy menu can be typed into. Put it back and
-everything returns to normal.
+the rest of Omarchy is one tap away, in a phone layout or a real one, and the
+things that normally need a keyboard shortcut or a mouse work by touch. Your
+windows can be rearranged by dragging them around, and the Omarchy menu can be
+typed into. Put it back and everything returns to normal.
 
 Two more documents sit beside this one. **[THEMING.md](THEMING.md)** is every
 field a keyboard theme may set. **[ARCHITECTURE.md](ARCHITECTURE.md)** is how
 Ragtop works underneath: the layer surfaces, the hardware it reads, and how
 it types.
+
+**Jump to:** [How it looks](#how-it-looks) &middot;
+[Will it work on mine?](#which-tablets) &middot; [Features](#features) &middot;
+[Install](#install) &middot; [The keyboard](#the-keyboard) &middot;
+[Tiling mode](#tiling-mode-preview) &middot; [Settings](#settings) &middot;
+[Troubleshooting](#troubleshooting)
 
 ## How it looks
 
@@ -22,12 +28,24 @@ The keyboard takes its colours from your Omarchy theme and its letters from
 your Hyprland layout, so it matches whatever you already run. The look is
 yours to change (see [Themes](#themes)).
 
+**It is not one keyboard.** Ragtop draws whichever board the screen can
+carry, from a tenkeyless down to the phone style, and changes its mind when
+the screen turns:
+
+| | |
+| --- | --- |
+| ![A 75% board in portrait, Spaceship theme on Osaka Jade](screenshots/portrait-75-spaceship-osaka-jade.webp) | ![The mobile board in portrait, Typewriter theme on Gruvbox](screenshots/portrait-mobile-typewriter-gruvbox.webp) |
+| **75%** in portrait: a function row, a number row and a nav column, with **Spaceship** on Osaka Jade and no background at all | **Mobile** in portrait: three letter rows and the symbol pages behind `?123`, with **Typewriter** on Gruvbox over its own tinted panel |
+
+**A Ragtop theme sets the shape of a key and your Omarchy theme sets its
+colour**, which is why any Ragtop theme looks right on any Omarchy one:
+
 | | | |
 | --- | --- | --- |
 | ![Glass theme on Tokyo Night, German layout](screenshots/glass-tokyo-night.jpg) | ![Typewriter theme on Catppuccin Latte, French layout](screenshots/typewriter-catppuccin-latte.jpg) | ![The lock screen's keyboard on Rose Pine](screenshots/lock-screen-rose-pine.jpg) |
 | **Glass** on Tokyo Night: see-through keys over a blurred desktop, QWERTZ | **Typewriter** on Catppuccin Latte: raised keycaps, AZERTY with its short bottom row filled out | **The lock screen's own keyboard**, in the lock screen's palette |
 
-Held upright, the same keyboard fills the width it is given:
+And the parts that only exist because it is a finger rather than a mouse:
 
 | | |
 | --- | --- |
@@ -60,7 +78,7 @@ thing:
 | Missing | What stops | What still works |
 | --- | --- | --- |
 | A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
-| An accelerometer, or `iio-sensor-proxy` | The screen following the device. The rotation-lock button has nothing to lock | The keyboard, the handle, tablet mode, the overlays |
+| An accelerometer, or `iio-sensor-proxy` | The screen following the device. Set rotation to Locked and turn it a quarter turn at a time by hand instead | The keyboard, the handle, tablet mode, the overlays |
 | `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, tiling mode, the picker strip |
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously, but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
@@ -76,37 +94,49 @@ space until tablet mode turns on.
   keyboard off, which a detachable reports the same way. The switch is
   auto-detected whichever driver provides it.
 - **Auto-rotation with a lock.** Screen and touch input rotate with the device
-  (via `iio-sensor-proxy`). A bar button locks the orientation, and the lock is
-  remembered, and released automatically on the way back to laptop mode.
+  (via `iio-sensor-proxy`). A bar button cycles Automatic, Locked and
+  Unlocked, the choice is remembered, and while it is Locked there are two
+  buttons to turn the screen a quarter turn by hand.
 - **An on-screen keyboard that fits Omarchy.** Drawn by the Omarchy shell in
   your theme's colours and font, and restyled the moment you switch themes. Its
   background is see-through as its theme asks, and goes entirely when you make
   Omarchy's bar transparent.
-- **The keys a desktop needs.** A slim extra row has Esc, Tab, Ctrl, Alt, Super
-  and arrow keys. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C, and
-  tap one twice to lock it on. Your
-  Hyprland SUPER shortcuts work from it: tap Super, then Return, to open a
-  terminal.
+- **Four boards, and it picks one.** Mobile is the phone style, three letter
+  rows with the symbols behind `?123`. 60%, 75% and 80% are the real thing,
+  with every symbol where your fingers already know it is, a function row and
+  a nav cluster on the larger two, and an **Fn** layer on the 60% that reaches
+  what it has no room for. Automatic draws the widest board the screen can
+  carry and changes its mind when you turn it, so folding into portrait steps
+  down a board instead of shrinking the keys. Pick one by name and it is kept.
+  See [Which board](#which-board).
+- **The keys a desktop needs.** Esc, Tab, Ctrl, Alt, Super, the arrows and
+  the function keys, in their own places on a real board and on a slim extra
+  row on the mobile one. Modifiers are one-shot: tap Ctrl, then C, for Ctrl+C,
+  and tap one twice to lock it on. Your Hyprland SUPER shortcuts work from it:
+  tap Super, then Return, to open a terminal.
 - **Your layout, any character.** The letter keys and the symbol pages follow
   your active Hyprland layout (QWERTZ, AZERTY, Cyrillic, Dvorak…), accents
   are a long press away, and characters your layout can't type (é on a US
   layout, emoji) still arrive.
 - **Settings one hold away.** Hold the Super key, next to the space bar, and
-  Ragtop's settings come up over the keyboard.
-- **Tiling mode.** Omarchy windows have no title bars and moving or resizing
-  them needs SUPER plus a mouse. Tiling mode puts a transparent layer over
-  the real windows so you can tap one to focus it, hold and drag it onto
-  another to swap them, and drag the squares and bars on its edges to resize.
-  The windows are the controls, at full size, with their content visible and
-  reflowing as you work. See [Tiling mode](#tiling-mode).
+  Ragtop's controls come up over the keyboard: the theme, which board, key
+  size, rotation, and which monitor Ragtop lives on where you have more than
+  one. The keyboard stays drawn underneath, so you see what you changed.
+- **Tiling mode, as a preview.** Omarchy windows have no title bars and moving
+  or resizing them needs SUPER plus a mouse. Tiling mode puts a transparent
+  layer over the real windows so you can tap one to focus it, hold and drag it
+  onto another to swap them, and drag the squares and bars on its edges to
+  resize. The windows are the controls, at full size, with their content
+  visible and reflowing as you work. It is solid on one screen and unfinished
+  on more than one. See [Tiling mode](#tiling-mode-preview).
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
   the keyboard up with them, and keep them clear of it. It's off until you turn
   it on, one overlay at a time (see [Omarchy's overlays](#omarchys-overlays)).
-- **Unlock without putting it back together, if you want to.** The lock screen hides every
-  other window, the on-screen keyboard included, so Ragtop can give it a
-  keyboard of its own in tablet mode. Also off until you turn it on.
+- **Unlock without putting it back together, if you want to.** The lock screen
+  hides every other window, the on-screen keyboard included, so Ragtop can
+  give it a keyboard of its own in tablet mode. Also off until you turn it on.
 - **Settings in the Omarchy menu,** under Setup › Tablet.
 
 ## Requirements
@@ -141,13 +171,15 @@ Nothing in Ragtop is written for either model: the tablet-mode switch is
 auto-detected, and rotation comes from the standard accelerometer stack.
 
 **On a Surface, touch is the machine's problem, not Ragtop's.** Surface
-hardware needs the [linux-surface](https://github.com/linux-surface/linux-surface)
-kernel and firmware before its touchscreen works at all, and a stock kernel gives
-you a machine that detaches, rotates and runs Ragtop, with nothing to touch it
-with. Worth knowing before you conclude the plugin is broken: check whether a
-touch device exists at all with `hyprctl devices | grep -i touch`. **If you have a machine we haven't listed, please try it and open an issue**,
-whether it works or not. Two machines is not a sample. There is a
-[hardware report form](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)
+hardware needs the
+[linux-surface](https://github.com/linux-surface/linux-surface) kernel and
+firmware before its touchscreen works at all, and a stock kernel gives you a
+machine that detaches, rotates and runs Ragtop, with nothing to touch it with.
+Worth knowing before you conclude the plugin is broken: check whether a touch
+device exists at all with `hyprctl devices | grep -i touch`. **If you have a
+machine we haven't listed, please try it and open an issue**, whether it works
+or not. Two machines is not a sample. There is a [hardware report
+form](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)
 that asks for exactly this.
 
 What is most useful to hear about, roughly in order:
@@ -205,9 +237,9 @@ machine set up either way ends up the same. Re-open it any time from
 already on the machine, so you can use it to turn overlays on and off later.
 
 The one thing it cannot do is install packages: it names what is missing, says
-what each is for, and hands you the one-line `omarchy pkg add`. If something Ragtop set up
-goes missing later, a "Ragtop needs setup" notification says what, and opens
-the same steps.
+what each is for, and hands you the one-line `omarchy pkg add`. If something
+Ragtop set up goes missing later, a "Ragtop needs setup" notification says
+what, and opens the same steps.
 
 The installer can be re-run safely. Options:
 
@@ -262,12 +294,15 @@ readable over a shoulder.
 
 ## Using it
 
-In tablet mode, two icons appear in the bar:
+Ragtop puts three buttons in the bar. Two of them are always there, because
+the one control that turns the keyboard on must not be somewhere you need a
+keyboard to reach:
 
-| Icon | Does |
-| --- | --- |
-| Grid | Opens tiling mode. Tap it again to leave. |
-| Padlock | Locks or unlocks rotation. Highlighted while locked, and stays in the bar while locked, even in laptop mode. |
+| Button | Does | There |
+| --- | --- | --- |
+| Keyboard | Cycles whether there is an on-screen keyboard at all: Follow Sensor, Always On, Always Off. Takes the accent while it is not following the sensor, and the key is struck through while it is off | always |
+| Screen rotation | Cycles Automatic, Locked and Unlocked. Takes the accent while locked | always |
+| Tiling | Opens [tiling mode](#tiling-mode-preview). Tap it again to leave | in tablet mode |
 
 A slim handle, coloured like the bar, runs along the bottom of the screen in
 tablet mode. Tap it to show the keyboard (it shows a wide ^) and tap it again
@@ -474,7 +509,7 @@ omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 Holding Super opens a small panel that sits below Omarchy's bar and holds
 what you reach for while actually holding the machine. It is never taller
 than half the screen, which is where Automatic stops the keyboard growing, so
-the two cannot meet; anything that does not fit scrolls. The keyboard stays
+the two cannot meet, and anything that does not fit scrolls. The keyboard stays
 drawn underneath, so changing the theme or the key size shows you the result
 as you do it. Tap anywhere on the keyboard to put it away.
 
@@ -557,17 +592,19 @@ row in the Omarchy menu under **Setup › Tablet**:
 
 | Row | Choices |
 | --- | --- |
-| Tablet Mode | Automatic (follow the hardware switch), On, or Off |
+| Tablet Mode | Automatic (follow the hardware switch), Always On, or Always Off |
+| Keyboard | Follow Sensor, Always On, or Always Off: whether there is an on-screen keyboard at all |
+| Layout | Automatic, Mobile, 60%, 75% or 80% (TKL): which board it draws |
 | Auto Keyboard | Whether the keyboard comes up by itself on a text field |
 | Theme | The keyboard's whole look, from a theme file |
-| Key Size | Smallest, Smaller, Regular, Larger, Largest, against whatever size the theme asks for, and the labels scale with the keys |
+| Key Size | Automatic, or Smallest, Smaller, Regular, Larger, Largest against whatever size the theme asks for, and the labels scale with the keys |
 | System Overlays | Touch typing in each of Omarchy's overlays, one at a time |
 | Run Setup | Opens setup in the shell |
 | Diagnostics | Copies everything a bug report needs to the clipboard |
 
-Theme, Key Size and the keyboard's own auto-expand are also on the panel a
-hold on Super opens, which is the quicker way to them while you are holding
-the machine.
+Theme, Layout, Key Size, rotation and the keyboard's own auto-expand are also
+on the panel a hold on Super opens, which is the quicker way to them while you
+are holding the machine.
 
 What a key looks like, its shape, relief, fill, how see-through it is, the
 background behind it and the top edge, belongs to the theme, so it is set in
@@ -622,10 +659,17 @@ blurs behind its keyboard.
 The lock screen's keyboard takes the shape, fill and measurements too,
 checked again by its own code, but never the colours or the background.
 
-## Tiling mode
+## Tiling mode (preview)
 
 Omarchy windows have no title bars, and moving or resizing them needs SUPER
 and a mouse. Tiling mode gives you the same thing with a finger.
+
+**This one is a preview.** It is good on a single screen and it is not
+finished on more than one. Ragtop draws the outlines for the screen it lives
+on, so windows on another monitor cannot be reached from it at all, and what
+it does do across several displays still has rough edges. Use it, report what
+you hit, and do not be surprised by it. Everything else in Ragtop is meant to
+be solid.
 
 It is named after Omarchy's own `bindings/tiling.lua`, which groups exactly
 these actions: split, float, tiled full screen, full width, the scratchpad and
@@ -638,6 +682,13 @@ covers the real windows, outlining each one with its title and size.
 The windows themselves are the controls. They stay at full size with their
 own content visible, and they reflow as you work, which is the whole reason
 it happens over them rather than over a scaled-down map.
+
+![Tiling mode over two tiled windows, with drag handles on each and the
+controls along the bottom](screenshots/tiling-mode.webp)
+
+Two tiles with their handles up, and the strip along the bottom: the
+workspaces and the scratchpad on the left, the shapes on the right, and the
+way out in the middle.
 
 | To | Do |
 | --- | --- |
@@ -705,11 +756,14 @@ on top.
 Moving or swapping a group moves all of it and keeps it together, because
 as far as the layout is concerned a group is one tile.
 
-Turned on its side there is less width and more height, so the strip becomes
-two rows rather than hiding anything behind a scroll.
+### Leaving, and turning it sideways
 
-Tiling mode also ends when the keyboard comes back by any route, when
-tablet mode ends, and after 90 seconds of nothing happening.
+Turned on its side there is less width and more height, so the strip along the
+bottom becomes two rows rather than hiding anything behind a scroll.
+
+Tiling mode ends when you tap Finish tiling or the bar's own button, when the
+keyboard comes back by any route, when tablet mode ends, and after 90 seconds
+of nothing happening.
 
 One limit worth knowing before it surprises you: a boundary between two
 *groups* of tiles resizes the whole group, because the layout is a tree and
@@ -725,7 +779,8 @@ lands on the overlay and closes it. This can't be fixed from the keyboard's
 side.
 
 The theme and background pickers (both Omarchy's image picker) have the same
-problem and one of their own: see [The theme and background pickers](#the-theme-and-background-pickers).
+problem and one of their own: see [The theme and background
+pickers](#the-theme-and-background-pickers).
 
 Ragtop can replace them with clones (made with Omarchy's own
 `omarchy plugin clone`) that change two lines, and only in tablet mode: they
@@ -769,12 +824,13 @@ What turning one on means:
 
 ### The menu's Apps list
 
-Omarchy 4 (checked on 4.0.4) doesn't give a third-party menu plugin its application
-library. The plugin's manifest reaches the shell's plugin API through an
-`Instantiator`, and after that round trip `Array.isArray(manifest.kinds)` is
-false, so the shell decides the plugin isn't a menu and builds it without one.
-Omarchy's own menu is unaffected, because it gets the shell itself. Any cloned
-menu, Ragtop's or anyone's, comes up with **Apps** empty.
+Omarchy 4 (checked on 4.0.4) doesn't give a third-party menu plugin its
+application library. The plugin's manifest reaches the shell's plugin API
+through an `Instantiator`, and after that round trip
+`Array.isArray(manifest.kinds)` is false, so the shell decides the plugin
+isn't a menu and builds it without one. Omarchy's own menu is unaffected,
+because it gets the shell itself. Any cloned menu, Ragtop's or anyone's, comes
+up with **Apps** empty.
 
 So the menu clone carries a third change: when the shell hands it no
 application library, it loads Omarchy's own `AppLibrary.qml`, the same file
@@ -892,7 +948,7 @@ One more lives in Ragtop's bar entry in `~/.config/omarchy/shell.json`:
 | --- | --- | --- |
 | `tabletSwitchDevice` | blank | Input device to read the tablet-mode switch from. Blank means auto-detect. |
 
-The padlock button writes `rotation` to `settings.conf` like every other
+The rotation button writes `rotation` to `settings.conf` like every other
 setting, so an old `rotationLocked` or `rotationMode` left in `shell.json` is
 read by nothing and can go.
 
@@ -917,9 +973,8 @@ If tablet mode is never detected:
   keyboard, the installer offers to install
   `/etc/udev/rules.d/70-ragtop-tablet-switch.rules`:
 
-  ```
-  SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{ID_INPUT_KEY}!="1", TAG+="uaccess"
-  ```
+  ``` SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1",
+  ENV{ID_INPUT_KEY}!="1", TAG+="uaccess" ```
 
   It gives the user logged in at the machine read access to switch devices
   only (tablet mode, lid, headphone jack), never keyboards, and takes effect
@@ -953,8 +1008,8 @@ True today, and worth saying if you want them gone:
 - **Automatic tablet mode needs a kernel switch.** A machine that reports none
   still works, set to **Always On**, and setup says so rather than failing
   quietly. See [Tablet-mode detection](#tablet-mode-detection).
-- **Rotation needs `iio-sensor-proxy`.** Without it the screen holds still and
-  the padlock is the only control.
+- **Rotation needs `iio-sensor-proxy`.** Without it the screen holds still,
+  and turning it by hand from the controls panel is the only way round.
 - **The keyboard takes every tap inside it.** A theme that draws no background
   at all is the exception, and then only the keys take one. There is no gap
   between keys to reach the window underneath.
@@ -973,6 +1028,10 @@ True today, and worth saying if you want them gone:
   Ragtop's own screen, so windows on another monitor cannot be arranged from
   it. Rotation is the exception and stays with the built-in panel, because
   that is the screen that physically turns.
+- **Tiling mode is a preview, and multi-monitor is where it shows.** On one
+  screen it does what it says. On more than one it reaches only the screen
+  Ragtop is on, and the rest is known to be rough rather than known to work.
+  See [Tiling mode](#tiling-mode-preview).
 - **The screen does not rotate while locked.** Omarchy's lock screen is not
   redrawn for a rotated display, so it keeps the orientation it was locked in
   and catches up when you unlock.
@@ -982,26 +1041,21 @@ True today, and worth saying if you want them gone:
   across everything inside. A mouse does the same thing. Nothing can name a
   single split to move, so this is the layout showing through rather than
   something Ragtop gets wrong.
-- **A cloned menu's Apps list is empty** on Omarchy 4.0.0.alpha, which is an
-  Omarchy bug rather than Ragtop's. Ragtop works around it and the workaround
-  undoes itself once upstream lands a fix. See
-  [The menu's Apps list](#the-menus-apps-list).
+- **A cloned menu's Apps list is empty** on Omarchy 4 (checked on 4.0.4),
+  which is an Omarchy bug rather than Ragtop's. Ragtop works around it and the
+  workaround undoes itself once upstream lands a fix. See [The menu's Apps
+  list](#the-menus-apps-list).
 
 ## What might come next
 
 Not built, not promised, and written down so the thinking isn't done twice.
 Each of these is here because it has a shape already, not because it is next.
+What used to head this list, function keys and second meanings for the arrows,
+is built: the larger boards have those keys in their own places and the 60%
+reaches them through [Fn](#which-board).
 
-- **Function keys, and second meanings for the arrows.** The likely answer is
-  one **Fn** key on the extra row that holds the row as F1 to F12 and
-  re-labels the arrows Home, End, PgUp and PgDn, latching and locking the way
-  Ctrl and Shift already do. A layer rather than a long press, for two
-  reasons. The arrows and Backspace repeat while held, and a hold card would
-  take that away. And it is what the keyboard you just folded behind the
-  screen does, so there is nothing to learn. Nothing sends the keys today, and
-  nothing needs to change in `keyboard-helper.py` to make it: `key F5` already
-  works.
-- **A number row of its own.** The digits a hold on a letter reaches come from
+- **A number row of its own, on the mobile board.** The real boards have one
+  already. On the mobile board the digits a hold on a letter reaches come from
   where the two rows sit, which only lines up when a layout puts ten letters
   on its top row. Hebrew puts eight there and Dvorak seven, so on those the
   digits no longer sit under the letters that print them. None is out of
@@ -1147,18 +1201,21 @@ afterwards, and rolls back if that fails. There are no release channels.
 Whatever is on the branch is what you get, so the branch is kept shippable
 and every push is, in effect, a release.
 
-The version in `manifest.json` is required, since `omarchy plugin validate` refuses
-a manifest without one, but Omarchy itself never shows it: not in
+The version in `manifest.json` is required, since `omarchy plugin validate`
+refuses a manifest without one, but Omarchy itself never shows it: not in
 `omarchy plugin list`, not in its JSON. So it is here for people, in the
-release tags and in bug reports. Ragtop is **in beta**: it runs two machines every day, but it wants strangers
-to break it. Bugs and hardware reports are the point of this stage, and so
-is telling us what is awkward. Features will change and be added while it is
-in beta, because usability is not a thing you finish before shipping and then
-stop doing. 1.0.0 is simply the first release that isn't beta. The version is **0.x while
-that is true**,
-and says so honestly: the settings file, the `ragtop` command and the rest
-are still moving. The first published release is 1.0.0, tagged, and from
-then on:
+release tags and in bug reports.
+
+**Ragtop is in beta, and the version is 0.x while that is true.** It runs two
+machines every day and it wants strangers to break it, so bugs and hardware
+reports are the point of this stage, and so is telling us what is awkward.
+Features will change and be added meanwhile, because usability is not
+something you finish before shipping and then stop doing. What 0.x says
+honestly is that the settings file, the `ragtop` command and the rest are
+still moving.
+
+1.0.0 is simply the first release that is not beta, tagged like the rest,
+and from there on:
 
 | | |
 | --- | --- |
