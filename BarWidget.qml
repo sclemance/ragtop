@@ -11,6 +11,14 @@ BarWidget {
   // the controls on the keyboard are the same switch rather than two copies.
   readonly property string rotationMode: root.service ? root.service.rotationMode : "auto"
   readonly property bool rotationLocked: root.service ? root.service.rotationLocked : false
+  // What the rotation button has to say, beyond which mode is set. Absent
+  // hardware, a daemon that has stopped answering, and a package that was
+  // never installed are three different things and only one of them is a
+  // fault: see Service.qml's accelPresent.
+  readonly property bool accelAbsent: root.service ? root.service.accelAbsent : false
+  readonly property bool sensorStuck: root.service ? root.service.sensorStuck : false
+  readonly property bool probesSettled: root.service ? root.service.probesSettled : false
+  readonly property bool rotationAvailable: root.service ? root.service.rotationAvailable : true
   readonly property string keyboardMode: root.service ? root.service.keyboardMode : "sensor"
   readonly property bool keyboardAvailable: root.service ? root.service.keyboardAvailable : false
   readonly property string tabletSwitchDevice: String(root.setting("tabletSwitchDevice", ""))
@@ -164,23 +172,52 @@ BarWidget {
 
     // A padlock said whether rotation was held, which is the state, not the
     // thing. What this button is about is the screen turning, so it says
-    // that, and the accent it takes while locked says it is held. That also
-    // stops it reading as a screen lock, which is what a padlock in a bar
-    // usually means.
+    // that. That also stops it reading as a screen lock, which is what a
+    // padlock in a bar usually means.
+    //
+    // Gone entirely where the machine has no accelerometer. Two of the three
+    // modes cannot do anything there, and a button that cycles three states
+    // where one matters is worse than no button. Nothing is lost: Locked and
+    // the two Rotate buttons stay in the controls panel, which is where you
+    // want them anyway, since you watch the screen turn as you tap.
+    //
+    // It used to light `active` for rotationLocked with no activeColor, and
+    // `active` on a bar widget means urgent in Omarchy: WidgetButton defaults
+    // activeColor to bar.urgent. rotationLocked is also true for Automatic in
+    // laptop mode, so the default setting on a laptop with the lid open, the
+    // commonest state Ragtop is ever in, painted the attention colour. This
+    // is the same mistake the keyboard button had, left on the button beside
+    // it.
+    //
+    // So: the accent for a mode you chose, the slash for rotation that is not
+    // going to happen, and the urgent colour for exactly one thing, an
+    // accelerometer that is there and has stopped answering. Absence is never
+    // an alarm. A missing package is not one either, because without it
+    // Ragtop cannot ask whether there is hardware and will not assert what it
+    // has not established.
     BarIconButton {
       id: rotationButton
+      visible: !(root.accelAbsent && root.probesSettled)
       bar: root.bar
-      tooltipText: root.rotationMode === "locked" ? "Screen rotation: locked"
-        : root.rotationMode === "unlocked" ? "Screen rotation: unlocked"
+      tooltipText: root.sensorStuck ? "Screen rotation: the sensor has stopped answering"
+        : !root.rotationAvailable ? "Screen rotation: needs iio-sensor-proxy to follow the device"
+        : root.rotationMode === "locked" ? "Screen rotation: locked, turn it by hand from the controls"
+        : root.rotationMode === "unlocked" ? "Screen rotation: unlocked, always follows the sensor"
         : "Screen rotation: automatic, follows tablet mode"
-      active: root.rotationLocked
+      // Urgent only for the fault. The accent for a mode other than the
+      // default, which is what it means on the keyboard button too.
+      active: root.sensorStuck || root.rotationMode !== "auto"
+      activeColor: root.sensorStuck
+        ? (root.bar ? root.bar.urgent : Color.urgent) : Color.accent
       iconComponent: Component {
         KeyIcon {
-          name: "rotate"
+          name: rotationButton.held ? "rotate-off" : "rotate"
           color: rotationButton.active && rotationButton.useActiveColor
             ? rotationButton.activeColor : rotationButton.foreground
         }
       }
+      // Rotation that is not going to happen, whether you held it or it broke.
+      readonly property bool held: root.sensorStuck || root.rotationMode === "locked"
       onPressed: root.cycleRotationMode()
     }
   }

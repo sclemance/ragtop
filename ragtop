@@ -579,6 +579,9 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
     claiming) row Rotation "$value, sensor starting up" ;;
     stuck) row Rotation "$value, sensor not answering, rotation is dead" ;;
     absent) row Rotation "$value, no sensor installed" ;;
+    # Distinct from "absent", which is the package, and from "stuck", which
+    # is a sensor that exists and has stopped. Nothing is wrong here.
+    "no accelerometer") row Rotation "$value, no accelerometer on this machine" ;;
     waiting) row Rotation "$value, sensor between tries" ;;
     # An older service, or none running at all.
     *) if ! command -v monitor-sensor >/dev/null; then

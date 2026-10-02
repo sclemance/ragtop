@@ -13,7 +13,7 @@ Item {
 
   // "settings", "shift", "backspace", "enter", "rotate", "keyboard",
   // "windows", "omarchy", "check", "float", "wide", "tiled", "split", "scroll",
-  // "keyboard-off",
+  // "keyboard-off", "rotate-off", "rotate-left", "rotate-right",
   // "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
@@ -160,6 +160,43 @@ Item {
     return path + move(0.34, 0.60) + line(0.66, 0.60)
   }
 
+  // One arc over the top with a head at the far end, for the two buttons
+  // that turn the screen by hand. The same circle as rotatePath, so the three
+  // read as a family, and the direction is the whole point of the pair: the
+  // arc is 140 degrees so it stays under the half circle an SVG arc can draw
+  // without a large-arc flag, and the head goes on the end it travels to.
+  function turnPath(cw) {
+    var r = 0.3
+    function pt(deg) {
+      var a = deg * Math.PI / 180
+      return [0.5 + r * Math.cos(a), 0.5 - r * Math.sin(a)]
+    }
+    function arcTo(deg, sweep) {
+      var p = pt(deg)
+      return "A " + (r * unit).toFixed(2) + " " + (r * unit).toFixed(2)
+        + " 0 0 " + (sweep ? 1 : 0) + " " + at(p[0], p[1])
+    }
+    function head(deg, away) {
+      var p = pt(deg), a = deg * Math.PI / 180, w = 0.11
+      var tx = Math.sin(a) * (away ? 1 : -1), ty = Math.cos(a) * (away ? 1 : -1)
+      var nx = Math.cos(a), ny = -Math.sin(a)
+      return move(p[0] + (tx + nx) * w, p[1] + (ty + ny) * w)
+        + line(p[0], p[1])
+        + line(p[0] + (tx - nx) * w, p[1] + (ty - ny) * w)
+    }
+    var start = cw ? 160 : 20, end = cw ? 20 : 160
+    var s = pt(start)
+    return move(s[0], s[1]) + arcTo(end, cw) + head(end, !cw)
+  }
+
+  // The same rotate mark with a line through it, for rotation that is held or
+  // not working. The same device as keyboardOffPath, for the same reason: a
+  // bar has no hover on a touchscreen, so the shape has to carry the state
+  // and not the colour alone.
+  function rotateOffPath() {
+    return rotatePath() + move(0.14, 0.82) + line(0.86, 0.18)
+  }
+
   // The same keyboard with a line through it, for a keyboard that is off.
   // The shape says so, rather than the colour, because on a bar there is no
   // hover to explain a colour and nothing else to compare it against.
@@ -231,6 +268,9 @@ Item {
     : name === "rotate" ? rotatePath()
     : name === "keyboard" ? keyboardPath()
     : name === "keyboard-off" ? keyboardOffPath()
+    : name === "rotate-off" ? rotateOffPath()
+    : name === "rotate-left" ? turnPath(false)
+    : name === "rotate-right" ? turnPath(true)
     : name === "windows" ? windowsPath()
     : name === "check" ? checkPath()
     : name === "float" ? floatPath()

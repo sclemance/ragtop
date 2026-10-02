@@ -78,7 +78,7 @@ thing:
 | Missing | What stops | What still works |
 | --- | --- | --- |
 | A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
-| An accelerometer, or `iio-sensor-proxy` | The screen following the device. Set rotation to Locked and turn it a quarter turn at a time by hand instead | The keyboard, the handle, tablet mode, the overlays |
+| An accelerometer, or `iio-sensor-proxy` | The screen following the device, and with no accelerometer the bar's rotation button goes with it. Set rotation to Locked and turn it a quarter turn at a time from the controls panel instead, which is Hyprland and needs no sensor | The keyboard, the handle, tablet mode, the overlays |
 | `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, tiling mode, the picker strip |
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously, but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
@@ -148,7 +148,7 @@ without any of it. It just does less, and the setup steps say which less.
 | For | You need | Without it |
 | --- | --- | --- |
 | The on-screen keyboard | `python-pywayland` (official repositories) | No keys are sent, everything else still works |
-| Rotation following the device | `iio-sensor-proxy` (official repositories), and an accelerometer | The screen stays where it is, and rotation lock is moot |
+| Rotation following the device | `iio-sensor-proxy` (official repositories), and an accelerometer | The screen stays where it is until you turn it by hand from the controls panel |
 | The keyboard coming up on text fields | `python-gobject`, and fcitx5 (which Omarchy ships) | Bring it up yourself with the handle |
 | **Automatic** tablet mode | A kernel driver that reports a tablet-mode switch (`lenovo-ymc`, `intel-vbtn`, `intel-hid`, `asus-wmi`, `hp-wmi`, `thinkpad_acpi`…), and read access to it | Set **Tablet Mode › Always On** and Ragtop stays in tablet mode, which is the right answer on a slate anyway |
 | Touch typing in Omarchy's overlays | `git`, to copy them | They behave as they ship |
@@ -301,7 +301,7 @@ keyboard to reach:
 | Button | Does | There |
 | --- | --- | --- |
 | Keyboard | Cycles whether there is an on-screen keyboard at all: Follow Sensor, Always On, Always Off. Takes the accent while it is not following the sensor, and the key is struck through while it is off | always |
-| Screen rotation | Cycles Automatic, Locked and Unlocked. Takes the accent while locked | always |
+| Screen rotation | Cycles Auto-rotate, Locked and Unlocked. Takes the accent for anything but Auto-rotate, the arrow is struck through while rotation is held, and it goes urgent only when an accelerometer that exists has stopped answering | unless the machine has no accelerometer |
 | Tiling | Opens [tiling mode](#tiling-mode-preview). Tap it again to leave | in tablet mode |
 
 A slim handle, coloured like the bar, runs along the bottom of the screen in
@@ -530,9 +530,9 @@ wins.
 | Control | What it does |
 | --- | --- |
 | Theme | Steps through your themes, redrawing the keyboard behind each one |
-| Keyboard Layout | Automatic, Mobile, 60%, 75% or 80%, the same choice as Setup › Tablet › Layout |
-| Screen Rotation | Locked, Unlocked, or Automatic, which turns while in tablet mode and holds still in laptop mode. Locked adds Rotate left and Rotate right, since with the sensor held off there is nothing to undo a turn by hand |
-| Keyboard Size | A slider against whatever size the theme asks for, with an Auto that asks the screen instead. Auto reads how many pixels the display has to the millimetre and aims for a key about a centimetre and a half wide, which is a keycap. It is a preference rather than a promise: a board already filling the width cannot grow into it |
+| Keyboard Layout | Auto-select, Mobile, 60%, 75% or 80%, the same choice as Setup › Tablet › Layout |
+| Screen Rotation | Locked, Unlocked, or Auto-rotate, which turns while in tablet mode and holds still in laptop mode. Locked adds **Rotate left** and **Rotate right**, each with a curved arrow showing which way it goes, since with the sensor held off there is nothing to undo a turn by hand. They are Hyprland and not the sensor, so they work on a machine that has no accelerometer at all |
+| Keyboard Size | A slider against whatever size the theme asks for, with an **Auto-resize** that asks the screen instead. It reads how many pixels the display has to the millimetre and aims for a key about a centimetre and a half wide, which is a keycap. It is a preference rather than a promise: a board already filling the width cannot grow into it |
 | Auto-expand keyboard on text fields | Whether the keyboard comes up by itself |
 | Settings | Opens Setup › Tablet for everything else |
 
@@ -543,15 +543,32 @@ The keyboard's own On / Off / Follow Sensor is not here either, for the same
 reason: turning it off would take away the panel you turned it off from. It is
 the bar button, which is always there whether or not there is a keyboard.
 
-**Screen rotation** is also in the bar, always visible, and the button there
-cycles the same three states. Rotation follows the sensor whether or not the
-machine is in tablet mode, so the screen can start turning while it is still
-a laptop, which is why Unlocked and Automatic are different things.
+**Screen rotation** is also in the bar and the button there cycles the same
+three states. Rotation follows the sensor whether or not the machine is in
+tablet mode, so the screen can start turning while it is still a laptop, which
+is why Unlocked and Auto-rotate are different things.
+
+What the button draws is the setting, and one fault. The accent says you have
+picked something other than Auto-rotate. A line through the arrow says the
+screen is not going to turn. The urgent colour is kept for exactly one thing,
+an accelerometer that is there and has stopped answering, which is the only
+state on this button worth an alarm and the only one with something to do
+about it. Absence is never an alarm.
+
+**On a machine with no accelerometer the button is not there at all.** A
+touchscreen with no sensor, a kiosk or a desk panel, can do nothing with two
+of the three states, and a button that cycles three where one matters is worse
+than no button. Nothing is lost: Locked and the two Rotate buttons stay in the
+controls panel, which is where you want them anyway, since you watch the
+screen turn as you tap. Ragtop asks `iio-sensor-proxy` whether there is an
+accelerometer rather than inferring it from a sensor that never answers, so a
+machine that simply has not got one is never told something is broken.
 
 **The keyboard button** sits beside it, also always visible, and cycles
 whether there is an on-screen keyboard at all: **Follow Sensor**, which is
 tablet mode as before, **Always On**, which offers it in laptop mode too, and
-**Always Off**. It takes the accent while a keyboard is available. Turning it
+**Always Off**. It takes the accent for anything but Follow Sensor, and the
+key is struck through while it is off. Turning it
 off is not the same as leaving tablet mode: tiling mode, the patched overlays
 and the rotation rules all still follow the switch. The same three are in
 Setup › Tablet › Keyboard, and `omarchy-shell ragtop cycleKeyboardMode` binds
@@ -915,7 +932,7 @@ the Settings button on the keyboard's own panel opens directly:
 | --- | --- | --- |
 | Tablet mode: Automatic (follow the hardware, folding or detaching), Always On or Always Off | Automatic | Setup › Tablet › Tablet Mode |
 | Which board the keyboard draws: Automatic, Mobile, 60%, 75% or 80% | Automatic | Setup › Tablet › Layout |
-| Which monitor Ragtop uses: Automatic, or a monitor by name | Automatic | the controls panel, where there is more than one |
+| Which monitor Ragtop uses: Auto-detect, or a monitor by name | Auto-detect | the controls panel, where there is more than one |
 | Turn the screen a quarter turn by hand | n/a | the controls panel, while Screen Rotation is Locked |
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
@@ -1009,7 +1026,16 @@ True today, and worth saying if you want them gone:
   still works, set to **Always On**, and setup says so rather than failing
   quietly. See [Tablet-mode detection](#tablet-mode-detection).
 - **Rotation needs `iio-sensor-proxy`.** Without it the screen holds still,
-  and turning it by hand from the controls panel is the only way round.
+  and turning it by hand from the controls panel is the only way round. That
+  half works with no sensor at all, since it is Hyprland rather than the
+  accelerometer.
+- **A touchscreen with no accelerometer gets no rotation button**, which is
+  the right answer for a kiosk or a desk panel: two of the three rotation
+  states cannot do anything there. Set rotation to Locked once, from the
+  controls panel, and the two Rotate buttons turn the screen by hand. Ragtop
+  asks `iio-sensor-proxy` whether an accelerometer exists rather than
+  concluding it from claims that never land, so such a machine is never told
+  that rotation is broken when there was never anything to break.
 - **The keyboard takes every tap inside it.** A theme that draws no background
   at all is the exception, and then only the keys take one. There is no gap
   between keys to reach the window underneath.
@@ -1095,8 +1121,11 @@ reaches them through [Fn](#which-board).
   how many tries it has had. A process that keeps dying is restarted more
   slowly each time, up to once every five minutes, instead of every three
   seconds forever.
-- **The screen stops following the device.** Ragtop says so, once, when the
-  sensor has failed to answer twice. `iio-sensor-proxy` can get into a state
+- **The screen stops following the device.** Ragtop says so, once, when an
+  accelerometer that exists has failed to answer twice. It asks
+  `iio-sensor-proxy` whether there is one first, so a machine that has none is
+  never sent this, and Diagnostics says `no accelerometer on this machine`
+  rather than blaming the daemon. `iio-sensor-proxy` can get into a state
   where claiming the accelerometer never returns, and
   `systemctl restart iio-sensor-proxy` clears it. Diagnostics says
   `sensor not answering` while that is true. Backing off matters more here

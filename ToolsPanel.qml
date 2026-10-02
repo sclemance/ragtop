@@ -158,7 +158,7 @@ Item {
         }
 
         ButtonGroup {
-          options: [{ value: "auto", label: "Automatic" },
+          options: [{ value: "auto", label: "Auto-rotate" },
                     { value: "locked", label: "Locked" },
                     { value: "unlocked", label: "Unlocked" }]
           value: panel.service.rotationMode
@@ -179,21 +179,67 @@ Item {
           width: parent.width
           spacing: Style.spacing.controlGap
 
+          // The label says which way and the arrow shows it, which is the
+          // part you read without reading. Drawn by KeyIcon rather than set
+          // as a font glyph, like every other icon Ragtop draws, so it does
+          // not depend on the panel's font carrying one.
+          //
+          // The icon and the label are a Row of their own centred in the
+          // button, because Omarchy's Button takes an icon only as a font
+          // codepoint. Everything else about the button is still the kit's.
           Button {
+            id: turnLeft
             width: (parent.width - Style.spacing.controlGap) / 2
             height: Style.spacing.controlHeight
             bordered: true
-            text: "Rotate left"
             foreground: Color.popups.text
             onClicked: panel.service.rotateBy(-1)
+
+            Row {
+              anchors.centerIn: parent
+              spacing: Style.spacing.controlGap
+              KeyIcon {
+                name: "rotate-left"
+                color: turnLeft.foreground
+                width: Style.font.icon
+                height: Style.font.icon
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                text: "Rotate left"
+                color: turnLeft.foreground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
           }
           Button {
+            id: turnRight
             width: (parent.width - Style.spacing.controlGap) / 2
             height: Style.spacing.controlHeight
             bordered: true
-            text: "Rotate right"
             foreground: Color.popups.text
             onClicked: panel.service.rotateBy(1)
+
+            Row {
+              anchors.centerIn: parent
+              spacing: Style.spacing.controlGap
+              KeyIcon {
+                name: "rotate-right"
+                color: turnRight.foreground
+                width: Style.font.icon
+                height: Style.font.icon
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                text: "Rotate right"
+                color: turnRight.foreground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
           }
         }
 
@@ -266,10 +312,9 @@ Item {
           // picked by hand.
           Button {
             id: autoSize
-            width: Style.space(52)
             height: Style.spacing.controlHeight
             bordered: true
-            text: "Auto"
+            text: "Auto-resize"
             selected: panel.service.sizeAuto
             foreground: Color.popups.text
             onClicked: panel.service.setSize("auto")

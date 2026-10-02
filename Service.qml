@@ -146,7 +146,7 @@ Item {
     return make
   }
   readonly property var displayOptions: {
-    var out = [{ value: "auto", label: "Auto" }]
+    var out = [{ value: "auto", label: "Auto-detect" }]
     var monitors = Hyprland.monitors.values
     var counts = {}
     monitors.forEach(function(m) {
@@ -172,7 +172,7 @@ Item {
   Process { id: displayProc }
 
   readonly property var keyboardLayoutOptions: [
-    { value: "auto", label: "Auto" },
+    { value: "auto", label: "Auto-select" },
     { value: "mobile", label: "Mobile" },
     { value: "60", label: "60%" },
     { value: "75", label: "75%" },
@@ -362,6 +362,66 @@ Item {
   property int sensorFailures: 0
   property bool sensorClaimed: false
   property bool sensorStuckReported: false
+
+  // Whether this machine has an accelerometer at all, which is a different
+  // question from whether iio-sensor-proxy is installed, and one Ragtop never
+  // used to ask. rotationAvailable is `command -v monitor-sensor` and nothing
+  // more.
+  //
+  // A touchscreen with no accelerometer, a kiosk or a desk panel, would have
+  // the package, because Ragtop's own setup asks for it and nothing else here
+  // needs it. Every claim then fails forever, which landed it in the same
+  // state as a wedged daemon and got it told to run
+  // `systemctl restart iio-sensor-proxy`, advice that cannot help when there
+  // is nothing to claim.
+  //
+  // iio-sensor-proxy answers it directly over D-Bus, so this asks. -1 until
+  // it has answered, 0 for no, 1 for yes. Only a definite 0 is ever acted on:
+  // a daemon too broken to answer its own property is a fault worth
+  // reporting, and absence has to be proved rather than assumed from a
+  // silence.
+  property int accelPresent: -1
+  Process {
+    id: accelCheckProc
+    running: true
+    command: ["busctl", "get-property", "net.hadess.SensorProxy",
+              "/net/hadess/SensorProxy", "net.hadess.SensorProxy", "HasAccelerometer"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var t = text.trim()
+        root.accelPresent = t === "b true" ? 1 : t === "b false" ? 0 : -1
+      }
+    }
+  }
+  // The package arriving is what makes the question answerable, so ask again
+  // when it does.
+  onRotationAvailableChanged: if (root.rotationAvailable && !accelCheckProc.running)
+    accelCheckProc.running = true
+
+  // Rotation that is meant to be working and is not. Every clause matters:
+  // the package has to be there to fail, the hardware must not be known
+  // absent, and rotation must not be held, because while it is held Ragtop
+  // does not claim the sensor at all and a failure count left over from
+  // before says nothing about now. Same precedence as the sensor line in
+  // health(). This is the one rotation state worth an alarm, because
+  // something that exists has stopped and there is a thing to do about it.
+  readonly property bool sensorStuck: root.rotationAvailable && root.accelPresent !== 0
+    && !root.rotationLocked && !root.sensorClaimed && root.sensorFailures >= 2
+
+  // Known to have no accelerometer, so nothing here can follow the device.
+  // Manual rotation still works, since that is Hyprland and not the sensor.
+  readonly property bool accelAbsent: root.accelPresent === 0
+
+  // Nothing says "absent" or "broken" until Ragtop has had a moment to ask.
+  // Without this the bar would show a fault, or hide a button, for the second
+  // or so between the shell starting and the first answers arriving, on every
+  // restart. The same reason tabletModeKnown exists.
+  property bool probesSettled: false
+  Timer {
+    interval: 4000
+    running: !root.probesSettled
+    onTriggered: root.probesSettled = true
+  }
   readonly property var sensorBackoff: [3000, 30000, 120000, 300000]
   // When the next attempt is allowed, as a clock reading rather than a
   // timer that is running. Four things ask for the sensor at startup, within
@@ -451,6 +511,15 @@ Item {
   // Rotation not working is invisible until someone turns the machine and
   // nothing happens, so say it once, with the command that clears it.
   function reportSensorStuck() {
+    // Nothing to claim, so nothing to restart. A kiosk used to be told to
+    // restart a daemon that was working perfectly well.
+    if (root.accelPresent === 0) return
+    // Not answered yet. Ask again and let the next failure decide, rather
+    // than sending advice that may turn out to be wrong.
+    if (root.accelPresent === -1) {
+      if (!accelCheckProc.running) accelCheckProc.running = true
+      return
+    }
     if (root.sensorStuckReported) return
     root.sensorStuckReported = true
     sensorNotifyProc.command = [
@@ -2516,6 +2585,10 @@ Item {
         raises: root.autoShows,
         tabletSwitch: root.watchSwitch ? root.retryHealth("switch", tabletModeProc.running) : "off",
         sensor: !root.rotationAvailable ? "absent"
+          // Told apart from "absent", which is the package, and from
+          // "stuck", which is a sensor that exists and has stopped. A bug
+          // report from a machine with no accelerometer should say so.
+          : root.accelPresent === 0 ? "no accelerometer"
           : root.rotationLocked ? "held"
           : root.sensorClaimed ? "ok"
           : root.sensorFailures >= 2 ? "stuck"

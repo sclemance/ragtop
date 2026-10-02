@@ -203,6 +203,22 @@ seconds of quiet. Ragtop's own retry was what kept it dead.
 So the sensor has a backoff of 3s, 30s, 2m, 5m, held as a deadline rather
 than an armed timer, and it says once what stopped working.
 
+A claim that never lands has two causes and only one of them is a fault. The
+daemon can be wedged, which a restart clears, or the machine can have no
+accelerometer at all, which a restart cannot help and which is the normal
+state of a kiosk or a desk touchscreen. Ragtop used to treat them as one
+thing, because the only question it asked was whether `monitor-sensor` is
+installed, and it told both of them to run
+`systemctl restart iio-sensor-proxy`.
+
+It asks instead. `net.hadess.SensorProxy.HasAccelerometer` is a boolean on
+the daemon's own D-Bus interface, read with `busctl get-property`, and it is
+the authority on whether there is hardware. Absence has to be proved: only a
+definite false suppresses the fault, so a daemon too broken to answer its own
+property is still reported, which it should be. The answer decides three
+things, the notification, the `sensor` line in Diagnostics, and whether the
+bar carries a rotation button at all.
+
 ## Typing
 
 `keyboard-helper.py` is a Wayland client in its own right. It connects to
