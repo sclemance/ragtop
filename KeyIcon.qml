@@ -79,10 +79,20 @@ Item {
   // Two arcs chasing each other round a circle, each ending in a head: the
   // rotation glyph. Drawn with SVG arcs rather than the straight-line
   // helpers, so the points are worked out here in the same 0..1 box.
+  //
+  // Stood a quarter turn up, which is not decoration. rotateOffPath draws a
+  // line across this one from the bottom left to the top right, and lying
+  // flat the two heads sat almost on that line: at 22 pixels, which is what
+  // a bar actually draws, the slash merged with them into a blob you could
+  // not read as a slash at all. Turned, the line crosses the middle of each
+  // arc instead and the heads stay clear of it. The plain mark is as
+  // recognisable either way up, so the one that keeps its struck-through
+  // twin legible wins.
+  readonly property real rotateTilt: 90
   function rotatePath() {
     var r = 0.3
     function pt(deg) {
-      var a = deg * Math.PI / 180
+      var a = (deg + icon.rotateTilt) * Math.PI / 180
       return [0.5 + r * Math.cos(a), 0.5 - r * Math.sin(a)]
     }
     function arcTo(deg) {
@@ -91,7 +101,7 @@ Item {
     }
     function head(deg, away) {
       // A short two-line head at the arc's end, turned to follow it.
-      var p = pt(deg), a = deg * Math.PI / 180, w = 0.11
+      var p = pt(deg), a = (deg + icon.rotateTilt) * Math.PI / 180, w = 0.11
       var tx = Math.sin(a) * (away ? 1 : -1), ty = Math.cos(a) * (away ? 1 : -1)
       var nx = Math.cos(a), ny = -Math.sin(a)
       return move(p[0] + (tx + nx) * w, p[1] + (ty + ny) * w)
