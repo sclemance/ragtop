@@ -126,7 +126,7 @@ Item {
       Btn {
         required property var modelData
         text: (bar.sending ? "→" : "") + modelData
-        lit: !bar.sending && modelData === bar.service.focusedWorkspace
+        lit: !bar.sending && modelData === bar.service.tilingWorkspace
         onTapped: bar.service.takeWorkspace(modelData)
       }
     }

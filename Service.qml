@@ -559,8 +559,13 @@ Item {
     return Hyprland.focusedMonitor
   }
 
-  // Asked once at startup and whenever monitors change. Unset it reads
+  // Asked at startup and whenever the monitors change. Unset it reads
   // "[[Auto]]", which is not a monitor name and so falls through.
+  //
+  // It used to be asked only once, though this comment already claimed
+  // otherwise. Binding the touchscreen to an output after the shell had
+  // started, or plugging in a screen that changed which output it belongs
+  // to, left Ragtop on the old answer until the shell was restarted.
   Process {
     id: touchOutputProc
     running: true
@@ -572,6 +577,24 @@ Item {
           root.touchOutput = v && v.set && typeof v.str === "string" ? v.str.trim() : ""
         } catch (e) { root.touchOutput = "" }
       }
+    }
+  }
+
+  // What the monitors say about themselves is read off them rather than
+  // tracked, so it has to be read again when they change. Not gated on
+  // tiling mode, unlike the other rawEvent handler: which screen Ragtop
+  // belongs on and how many pixels it has to the millimetre matter whether
+  // or not anything is open.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      var n = event.name
+      if (n !== "monitoradded" && n !== "monitorremoved"
+          && n !== "monitorlayoutchanged" && n !== "configreloaded") return
+      if (!touchOutputProc.running) touchOutputProc.running = true
+      // A mode change moves the pixels without moving the name, so this one
+      // cannot wait for keyboardMonitorName to notice.
+      if (!densityProc.running) densityProc.running = true
     }
   }
 
@@ -633,7 +656,13 @@ Item {
     command: ["hyprctl", "monitors", "-j"]
     stdout: StdioCollector {
       onStreamFinished: {
-        var name = root.keyboardMonitorName
+        // The built-in panel, the same screen the sensor turns, and not
+        // whichever one Ragtop happens to be drawn on. That screen is the one
+        // that physically turns, and the input transform these commands set
+        // is global: turning an external monitor would rotate the touchscreen
+        // mapping of the panel in your hands to match a screen that had not
+        // moved.
+        var name = root.internalMonitorName()
         if (name === "") return
         var cur = -1
         try {
@@ -1275,6 +1304,16 @@ Item {
     return ids
   }
   readonly property int focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+  // The workspace tiling mode is about, which is the one on Ragtop's own
+  // screen and not the one with keyboard focus. The outlines already came
+  // from here. The strip did not, so with focus on another monitor it lit
+  // the number of a workspace whose windows were nowhere on screen. Falls
+  // back to the focused one, which is the right answer on one monitor and
+  // the only answer before Hyprland has reported a monitor at all.
+  readonly property int tilingWorkspace: {
+    var m = root.keyboardMonitor
+    return m && m.activeWorkspace ? m.activeWorkspace.id : root.focusedWorkspace
+  }
 
   // A number rather than a name, checked against the range Hyprland has, so
   // the only thing that reaches a command line is a digit this decided on.
@@ -1284,11 +1323,20 @@ Item {
     return send ? 'hl.dsp.window.move({ workspace = "' + n + '" })'
                 : 'hl.dsp.focus({ workspace = "' + n + '" })'
   }
+  // Hyprland switches the workspace on whichever monitor has focus, so a tap
+  // on the strip used to change a screen you were not looking at while the
+  // outlines beside it stayed where they were. Ragtop's own monitor is taken
+  // first, which is a no-op on one screen and names the right one on more.
+  // Only for going to a workspace: sending a window somewhere follows the
+  // window, which is already on this screen.
   function runWorkspace(id, send) {
     var lua = root.workspaceLua(id, send)
     if (lua === "") return
+    var name = root.keyboardMonitorName
+    var pre = (!send && name !== "")
+      ? "hl.dispatch(hl.dsp.focus({ monitor = '" + name + "' })) " : ""
     var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
+      { command: ["hyprctl", "eval", pre + "hl.dispatch(" + lua + ")"] })
     if (proc) proc.running = true
     // The bar's own buttons land here. Two things follow from that.
     //
@@ -1336,15 +1384,15 @@ Item {
     if (root.sendMod === "latched") root.sendMod = "off"
   }
 
-  // Whether a special workspace is showing. The scratchpad is not the
-  // focused workspace while it is up: it is an overlay, and it lives in the
-  // monitor's own specialWorkspace rather than in focusedWorkspace, so
-  // asking the usual place says no every time.
   // How many times the focus bridge has asked for the keyboard. Zero after a
   // long session is the signature of an input method gone quiet: everything
   // reports healthy and nothing ever comes up.
   property int autoShows: 0
 
+  // Whether a special workspace is showing on Ragtop's screen. The scratchpad
+  // is not the focused workspace while it is up: it is an overlay, and it
+  // lives in the monitor's own specialWorkspace rather than in
+  // focusedWorkspace, so asking the usual place says no every time.
   property bool specialShown: false
 
   property bool tilingOpen: false
@@ -1527,8 +1575,8 @@ Item {
     tilingSettle.restart()
   }
 
-  // Read once on the way in, because the event below only fires on a change
-  // and the scratchpad may already be up.
+  // Read on the way in, because the scratchpad may already be up, and again
+  // on every activespecial event.
   Process {
     id: specialReadProc
     command: ["hyprctl", "-j", "monitors"]
@@ -1537,6 +1585,10 @@ Item {
         try {
           var any = false
           JSON.parse(text).forEach(function(m) {
+            // Only this screen's. A scratchpad up on another monitor put its
+            // windows in the layer here, drawn at coordinates belonging to a
+            // display Ragtop is not on.
+            if (m.name !== root.keyboardMonitorName) return
             if (m.specialWorkspace && m.specialWorkspace.id !== 0) any = true
           })
           root.specialShown = any
@@ -1586,8 +1638,7 @@ Item {
         var oy = monitor ? monitor.y : 0
         // And its workspace, for the same reason. The focused workspace is on
         // whichever monitor has focus, which need not be this one.
-        var ws = monitor && monitor.activeWorkspace ? monitor.activeWorkspace.id
-          : root.focusedWorkspace
+        var ws = root.tilingWorkspace
         var out = []
         try {
           JSON.parse(text).forEach(function(c) {
@@ -1664,9 +1715,13 @@ Item {
     function onRawEvent(event) {
       if (!root.tilingOpen) return
       var n = event.name
-      if (n === "activespecial") {
-        // "workspacename,monitorname", and an empty name means it went away.
-        root.specialShown = String(event.data).split(",")[0] !== ""
+      if (n === "activespecial" && !specialReadProc.running) {
+        // Asked rather than parsed out of the event. The event carries
+        // "workspacename,monitorname" and this only cares about one monitor,
+        // so reading the monitors back is both shorter and the authority on
+        // which screen the scratchpad landed on. It fires on a scratchpad
+        // toggle and nowhere near as often as the client reads do.
+        specialReadProc.running = true
       }
       // The monitor ones matter because a rotation from anywhere else, the
       // bar's button or a keybinding, has to be noticed too.
@@ -1815,9 +1870,16 @@ Item {
     return Math.max(root.sizeMin, Math.min(root.sizeMax, Math.round(pct)))
   }
 
+  // Stepping starts from the size on screen, which under Auto is whatever
+  // Auto worked out and not 100. sizePercent("auto") has no number to give
+  // and answers 100, so a step from Auto used to jump to 105 or 95 however
+  // big the keys actually were. On a dense screen, where Auto lands at 140,
+  // asking for bigger keys made them smaller.
   function stepSize(by) {
-    root.setSize(root.sizePercent(root.lastAskedSize !== "" ? root.lastAskedSize
-      : root.settings["size-adjust"]) + by * 5)
+    var from = root.lastAskedSize !== "" ? root.lastAskedSize
+      : String(root.settings["size-adjust"] || "")
+    var base = from.trim() === "auto" ? root.autoSizePercent : root.sizePercent(from)
+    root.setSize(base + by * 5)
   }
   // Dragging the slider asks for a size faster than a process can write one,
   // and reassigning a Process that is still running drops the write. So the
