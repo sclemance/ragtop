@@ -1,6 +1,6 @@
-# Ragtop
-
-**Made for convertibles, works for tablets, built for Omarchy.**
+<h1 align="center">
+  <img src="screenshots/banner.webp" width="100%" alt="Ragtop: made for convertibles, great for tablets, built for Omarchy">
+</h1>
 
 Fold the screen back, like a ragtop's roof, or take the keyboard off, which
 the hardware reports the same way, and Ragtop switches your
@@ -30,8 +30,8 @@ yours to change (see [Themes](#themes)).
 
 | | | |
 | --- | --- | --- |
-| ![Glass theme on Tokyo Night, a 60% board](screenshots/glass-tokyo-night.webp) | ![Typewriter theme on Catppuccin Latte, a 75% board](screenshots/typewriter-catppuccin-latte.webp) | ![Spaceship theme on Osaka Jade, a tenkeyless board](screenshots/spaceship-osaka-jade-tkl.webp) |
-| **Glass** on Tokyo Night, 60% | **Typewriter** on Catppuccin Latte, 75% | **Spaceship** on Osaka Jade, tenkeyless |
+| ![Soft theme on Everforest, a 60% board](screenshots/soft-everforest.webp) | ![Typewriter theme on Catppuccin Latte, a 75% board](screenshots/typewriter-catppuccin-latte.webp) | ![Spaceship theme on Osaka Jade, a tenkeyless board](screenshots/spaceship-osaka-jade-tkl.webp) |
+| **Soft** on Everforest, 60% | **Typewriter** on Catppuccin Latte, 75% | **Spaceship** on Osaka Jade, tenkeyless |
 
 **A Ragtop theme sets the shape of a key and your Omarchy theme sets its
 colour**, which is why any Ragtop theme looks right on any Omarchy one. **It
@@ -661,8 +661,8 @@ one from the menu or with `./ragtop theme apply <name>`. Yours go in
 
 | | |
 | --- | --- |
-| ![Soft theme on Everforest](screenshots/soft-everforest.webp) | ![Industrial theme on Matte Black, the mobile board](screenshots/industrial-matte-black-mobile.webp) |
-| **Soft** on Everforest, rounded and quiet | **Industrial** on Matte Black, the mobile board in landscape |
+| ![Glass theme on Tokyo Night](screenshots/glass-tokyo-night.webp) | ![Industrial theme on Matte Black, the mobile board](screenshots/industrial-matte-black-mobile.webp) |
+| **Glass** on Tokyo Night, see-through keys over the wallpaper | **Industrial** on Matte Black, the mobile board in landscape |
 
 Applying one **writes its values into your settings**, so afterwards every
 menu row shows what the keyboard is actually doing. A theme is a starting

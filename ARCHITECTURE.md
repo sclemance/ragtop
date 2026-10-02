@@ -3,7 +3,7 @@
 What Ragtop is made of and how the pieces reach the machine. README.md says
 what it does and how to use it. This says how it works.
 
-Written against Omarchy 4.0.0.alpha, Hyprland 0.56.2 and Quickshell 0.3.1.
+Written against Omarchy 4.0.4, Hyprland 0.56.2 and Quickshell 0.3.1.
 
 ## Where it runs
 
