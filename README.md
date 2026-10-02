@@ -11,6 +11,15 @@ things that normally need a keyboard shortcut or a mouse work by touch. Your
 windows can be rearranged by dragging them around, and the Omarchy menu can be
 typed into. Put it back and everything returns to normal.
 
+> [!TIP]
+> **Ragtop is in beta, and your machine is the test.** Install it, fold the
+> screen back and enjoy it, then tell us how it went, whether it worked or
+> not. It has only been tried on two machines so far, so every report counts.
+>
+> **[What we'd most like to hear](#tested-hardware-feedback-wanted)** &middot;
+> **[Send a hardware report](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)** &middot;
+> **[Report a bug or share an idea](https://github.com/sclemance/ragtop/issues/new/choose)**
+
 Two more documents sit beside this one. **[THEMING.md](THEMING.md)** is every
 field a keyboard theme may set. **[ARCHITECTURE.md](ARCHITECTURE.md)** is how
 Ragtop works underneath: the layer surfaces, the hardware it reads, and how
@@ -20,7 +29,8 @@ it types.
 [Will it work on mine?](#which-tablets) &middot; [Features](#features) &middot;
 [Install](#install) &middot; [The keyboard](#the-keyboard) &middot;
 [Tiling mode](#tiling-mode-preview) &middot; [Settings](#settings) &middot;
-[Troubleshooting](#troubleshooting)
+[Troubleshooting](#troubleshooting) &middot;
+[Feedback](#tested-hardware-feedback-wanted)
 
 ## How it looks
 
