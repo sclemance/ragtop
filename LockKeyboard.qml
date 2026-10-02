@@ -32,7 +32,7 @@ Item {
 
   // The active layout's letter keys, which Ragtop's service writes when its
   // keyboard helper reads them from the keymap, so these keys type what the
-  // physical keyboard would. Checked before use; US if missing or malformed.
+  // physical keyboard would. Checked before use, and US if missing or malformed.
   readonly property var usRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
     [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
@@ -123,7 +123,7 @@ Item {
   readonly property var level4Of: root.levelOf(3)
   function letters(row) { return row.map(function(k) { return k[0] }) }
 
-  // Rows of keys; a key is its text, or one of the named keys below. Widths
+  // Rows of keys. A key is its text, or one of the named keys below. Widths
   // are in units of a letter key. The symbol pages are the same in every
   // layout, and the two free slots on each one's third row take what that
   // layout adds (see layoutSymbols): a password is typed in characters, so
@@ -144,13 +144,13 @@ Item {
 
   // Hold a letter for the characters that belong to it, as the desktop
   // keyboard does and as every phone keyboard does. A password is typed in
-  // characters, and a layout can keep letters off its letter rows entirely —
-  // AZERTY has é, è, ç and à on its number row — so without this they can't
+  // characters, and a layout can keep letters off its letter rows entirely.
+  // AZERTY has é, è, ç and à on its number row, so without this they can't
   // be typed here at all.
   //
   // Copied by hand from Keyboard.qml, table and all, because this file shares
   // no code with it. It shows what is being held, which anyone watching the
-  // screen can see; so does a pressed key, and that is as far as it goes.
+  // screen can see. So does a pressed key, and that is as far as it goes.
   // There is no trail and never will be: see the note on swipe below.
   readonly property var variantTable: ({
     "a": ["à", "â", "á", "ä", "ã", "å", "æ"],
@@ -291,7 +291,7 @@ Item {
   })
 
   // The key style's shape and measurements, as Ragtop's service last wrote
-  // them. Checked again here with this file's own rules; anything missing,
+  // them. Checked again here with this file's own rules. Anything missing,
   // unknown or out of range gets the Rounded default.
   property var style: cleanStyle(null)
 
@@ -329,7 +329,7 @@ Item {
       labels: pick(raw.labels, ["small", "normal", "large"], "normal"),
       depth: num(raw.depth, 0, 10, 4),
       chamfer: num(raw.chamfer, 0, 20, 8),
-      // Off-theme sizes; colours are left to the lock screen's own palette.
+      // Off-theme sizes. Colours are left to the lock screen's own palette.
       borderWidth: typeof raw.borderWidth === "number" ? num(raw.borderWidth, 0, 4, "auto") : "auto",
       radius: typeof raw.radius === "number" ? num(raw.radius, 0, 30, "auto") : "auto"
     }
@@ -373,8 +373,8 @@ Item {
   // keys at both ends of a third row. Rows of plain keys stay centred, so
   // the letters keep one size. Copied by hand from the desktop keyboard
   // (Keyboard.qml's stretch), as everything here is. The letter rows come up
-  // short only on some layouts — French's bottom row is six keys against
-  // eleven on the row above — while the symbol pages' third row is short on
+  // short only on some layouts. French's bottom row is six keys against
+  // eleven on the row above, while the symbol pages' third row is short on
   // any of them.
   function keyUnits(row, index) {
     var key = row[index]
@@ -401,7 +401,7 @@ Item {
   // A raised key's side is part of the key: the face's colour in shadow,
   // fading with it. An outline key has no face colour, so it stays a wash.
   // Where the face is too dark to hold a shadow the side steps up instead,
-  // as the desktop keyboard's does — on a dark theme a dark key's side is
+  // as the desktop keyboard's does. On a dark theme a dark key's side is
   // otherwise the same colour as its face, which is a keycap with no side.
   property real sideShadow: 0.25
   property real sideLift: 0.09
@@ -415,18 +415,18 @@ Item {
   readonly property color keySide: seeThrough(style.fill === "outline"
     ? Util.alpha(Qt.tint(Color.lock.text, Util.alpha(Color.lock.borderActive, 0.35)), 0.3)
     : Qt.tint(shaded(keyBase), Util.alpha(Color.lock.borderActive, sideAccent)))
-  // A side can't take more than this much of the key; pressing sinks the
+  // A side can't take more than this much of the key. Pressing sinks the
   // face most of the way into it.
   property real maxDepthFraction: 0.25
   property real pressSink: 0.6
   // Solid keys sit on the lock screen's own surface colour, subtle ones let
   // it show through, outline keys are carried by their edge alone.
-  // How see-through the keys are; what shows through is the lock screen
+  // How see-through the keys are. What shows through is the lock screen
   // behind them.
   readonly property real keyOpacity: 1 - style.keyTransparency / 100
   function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
 
-  // A key sits darker or lighter than the lock screen's own surface; where
+  // A key sits darker or lighter than the lock screen's own surface. Where
   // that surface already is the theme's darkest or lightest colour, the
   // step is taken from the surface itself.
   function luminance(c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b }
@@ -478,7 +478,7 @@ Item {
   readonly property bool cornersAllRound: keyCorners[0] === "round"
     && keyCorners[1] === "round" && keyCorners[2] === "round"
     && keyCorners[3] === "round"
-  // Labels on Omarchy's scales, growing with the keys; glyph keys take its
+  // Labels on Omarchy's scales, growing with the keys. Glyph keys take its
   // icon scale.
   function labelPx(size) { return Math.max(8, Math.round(size * keyScale)) }
   readonly property int labelSize: labelPx(style.labels === "small" ? Style.font.heading
@@ -549,11 +549,11 @@ Item {
 
   // The popup, over the rows above the key being held: the letters on a card
   // of their own, so it reads as one thing lifted off the keyboard rather
-  // than a few keys floating over it. Card and keys are both opaque — what
+  // than a few keys floating over it. Card and keys are both opaque, and what
   // is behind them is the keyboard, and Key Transparency is for showing the
   // lock screen through the keyboard, not the keyboard through itself. It
   // draws its own keys rather than reusing this file's delegate, which is
-  // bound to a row model; the shapes and measurements are the same ones,
+  // bound to a row model. The shapes and measurements are the same ones,
   // from the same style.
   Item {
     id: popupLayer
@@ -802,7 +802,7 @@ Item {
               readonly property bool holdable: root.variantsFor(key.modelData).length > 1
               pressAndHoldInterval: 420
               onPressed: if (!holdable) root.press(key.modelData)
-              // Holding backspace keeps deleting; holding a letter offers the
+              // Holding backspace keeps deleting, and holding a letter offers the
               // characters that belong to it.
               onPressAndHold: {
                 if (key.modelData === "backspace") repeat.start()

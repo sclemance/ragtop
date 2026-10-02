@@ -6,9 +6,9 @@ import qs.Commons
 //
 // Omarchy's theme owns the values: colours (Color), type scale and spacing
 // (Style), borders (Border). The settings under Setup › Tablet only say how
-// to use them — how the keys are filled, how roomy they are, how big their
-// labels read — so switching Omarchy themes restyles the keyboard too. A
-// setting can still pin an off-theme colour or size outright; those stop
+// to use them, how the keys are filled, how roomy they are and how big
+// their labels read, so switching Omarchy themes restyles the keyboard too.
+// A setting can still pin an off-theme colour or size outright. Those stop
 // following the theme, and only those.
 QtObject {
   id: theme
@@ -52,7 +52,7 @@ QtObject {
   }
 
   // The keyboard is a popup-like surface, so it takes Omarchy's popup
-  // colours; the keys are controls, so they take its control states.
+  // colours, and the keys are controls, so they take its control states.
   property color surface: Color.popups.background
   property color text: role(look.labelColor, Color.popups.text)
   property color accent: Color.accent
@@ -91,7 +91,7 @@ QtObject {
 
   // Whether the background is actually drawn. Fully clear (Setup › Tablet ›
   // BG Transparency › Full) hides nothing, so taps off the keys can reach
-  // what is behind the keyboard; any visible background does hide it, and
+  // what is behind the keyboard. Any visible background does hide it, and
   // then the keyboard keeps those taps to itself.
   readonly property bool backgroundVisible: Math.max(background.a, backgroundTop.a) > 0.01
 
@@ -103,7 +103,7 @@ QtObject {
 
   // A key sits darker or lighter than its panel. The palette has roles
   // rather than a ramp, so each direction first tries the theme's own
-  // colours; where the panel already is that colour (a dark theme has
+  // colours. Where the panel already is that colour (a dark theme has
   // nothing darker than its background), it steps from the panel itself.
   // The step with the most contrast wins, and the key's border carries it
   // when a theme leaves little headroom either way.
@@ -124,7 +124,7 @@ QtObject {
   // "auto" takes whichever direction the theme has room for. A dark theme
   // has little below its background and a light one little above it, so a
   // fixed choice is strong on half the themes and nearly invisible on the
-  // rest — which is no way to ship a theme.
+  // rest, which is no way to ship a theme.
   readonly property color autoKey: Math.abs(luminance(lightKey) - luminance(solidBase))
     >= Math.abs(luminance(darkKey) - luminance(solidBase)) ? lightKey : darkKey
 
@@ -189,7 +189,7 @@ QtObject {
   // edge, and it fades with the key so a see-through key stays one object.
   // An outline key has no face colour to shade, so there it stays a wash.
   //
-  // Shadow is a step towards black, which is what a keycap's side is — but a
+  // Shadow is a step towards black, which is what a keycap's side is, but a
   // face that is already nearly black has no shadow left in it. Measured
   // across Omarchy's themes, a dark key's side came out less than 3% of
   // luminance from its face on 14 of 22 of them, and on vantablack the two
@@ -257,7 +257,7 @@ QtObject {
     : Style.space(8)
   property real keyDepth: raised ? Style.space(look.depth) : 0
   // A side can't take more than this much of the key, or the face has
-  // nowhere left to sit; pressing sinks the face most of the way into it.
+  // nowhere left to sit. Pressing sinks the face most of the way into it.
   property real maxDepthFraction: 0.25
   property real pressSink: 0.6
   property real keyChamfer: Style.space(look.chamfer)
@@ -268,8 +268,8 @@ QtObject {
   property real keyScale: Math.max(0.6, Math.min(1.6, look.size / 100 * sizeNudge))
 
   property string fontFamily: Style.font.family
-  // Labels step on Omarchy's type scale — a character reads large, a word
-  // like "Esc" small, an icon on its own icon scale — and grow with the
+  // Labels step on Omarchy's type scale, a character reading large, a word
+  // like "Esc" small and an icon on its own icon scale, and they grow with the
   // keys, so Key Size moves the labels with them.
   function labelPx(size) { return Math.max(8, Math.round(size * keyScale)) }
   property int labelSize: labelPx(labels === "small" ? Style.font.heading

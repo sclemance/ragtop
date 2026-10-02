@@ -7,7 +7,7 @@ import QtQuick
 // The carousel is driven by Left, Right, Return and Escape. Its slices can
 // be tapped, but the one that matters is the big preview in the middle, and
 // stepping to the next theme means hitting a narrow slice beside it, with
-// the scrim — which cancels the picker — all around. The keyboard would do
+// the scrim, which cancels the picker, all around. The keyboard would do
 // the job, except it covers the very preview the picker exists to show. So
 // Ragtop puts those four keys in a strip along the bottom instead, sent
 // through the same helper the keyboard uses, and draws it from the
@@ -23,7 +23,7 @@ Item {
   required property var service
   required property var theme
 
-  // Prev and Next repeat while held, as the keyboard's arrows do; Select and
+  // Prev and Next repeat while held, as the keyboard's arrows do. Select and
   // Cancel are taps. `pad` puts air before a button, keeping the one that
   // throws the picker away from the three that work it.
   readonly property var buttons: [
@@ -43,7 +43,7 @@ Item {
 
   implicitHeight: topPadding + keyHeight + theme.padding
 
-  // Where each button sits, centred as a row; the same shape as the
+  // Where each button sits, centred as a row, in the same shape as the
   // keyboard's slots so KeyboardKey can be dropped straight in.
   readonly property var slots: {
     var gap = root.theme.gap

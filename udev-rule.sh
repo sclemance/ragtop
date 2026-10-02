@@ -5,12 +5,12 @@
 # Usage: udev-rule.sh status|install|remove
 #
 # status  prints "readable", "unreadable", "no-switch" or "installed-but-unreadable"
-# install writes the rule and re-applies it; asks for a password through
+# install writes the rule and re-applies it, asking for a password through
 #         Omarchy's polkit dialog (pkexec), never sudo unless pkexec is absent
 # remove  takes it away again
 #
-# The rule gives the logged-in user read access to switch devices only —
-# tablet mode, lid, headphone jack — and never to keyboards, which is what
+# The rule gives the logged-in user read access to switch devices only,
+# tablet mode, lid and headphone jack, and never to keyboards, which is what
 # joining the `input` group would do. It must sort before systemd's
 # 73-seat-late.rules, which is what applies uaccess tags.
 set -euo pipefail
@@ -64,7 +64,7 @@ case "${1:-}" in
     # Taking the rule away does not take back the access it granted. The rule
     # tags switch devices `uaccess`, and logind answers that tag by putting an
     # ACL on the device for whoever is logged in. Remove the rule and the tag
-    # stops being applied — but the ACL already on the device stays, so the
+    # stops being applied, but the ACL already on the device stays, so the
     # switch goes on being readable until the machine reboots. Drop it here,
     # or uninstalling only looks like it worked.
     path=$(switch_path)
@@ -87,7 +87,7 @@ case "${1:-}" in
         # the ACL is not ours to remove.
         tags=$(udevadm info --query=property --name="$2" 2>/dev/null | sed -n "s/^CURRENT_TAGS=//p")
         case "$tags" in
-          *uaccess*) echo "something else still tags $2 uaccess; leaving its access alone" ;;
+          *uaccess*) echo "something else still tags $2 uaccess, so leaving its access alone" ;;
           *) setfacl -x "user:$3" "$2" 2>/dev/null ;;
         esac
       fi

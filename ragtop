@@ -19,7 +19,7 @@
 #        ragtop diagnostics [copy]          what a bug report needs
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
-# (follow the hardware switch — folding a hinge or taking the keyboard off),
+# (follow the hardware switch, folding a hinge or taking the keyboard off),
 # on or off.
 #
 # What a key looks like is a Ragtop theme's to say, so shape, relief, fill,
@@ -186,8 +186,8 @@ switch() {
   esac
 }
 
-# choice <key> <default> <get|is|set> [value] for a setting with named values;
-# the allowed values are the cases in choice_notice.
+# choice <key> <default> <get|is|set> [value] for a setting with named
+# values. The allowed values are the cases in choice_notice.
 choice() {
   local key="$1" default="$2"
   case "${3:-}" in

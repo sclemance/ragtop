@@ -88,7 +88,7 @@ PRINTABLE_ASCII = [chr(c) for c in range(0x20, 0x7f)]
 
 def localized_layout_name(name):
     """The layout's name in the user's language, out of xkeyboard-config's own
-    catalog — the same translations the rest of the desktop reads, so nothing
+    catalog, the same translations the rest of the desktop reads, so nothing
     here has to be translated or kept up to date. With an English locale, or
     no catalog installed, it returns what it was given.
 
@@ -366,7 +366,7 @@ class XkbLabels:
     def _symbols(self, keymap, group, char):
         """The symbols this layout puts on its keys, in keyboard order: what
         a user of it would look for and not find on a US keyboard. Only the
-        first two levels, which is what's printed on the keycaps — the ones
+        first two levels, which is what's printed on the keycaps. The ones
         above that are much the same on every layout (¹ ² ½ ™ ← →) and say
         nothing about it. A national currency is the exception: it sits
         deeper, and it's exactly what that layout's user wants."""
@@ -394,7 +394,7 @@ class XkbLabels:
                     elif (unicodedata.category(c) == "Sc" and c not in self.COMMON_CURRENCY
                           and c not in currency):
                         currency.append(c)
-        # The keyboard picks what it can use; this is only what the layout
+        # The keyboard picks what it can use. This is only what the layout
         # has, bounded so a strange keymap can't flood the line.
         return (found + [c for c in currency if c not in found])[:48]
 
@@ -419,7 +419,7 @@ class Keymap:
         aliases = {m.group(1): m.group(2) for m in re.finditer(r"alias\s*<([^>]+)>\s*=\s*<([^>]+)>;", keycodes)}
         with_symbols = {aliases.get(m.group(1), m.group(1))
                         for m in re.finditer(r"key\s*<([^>]+)>", self._section("xkb_symbols"))}
-        # Spare keys as (name, evdev keycode); evdev codes are xkb's minus 8.
+        # Spare keys as (name, evdev keycode). Evdev codes are xkb's minus 8.
         self.spare = sorted(((name, code - 8) for name, code in codes.items()
                              if code <= MAX_KEYCODE and name not in with_symbols), key=lambda k: k[1])
         self.spare_codes = dict(self.spare)
@@ -666,7 +666,7 @@ class Keyboard:
 
 
 def dry_run(log):
-    """--dry-run <file>: log each command with when it arrived; send nothing."""
+    """--dry-run <file>: log each command with when it arrived, and send nothing."""
     print("ready", flush=True)
     with open(log, "a", buffering=1) as out:
         for line in sys.stdin:

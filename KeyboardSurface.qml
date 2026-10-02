@@ -25,7 +25,7 @@ Item {
   }
 
   // Edge: Border. Hyprland's own window border along the top, so the panel
-  // is edged like a tiled window; its colour can be a gradient.
+  // is edged like a tiled window, and its colour can be a gradient.
   Rectangle {
     id: edge
     visible: surface.theme.edgeBorder > 0

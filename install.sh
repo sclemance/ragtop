@@ -7,13 +7,13 @@
 #        install.sh uninstall [--no-restart] [--yes] [--no-udev]
 #
 #   --no-restart   don't restart the Omarchy shell at the end
-#   --yes          don't ask anything; take the offer (the switch access rule
+#   --yes          don't ask anything, take the offer (the switch access rule
 #                  still needs your password, in Omarchy's polkit dialog).
 #                  Touch typing in Omarchy's overlays is the exception: it
 #                  replaces part of Omarchy, so it stays off unless asked for.
 #   --no-udev      leave the switch access rule alone, installing or removing
 #   --overlays     turn touch typing on in all of Omarchy's overlays, without
-#                  asking; the uninstaller removes them either way
+#                  asking. The uninstaller removes them either way
 #   --no-overlays  leave it off, without asking
 set -euo pipefail
 
@@ -24,7 +24,7 @@ plugin_dir="$plugins_dir/$id"
 state_dir="$HOME/.local/state/ragtop"
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 
-# Set from the flags; see the usage text.
+# Set from the flags. See the usage text.
 assume_yes=0
 skip_udev=0
 # "ask", or "on"/"off" from --overlays/--no-overlays.
@@ -60,7 +60,7 @@ check_deps() {
     command -v "$cmd" >/dev/null || die "$cmd not found; Ragtop needs Omarchy 4 with Hyprland."
   done
   if (( ${#missing[@]} )); then
-    # A list of package names is a task; a command is an answer.
+    # A list of package names is a task, and a command is an answer.
     # Name the packages, not the commands that are missing: "monitor-sensor"
     # is not something anybody can install.
     warn "missing: ${hints[*]}"
@@ -97,7 +97,7 @@ offer_udev_rule() {
   local rule
   rule=$("$repo/udev-rule.sh" rule)
   echo "   Ragtop can install a udev rule giving the logged-in user read access"
-  echo "   to switch devices only (tablet mode, lid, headphone jack; never keyboards):"
+  echo "   to switch devices only (tablet mode, lid and headphone jack, never keyboards):"
   printf '     %s\n' $rule
   if (( skip_udev )); then
     echo "   left alone (--no-udev)"
@@ -105,7 +105,7 @@ offer_udev_rule() {
   fi
   if (( ! assume_yes )); then
     if [[ ! -t 0 ]]; then
-      warn "not running in a terminal, so not asking; re-run install.sh in one, or pass --yes."
+      warn "not running in a terminal, so not asking. Re-run install.sh in one, or pass --yes."
       return 1
     fi
     local answer
@@ -113,7 +113,7 @@ offer_udev_rule() {
     [[ $answer == [yY]* ]] || return 1
   fi
   if "$repo/udev-rule.sh" install >/dev/null; then
-    echo "   installed; the switch is readable now"
+    echo "   installed, and the switch is readable now"
   else
     warn "couldn't install the rule."
     return 1
@@ -148,8 +148,8 @@ offer_overlays() {
   echo "   be worked by touch as they ship. Ragtop can run patched clones of them"
   echo "   instead: touch typing in each, a keyboard on the lock screen, and arrows"
   echo "   and a Select button for the theme and background pickers."
-  echo "   The catch: a clone is Omarchy's own code — the password prompt and lock"
-  echo "   screen included — copied from its root-owned folder into your config,"
+  echo "   The catch: a clone is Omarchy's own code, the password prompt and lock"
+  echo "   screen included, copied from its root-owned folder into your config,"
   echo "   where anything running as you can rewrite it, and it stops taking"
   echo "   Omarchy's updates directly (a hook re-clones it after each update)."
   echo "   Leave this off if in doubt: you can turn each overlay on later in"
@@ -160,11 +160,11 @@ offer_overlays() {
     off) echo "   left off (--no-overlays)"; return ;;
     *)
       if (( assume_yes )); then
-        echo "   left off; pass --overlays to turn them all on without asking"
+        echo "   left off. Pass --overlays to turn them all on without asking"
         return
       fi
       if [[ ! -t 0 ]]; then
-        echo "   left off; not running in a terminal, so not asking"
+        echo "   left off, since this is not running in a terminal"
         return
       fi
       local answer
@@ -202,7 +202,7 @@ link_plugin() {
   if [[ $(realpath "$plugin_dir" 2>/dev/null) == "$repo" ]]; then
     echo "   ${plugin_dir/#$HOME/\~} is this checkout"
   elif [[ -e $plugin_dir || -L $plugin_dir ]]; then
-    die "${plugin_dir/#$HOME/\~} already exists and isn't this checkout; remove it first."
+    die "${plugin_dir/#$HOME/\~} already exists and isn't this checkout. Remove it first."
   else
     mkdir -p "$plugins_dir"
     ln -s "$repo" "$plugin_dir"
@@ -211,7 +211,7 @@ link_plugin() {
 
   omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
   for (( i = 0; i < 40; i++ )); do plugin_discovered && break; sleep 0.1; done
-  plugin_discovered || die "Omarchy didn't discover $id; check ${plugin_dir/#$HOME/\~}/manifest.json."
+  plugin_discovered || die "Omarchy didn't discover $id. Check ${plugin_dir/#$HOME/\~}/manifest.json."
   if plugin_enabled; then
     echo "   already enabled"
   else

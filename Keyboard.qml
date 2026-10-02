@@ -1,7 +1,7 @@
 import QtQuick
 
 // Ragtop's on-screen keyboard. It draws the keys and decides what each tap
-// means; keyboard-helper.py, run by the service, turns that into key events.
+// means. keyboard-helper.py, run by the service, turns that into key events.
 // The letter keys are those of the active Hyprland layout, as the helper
 // reads them from the keymap (US until it reports), and the symbol pages
 // pick up the symbols that layout carries. Characters go by what they are,
@@ -206,7 +206,7 @@ Item {
   // What the active layout puts on its keys that the pages above don't
   // have: § and ° on a German keyboard, ¡ and ¿ on a Spanish one, № and ₽
   // on a Russian one, nothing at all on a US one. The helper reports them
-  // (see keyboard-helper.py); the four that fit go in the two free slots on
+  // (see keyboard-helper.py). The four that fit go in the two free slots on
   // each page's third row, which is why those rows are a key short.
   readonly property var layoutSymbols: root.service.keyLabels && root.service.keyLabels.symbols
     ? root.service.keyLabels.symbols : []
@@ -237,8 +237,8 @@ Item {
   })
   // The key back to the letters page names the script, not a language: the
   // layout's own first three letters, so A B C on a Latin layout and А Б В
-  // on a Cyrillic one. Sorting by code point gets there without a table —
-  // each script's letters are a contiguous run, and the ASCII ones sort
+  // on a Cyrillic one. Sorting by code point gets there without a table,
+  // because each script's letters are a contiguous run, and the ASCII ones sort
   // ahead of the accented letters a Latin layout adds. Scripts without case
   // are unchanged by toUpperCase, which is what they want.
   readonly property string lettersLabel: {
@@ -367,7 +367,7 @@ Item {
   // Hold a letter to reach the characters that belong to it, as every phone
   // keyboard does. Ragtop needs it more than most: the letter rows are the
   // three rows of a physical keyboard, and a layout can keep letters
-  // elsewhere — AZERTY has é, è, ç and à on its number row — so without
+  // elsewhere, and AZERTY has é, è, ç and à on its number row, so without
   // this a French user can't type them at all.
   readonly property var variantTable: ({
     "a": ["à", "â", "á", "ä", "ã", "å", "æ"],
@@ -406,7 +406,7 @@ Item {
       var base = root.variantBase[lower] || lower.normalize("NFD")[0]
       // The letter it decomposes to, whatever the script: ё belongs behind
       // Cyrillic е as é does behind e. Anything that decomposes to itself
-      // is no letter's variant — µ, º and ª come through the keymap as
+      // is no letter's variant, since µ, º and ª come through the keymap as
       // letters but belong to nothing.
       if (base.length !== 1 || base === lower || base.toLowerCase() === base.toUpperCase()) return
       if (!(base in own)) own[base] = []
@@ -547,7 +547,7 @@ Item {
     }
     // A punctuation key offers punctuation and nothing else, on whichever
     // page it is standing. It sits on the bottom row, which no page overlays
-    // (see overlaid), so there is nothing here to keep anyway; and a card of
+    // (see overlaid), so there is nothing here to keep anyway, and a card of
     // brackets behind the period would bury the marks a sentence is made of.
     if (root.punctuation.indexOf(key) !== -1) {
       addAll(root.punctuationCard(key))
@@ -708,7 +708,7 @@ Item {
 
   // Where each key sits: { key, x, y, width, height } for every key of the
   // top row and the current page, rows centred. A key's slot is this
-  // rectangle; how it's drawn inside is up to KeyboardKey.qml, and never
+  // rectangle. How it's drawn inside is up to KeyboardKey.qml, and never
   // affects which key a touch means.
   // A soft or bordered top edge (Setup › Tablet › Edge) gets its own space
   // above the keys, so it's clear of the first row.
@@ -724,12 +724,12 @@ Item {
   // own stretchy keys, rather than floating in the middle with a gap at
   // either end: the space bar on the bottom row, and the wide keys at both
   // ends of a third row (Shift and Backspace, or a page key and Backspace).
-  // Rows of plain keys — the letters, the digits — are left alone and stay
+  // Rows of plain keys, the letters and the digits, are left alone and stay
   // centred, so the keys keep one size.
   //
-  // The letter rows only come up short on some layouts — French's bottom row
-  // is six keys (w x c v b n; m sits above it) against eleven on the row
-  // above, so its Shift and Backspace grow to reach the edges — while the
+  // The letter rows only come up short on some layouts. French's bottom row
+  // is six keys (w x c v b n, with m above it) against eleven on the row
+  // above, so its Shift and Backspace grow to reach the edges, while the
   // symbol pages' third row is short everywhere, and its page key and
   // Backspace take the slack on any layout.
   function stretch(row, widths) {
@@ -942,9 +942,9 @@ Item {
   // What the surface takes touches on (the service masks it to this): you
   // can only touch through the keyboard where it isn't there. With a drawn
   // background the whole surface takes them, so a tap in the margins does
-  // nothing rather than reaching a window the background hides; when the
+  // nothing rather than reaching a window the background hides. When the
   // background is fully clear there is nothing to hide, and the margins
-  // pass taps through — tapping away from a menu closes it.
+  // pass taps through, so tapping away from a menu closes it.
   readonly property Item touchArea: root.theme.backgroundVisible ? root : keysBounds
 
   implicitHeight: slotsBottom + theme.padding

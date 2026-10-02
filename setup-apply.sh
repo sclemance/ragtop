@@ -6,7 +6,7 @@
 #
 # It runs as a transient systemd unit, because copying an overlay replaces one
 # of Omarchy's own plugins and the shell reloads its plugins when that happens
-# — taking anything the shell owns down with it, mid-sentence. A unit outlives
+# taking anything the shell owns down with it, mid-sentence. A unit outlives
 # that. Keeping the work in a file also keeps shell syntax away from systemd's
 # command-line parser, which expands ${...} itself and quietly turned one
 # expansion into an empty string when this lived in the unit's ExecStart.

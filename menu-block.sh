@@ -19,6 +19,10 @@ esac
 python3 - "$1" "$menu_file" <<'EOF'
 import json, os, sys, tomllib
 action, path = sys.argv[1:]
+# Protocol, not prose. This exact line is how the block is found again in the
+# user's menu file, so an installed Ragtop would stop recognising its own rows
+# if it changed: `add` would leave the old block behind and write a second one,
+# and `remove` would find nothing. The semicolon stays for that reason alone.
 start = "  // Ragtop: tablet settings. Added by Ragtop's installer; removed by its uninstaller."
 end = "  // End of Ragtop's tablet settings."
 cmd = "$HOME/.config/omarchy/plugins/sclemance.ragtop/ragtop"

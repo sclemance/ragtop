@@ -8,6 +8,9 @@ state="$HOME/.local/state/ragtop"
 conf="$state/install.conf"
 
 if [[ ! -f $conf ]]; then
+  # Protocol, not prose. Service.qml matches this sentence to decide whether
+  # to open setup outright rather than describe what is missing, so rewording
+  # it here silently turns that into an ordinary notification.
   echo "The installer hasn't been run yet."
   exit 0
 fi
@@ -33,6 +36,6 @@ done
 
 switch=$("$dir/find-tablet-switch.py" 2>/dev/null)
 if [[ -n $switch && ! -r ${switch%%$'\t'*} ]]; then
-  echo "Can't read the tablet-mode switch; the installer can fix this."
+  echo "Can't read the tablet-mode switch. The installer can fix this."
 fi
 exit 0

@@ -26,7 +26,7 @@ NAME = "org.fcitx.Fcitx5.VirtualKeyboard"
 PATH = "/org/fcitx/virtualkeyboard/impanel"
 IFACE = "org.fcitx.Fcitx5.VirtualKeyboard1"
 
-# Only the calls that matter; fcitx5 sends the rest (preedit, candidates)
+# Only the calls that matter. fcitx5 sends the rest (preedit, candidates)
 # without waiting for a reply, so an error back is harmless.
 XML = f"""
 <node>

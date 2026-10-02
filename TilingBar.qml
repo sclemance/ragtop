@@ -189,7 +189,7 @@ Item {
     }
     // The odd one out on this row, and it says so by lighting for a mode
     // rather than for the focused window. Everything left of it changes one
-    // window; this changes how every window is arranged, because Hyprland
+    // window. This changes how every window is arranged, because Hyprland
     // keeps the layout globally rather than per workspace. It earns its place
     // here anyway: it is the same question the rest of the row asks, which is
     // what shape the things on screen take.

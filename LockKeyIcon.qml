@@ -20,7 +20,7 @@ Item {
   // Filled rather than outlined: Shift while Caps is locked on.
   property bool filled: false
 
-  // Enter's arrow runs twice as wide as it is tall; the rest are square.
+  // Enter's arrow runs twice as wide as it is tall. The rest are square.
   readonly property real aspect: name === "enter" ? 2 : 1
   implicitWidth: height * aspect
   readonly property real unit: Math.min(width / aspect, height)

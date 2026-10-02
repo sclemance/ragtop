@@ -66,7 +66,7 @@ BarWidget {
   onTabletSwitchDeviceChanged: pushConfig()
 
   // Persisted inline on this widget's shell.json entry, the same way the
-  // built-in clock saves its format; the shell only writes when it changed.
+  // built-in clock saves its format. The shell only writes when it changed.
   // Automatic, then locked, then unlocked, then round again.
   function cycleRotationMode() {
     if (!root.service) return

@@ -39,7 +39,7 @@ Item {
   // print two things.
   property string hintIcon: ""
   // Draw the fill at full strength whatever Key Transparency says. The
-  // setting is there to let the desktop show through the keyboard; behind a
+  // setting is there to let the desktop show through the keyboard. Behind a
   // key in a long-press popup is the popup's own panel, so being see-through
   // there would only muddy the letter.
   property bool opaque: false
@@ -180,7 +180,7 @@ Item {
     Math.round(faceHeight * 0.62))
 
   // A glyph goes through Omarchy's own glyph renderer, which corrects the
-  // centring of icon glyphs; plain text doesn't need it.
+  // centring of icon glyphs. Plain text doesn't need it.
   OpticalGlyph {
     visible: key.labelKind === "icon"
     y: key.faceY

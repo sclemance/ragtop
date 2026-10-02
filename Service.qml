@@ -12,7 +12,7 @@ import qs.Commons
 Item {
   id: root
 
-  // Override from the widget's settings; blank means auto-detect.
+  // Override from the widget's settings. Blank means auto-detect.
   property string tabletSwitchDevice: ""
   property string detectedSwitchDevice: ""
   readonly property string switchDevice: root.tabletSwitchDevice !== "" ? root.tabletSwitchDevice : root.detectedSwitchDevice
@@ -58,7 +58,7 @@ Item {
   // apart from "not decided yet".
   property bool tabletModeKnown: false
 
-  // The hinge's switch, as last read; only followed in the "auto" setting.
+  // The hinge's switch, as last read, and only followed in "auto".
   property bool switchTablet: false
   property bool switchKnown: false
 
@@ -241,7 +241,7 @@ Item {
       required property var modelData
       screen: modelData
       // While a stock picker is up every touch reaches the picker, so a tap
-      // on the handle would only throw it away; a cloned picker leaves the
+      // on the handle would only throw it away. A cloned picker leaves the
       // handle usable, for filter typing.
       // Only on the screen the keyboard itself uses. One per screen is how
       // Variants works, and a handle on a monitor the keyboard will never
@@ -253,7 +253,7 @@ Item {
 
       // Under an open keyboard the handle takes the keyboard's background
       // and text colours, so the two read as one panel with the handle as
-      // its tab; otherwise it matches the bar. Only on the keyboard's screen.
+      // its tab, and otherwise it matches the bar. Only on the keyboard's screen.
       readonly property bool underKeyboard: root.oskVisible && modelData === keyboardWindow.screen
       readonly property color fill: underKeyboard ? keyboardTheme.background
         : root.barTransparent ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
@@ -323,7 +323,7 @@ Item {
   }
 
   // Rotation waits for a widget to report the saved lock state, so a saved
-  // lock isn't briefly overridden at startup; unlocked if none reports in.
+  // lock isn't briefly overridden at startup. Unlocked if none reports in.
   Timer {
     id: configureFallback
     interval: 2000
@@ -344,7 +344,7 @@ Item {
   // there is nothing to watch and nothing to restart: a machine with no
   // accelerometer, or one where the package was never installed, would
   // otherwise respawn a missing command every three seconds for as long as
-  // the shell runs. The setup steps say what's missing; this just stops
+  // the shell runs. The setup steps say what's missing, and this just stops
   // asking.
   property bool rotationAvailable: true
 
@@ -543,7 +543,7 @@ Item {
     }
   }
   // Someone who installs the package is owed rotation without restarting the
-  // shell for it — that is the whole point of setup naming what is missing.
+  // shell for it, which is the whole point of setup naming what is missing.
   // Checking once at startup left it dead until the next restart, so keep
   // looking while it is absent. One `command -v` a minute costs nothing.
   Timer {
@@ -677,7 +677,7 @@ Item {
   // Rotation waits while the screen is locked: Omarchy's lock screen isn't
   // redrawn for a rotated display, though touches would be rotated, so what's
   // drawn and where taps land would disagree. Asking only when about to
-  // rotate avoids polling; while locked, it asks again until unlocked.
+  // rotate avoids polling. While locked, it asks again until unlocked.
   function applyOrientation(orientation) {
     if (root.rotationLocked || orientation === root.appliedOrientation) return
     if (!lockCheckProc.running) lockCheckProc.running = true
@@ -796,17 +796,17 @@ Item {
   }
 
   // Settings written by the `ragtop` command (Setup › Tablet in the
-  // Omarchy menu), as key=value lines; a missing key keeps its default.
+  // Omarchy menu), as key=value lines. A missing key keeps its default.
   property var settings: ({})
   property bool settingsLoaded: false
 
   // Whether Omarchy's bar is transparent (Style › Bar › Transparency), passed
-  // on by the bar widget; the keyboard handle and, by default, the keyboard's
+  // on by the bar widget. The keyboard handle and, by default, the keyboard's
   // background follow it.
   property bool barTransparent: false
   // Set by the bar widget, which is the only thing that can ask the bar.
   property int barSize: Style.bar.sizeHorizontal
-  // Both files below are watched — settings.conf by this service, and the
+  // Both files below are watched, settings.conf by this service and the
   // mode file by every patched overlay clone. A watcher on a path that does
   // not exist yet never learns that it appeared: on a machine where Ragtop
   // had never run, the first setting written went unnoticed until the shell
@@ -859,7 +859,7 @@ Item {
 
   // In tablet mode, bring the keyboard up when a text field gets focus. The
   // bridge learns about focus from fcitx5, Omarchy's input method, and prints
-  // "show"; hiding stays with the user (see fcitx-osk-bridge.py for why).
+  // "show". Hiding stays with the user (see fcitx-osk-bridge.py for why).
   // Stopping it hands fcitx5 back its own interface.
   // `running` cannot be a binding here. The restart timer assigns to it, and
   // an assignment breaks a binding for good, so after the first crash the
@@ -920,7 +920,7 @@ Item {
 
   // A plugin added with `omarchy plugin add` runs without install.sh having
   // set up its config lines, layouts and overlay patches. Check once per
-  // session and offer to run the installer; installing a plugin never runs
+  // session and offer to run the installer. Installing a plugin never runs
   // its code, so this asks rather than doing it.
   function offerSetup(problems) {
     if (problems.length === 0) return
@@ -979,7 +979,7 @@ Item {
   }
 
   // Namespaces of overlays patched by overlay-clones.sh. An open overlay
-  // covers the bar, so the keyboard is brought up with it; with a stock
+  // covers the bar, so the keyboard is brought up with it. With a stock
   // overlay taps on the keyboard would only close it, so only patched ones
   // count.
   property var patchedOverlays: []
@@ -990,7 +990,7 @@ Item {
   // surface is named for what it does rather than for the plugin.
   readonly property string pickerNamespace: "omarchy-image-selector"
   // Whether the picker runs as a Ragtop clone, which is what makes the nav
-  // strip tappable at all; see PickerNav.qml.
+  // strip tappable at all. See PickerNav.qml.
   property bool pickerPatched: false
 
   Process {
@@ -1032,7 +1032,7 @@ Item {
     }
   }
 
-  // The last layout a real keyboard switched to; see onRawEvent.
+  // The last layout a real keyboard switched to. See onRawEvent.
   property string lastLayoutName: ""
 
   Connections {
@@ -1062,12 +1062,12 @@ Item {
         // so the display returns to whatever the config says while the device
         // is still lying where it was. The sensor has nothing new to report,
         // so nothing would put it back until the machine was physically
-        // moved — which is how this was found, switching themes on a tablet
+        // moved, which is how this was found, switching themes on a tablet
         // held upright. Forget what was applied and apply it again.
         root.appliedOrientation = ""
         root.applyOrientation(root.pendingOrientation)
       }
-      // Omarchy's screensaver, watched by window class; see the catcher
+      // Omarchy's screensaver, watched by window class. See the catcher
       // below for what Ragtop does about it.
       if (name === "openwindow") {
         var fields = String(event.data || "").split(",")
@@ -1211,7 +1211,7 @@ Item {
   }
 
   // The active layout's name and letter keys, from the helper:
-  // { name, rows: [[[normal, shifted], ...], ...] }; null until it reports.
+  // { name, rows: [[[normal, shifted], ...], ...] }. Null until it reports.
   // Also written to $XDG_RUNTIME_DIR/ragtop-layout.json for the lock
   // screen's keyboard, which can't reach this service.
   property var keyLabels: null
@@ -1226,7 +1226,7 @@ Item {
   }
   Process { id: layoutWriteProc }
 
-  // One command per line; see keyboard-helper.py.
+  // One command per line. See keyboard-helper.py.
   function sendKeys(command) {
     if (keyboardHelper.running) keyboardHelper.write(command + "\n")
   }
@@ -2055,7 +2055,7 @@ Item {
 
   // Every part of the look is a setting (Setup › Tablet), so what the menu
   // shows is what the keyboard does. Presets are files that write these
-  // settings; see the `ragtop` command. Values are checked here too, since
+  // settings. See the `ragtop` command. Values are checked here too, since
   // settings.conf is a plain file anyone can edit.
   readonly property var look: {
     function pick(key, allowed, fallback) {
@@ -2089,7 +2089,7 @@ Item {
       // background over the desktop. 0 is solid and 100 is gone.
       keyTransparency: num("key-transparency", 0, 100, 0),
       transparency: num("transparency", 0, 100, 0),
-      // Raised keys stand on a side, like a keycap; flat ones don't.
+      // Raised keys stand on a side, like a keycap, and flat ones don't.
       relief: pick("relief", ["flat", "raised"], "flat"),
       fill: pick("fill", ["auto", "dark", "light", "outline"], "light"),
       // The theme's key size, as a percentage of the usual, and the nudge on
@@ -2122,7 +2122,7 @@ Item {
 
   // Blur behind the keyboard and its handle, so the two match. Hyprland
   // blurs nothing unless its global blur is on, and that would blur
-  // see-through windows too — so when Ragtop turns it on, it also tells
+  // see-through windows too, so when Ragtop turns it on it also tells
   // Hyprland to leave every window alone, and only the keyboard blurs.
   // Nothing is written to the Hyprland config: `hyprctl reload` clears it.
   readonly property bool blurKeyboard: root.settings["blur"] === "on"
@@ -2145,11 +2145,11 @@ Item {
   }
 
   // Layers reserving the same screen edge are laid out in the order
-  // Hyprland arranged them, which is whichever mapped first — so a bar
+  // Hyprland arranged them, which is whichever mapped first, so a bar
   // moved to the bottom after the handle exists would end up between the
   // handle and the keyboard. These orders pin the arrangement instead: the
   // bar keeps the edge, the handle sits above it, the keyboard above that.
-  // Runtime only, so nothing is written to the Hyprland config; a config
+  // Runtime only, so nothing is written to the Hyprland config. A config
   // reload drops them, and they are set again then.
   property bool layerRulesReady: false
   function applyLayerRules() {
@@ -2220,7 +2220,7 @@ Item {
   }
 
   // Window events only tell us about a screensaver that starts while the
-  // shell is running, so ask once at startup as well — restarting the shell
+  // shell is running, so ask once at startup as well. Restarting the shell
   // with the screensaver already up is the ordinary case while working on
   // Ragtop, not a corner one.
   // What the address was when the read below was started. A reply is about
@@ -2281,7 +2281,7 @@ Item {
   // running ttfx, which quits when its terminal reads a character or when it
   // loses focus. A touchscreen gives it neither: a terminal ignores touch,
   // and tapping a fullscreen window doesn't move focus. So the screen stays
-  // covered until a key is pressed — no use on a folded laptop, and no use
+  // covered until a key is pressed, no use on a folded laptop, and no use
   // either on an open one that someone reaches for by the screen.
   //
   // The catcher isn't limited to tablet mode. A touchscreen is a touchscreen
@@ -2520,7 +2520,7 @@ Item {
     exclusionMode: ExclusionMode.Ignore
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
-    // Only the card takes input; the dimmed rest of the screen stays usable,
+    // Only the card takes input, and the dimmed rest of the screen stays usable,
     // so a terminal can be reached while setup is open.
     mask: Region { item: setupLoader.item ? setupLoader.item.card : null }
 

@@ -3,8 +3,8 @@ import QtQuick.Shapes
 
 // An icon on a key, drawn rather than typed, so it never depends on the
 // font having a glyph (Omarchy's font list includes fonts without Nerd Font
-// icons) and it scales exactly with the key. Keyboard.qml names the icon;
-// KeyboardKey.qml sizes and colours it.
+// icons) and it scales exactly with the key. Keyboard.qml names the icon
+// and KeyboardKey.qml sizes and colours it.
 //
 // Coordinates are a 0..1 box, scaled to `unit`, so every icon keeps its
 // proportions at any key size.
@@ -18,7 +18,7 @@ Item {
   property string name: ""
   property color color: "white"
 
-  // Enter's arrow runs twice as wide as it is tall; the rest are square.
+  // Enter's arrow runs twice as wide as it is tall. The rest are square.
   readonly property real aspect: name === "enter" ? 2 : 1
   implicitWidth: height * aspect
   readonly property real unit: Math.min(width / aspect, height)
@@ -26,7 +26,7 @@ Item {
   property bool filled: false
 
   readonly property real stroke: Math.max(1, unit * (name === "enter" ? 0.12 : 0.09))
-  // The arrows are one shape; the key says which way it points.
+  // The arrows are one shape, and the key says which way it points.
   readonly property var arrowTurn: ({ "left": 0, "up": 90, "right": 180, "down": 270 })
   readonly property bool isArrow: name in arrowTurn
 
@@ -218,7 +218,7 @@ Item {
     return move(0.2, 0.52) + line(0.42, 0.74) + line(0.8, 0.28)
   }
 
-  // A plain arrow pointing left; `arrowTurn` turns it the other ways.
+  // A plain arrow pointing left. `arrowTurn` turns it the other ways.
   function arrowPath() {
     return move(0.88, 0.5) + line(0.16, 0.5) + " " + move(0.42, 0.26) + line(0.16, 0.5) + line(0.42, 0.74)
   }
@@ -291,7 +291,7 @@ Item {
     : isArrow ? arrowPath()
     : ""
 
-  // The gear and Omarchy's mark are filled shapes; the rest are strokes.
+  // The gear and Omarchy's mark are filled shapes. The rest are strokes.
   readonly property string filledPath: name === "settings" ? gearPath()
     : name === "omarchy" ? omarchyPath() : ""
 

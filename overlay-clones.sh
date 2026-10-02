@@ -21,7 +21,7 @@
 # LockKeyboard.qml at the bottom of the screen while in tablet mode.
 #
 # Clones stop receiving Omarchy's updates, so `sync` re-clones and re-patches
-# any whose built-in has changed; `install` registers it as an Omarchy
+# any whose built-in has changed. `install` registers it as an Omarchy
 # post-update hook.
 #
 # The polkit and lock clones keep the authentication capability: Omarchy
@@ -51,7 +51,7 @@ stock_focus='    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive'
 patched_focus="    WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
     $mode_file_view"
 # The image picker holds focus only while it's showing something, so its
-# line carries that condition; the tablet-mode swap goes inside it.
+# line carries that condition, and the tablet-mode swap goes inside it.
 stock_picker_focus='    WlrLayershell.keyboardFocus: root.opened && root.imagesLoaded ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None'
 patched_picker_focus="    WlrLayershell.keyboardFocus: root.opened && root.imagesLoaded ? (ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive) : WlrKeyboardFocus.None
     $mode_file_view"
@@ -65,8 +65,8 @@ patched_exclusion='    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal :
 # pluginShellFor() through an Instantiator, and that round-trip leaves
 # Array.isArray(manifest.kinds) false, so manifestHasKind(manifest, "menu")
 # fails and PluginShellApi.appLibrary is built as null. Load Omarchy's own
-# AppLibrary.qml instead — the same file the shell itself uses, which is
-# self-contained — and drop back to the injected one the day it arrives.
+# AppLibrary.qml instead, the same file the shell itself uses and one that
+# stands on its own, and drop back to the injected one the day it arrives.
 stock_menu_apps='  readonly property var appLibrary: root.shell ? root.shell.appLibrary : null'
 patched_menu_apps=$(cat <<'MENU_APPS'
   // Ragtop: Omarchy 4 builds this plugin's appLibrary as null (the
@@ -130,7 +130,7 @@ select_overlay() {
   clone_dir="$plugins_dir/$clone_id"
   builtin_dir="$builtin_root/$name"
   base_file="$clone_dir/.ragtop-base"
-  # Cloning and patching are two steps; this says the first has happened and
+  # Cloning and patching are two steps. This says the first has happened and
   # the second hasn't, so an interrupted run leaves something recognisable
   # rather than a clone nobody can tell from one of the user's own. It lives
   # outside the clone, which the next clone command replaces wholesale.
@@ -206,7 +206,7 @@ install_hook() {
 install_one() {
   if [[ -d $clone_dir ]] && ! is_patched; then
     if [[ ! -f $progress_file ]]; then
-      echo "$clone_dir exists but isn't Ragtop's; leaving it alone." >&2
+      echo "$clone_dir exists but isn't Ragtop's, so leaving it alone." >&2
       return 1
     fi
     # Ours, cloned but never patched, by a run that was cut short. Start over.
@@ -235,7 +235,7 @@ sync_one() {
     return
   fi
   if in_sync; then
-    echo "$clone_id matches the built-in; nothing to sync."
+    echo "$clone_id matches the built-in, so nothing to sync."
     return
   fi
   # Either Omarchy's own file moved or Ragtop's patches did. Both are fixed by
@@ -246,7 +246,7 @@ sync_one() {
     done_msg="Re-patched $clone_id for this version of Ragtop."
   fi
   if ! clone_is_ours; then
-    echo "$changed, but $clone_id has edits besides Ragtop's; not replacing it." >&2
+    echo "$changed, but $clone_id has edits besides Ragtop's, so not replacing it." >&2
     notify "Your $name clone has edits of its own, so it wasn't resynced."
     return 1
   fi
@@ -260,7 +260,7 @@ remove_one() {
   if [[ ! -d $clone_dir ]]; then
     echo "No $clone_id clone installed."
   elif ! clone_is_ours; then
-    echo "$clone_id has edits besides Ragtop's; remove it yourself with: omarchy plugin remove $clone_id" >&2
+    echo "$clone_id has edits besides Ragtop's. Remove it yourself with: omarchy plugin remove $clone_id" >&2
     return 1
   else
     omarchy plugin remove "$clone_id" --yes >/dev/null

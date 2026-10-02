@@ -30,7 +30,7 @@ Item {
   readonly property int chipPad: Style.space(6)
   // Long enough that a tap is not mistaken for a hold, short enough that
   // holding does not feel like waiting. The keyboard uses 420 for its
-  // accents, which have a popup to justify the pause; this only has to say
+  // accents, which have a popup to justify the pause. This only has to say
   // "picked up".
   readonly property int holdMs: 280
   // One number for the shrink and the ghost, so what you pick up and what
@@ -328,7 +328,7 @@ Item {
       // every delegate, which destroys the DragHandler the finger is
       // holding. That is the same fault as the window list one level up,
       // and it is why a resize drag died after a step or two. The Repeater's
-      // model is the number 8 and never changes; the geometry inside each
+      // model is the number 8 and never changes. The geometry inside each
       // delegate re-evaluates in place.
       function handleSpec(i) {
         switch (i) {

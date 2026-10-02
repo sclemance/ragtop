@@ -13,7 +13,7 @@ import qs.Ui
 // up here and one set up from a terminal end up identical.
 //
 // The one thing it cannot do is install packages. It says which are missing,
-// what each is for, and hands over the command — asking a plugin to run a
+// what each is for, and hands over the command, since asking a plugin to run a
 // package manager is a bigger thing than asking it to write a config file.
 //
 // It is built from Omarchy's own panel kit (BorderSurface, Button, Toggle,
@@ -36,7 +36,7 @@ Item {
   // ---- dependencies -----------------------------------------------------
 
   // Each package, what it's for, and whether it's here. Ragtop runs without
-  // any of them; it just does less, and the wording says exactly what less.
+  // any of them. It just does less, and the wording says exactly what less.
   property var deps: [
     { pkg: "iio-sensor-proxy", need: "Rotation. Without it the screen won't follow the device.", ok: false },
     { pkg: "python-pywayland", need: "The on-screen keyboard. Without it no keys are sent.", ok: false },
@@ -180,7 +180,7 @@ Item {
   // Applying hands the work to a transient systemd unit, and lets go.
   //
   // Copying an overlay replaces one of Omarchy's own plugins, and the shell
-  // reloads its plugins when that happens — taking this service, this window,
+  // reloads its plugins when that happens, taking this service, this window,
   // and any child process of it down mid-sentence. That is exactly what
   // happened on the first machine this was tried on: the menu and the emoji
   // picker were copied, the shell reloaded, and the rest of the work died
@@ -407,7 +407,7 @@ Item {
         width: parent.width
         text: root.missingDeps.length === 0
           ? "Everything Ragtop needs is installed."
-          : "Ragtop needs these from Arch's own repositories. It works without them — it just does less."
+          : "Ragtop needs these from Arch's own repositories. It works without them, it just does less."
       }
 
       Repeater {
@@ -486,19 +486,19 @@ Item {
       Body {
         width: parent.width
         text: parent.noSwitch
-          ? "Ragtop can notice a screen being folded back — or a keyboard coming off — by "
+          ? "Ragtop can notice a screen being folded back, or a keyboard coming off, by "
             + "reading a tablet-mode "
-            + "switch — an input device the kernel exposes, like a keyboard or a mouse. "
+            + "switch, an input device the kernel exposes, like a keyboard or a mouse. "
             + "This machine reports none."
           : "Ragtop knows the screen has been folded back, or the keyboard taken off, by "
             + "reading the tablet-mode "
-            + "switch — an input device the kernel exposes, like a keyboard or a mouse."
+            + "switch, an input device the kernel exposes, like a keyboard or a mouse."
       }
       Body {
         width: parent.width
         visible: parent.offering
-        text: "Only root can read it here. This rule tags switch devices — tablet mode, the "
-          + "lid, the headphone jack — so whoever is logged in at the machine can read them. "
+        text: "Only root can read it here. This rule tags switch devices, tablet mode, the "
+          + "lid and the headphone jack, so whoever is logged in at the machine can read them. "
           + "Keyboards are excluded, which is the difference between this and joining the "
           + "input group."
       }
@@ -526,7 +526,7 @@ Item {
       Body {
         width: parent.width
         visible: root.switchState === "readable"
-        text: "The switch is readable already — nothing to do here."
+        text: "The switch is readable already, so there is nothing to do here."
       }
 
       // A slate has no hinge to report, and a convertible whose switch stays
@@ -537,7 +537,7 @@ Item {
         width: parent.width
         visible: parent.noSwitch || parent.offering
         text: parent.noSwitch
-          ? "That is ordinary on a tablet with no keyboard — there is nothing to fold or "
+          ? "That is ordinary on a tablet with no keyboard, since there is nothing to fold or "
             + "detach, so nothing to report. "
             + "Tell Ragtop to stay in tablet mode and it will, for good."
           : "You can also skip it. The rule buys one thing: noticing the fold, or the "
@@ -584,10 +584,10 @@ Item {
       }
       Note {
         width: parent.width
-        text: "A copy is Omarchy's own code — the password prompt and lock screen included — "
+        text: "A copy is Omarchy's own code, the password prompt and lock screen included, "
           + "living in your config where anything running as you can change it, and no longer "
           + "taking Omarchy's updates directly (a hook re-copies them after each update). "
-          + "Leave them off if in doubt; they can be turned on one at a time later."
+          + "Leave them off if in doubt. They can be turned on one at a time later."
       }
 
       Toggle {
@@ -640,7 +640,7 @@ Item {
         width: parent.width
         visible: root.missingDeps.length > 0
         text: "Still missing: " + root.missingDeps.map(function(d) { return d.pkg }).join(", ")
-          + ". Setup will finish without them; install them whenever you like and Ragtop "
+          + ". Setup will finish without them. Install them whenever you like and Ragtop "
           + "will pick them up."
       }
       Body {
