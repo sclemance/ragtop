@@ -1794,11 +1794,12 @@ Item {
 
   // What the screen itself says the size should be.
   //
-  // Quickshell reports physicalPixelDensity in device pixels per millimetre,
-  // which is the one number that makes a key the same size in the hand on any
-  // screen. Measured here: 5.37 px/mm over 1366 pixels is a 254mm panel,
-  // which is the 11.6 inch screen this was written on, so the number is real
-  // and not a guess.
+  // How big a key is in the hand comes from one number, the pixels the screen
+  // has to the millimetre, and where that number comes from is the whole
+  // story: see monitorDensity below, which takes it from Hyprland because
+  // Qt's own figure turns with the screen. Measured here it is 5.31 px/mm,
+  // which over 1366 pixels is a 257mm panel, which is the 11.6 inch screen
+  // this was written on.
   //
   // 84 logical pixels is the widest Ragtop ever draws a key at scale 1, so
   // that is what the target is measured against. A key of about a centimetre

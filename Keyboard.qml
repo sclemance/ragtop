@@ -613,9 +613,26 @@ Item {
   // Height follows the size setting, not the width a key happens to get. On
   // a narrow screen the width is spent long before the ladder runs out, so
   // pinning height to it made Larger and Largest render identically to
-  // Regular. The cap against `unit` only stops a key becoming a tall ribbon.
+  // Regular.
+  //
+  // This much of it is what the ladder is allowed to ask about, and it is
+  // deliberately the half that knows nothing about which board was chosen.
+  // What follows is circular otherwise: the chosen form sets `formUnits`,
+  // which sets `unit`, which would set the height the ladder measures each
+  // form by. Qt does not report that one as a binding loop and it happens to
+  // converge, but what `form` sees mid-evaluation is then a matter of
+  // evaluation order rather than of a value, and the only reason the answer
+  // came out right was a coincidence between two unrelated constants: the
+  // ribbon cap below engages under 42.86 key-scaled pixels and `minKeyWidth`
+  // already refuses anything under 48, so the cap could never move a height
+  // the ladder had measured. A 12% margin between numbers that have no
+  // reason to stay in that order is not a thing to rely on.
+  readonly property real keyHeightUncapped: Math.max(30, Math.round(60 * theme.keyScale))
+  // And the ribbon cap, which is the part that needs the width. It only ever
+  // lowers the height, so the uncapped figure above is an upper bound on
+  // this one and a form the ladder accepts on that figure still fits.
   readonly property real keyHeight: Math.max(30,
-    Math.min(Math.round(60 * theme.keyScale), Math.round(unit * 1.4)))
+    Math.min(root.keyHeightUncapped, Math.round(unit * 1.4)))
   // The extra row is shorter than a row of letters: it is reached for rather
   // than typed on. Held as a fraction so it travels with the row.
   readonly property real topRowFraction: 0.62
@@ -646,10 +663,13 @@ Item {
       // of width, so this is the row that buys the others their place.
       : [root.topRowFraction, 1, 1, 1, 1, 1]
   }
+  // How tall a form would be, for the ladder to measure against maxHeight.
+  // Uncapped on purpose: see keyHeightUncapped. Nothing draws from this, and
+  // the height the keys actually get is keyHeight.
   function formHeightOf(form) {
     var rows = root.rowHeightsOf(form)
     var h = 0
-    rows.forEach(function(f) { h += Math.round(root.keyHeight * f) })
+    rows.forEach(function(f) { h += Math.round(root.keyHeightUncapped * f) })
     return root.topPadding + h + (rows.length - 1) * root.theme.gap + root.theme.padding
   }
 
