@@ -2,7 +2,8 @@
   <img src="screenshots/banner.webp" width="100%" alt="Ragtop: made for convertibles, great for tablets, built for Omarchy">
 </h1>
 
-Fold the screen back, like a ragtop's roof, or take the keyboard off, which
+Fold the screen back, like a
+[ragtop's](https://en.wikipedia.org/wiki/Convertible) roof, or take the keyboard off, which
 the hardware reports the same way, and Ragtop switches your
 [Omarchy 4](https://github.com/omacom/omarchy) desktop into a touch-friendly
 mode: the screen rotates with the device, an on-screen keyboard themed like
