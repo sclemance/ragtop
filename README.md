@@ -28,29 +28,19 @@ The keyboard takes its colours from your Omarchy theme and its letters from
 your Hyprland layout, so it matches whatever you already run. The look is
 yours to change (see [Themes](#themes)).
 
-**It is not one keyboard.** Ragtop draws whichever board the screen can
-carry, from a tenkeyless down to the phone style, and changes its mind when
-the screen turns:
-
-| | |
-| --- | --- |
-| ![A 75% board in portrait, Spaceship theme on Osaka Jade](screenshots/portrait-75-spaceship-osaka-jade.webp) | ![The mobile board in portrait, Typewriter theme on Gruvbox](screenshots/portrait-mobile-typewriter-gruvbox.webp) |
-| **75%** in portrait: a function row, a number row and a nav column, with **Spaceship** on Osaka Jade and no background at all | **Mobile** in portrait: three letter rows and the symbol pages behind `?123`, with **Typewriter** on Gruvbox over its own tinted panel |
-
-**A Ragtop theme sets the shape of a key and your Omarchy theme sets its
-colour**, which is why any Ragtop theme looks right on any Omarchy one:
-
 | | | |
 | --- | --- | --- |
-| ![Glass theme on Tokyo Night, German layout](screenshots/glass-tokyo-night.jpg) | ![Typewriter theme on Catppuccin Latte, French layout](screenshots/typewriter-catppuccin-latte.jpg) | ![The lock screen's keyboard on Rose Pine](screenshots/lock-screen-rose-pine.jpg) |
-| **Glass** on Tokyo Night: see-through keys over a blurred desktop, QWERTZ | **Typewriter** on Catppuccin Latte: raised keycaps, AZERTY with its short bottom row filled out | **The lock screen's own keyboard**, in the lock screen's palette |
+| ![Glass theme on Tokyo Night, a 60% board](screenshots/glass-tokyo-night.webp) | ![Typewriter theme on Catppuccin Latte, a 75% board](screenshots/typewriter-catppuccin-latte.webp) | ![Spaceship theme on Osaka Jade, a tenkeyless board](screenshots/spaceship-osaka-jade-tkl.webp) |
+| **Glass** on Tokyo Night, 60% | **Typewriter** on Catppuccin Latte, 75% | **Spaceship** on Osaka Jade, tenkeyless |
 
-And the parts that only exist because it is a finger rather than a mouse:
-
-| | |
-| --- | --- |
-| ![Holding a letter for its accents](screenshots/portrait-accents-osaka-jade.jpg) | ![The nav strip under the background picker](screenshots/portrait-picker-nav.jpg) |
-| Hold a letter for its accents, the only way to reach é on some layouts | Choosing a background by touch, with the picker's own strip |
+**A Ragtop theme sets the shape of a key and your Omarchy theme sets its
+colour**, which is why any Ragtop theme looks right on any Omarchy one. **It
+is not one keyboard** either: Ragtop draws whichever board the screen can
+carry, from a tenkeyless down to the phone style, and changes its mind when
+the screen turns. More of it further down, beside what it shows:
+[the boards](#which-board), [themes](#themes),
+[accents](#what-every-board-has), [the pickers](#the-theme-and-background-pickers),
+[the lock screen](#the-lock-screen) and [tiling mode](#tiling-mode-preview).
 
 ## Which tablets?
 
@@ -343,6 +333,14 @@ colours and font, and the Transparency setting, without restarting.
 
 There is more than one, and they are the boards those names mean.
 
+<p align="center">
+  <img src="screenshots/portrait-75-spaceship-osaka-jade.webp" width="260" alt="A 75% board in portrait, Spaceship theme on Osaka Jade">
+  &nbsp;
+  <img src="screenshots/portrait-mobile-typewriter-gruvbox.webp" width="260" alt="The mobile board in portrait, Typewriter theme on Gruvbox">
+  <br>
+  <sub>The same screen turned upright: <b>75%</b> with Spaceship on Osaka Jade, and <b>Mobile</b> with Typewriter on Gruvbox</sub>
+</p>
+
 **Mobile** is the three letter rows with symbol pages behind a `?123` key,
 which is what a phone keyboard is and what Ragtop drew for its whole life
 until now.
@@ -495,6 +493,12 @@ well, and does.
   away. **Hold it** for Ragtop's own controls, which come up over the keyboard
   so the keys stay in view while you change them. A small gear in the corner
   of the key says so, the way a cap prints what AltGr types on it. See below.
+
+<p align="center">
+  <img src="screenshots/accents-french-ergol.webp" width="640" alt="Holding a letter for its accents on a French Ergo-L layout">
+  <br>
+  <sub>Holding a letter for its accents. The letters are the active layout's own, here French Ergo-L, which is why the home row is not QWERTY</sub>
+</p>
 
 `keyboard-helper.py` sends the keys: it registers a Wayland virtual keyboard
 with the same keymap as your physical keyboard, which is also why your SUPER
@@ -655,6 +659,11 @@ Six ship: Omarchy, Soft, Typewriter, Glass, Industrial and Spaceship. Apply
 one from the menu or with `./ragtop theme apply <name>`. Yours go in
 `~/.config/ragtop/themes/<name>/ragtop.toml` and win where the names match.
 
+| | |
+| --- | --- |
+| ![Soft theme on Everforest](screenshots/soft-everforest.webp) | ![Industrial theme on Matte Black, the mobile board](screenshots/industrial-matte-black-mobile.webp) |
+| **Soft** on Everforest, rounded and quiet | **Industrial** on Matte Black, the mobile board in landscape |
+
 Applying one **writes its values into your settings**, so afterwards every
 menu row shows what the keyboard is actually doing. A theme is a starting
 point, not a layer that overrides you. It is also a whole look rather than a
@@ -700,8 +709,9 @@ The windows themselves are the controls. They stay at full size with their
 own content visible, and they reflow as you work, which is the whole reason
 it happens over them rather than over a scaled-down map.
 
-![Tiling mode over two tiled windows, with drag handles on each and the
-controls along the bottom](screenshots/tiling-mode.webp)
+<p align="center">
+  <img src="screenshots/tiling-mode.webp" width="720" alt="Tiling mode over two tiled windows, with drag handles on each and the controls along the bottom">
+</p>
 
 Two tiles with their handles up, and the strip along the bottom: the
 workspaces and the scratchpad on the left, the shapes on the right, and the
@@ -874,6 +884,10 @@ drawn from the keyboard's own theme and reserves its space, so the carousel
 sits above it. The keyboard handle stays, so you can still bring the keyboard
 up to type a filter where the picker takes one.
 
+<p align="center">
+  <img src="screenshots/picker-nav.webp" width="560" alt="The background picker with Ragtop's strip along the bottom">
+</p>
+
 Without the clone Ragtop can only get out of the way: a stock picker takes
 every touch on the screen, so the strip's own taps would never reach it, and
 even a tap on the keyboard would land on the picker and throw it away. So
@@ -901,6 +915,10 @@ are picking stays legible against the keys it covers. The keys edit
 the password the same way typing does, and Omarchy checks it as usual. The
 keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
 loads.
+
+<p align="center">
+  <img src="screenshots/lock-screen-nord.webp" width="560" alt="The lock screen's own keyboard on Nord">
+</p>
 
 It's shaped like the desktop keyboard but drawn in the lock screen's own
 colours, and it's deliberately a separate, self-contained file: it shares no
