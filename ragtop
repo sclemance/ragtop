@@ -146,12 +146,26 @@ get() {
   echo "${value:-$2}"
 }
 
-# put <key> <value>, written whole and renamed into place so the service
-# never reads a half-written file.
+# put <key> <value>, written whole and renamed into place so the service never
+# reads a half-written file, and one writer at a time.
+#
+# The lock is the new part. This keeps every line but the key's own and then
+# appends it, which is a read-modify-write: two at once both read the file as
+# it was and the later rename discards the other's change. The controls panel
+# does exactly that, since applying a theme writes several keys while the size
+# slider is writing one. The fixed .tmp name was a second way to collide, both
+# writers naming the same file, so the temporary one is named uniquely now.
+#
+# The lock is a file of its own rather than the settings file, because the
+# rename replaces the settings file and a lock held on it would go with it.
 put() {
   mkdir -p "$(dirname "$settings")"
-  { grep -v "^$1=" "$settings" 2>/dev/null || true; echo "$1=$2"; } >"$settings.tmp"
-  mv -f "$settings.tmp" "$settings"
+  ( flock 9
+    local tmp
+    tmp=$(mktemp "$settings.XXXXXX")
+    { grep -v "^$1=" "$settings" 2>/dev/null || true; echo "$1=$2"; } >"$tmp"
+    mv -f "$tmp" "$settings"
+  ) 9>"$settings.lock"
 }
 
 # switch <key> <enabled|enable|disable|toggle> for an on/off setting that
@@ -209,7 +223,17 @@ choice_notice() {
         *) (( $2 >= 60 && $2 <= 160 )) || return 1; echo "" ;;
       esac ;;
     "display auto") echo "Ragtop follows the touchscreen, or the built-in panel." ;;
-    "display "*) echo "Ragtop moves to $2." ;;
+    # Every other setting here is a fixed list, and the final case rejects
+    # anything not on it. This one takes a monitor name, so it has to check
+    # the shape itself: "display "* matched whatever it was handed, and a
+    # value with a newline in it wrote a second line into settings.conf.
+    #
+    # The shape and not the existence. Naming a screen that is not plugged in
+    # yet is a reasonable thing to do, and the service falls back to the
+    # touchscreen or the built-in panel while the named one is absent.
+    "display "*)
+      [[ $2 =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+      echo "Ragtop moves to $2." ;;
     "keyboard-layout auto") echo "The keyboard picks the biggest board that fits." ;;
     "keyboard-layout 60") echo "A 60% keyboard, where the screen is wide enough." ;;
     "keyboard-layout 75") echo "A 75% keyboard, where the screen is wide enough." ;;
