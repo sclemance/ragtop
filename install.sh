@@ -42,12 +42,12 @@ menu_block() { "$repo/menu-block.sh" "$1"; }
 
 plugin_enabled() {
   omarchy plugin list --json 2>/dev/null |
-    python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' and p['enabled'] for p in json.load(sys.stdin)) else 1)"
+    /usr/bin/python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' and p['enabled'] for p in json.load(sys.stdin)) else 1)"
 }
 
 plugin_discovered() {
   omarchy plugin list --json 2>/dev/null |
-    python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' for p in json.load(sys.stdin)) else 1)"
+    /usr/bin/python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' for p in json.load(sys.stdin)) else 1)"
 }
 
 check_deps() {
@@ -55,8 +55,11 @@ check_deps() {
   local missing=() hints=()
   command -v monitor-sensor >/dev/null || { missing+=(monitor-sensor); hints+=(iio-sensor-proxy); }
   command -v git >/dev/null || { missing+=(git); hints+=(git); }
-  python3 -c "import pywayland" 2>/dev/null || { missing+=(python-pywayland); hints+=(python-pywayland); }
-  python3 -c "import gi" 2>/dev/null || { missing+=(python-gobject); hints+=(python-gobject); }
+  # The system Python by path, here and everywhere Ragtop runs Python: the
+  # packages below are pacman's, installed for /usr/bin/python3 only, and a
+  # mise or pyenv python3 earlier on the PATH would not see them.
+  /usr/bin/python3 -c "import pywayland" 2>/dev/null || { missing+=(python-pywayland); hints+=(python-pywayland); }
+  /usr/bin/python3 -c "import gi" 2>/dev/null || { missing+=(python-gobject); hints+=(python-gobject); }
   for cmd in omarchy omarchy-shell hyprctl gdbus; do
     command -v "$cmd" >/dev/null || die "$cmd not found; Ragtop needs Omarchy 4 with Hyprland."
   done

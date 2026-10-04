@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """Report text-field focus from fcitx5, which Omarchy already runs as its
 input method, so the on-screen keyboard can come up when one is tapped.
 

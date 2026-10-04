@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """Watches a tablet-mode switch: tablet-switch.py <device, e.g. /dev/input/event12>.
 
 Prints "tablet" or "laptop" at start and again whenever the switch moves.

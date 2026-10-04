@@ -273,7 +273,7 @@ choice_notice() {
 # it does not look at itself, because menu-block.sh already knows what the
 # rows should be and can say whether the file holds them.
 migrate() {
-  locked python3 - "$settings" "$HOME/.config/ragtop" <<'PYEOF'
+  locked /usr/bin/python3 - "$settings" "$HOME/.config/ragtop" <<'PYEOF'
 import json, os, sys, tempfile
 
 settings_path, config_dir = sys.argv[1:]
@@ -374,7 +374,7 @@ themes() {
 apply_theme() {
   local file name
   file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; exit 2; }
-  name=$(locked python3 - "$file" "$settings" <<'EOF'
+  name=$(locked /usr/bin/python3 - "$file" "$settings" <<'EOF'
 import os, re, sys, tempfile, tomllib
 
 path, settings = sys.argv[1:]
@@ -536,7 +536,7 @@ diagnostics() {
   # be answered without the scale, and nobody thinks to send it. The transform
   # says which way the screen is really turned, which is the other half of a
   # rotation report.
-  value=$(python3 - <<'PYEOF' || true
+  value=$(/usr/bin/python3 - <<'PYEOF' || true
 import json, subprocess, sys
 
 turns = {0: "normal", 1: "turned left", 2: "upside down", 3: "turned right"}
@@ -574,7 +574,7 @@ PYEOF
   # rule out behind "the keyboard never comes up".
   row Keyboard "$(get keyboard sensor), layout $(get keyboard-layout auto)"
   row Display "$(get display auto)$(hyprctl monitors -j 2>/dev/null \
-    | python3 -c 'import json,sys
+    | /usr/bin/python3 -c 'import json,sys
 ms=json.load(sys.stdin)
 print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 2>/dev/null || true)"
   switch=$("$repo/find-tablet-switch.py" 2>/dev/null || true)
@@ -643,8 +643,8 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   fi
 
   command -v monitor-sensor >/dev/null || missing+=(iio-sensor-proxy)
-  python3 -c "import pywayland" 2>/dev/null || missing+=(python-pywayland)
-  python3 -c "import gi" 2>/dev/null || missing+=(python-gobject)
+  /usr/bin/python3 -c "import pywayland" 2>/dev/null || missing+=(python-pywayland)
+  /usr/bin/python3 -c "import gi" 2>/dev/null || missing+=(python-gobject)
   command -v git >/dev/null || missing+=(git)
   if (( ${#missing[@]} )); then
     row Packages "missing ${missing[*]}"

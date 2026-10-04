@@ -16,7 +16,7 @@ case "${1:-}" in
   *) echo "Usage: $0 add|remove|check" >&2; exit 2 ;;
 esac
 
-python3 - "$1" "$menu_file" <<'EOF'
+/usr/bin/python3 - "$1" "$menu_file" <<'EOF'
 import json, os, sys, tomllib
 action, path = sys.argv[1:]
 # Protocol, not prose. This exact line is how the block is found again in the

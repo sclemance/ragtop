@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """Prints "<device path>\t<device name>" for the input device reporting the
 tablet-mode switch (SW_TABLET_MODE, bit 1 of its switch bitmask), or nothing.
 

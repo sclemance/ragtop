@@ -141,7 +141,7 @@ select_overlay() {
 replace() {
   local -a pairs=("${patch[@]}")
   if [[ $2 == revert ]]; then pairs+=("${legacy[@]}"); fi
-  python3 - "$1" "$2" "${pairs[@]}" <<'EOF'
+  /usr/bin/python3 - "$1" "$2" "${pairs[@]}" <<'EOF'
 import sys
 path, direction, *pairs = sys.argv[1:]
 text = open(path).read()

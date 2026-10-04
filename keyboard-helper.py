@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """Sends keys for Ragtop's own on-screen keyboard (Keyboard.qml), as a Wayland
 virtual keyboard. QML can't be one itself, so the service runs this and
 writes commands to it.

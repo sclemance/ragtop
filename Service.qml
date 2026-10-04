@@ -886,7 +886,7 @@ Item {
   }
   Process {
     id: focusBridgeProc
-    command: ["python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
+    command: ["/usr/bin/python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
     stdout: SplitParser {
       onRead: function(line) {
         if (line !== "show") return
@@ -1156,7 +1156,7 @@ Item {
   }
   Process {
     id: tabletModeProc
-    command: ["python3", Qt.resolvedUrl("tablet-switch.py").toString().replace(/^file:\/\//, ""), root.switchDevice]
+    command: ["/usr/bin/python3", Qt.resolvedUrl("tablet-switch.py").toString().replace(/^file:\/\//, ""), root.switchDevice]
     stdout: SplitParser {
       onRead: function(line) {
         if (line === "tablet" || line === "laptop") root.applySwitchReading(line === "tablet")
@@ -1187,7 +1187,7 @@ Item {
   // Sends its keys: QML can't be a Wayland virtual keyboard itself.
   Process {
     id: keyboardHelper
-    command: ["python3", Qt.resolvedUrl("keyboard-helper.py").toString().replace(/^file:\/\//, "")]
+    command: ["/usr/bin/python3", Qt.resolvedUrl("keyboard-helper.py").toString().replace(/^file:\/\//, "")]
     running: true
     stdinEnabled: true
     stdout: SplitParser {
