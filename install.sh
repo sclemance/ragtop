@@ -102,7 +102,10 @@ offer_udev_rule() {
   rule=$("$repo/udev-rule.sh" rule)
   echo "   Ragtop can install a udev rule giving the logged-in user read access"
   echo "   to switch devices only (tablet mode, lid and headphone jack, never keyboards):"
-  printf '     %s\n' $rule
+  # Quoted and split on newlines only: `rule` prints the file and the rule on
+  # a line each, and unquoted the rule fell apart at every space.
+  local line
+  while IFS= read -r line; do printf '     %s\n' "$line"; done <<<"$rule"
   if (( skip_udev )); then
     echo "   left alone (--no-udev)"
     return 1
