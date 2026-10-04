@@ -1183,6 +1183,10 @@ This removes any overlay clones you turned on, Ragtop's rows in the Omarchy
 menu, the switch access rule, Ragtop's settings and generated files, and the
 plugin itself (or unlinks it, if it was linked from a checkout).
 
+Your own themes are kept. Anything in `~/.config/ragtop/themes` (and
+`~/.config/ragtop/presets`, from before 0.39) stays where it is, and the
+uninstaller says so. Delete `~/.config/ragtop` yourself if you don't want them.
+
 ## Language
 
 Ragtop is English-only, and so is Omarchy: the shell has no translation layer

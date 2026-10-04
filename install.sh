@@ -22,6 +22,7 @@ id="sclemance.ragtop"
 plugins_dir="$HOME/.config/omarchy/plugins"
 plugin_dir="$plugins_dir/$id"
 state_dir="$HOME/.local/state/ragtop"
+config_dir="$HOME/.config/ragtop"
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 
 # Set from the flags. See the usage text.
@@ -220,9 +221,16 @@ link_plugin() {
   fi
 }
 
-# Everything Ragtop generates outside its own folder.
+# Everything Ragtop generates outside its own folder. Not the themes and
+# presets under ~/.config/ragtop: those are the user's own work, which Ragtop
+# only reads, and an uninstall is no reason to destroy them. They stay, and
+# the folder with them, until the user removes it.
 remove_files() {
-  rm -rf "$state_dir" "$HOME/.config/ragtop"
+  rm -rf "$state_dir"
+  if [[ -d $config_dir ]]; then
+    find "$config_dir" -mindepth 1 -maxdepth 1 ! -name themes ! -name presets -exec rm -rf {} +
+    rmdir "$config_dir" 2>/dev/null || true
+  fi
   rm -f "${XDG_RUNTIME_DIR:-/tmp}"/ragtop-*.json "${XDG_RUNTIME_DIR:-/tmp}/ragtop-mode"
 }
 
@@ -301,6 +309,9 @@ uninstall() {
     restart_shell
     # The shell that was running kept writing these until it went down.
     remove_files
+  fi
+  if [[ -d $config_dir ]]; then
+    echo "   kept your own themes in ${config_dir/#$HOME/\~} (delete it if you don't want them)"
   fi
   say "Ragtop removed."
 }
