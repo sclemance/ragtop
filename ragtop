@@ -168,6 +168,16 @@ put() {
   ) 9>"$settings.lock"
 }
 
+# locked <command ...>: run it holding the same lock put() takes, for the
+# other read-modify-writes of settings.conf. Applying a theme and migrating
+# both rewrite the whole file, so without the lock they lose a size step
+# written meanwhile just as two puts would, which is the race put()'s lock
+# was added for in the first place. Standard input passes through.
+locked() {
+  mkdir -p "$(dirname "$settings")"
+  ( flock 9; "$@" ) 9>"$settings.lock"
+}
+
 # switch <key> <enabled|enable|disable|toggle> for an on/off setting that
 # defaults to on.
 switch() {
@@ -263,8 +273,8 @@ choice_notice() {
 # it does not look at itself, because menu-block.sh already knows what the
 # rows should be and can say whether the file holds them.
 migrate() {
-  python3 - "$settings" "$HOME/.config/ragtop" <<'PYEOF'
-import json, os, sys
+  locked python3 - "$settings" "$HOME/.config/ragtop" <<'PYEOF'
+import json, os, sys, tempfile
 
 settings_path, config_dir = sys.argv[1:]
 TRANS = {"opaque": 0, "low": 15, "medium": 30, "high": 50, "full": 100, "auto": 0}
@@ -291,8 +301,12 @@ if os.path.exists(settings_path):
             continue
         out.append("%s=%s" % (key, value))
     if changed:
-        open(settings_path + ".tmp", "w").write("\n".join(out) + "\n")
-        os.replace(settings_path + ".tmp", settings_path)
+        # Named uniquely, as put() names its own, so no two writers share one.
+        fd, tmp = tempfile.mkstemp(prefix=os.path.basename(settings_path) + ".",
+                                   dir=os.path.dirname(settings_path))
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(out) + "\n")
+        os.replace(tmp, settings_path)
         did.append("settings")
 
 # A preset of their own becomes a theme of their own. The original is left
@@ -360,8 +374,8 @@ themes() {
 apply_theme() {
   local file name
   file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; exit 2; }
-  name=$(python3 - "$file" "$settings" <<'EOF'
-import os, re, sys, tomllib
+  name=$(locked python3 - "$file" "$settings" <<'EOF'
+import os, re, sys, tempfile, tomllib
 
 path, settings = sys.argv[1:]
 # Only these keys, only these values: a theme can't smuggle anything else in.
@@ -431,8 +445,11 @@ if os.path.exists(settings):
              if l and l.split("=", 1)[0] not in look_keys]
 lines += [f"{k}={v}" for k, v in sorted(values.items())]
 os.makedirs(os.path.dirname(settings), exist_ok=True)
-open(settings + ".tmp", "w").write("\n".join(lines) + "\n")
-os.replace(settings + ".tmp", settings)
+fd, tmp = tempfile.mkstemp(prefix=os.path.basename(settings) + ".",
+                           dir=os.path.dirname(settings))
+with os.fdopen(fd, "w") as f:
+    f.write("\n".join(lines) + "\n")
+os.replace(tmp, settings)
 
 label = raw.get("name")
 print(label if isinstance(label, str) and label.strip()
