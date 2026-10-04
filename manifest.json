@@ -5,7 +5,7 @@
   "version": "0.43.0",
   "author": "Stan Clemance",
   "license": "MIT",
-  "description": "Made for convertibles, works for tablets, built for Omarchy: tablet mode when you fold the screen back or take the keyboard off, rotation that follows the device, a themed on-screen keyboard, and a way to arrange your windows with a finger by dragging them.",
+  "description": "Tablet mode plus an on-screen keyboard (OSK). Inherits Omarchy themes, with keycaps in Mobile, 60%, 75% or 80% tenkeyless (TKL). Auto-resize and auto-rotate via the accelerometer, or pick what you like and lock the orientation. It follows your layout down to dead keys and AltGr. Fold or detach a convertible 2-in-1 and it auto-detects notebook or tablet mode. Use it by touchscreen or by mouse for kiosks. A touch interface resizes, moves and swaps Omarchy tiles. Tested on Yoga and Surface.",
   "kinds": ["bar-widget", "service"],
   "entryPoints": { "barWidget": "BarWidget.qml", "service": "Service.qml" },
   "barWidget": {
