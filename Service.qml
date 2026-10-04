@@ -95,7 +95,7 @@ Item {
     // focus mode.
     modeWriteProc.command = [
       "sh", "-c",
-      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-mode.tmp" && mv -f "$d/ragtop-mode.tmp" "$d/ragtop-mode"',
+      'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-mode.tmp" && mv -f "$d/ragtop-mode.tmp" "$d/ragtop-mode"',
       "--", tablet ? "tablet" : "laptop"
     ]
     modeWriteProc.running = true
@@ -817,7 +817,7 @@ Item {
     running: true
     command: ["sh", "-c",
       'mkdir -p "$HOME/.config/ragtop"; : >> "$HOME/.config/ragtop/settings.conf"; ' +
-      'd="${XDG_RUNTIME_DIR:-/tmp}"; [ -e "$d/ragtop-mode" ] || printf "laptop\n" > "$d/ragtop-mode"']
+      'd="${XDG_RUNTIME_DIR:-}"; [ -z "$d" ] || [ -e "$d/ragtop-mode" ] || printf "laptop\n" > "$d/ragtop-mode"']
   }
 
   // And if it goes missing while running, keep asking: a watcher that has
@@ -1219,7 +1219,7 @@ Item {
     if (!root.keyLabels) return
     layoutWriteProc.command = [
       "sh", "-c",
-      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-layout.json.tmp" && mv -f "$d/ragtop-layout.json.tmp" "$d/ragtop-layout.json"',
+      'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-layout.json.tmp" && mv -f "$d/ragtop-layout.json.tmp" "$d/ragtop-layout.json"',
       "--", JSON.stringify(root.keyLabels)
     ]
     layoutWriteProc.running = true
@@ -2186,7 +2186,7 @@ Item {
   function writeStyleForLock() {
     styleWriteProc.command = [
       "sh", "-c",
-      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-style.json.tmp" && mv -f "$d/ragtop-style.json.tmp" "$d/ragtop-style.json"',
+      'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-style.json.tmp" && mv -f "$d/ragtop-style.json.tmp" "$d/ragtop-style.json"',
       "--", JSON.stringify(root.look)
     ]
     styleWriteProc.running = true

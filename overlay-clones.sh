@@ -37,7 +37,7 @@ overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitA
 
 # Bumped whenever the patches below change, so `sync` re-clones a clone that
 # was made by an older Ragtop even though Omarchy's own file hasn't moved.
-patch_revision=3
+patch_revision=4
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 builtin_root="${OMARCHY_PATH:-/usr/share/omarchy}/shell/plugins"
@@ -45,7 +45,12 @@ hook_file="$HOME/.config/omarchy/hooks/post-update.d/ragtop-overlay-sync.hook"
 self="$(realpath "$0")"
 
 # Every patch includes this, which is also how a Ragtop clone is recognised.
-mode_file_view='FileView { id: ragtopMode; property bool tablet: false; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-mode"; watchChanges: true; printErrors: false; onFileChanged: reload(); onLoaded: tablet = text().trim() === "tablet"; onLoadFailed: tablet = false }'
+# With no XDG_RUNTIME_DIR it reads nothing and stays in laptop mode. It used
+# to fall back to /tmp, where any local user can create ragtop-mode first and
+# so decide how the password prompt and the lock screen take focus.
+mode_file_view='FileView { id: ragtopMode; property bool tablet: false; path: Quickshell.env("XDG_RUNTIME_DIR") ? Quickshell.env("XDG_RUNTIME_DIR") + "/ragtop-mode" : ""; watchChanges: true; printErrors: false; onFileChanged: reload(); onLoaded: tablet = text().trim() === "tablet"; onLoadFailed: tablet = false }'
+# What revision 3 and earlier wrote, so their clones are still recognised.
+legacy_mode_file_view='FileView { id: ragtopMode; property bool tablet: false; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-mode"; watchChanges: true; printErrors: false; onFileChanged: reload(); onLoaded: tablet = text().trim() === "tablet"; onLoadFailed: tablet = false }'
 
 stock_focus='    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive'
 patched_focus="    WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
@@ -87,6 +92,9 @@ MENU_APPS
 # clone made by an older Ragtop is still recognised as ours and gets
 # re-patched instead of refused. Revision 2 named an Omarchy version here.
 legacy_menu_apps=${patched_menu_apps/Omarchy 4 builds/Omarchy 4.0.0.alpha builds}
+# Revision 3 and earlier read the mode file with a /tmp fallback.
+legacy_focus=${patched_focus/"$mode_file_view"/"$legacy_mode_file_view"}
+legacy_picker_focus=${patched_picker_focus/"$mode_file_view"/"$legacy_mode_file_view"}
 
 stock_lock_import='import qs.Ui'
 patched_lock_import='import qs.Ui
@@ -106,6 +114,7 @@ patched_lock_view="    $mode_file_view
     }
     BorderSurface {
       id: inputField"
+legacy_lock_view=${patched_lock_view/"$mode_file_view"/"$legacy_mode_file_view"}
 
 # Per-overlay paths and patch (stock/patched text pairs), set by select_overlay.
 # `legacy` holds pairs that only ever get reverted: text this script used to
@@ -117,14 +126,17 @@ select_overlay() {
   legacy=()
   if [[ $name == lock ]]; then
     patch=("$stock_lock_import" "$patched_lock_import" "$stock_lock_view" "$patched_lock_view")
+    legacy=("$stock_lock_view" "$legacy_lock_view")
   elif [[ $name == menu ]]; then
     patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion"
            "$stock_menu_apps" "$patched_menu_apps")
-    legacy=("$stock_menu_apps" "$legacy_menu_apps")
+    legacy=("$stock_menu_apps" "$legacy_menu_apps" "$stock_focus" "$legacy_focus")
   elif [[ $name == image-picker ]]; then
     patch=("$stock_picker_focus" "$patched_picker_focus" "$stock_exclusion" "$patched_exclusion")
+    legacy=("$stock_picker_focus" "$legacy_picker_focus")
   else
     patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion")
+    legacy=("$stock_focus" "$legacy_focus")
   fi
   clone_id="$USER.$name"
   clone_dir="$plugins_dir/$clone_id"

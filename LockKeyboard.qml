@@ -75,7 +75,7 @@ Item {
   }
 
   FileView {
-    path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-layout.json"
+    path: Quickshell.env("XDG_RUNTIME_DIR") ? Quickshell.env("XDG_RUNTIME_DIR") + "/ragtop-layout.json" : ""
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
@@ -336,7 +336,7 @@ Item {
   }
 
   FileView {
-    path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/ragtop-style.json"
+    path: Quickshell.env("XDG_RUNTIME_DIR") ? Quickshell.env("XDG_RUNTIME_DIR") + "/ragtop-style.json" : ""
     watchChanges: true
     printErrors: false
     onFileChanged: reload()

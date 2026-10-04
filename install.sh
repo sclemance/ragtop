@@ -242,7 +242,9 @@ remove_files() {
     find "$config_dir" -mindepth 1 -maxdepth 1 ! -name themes ! -name presets -exec rm -rf {} +
     rmdir "$config_dir" 2>/dev/null || true
   fi
-  rm -f "${XDG_RUNTIME_DIR:-/tmp}"/ragtop-*.json "${XDG_RUNTIME_DIR:-/tmp}/ragtop-mode"
+  if [[ -n ${XDG_RUNTIME_DIR:-} ]]; then
+    rm -f "$XDG_RUNTIME_DIR"/ragtop-*.json "$XDG_RUNTIME_DIR/ragtop-mode"
+  fi
 }
 
 restart_shell() {
