@@ -129,8 +129,16 @@ remove_udev_rule() {
     echo "   left alone (--no-udev)"
     return 0
   fi
+  # The first line `rule` prints is where the rule lives. Only ask for a
+  # password when there is one there to remove.
+  local rule_file
+  rule_file=$("$repo/udev-rule.sh" rule | head -n 1)
+  if [[ ! -e $rule_file ]]; then
+    echo "   not installed, nothing to remove"
+    return 0
+  fi
   echo "   removing the switch access rule needs your password"
-  "$repo/udev-rule.sh" remove && echo "   removed" || warn "couldn't remove it."
+  "$repo/udev-rule.sh" remove >/dev/null && echo "   removed" || warn "couldn't remove it."
 }
 
 # Touch typing in Omarchy's own overlays means running patched clones of them

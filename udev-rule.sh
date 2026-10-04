@@ -67,6 +67,14 @@ case "${1:-}" in
     # stops being applied, but the ACL already on the device stays, so the
     # switch goes on being readable until the machine reboots. Drop it here,
     # or uninstalling only looks like it worked.
+    #
+    # No rule file means nothing of ours to take back: either it was never
+    # installed, or a remove already ran and dropped the access with it. Say
+    # so and stop here, rather than asking for a password to do nothing.
+    if [[ ! -e $rule_file ]]; then
+      echo "not-installed"
+      exit 0
+    fi
     path=$(switch_path)
     as_root '
       [ -f "$1" ] && rm -f "$1"
