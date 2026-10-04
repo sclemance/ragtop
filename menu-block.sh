@@ -17,7 +17,7 @@ case "${1:-}" in
 esac
 
 /usr/bin/python3 - "$1" "$menu_file" <<'EOF'
-import json, os, sys, tomllib
+import json, os, sys, tempfile, tomllib
 action, path = sys.argv[1:]
 # Protocol, not prose. This exact line is how the block is found again in the
 # user's menu file, so an installed Ragtop would stop recognising its own rows
@@ -133,16 +133,30 @@ block = [start] + [f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," fo
 text = open(path).read() if os.path.exists(path) else ""
 lines = text.split("\n")
 
+
+def block_end(i):
+    """Where the block that starts at line i ends. A start with no end after
+    it means the file was edited by hand, and guessing where Ragtop's rows
+    stop could take the user's own rows with them, so stop and say so."""
+    try:
+        return lines.index(end, i)
+    except ValueError:
+        shown = path.replace(os.path.expanduser("~"), "~", 1)
+        sys.exit(f"{shown} has the line that starts Ragtop's settings but not the one "
+                 f"that ends them ({end.strip()}). Put it back after Ragtop's rows, "
+                 f"or delete Ragtop's rows by hand, then run this again.")
+
+
 if action == "check":
     if start not in lines:
         sys.exit(1)
     i = lines.index(start)
-    j = lines.index(end, i)
+    j = block_end(i)
     sys.exit(0 if lines[i:j + 1] == block else 1)
 
 if start in lines:
     i = lines.index(start)
-    j = lines.index(end, i)
+    j = block_end(i)
     del lines[i:j + 1]
     changed = "removed"
 else:
@@ -159,7 +173,21 @@ if action == "add":
     changed = "updated" if changed else "added"
 
 if changed:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    open(path, "w").write("\n".join(lines))
+    # The whole of the user's menu file lives here, not only Ragtop's rows,
+    # so it is written beside itself and renamed into place: a write cut
+    # short leaves the old file whole rather than half of the new one. A
+    # symlinked file (dotfiles) is written through to where it points.
+    real = os.path.realpath(path)
+    os.makedirs(os.path.dirname(real), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".omarchy-menu.", dir=os.path.dirname(real))
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(lines))
+        if os.path.exists(real):
+            os.chmod(tmp, os.stat(real).st_mode & 0o7777)
+        os.replace(tmp, real)
+    except BaseException:
+        os.unlink(tmp)
+        raise
     print(f"   {changed} in {path.replace(os.path.expanduser('~'), '~', 1)}")
 EOF
