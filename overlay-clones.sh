@@ -203,6 +203,12 @@ install_hook() {
   chmod +x "$hook_file"
 }
 
+# Every step checks for itself rather than leaning on set -e. This runs as
+# `install_one || status=1`, and bash switches errexit off for the whole of a
+# function called on the left of ||, so a failed step used to fall through:
+# the progress marker went, "Cloned and patched" was printed, and what was
+# left was an unpatched clone with no marker and no .ragtop-base, which
+# install, sync and remove all then refused as somebody else's.
 install_one() {
   if [[ -d $clone_dir ]] && ! is_patched; then
     if [[ ! -f $progress_file ]]; then
@@ -210,16 +216,26 @@ install_one() {
       return 1
     fi
     # Ours, cloned but never patched, by a run that was cut short. Start over.
-    omarchy plugin remove "$clone_id" --yes >/dev/null
+    omarchy plugin remove "$clone_id" --yes >/dev/null || return 1
   fi
   if is_patched; then
     echo "$clone_id is already patched."
     return
   fi
-  : >"$progress_file"
-  omarchy plugin clone "omarchy.$name" >/dev/null
-  write_base
-  replace "$clone_dir/$entry" apply
+  : >"$progress_file" || return 1
+  if ! omarchy plugin clone "omarchy.$name" >/dev/null; then
+    echo "Couldn't clone omarchy.$name." >&2
+    return 1
+  fi
+  if ! write_base || ! replace "$clone_dir/$entry" apply; then
+    # Usually an Omarchy update that changed the lines the patch looks for.
+    # An unpatched clone is only a stale copy of the built-in, and for the
+    # password prompt and the lock screen a stale copy is the worst thing to
+    # leave running, so take it away and let the built-in stand.
+    echo "Couldn't patch $clone_id, so it was removed and Omarchy's own $name stays in use." >&2
+    omarchy plugin remove "$clone_id" --yes >/dev/null && rm -f "$progress_file"
+    return 1
+  fi
   rm -f "$progress_file"
   echo "Cloned and patched $clone_id."
 }
@@ -228,7 +244,7 @@ sync_one() {
   if ! is_patched; then
     # Nothing to sync unless an earlier run left a clone half-made.
     if [[ -f $progress_file ]]; then
-      install_one >/dev/null
+      install_one >/dev/null || return 1
       echo "Finished an interrupted $clone_id clone."
       synced=1
     fi
@@ -250,8 +266,13 @@ sync_one() {
     notify "Your $name clone has edits of its own, so it wasn't resynced."
     return 1
   fi
-  omarchy plugin remove "$clone_id" --yes >/dev/null
-  install_one >/dev/null
+  omarchy plugin remove "$clone_id" --yes >/dev/null || return 1
+  # Whatever goes wrong from here, install_one leaves either a patched clone or
+  # none, and says which on stderr. Only a patched one has been synced.
+  if ! install_one >/dev/null; then
+    notify "Your $name overlay couldn't be re-patched, so it was removed. Restart the shell to go back to Omarchy's own."
+    return 1
+  fi
   echo "$done_msg"
   synced=1
 }
