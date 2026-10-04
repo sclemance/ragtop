@@ -50,4 +50,4 @@ body:
       description: >
         Setup › Tablet › Diagnostics copies these and the rest of what we
         need. Paste it here, or just name the two versions.
-      placeholder: Ragtop 0.39.0, Omarchy 4.0.4
+      placeholder: Ragtop 0.44.0, Omarchy 4.0.4
