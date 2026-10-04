@@ -21,12 +21,23 @@ typed into. Put it back and everything returns to normal.
 > **[Send a hardware report](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)** &middot;
 > **[Report a bug or share an idea](https://github.com/sclemance/ragtop/issues/new/choose)**
 
+## Quick start
+
+```bash
+omarchy pkg add iio-sensor-proxy python-pywayland
+omarchy plugin add https://github.com/sclemance/ragtop.git --enable
+```
+
+Setup opens in the shell by itself. Follow it, then fold the screen back or
+take the keyboard off. The rest of this page is the detail:
+[Install](#install) covers the options and the terminal installer.
+
 Two more documents sit beside this one. **[THEMING.md](THEMING.md)** is every
 field a keyboard theme may set. **[ARCHITECTURE.md](ARCHITECTURE.md)** is how
 Ragtop works underneath: the layer surfaces, the hardware it reads, and how
 it types.
 
-**Jump to:** [How it looks](#how-it-looks) &middot;
+**Jump to:** [Quick start](#quick-start) &middot; [How it looks](#how-it-looks) &middot;
 [Will it work on mine?](#which-tablets) &middot; [Features](#features) &middot;
 [Install](#install) &middot; [The keyboard](#the-keyboard) &middot;
 [Tiling mode](#tiling-mode-preview) &middot; [Settings](#settings) &middot;
