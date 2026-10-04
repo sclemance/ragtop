@@ -100,7 +100,10 @@ case "${1:-}" in
         esac
       fi
       exit 0
-    ' "$rule_file" "$path" "${USER:-$(id -un)}"
+    ' "$rule_file" "$path" "$(id -un)"
+    # The account from id, not $USER: this name goes to setfacl as root, and
+    # the environment is anybody's to set, so it could name someone else's
+    # access to take away.
     ;;
   *)
     echo "Usage: $0 status|rule|install|remove" >&2; exit 2 ;;
