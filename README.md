@@ -375,7 +375,9 @@ and reaches all of it.
 **75%** is the compressed one: a function row on top and one more column hard
 against the right of the main block, no gap, which is the whole idea. Sixteen
 units. Arrows in the bottom row, Del, Home, PgUp, PgDn and End down the right.
-It has no room for a Menu key, so the tiling key holds it.
+It has no room for a Menu key, so the tiling key holds it. Right of the space
+bar are three keys of one unit, right Alt, **Fn** and tiling, as on a physical
+75%.
 
 The function row on both of these is drawn shorter than a row of letters, the
 way the mobile board's extra row is, because it is the same class of key: one
@@ -421,6 +423,12 @@ in the same place on every row and the clusters line up down the edge. If your
 layout turns out not to have some key, the block stretches back to fifteen
 units by its own ends rather than handing the width to a nav key.
 
+**On all three, digits and punctuation print their shifted character in the corner of the
+key**, `!` on the `1`, `+` on the `=`, `<` on the `,` and `:` on the `;`, and
+holding the key types it without a trip down to Shift. With Shift on it is
+the other way round, and the corner gives the plain one back. Letters keep
+their corner for AltGr, since a letter's other level is only its capital.
+
 The 60% board is drawn ANSI shaped whatever your layout. An ISO board's tall
 Enter is a keycap shape and nothing on a screen you tap is better for
 reproducing it. What an ISO layout does get is its extra key beside the left
@@ -451,13 +459,24 @@ the caps change to say what they do, so there is nothing to memorise:
 
 ```
         F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12  Del
-                          PgUp  Up   PgDn
-                    Home  Left  Down Right  End
+                          PgUp  Up   PgDn  PrtSc ScrLk Pause
+                    Home  Left  Down Right  End   Ins
                                         tiling -> Menu
 ```
 
+PrtSc, ScrLk and Pause are on `P`, `[` and `]` and Insert is on `'`, which is
+where a Poker keeps them and the nearest thing a 60% has to a convention.
+
 The arrows are an inverted T rather than a row of four, because a finger aims
 by shape even when the key says what it is.
+
+The 75% has an Fn as well, and a much smaller layer, because it already has
+its function row and its arrows. It reaches only what that board still lacks,
+down the column on the right edge where a physical 75% keeps it:
+
+```
+Del -> Ins    Home -> PrtSc    PgUp -> ScrLk    PgDn -> Pause    tiling -> Menu
+```
 
 **Tiling mode is a tap on every real board**, in the place a full keyboard
 keeps its right Super, for the same reason Fn takes that key on the 60%. The
@@ -477,7 +496,9 @@ well, and does.
   again, however long you take over it. **Shift is the exception on a board
   that has a Caps key**, where it only ever latches: locking is what Caps is
   for, and one keyboard offering two ways to do one thing is one too many.
-  Tapping Shift while Caps holds it still lets go.
+  Caps capitalises letters and nothing else, as it does on a physical board:
+  digits stay digits, shortcuts go out without a Shift on them, and Shift
+  under Caps types a small letter.
 - **Your layout's letters:** the letter keys follow the active Hyprland
   layout, and the space bar shows its name. **Hold the space bar** to switch
   to another of the layouts you have configured in Hyprland, if you have

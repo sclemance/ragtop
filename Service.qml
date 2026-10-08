@@ -2604,7 +2604,8 @@ Item {
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {
       return JSON.stringify({ visible: root.oskVisible,
-                              page: keyboard.page, mods: keyboard.mods })
+                              page: keyboard.page, mods: keyboard.mods,
+                              caps: keyboard.caps })
     }
     function pickerState(): string {
       return JSON.stringify({ open: root.pickerOpen, patched: root.pickerPatched,
