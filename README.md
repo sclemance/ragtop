@@ -892,6 +892,35 @@ What turning one on means:
   interfere with your session in other ways, but it's the one to think about
   before turning on.
 
+### Overlays that share a window
+
+Omarchy 4.0.4 draws each overlay in a window of its own. Later Omarchy
+(checked at commit `7cc6a55`) draws the menu and the emoji, clipboard and
+image pickers in one shared kind of window. The password prompt and the lock
+screen are as they were.
+
+Ragtop patches both. For the four that changed, the lines it needs are no
+longer in the overlay but in the shared window, which every other overlay in
+Omarchy uses too, so Ragtop leaves it alone. The clone gets a patched copy of
+that window to itself, `RagtopOverlayWindow.qml` inside the clone's folder,
+and Omarchy's file is never written to. Three things follow from that:
+
+- **The copy counts as part of the clone.** If you edit it, the clone is
+  yours and Ragtop won't replace or remove it, the same as any other edit.
+  If Omarchy changes its shared window, the clone is re-cloned, the same as
+  when the overlay itself changes.
+- **An opening overlay holds the keyboard for a moment.** In tablet mode each
+  open asks for the keyboard exclusively for 75 milliseconds and then lets
+  go, so that a tap can reach the on-screen keyboard. That is what Omarchy's
+  own bar panels do, and where the number is from.
+- **It appears as soon as the screen's scale is known.** Omarchy holds an
+  overlay back until it fills the whole screen. Above the keyboard it never
+  does, so in tablet mode the clone doesn't wait for that.
+
+Ragtop only patches what it recognises. If Omarchy rewrites an overlay or the
+shared window in a way it hasn't seen, the clone is removed, Omarchy's own
+overlay stays in use, and `./ragtop overlay status` shows it as not installed.
+
 ### The menu's Apps list
 
 Omarchy 4 (checked on 4.0.4) doesn't give a third-party menu plugin its
