@@ -310,6 +310,83 @@ new_edited_clone_survives_a_shared_window_change() {
   assert_contains "$(calls)" "notify -g 󰌌 Ragtop Your menu clone has edits of its own, so it wasn't resynced."
 }
 
+# --- What Ragtop's service is told -----------------------------------------
+
+everything_in_the_sandbox() { (cd "$sandbox" && find home run omarchy -printf '%p %s %T@\n' | LC_ALL=C sort); }
+
+# Omarchy's four shared-window overlays as omacom/omarchy#13193 has them.
+give_omarchy_cooperative_focus() {
+  local o
+  for o in "${shared_windows[@]}"; do
+    sed -i '/^  OverlayWindow {$/{n;s/$/\n    cooperativeFocus: !!root.shell \&\& root.shell.overlaysCooperativeFocus === true/}' \
+      "$sandbox/omarchy/shell/plugins/$o/${entry[$o]}"
+  done
+}
+shell_json() { mkdir -p "$sandbox/home/.config/omarchy"; echo "$1" >"$sandbox/home/.config/omarchy/shell.json"; }
+
+tappable_names_ragtops_clones() {
+  local before
+  for tree in "$old_omarchy" "$new_omarchy"; do
+    make_sandbox "$tree"
+    clones tappable
+    assert_rc 0
+    assert_equal "$out" "" "tappable with nothing installed"
+    clones install menu polkit image-picker lock
+    before=$(everything_in_the_sandbox)
+    clones tappable
+    assert_rc 0
+    assert_equal "$out" $'menu\npolkit\nimage-picker'
+    assert_equal "$(everything_in_the_sandbox)" "$before" "the sandbox after asking"
+  done
+}
+
+tappable_names_omarchys_cooperative_overlays() {
+  make_sandbox "$new_omarchy"
+  give_omarchy_cooperative_focus
+
+  # Off unless shell.json says so, in so many words.
+  clones tappable
+  assert_equal "$out" "" "tappable with no shell.json"
+  shell_json '{"version": 1}'
+  clones tappable
+  assert_equal "$out" "" "tappable with the setting absent"
+  shell_json '{"overlays": {"cooperativeFocus": false}}'
+  clones tappable
+  assert_equal "$out" "" "tappable with the setting off"
+  shell_json '{"overlays": {"cooperativeFocus": "true"}}'
+  clones tappable
+  assert_equal "$out" "" "tappable with the setting a string"
+  shell_json 'not json'
+  clones tappable
+  assert_rc 0
+  assert_equal "$out" "" "tappable with a shell.json that does not parse"
+
+  # On: the four that opt in, and not the password prompt, which does not.
+  shell_json '{"overlays": {"cooperativeFocus": true}}'
+  clones tappable
+  assert_rc 0
+  assert_equal "$out" $'menu\nemojis\nclipboard\nimage-picker'
+
+  # On an Omarchy without it the setting alone means nothing.
+  switch_omarchy "$new_omarchy"
+  clones tappable
+  assert_equal "$out" "" "tappable on an Omarchy with no cooperative focus"
+  give_omarchy_cooperative_focus
+
+  # Somebody else's clone stands in for the built-in and is not vouched for.
+  sandboxed omarchy plugin clone omarchy.emojis >/dev/null
+  clones tappable
+  assert_equal "$out" $'menu\nclipboard\nimage-picker'
+  # Ragtop's own counts whatever the setting says.
+  shell_json '{"version": 1}'
+  clones install menu
+  clones tappable
+  assert_equal "$out" "menu"
+}
+
+run_test "tappable: names Ragtop's clones, on both Omarchys, and writes nothing" tappable_names_ragtops_clones
+run_test "tappable: names Omarchy's own overlays only where they cooperate and the setting is on" tappable_names_omarchys_cooperative_overlays
+
 # --- Shapes nobody has read ------------------------------------------------
 #
 # A clone Ragtop cannot patch with confidence is worse than none: it is a

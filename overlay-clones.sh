@@ -36,8 +36,9 @@
 # The polkit and lock clones keep the authentication capability: Omarchy
 # stamps a clone with its source's capabilities via clonedFrom.
 #
-# Usage: overlay-clones.sh [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit|image-picker|lock ...]
+# Usage: overlay-clones.sh [install|sync|remove|status|installed|tappable] [menu|emojis|clipboard|polkit|image-picker|lock ...]
 # `installed` succeeds only if every named overlay has a Ragtop clone.
+# `tappable` is for Ragtop's service: see tappable_one.
 #
 # Tested by tests/overlay-clones-test.sh. Run tests/run.
 set -euo pipefail
@@ -502,6 +503,32 @@ status_one() {
   if is_patched && ! clone_is_ours; then echo "$name: note: the clone has edits besides Ragtop's"; fi
 }
 
+# For Ragtop's service, which raises the on-screen keyboard with an overlay
+# and offers the picker its nav strip: prints the name of each overlay that
+# lets a touch through to a surface above it, so that doing either is any
+# use. Reads only.
+#
+# A Ragtop clone does. So does Omarchy's own overlay once it has the
+# cooperative focus proposed in omacom/omarchy#13193, which an overlay opts
+# into in its entry file and the user turns on in shell.json. Any other clone
+# in the overlay's place is somebody else's and is not vouched for. The lock
+# screen has no surface above it to reach.
+cooperative_focus_on() {
+  /usr/bin/python3 - "$HOME/.config/omarchy/shell.json" <<'EOF' 2>/dev/null
+import json, sys
+overlays = json.load(open(sys.argv[1])).get("overlays")
+sys.exit(0 if isinstance(overlays, dict) and overlays.get("cooperativeFocus") is True else 1)
+EOF
+}
+tappable_one() {
+  [[ $name != lock ]] || return 0
+  if [[ -e $clone_dir || -L $clone_dir ]]; then
+    if is_patched; then echo "$name"; fi
+  elif grep -qs '^    cooperativeFocus: ' "$builtin_dir/$entry" && cooperative_focus_on; then
+    echo "$name"
+  fi
+}
+
 command="${1:-install}"
 shift || true
 
@@ -527,7 +554,8 @@ for o in "${selected[@]}"; do
     remove) remove_one || status=1 ;;
     status) status_one ;;
     installed) is_patched || status=1 ;;
-    *) echo "Usage: $0 [install|sync|remove|status|installed] [menu|emojis|clipboard|polkit|image-picker|lock ...]" >&2; exit 2 ;;
+    tappable) tappable_one ;;
+    *) echo "Usage: $0 [install|sync|remove|status|installed|tappable] [menu|emojis|clipboard|polkit|image-picker|lock ...]" >&2; exit 2 ;;
   esac
 done
 

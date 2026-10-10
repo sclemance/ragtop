@@ -978,10 +978,11 @@ Item {
     onTriggered: overlaySyncProc.running = true
   }
 
-  // Namespaces of overlays patched by overlay-clones.sh. An open overlay
-  // covers the bar, so the keyboard is brought up with it. With a stock
-  // overlay taps on the keyboard would only close it, so only patched ones
-  // count.
+  // Namespaces of the overlays a touch can get past to the keyboard: the
+  // ones patched by overlay-clones.sh, and Omarchy's own where it has
+  // cooperative focus and that is turned on. An open overlay covers the bar,
+  // so the keyboard is brought up with it. With any other overlay taps on the
+  // keyboard would only close it, so only these count.
   property var patchedOverlays: []
   property var openOverlays: []
   property bool oskShownForOverlay: false
@@ -989,22 +990,21 @@ Item {
   // Omarchy's theme and background pickers are both its image picker, whose
   // surface is named for what it does rather than for the plugin.
   readonly property string pickerNamespace: "omarchy-image-selector"
-  // Whether the picker runs as a Ragtop clone, which is what makes the nav
-  // strip tappable at all. See PickerNav.qml.
+  // Whether the picker is one of those, which is what makes the nav strip
+  // tappable at all. See PickerNav.qml.
   property bool pickerPatched: false
 
   Process {
     id: patchCheckProc
-    command: ["sh", "-c",
-      'for p in menu:Menu emojis:Emojis clipboard:Clipboard polkit:PolkitAgent; do ' +
-      'grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.${p%%:*}/${p#*:}.qml" && echo "omarchy-${p%%:*}"; ' +
-      'done; ' +
-      'grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.image-picker/ImagePicker.qml" && ' +
-      'echo "omarchy-image-selector"; true']
+    // Asked once. Turning cooperative focus on or off in shell.json is
+    // noticed at the next shell restart, as a new clone is.
+    command: ["bash", Qt.resolvedUrl("overlay-clones.sh").toString().replace(/^file:\/\//, ""), "tappable"]
     running: true
     stdout: StdioCollector {
       onStreamFinished: {
-        var found = text.split("\n").filter(function(s) { return s !== "" })
+        var found = text.split("\n").filter(function(s) { return s !== "" }).map(function(name) {
+          return name === "image-picker" ? root.pickerNamespace : "omarchy-" + name
+        })
         root.pickerPatched = found.indexOf(root.pickerNamespace) !== -1
         // The picker is kept out of patchedOverlays: an open overlay brings
         // the keyboard up, and the picker wants it away (see pickerOpen).
