@@ -980,9 +980,9 @@ Item {
 
   // Namespaces of the overlays a touch can get past to the keyboard: the
   // ones patched by overlay-clones.sh, and Omarchy's own where it has
-  // cooperative focus and that is turned on. An open overlay covers the bar,
-  // so the keyboard is brought up with it. With any other overlay taps on the
-  // keyboard would only close it, so only these count.
+  // cooperative focus and nothing has turned that off. An open overlay
+  // covers the bar, so the keyboard is brought up with it. With any other
+  // overlay taps on the keyboard would only close it, so only these count.
   property var patchedOverlays: []
   property var openOverlays: []
   property bool oskShownForOverlay: false

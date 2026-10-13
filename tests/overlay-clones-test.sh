@@ -314,13 +314,26 @@ new_edited_clone_survives_a_shared_window_change() {
 
 everything_in_the_sandbox() { (cd "$sandbox" && find home run omarchy -printf '%p %s %T@\n' | LC_ALL=C sort); }
 
-# Omarchy's four shared-window overlays as omacom/omarchy#13193 has them.
+# Omarchy's four shared-window overlays as omacom/omarchy#13193 first had
+# them: cooperative focus an overlay opts into, off until shell.json asks.
 give_omarchy_cooperative_focus() {
   local o
   for o in "${shared_windows[@]}"; do
     sed -i '/^  OverlayWindow {$/{n;s/$/\n    cooperativeFocus: !!root.shell \&\& root.shell.overlaysCooperativeFocus === true/}' \
       "$sandbox/omarchy/shell/plugins/$o/${entry[$o]}"
   done
+}
+# And as it has them since: the overlay hands the shell's setting on, and the
+# shared window cooperates by itself unless told otherwise.
+give_omarchy_automatic_cooperative_focus() {
+  local o
+  for o in "${shared_windows[@]}"; do
+    sed -i '/^  OverlayWindow {$/{n;s/$/\n    cooperativeFocus: root.shell ? root.shell.overlaysCooperativeFocus : false\n    ownReservedSpace: root.shell ? root.shell.barReservedSpace : [0, 0, 0, 0]/}' \
+      "$sandbox/omarchy/shell/plugins/$o/${entry[$o]}"
+  done
+  sed -i '0,/^  property bool shown: false$/s//&\n  property var cooperativeFocus: false\n  readonly property bool cooperative: cooperativeFocus === true || (cooperativeFocus === "auto" \&\& competingSurface \&\& cooperationSettled)/' \
+    "$sandbox/omarchy/shell/Ui/OverlayWindow.qml"
+  grep -qF 'cooperativeFocus === "auto"' "$sandbox/omarchy/shell/Ui/OverlayWindow.qml" || fail "the fixture's shared window was not given automatic cooperative focus"
 }
 shell_json() { mkdir -p "$sandbox/home/.config/omarchy"; echo "$1" >"$sandbox/home/.config/omarchy/shell.json"; }
 
@@ -385,7 +398,47 @@ tappable_names_omarchys_cooperative_overlays() {
 }
 
 run_test "tappable: names Ragtop's clones, on both Omarchys, and writes nothing" tappable_names_ragtops_clones
+tappable_follows_omarchys_automatic_cooperative_focus() {
+  make_sandbox "$new_omarchy"
+  give_omarchy_automatic_cooperative_focus
+  local four=$'menu\nemojis\nclipboard\nimage-picker'
+
+  # On unless shell.json says false, in so many words. Anything else is what
+  # that Omarchy reads as automatic.
+  clones tappable
+  assert_rc 0
+  assert_equal "$out" "$four" "tappable with no shell.json"
+  shell_json '{"version": 1}'
+  clones tappable
+  assert_equal "$out" "$four" "tappable with the setting absent"
+  shell_json '{"overlays": {"cooperativeFocus": "auto"}}'
+  clones tappable
+  assert_equal "$out" "$four" "tappable with the setting automatic"
+  shell_json '{"overlays": {"cooperativeFocus": "false"}}'
+  clones tappable
+  assert_equal "$out" "$four" "tappable with the setting a string"
+  shell_json 'not json'
+  clones tappable
+  assert_rc 0
+  assert_equal "$out" "$four" "tappable with a shell.json that does not parse"
+  shell_json '{"overlays": {"cooperativeFocus": true}}'
+  clones tappable
+  assert_equal "$out" "$four" "tappable with the setting on"
+
+  shell_json '{"overlays": {"cooperativeFocus": false}}'
+  clones tappable
+  assert_rc 0
+  assert_equal "$out" "" "tappable with the setting off"
+
+  # Somebody else's clone stands in for the built-in and is not vouched for.
+  shell_json '{"version": 1}'
+  sandboxed omarchy plugin clone omarchy.emojis >/dev/null
+  clones tappable
+  assert_equal "$out" $'menu\nclipboard\nimage-picker'
+}
+
 run_test "tappable: names Omarchy's own overlays only where they cooperate and the setting is on" tappable_names_omarchys_cooperative_overlays
+run_test "tappable: names Omarchy's own overlays unless the setting is off, where they cooperate by themselves" tappable_follows_omarchys_automatic_cooperative_focus
 
 # --- Shapes nobody has read ------------------------------------------------
 #

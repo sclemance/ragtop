@@ -510,15 +510,30 @@ status_one() {
 #
 # A Ragtop clone does. So does Omarchy's own overlay once it has the
 # cooperative focus proposed in omacom/omarchy#13193, which an overlay opts
-# into in its entry file and the user turns on in shell.json. Any other clone
-# in the overlay's place is somebody else's and is not vouched for. The lock
-# screen has no surface above it to reach.
-cooperative_focus_on() {
-  /usr/bin/python3 - "$HOME/.config/omarchy/shell.json" <<'EOF' 2>/dev/null
+# into in its entry file. shell.json then has the last word: true turns it
+# on and false turns it off. With neither, that Omarchy decides for itself,
+# and cooperates while something other than its bar reserves part of the
+# screen. Ragtop's keyboard and its handle both do, so it counts. An earlier
+# form of the proposal had no such default and stayed off until asked, and
+# is told apart by its shared window never mentioning "auto".
+#
+# Any other clone in the overlay's place is somebody else's and is not
+# vouched for. The lock screen has no surface above it to reach.
+cooperative_focus_setting() {
+  /usr/bin/python3 - "$HOME/.config/omarchy/shell.json" <<'EOF' 2>/dev/null || true
 import json, sys
 overlays = json.load(open(sys.argv[1])).get("overlays")
-sys.exit(0 if isinstance(overlays, dict) and overlays.get("cooperativeFocus") is True else 1)
+setting = overlays.get("cooperativeFocus") if isinstance(overlays, dict) else None
+print("true" if setting is True else "false" if setting is False else "")
 EOF
+}
+cooperative_focus_is_automatic() { grep -qsF 'cooperativeFocus === "auto"' "$shared_window"; }
+cooperative_focus_on() {
+  case $(cooperative_focus_setting) in
+    true) return 0 ;;
+    false) return 1 ;;
+    *) cooperative_focus_is_automatic ;;
+  esac
 }
 tappable_one() {
   [[ $name != lock ]] || return 0
