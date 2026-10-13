@@ -43,6 +43,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -108,7 +109,9 @@ def hyprland_layout():
         out = subprocess.run(["hyprctl", "getoption", f"input:{name}"],
                              capture_output=True, text=True).stdout
         m = re.search(r"str: (.*)", out)
-        return m.group(1).strip() if m else ""
+        value = m.group(1).strip() if m else ""
+        # Hyprland prints an option nobody has set as this, not as nothing.
+        return "" if value == "[[EMPTY]]" else value
 
     names = {key: option(f"kb_{key}") for key in ("rules", "model", "layout", "variant", "options")}
     active = 0
@@ -677,9 +680,14 @@ def dry_run(log):
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--dry-run":
         return dry_run(sys.argv[2])
-    kb = Keyboard()
-    print("ready", flush=True)
+    kb = None
+    failure = None
+    status = 0
     try:
+        # Starting up is in here too. A keyboard that fails to start has
+        # already connected, so it has to leave by the same door.
+        kb = Keyboard()
+        print("ready", flush=True)
         for line in sys.stdin:
             line = line.rstrip("\n")
             if not line:
@@ -690,19 +698,35 @@ def main():
                 print("ok", flush=True)
             except ValueError as e:
                 print(f"error: {e}", flush=True)
+    except BaseException as e:
+        # Held until the exit below: letting go of it here would free the
+        # half-built keyboard, and its pywayland objects with it.
+        failure = e  # noqa: F841
+        status = 1
+        try:
+            if isinstance(e, SystemExit):
+                if e.code not in (None, 0):
+                    print(e.code, file=sys.stderr, flush=True)
+                else:
+                    status = 0
+            elif not isinstance(e, KeyboardInterrupt):
+                traceback.print_exc()
+        except Exception:
+            pass
     finally:
         try:
             # Never leave a key or modifier stuck down.
-            kb.release_all()
-            kb.vk.destroy()
-            kb.display.roundtrip()
+            if kb is not None:
+                kb.release_all()
+                kb.vk.destroy()
+                kb.display.roundtrip()
             sys.stdout.flush()
         except Exception:
             pass  # e.g. BrokenPipeError: the shell that read us has exited
         # Skip Python's own teardown, whatever happened above: it frees
         # pywayland objects in an order libwayland crashes on. The
         # compositor cleans up after the socket.
-        os._exit(0)
+        os._exit(status)
 
 
 if __name__ == "__main__":
