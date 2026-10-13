@@ -19,6 +19,12 @@ Item {
   property var mods: ({ "shift": "off", "ctrl": "off", "alt": "off", "super": "off",
                        "altgr": "off", "fn": "off" })
   readonly property bool upper: root.mods.shift !== "off"
+  // Caps Lock, which is not Shift held down: it capitalises letters and
+  // leaves everything else alone, so a 4 stays a 4 and Ctrl and C stays Ctrl
+  // and C. It used to be a locked Shift, which made the number row type
+  // !@#$ for as long as it was on. Kept apart from the modifiers because it
+  // is never sent with a key, only read when choosing what a letter types.
+  property bool capsOn: false
   readonly property bool altgrOn: root.mods.altgr !== "off"
 
   // The extra row of desktop keys, then the pages. A key is its character,
@@ -95,11 +101,20 @@ Item {
   // same thing whichever side of the space bar it is on. Everything that
   // acts on a key asks for its role first, so one Shift and the other are
   // one Shift as far as the modifier state is concerned.
-  // What each key becomes while Fn is on. Keyed by position, so it holds for
-  // any board that draws an Fn key. Nothing moves: the slots are the drawn
-  // keys and only their meaning changes, so no key slides out from under a
-  // finger when the layer comes on.
+  // What each key becomes while Fn is on. Keyed by position. Nothing moves:
+  // the slots are the drawn keys and only their meaning changes, so no key
+  // slides out from under a finger when the layer comes on.
   readonly property var fnMap: {
+    // A 75% has its function row and its arrows as keys of their own, so its
+    // layer is only what the board still lacks, and it stays on the column
+    // down the right edge, which is where a physical 75% keeps it. Fn and Del
+    // for Insert is as near a convention as these boards have. The other
+    // three follow in the order a tenkeyless sets them out over its cluster.
+    // The number row and the letters are left alone: turning them into a
+    // second set of keys the board already draws would only take them away.
+    if (root.form === "75")
+      return ({ "delete": "insert", "home": "prtsc", "pgup": "scrlk", "pgdn": "pause",
+                "windows": "menu" })
     // Tiling mode is the tap and the context menu is behind Fn, not the other
     // way round. A tablet has no right click, so Menu is worth having at all,
     // but arranging windows by touch is something you do constantly and Menu
@@ -118,6 +133,15 @@ Item {
     map["AD07"] = "pgup";  map["AD08"] = "up";    map["AD09"] = "pgdn"
     map["AC06"] = "home";  map["AC07"] = "left";  map["AC08"] = "down"
     map["AC09"] = "right"; map["AC10"] = "end"
+    // The keys a tenkeyless keeps over its nav cluster, in the same order,
+    // on the three keys right of the arrows' top row, and Insert beside End.
+    // These are where a Poker keeps them, which is the nearest thing a 60%
+    // has to a convention, and they are the keys the arrows left free.
+    //
+    //                  P      [      ]        PrtSc  ScrLk  Pause
+    //             ;    '                 End  Ins
+    map["AD10"] = "prtsc"; map["AD11"] = "scrlk"; map["AD12"] = "pause"
+    map["AC11"] = "insert"
     return map
   }
   // Whether the board being drawn has an Fn key of its own, read off the keys
@@ -127,9 +151,9 @@ Item {
   })
   // The layer is only ever on where there is a key to turn it off again.
   //
-  // Lock Fn on a 60%, then turn the machine so the board changes to a 75% or
-  // a tenkeyless, and the state used to survive a board that has no Fn key.
-  // Those boards have the same positions the layer remaps, so the number row
+  // Lock Fn on a 60%, then turn the machine so the board changes to a
+  // tenkeyless, and the state used to survive a board that has no Fn key.
+  // That board has the same positions the layer remaps, so the number row
   // stayed F1 to F12 and the letters stayed arrows, with nothing on screen to
   // undo it. Asking whether the key is there costs nothing and makes the
   // state unable to outlive its key.
@@ -357,12 +381,52 @@ Item {
   // because holding it gives back exactly what the position types.
   readonly property var holdGrid: ({ "ESC": "TLDE" })
 
+  // A key's other level, on a real board: ! on the 1, + on the =, < on the
+  // comma and : on the semicolon, or the plain one back again while Shift
+  // is on. Shift is a trip to the far corner and back for one character,
+  // and a hold on the key itself is nearer. It is printed in the cap's
+  // corner so the hold is not a secret. The mobile board has its symbol
+  // pages for this. Read off the keymap like everything else on a real
+  // board, so a French 1 offers the digit and not the &. Not letters: the
+  // other level of a letter is its capital, which is what Shift is for, and
+  // their corner and their card belong to AltGr and the accents (see
+  // isCapitalOf for what counts as one).
+  function shiftLevelOf(key) {
+    if (root.form === "mobile" || root.altgrOn) return ""
+    var lv = root.grid[key]
+    if (!lv || !lv[0] || !lv[1]) return ""
+    if (root.isCapitalOf(lv[1], lv[0])) return ""
+    var other = root.upper ? lv[0] : lv[1]
+    return other && other !== root.charFor(key) ? other : ""
+  }
+
   // Whether the board being drawn has a Caps key of its own. Read off the
   // keys rather than named per form factor, so every real board that gains
   // one gets the same Shift without being listed here.
   readonly property bool hasCapsKey: root.slots.some(function(s) {
     return root.roleOf(s.key) === "caps"
   })
+  // Caps is only ever on where there is a key to turn it off again, and is
+  // dropped when the board loses that key, the same way Fn is.
+  readonly property bool caps: root.hasCapsKey && root.capsOn
+  onHasCapsKeyChanged: if (!root.hasCapsKey) root.capsOn = false
+
+  // Whether one level of a key is the capital of the other, which is what
+  // makes the pair a letter as far as Caps and the corner hints go. Asked of
+  // the pair and not of the plain character alone, because French keeps é
+  // under its 2 and German ß under its ?, and those are letters whose other
+  // level is no capital. The decomposition is for Turkish, whose i
+  // capitalises to İ.
+  function isCapitalOf(big, small) {
+    return !!big && !!small && big !== small && (small.toUpperCase() === big
+      || big.toLowerCase().normalize("NFD")[0] === small)
+  }
+  // Whether a key types the upper of two levels. Shift decides, and on a
+  // letter Caps turns that round, so Shift under Caps is a small letter
+  // again, as it is on a physical board.
+  function raised(low, high) {
+    return root.caps && root.isCapitalOf(high, low) ? !root.upper : root.upper
+  }
 
   // Hold a letter to reach the characters that belong to it, as every phone
   // keyboard does. Ragtop needs it more than most: the letter rows are the
@@ -518,7 +582,7 @@ Item {
   function variantsFor(key) {
     var list = root.variantsOf[key]
     if (!list || list.length === 0) return []
-    return list.map(function(c) { return root.upper ? c.toUpperCase() : c })
+    return list.map(function(c) { return root.upper !== root.caps ? c.toUpperCase() : c })
   }
 
   // What a hold on a key offers: everything behind it, in one card, in the
@@ -541,6 +605,8 @@ Item {
       // A key standing in for a position offers what that position types
       // first, since reaching it is the whole reason the hold is there.
       if (key in root.holdGrid) { add(lv[0]); add(lv[1]) }
+      // The corner's promise comes first, over the key (see shiftLevelOf).
+      add(root.shiftLevelOf(key))
       if (!root.altgrOn) { add(lv[2]); add(lv[3]) }
       root.variantsFor(lv[0]).forEach(add)
       return out.slice(0, root.cardLimit)
@@ -817,7 +883,11 @@ Item {
       // across the block rather than grouped in fours, for the same reason
       // and because a bigger key is worth more here than a familiar gap, but
       // it stops where the block stops so Del sits over the column below it.
-      // There is no room for a Menu key, so the tiling key holds it.
+      // There is no room for a Menu key, so the tiling key holds it. Right
+      // of the space bar is three keys of one unit, right Alt, Fn and then
+      // the key that would be the right Ctrl, which is the tiling key here
+      // as it is on every board. That is the bottom row a physical 75% has,
+      // and it leaves the space bar the 6.25 units a keycap set makes it.
       var fRow = ["ESC"].concat(root.positions("FK", 1, 12))
       rows = [
         [fRow.map(function(k) { return key(k, 15 / fRow.length) }), [key("delete")]],
@@ -825,8 +895,8 @@ Item {
         [mainRows[1], [key("pgup")]],
         [mainRows[2], [key("pgdn")]],
         [shift.concat([key("RTSH", 1.75), key("up")]), [key("end")]],
-        [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.75),
-          key("RALT", 1.25), key("windows", 1.25), key("left"), key("down")],
+        [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
+          key("RALT"), key("FN"), key("windows"), key("left"), key("down")],
          [key("right")]]
       ]
     } else {
@@ -976,13 +1046,15 @@ Item {
 
   // What a cap prints small in its right corner: the character AltGr types
   // on it. A real board reads it off the position, the mobile layout off the
-  // letter.
+  // letter. A real board's digits and punctuation print their other level
+  // there instead, since one corner cannot say two things and that is the
+  // one reached for more. What AltGr types on it is still on the card.
   function hintFor(key) {
     // The layer replaces what a key does, so what it would otherwise reach
     // with AltGr is not what it reaches now.
     if (root.altgrOn || (root.fnOn && (key in root.fnMap))) return ""
     var lv = root.grid[key]
-    return lv ? lv[2] : (root.level3Of[key] || "")
+    return lv ? (root.shiftLevelOf(key) || lv[2]) : (root.level3Of[key] || "")
   }
 
   function shifted(key) {
@@ -1002,10 +1074,10 @@ Item {
     var lv = root.grid[key]
     if (lv) {
       if (root.altgrOn) {
-        var level = root.upper ? (lv[3] || lv[2]) : lv[2]
+        var level = root.raised(lv[2], lv[3]) ? (lv[3] || lv[2]) : lv[2]
         if (level) return level
       }
-      return root.upper ? (lv[1] || lv[0]) : lv[0]
+      return root.raised(lv[0], lv[1]) ? (lv[1] || lv[0]) : lv[0]
     }
     if (root.altgrOn) {
       var deep = root.upper ? (root.level4Of[key] || root.level3Of[key]) : root.level3Of[key]
@@ -1019,9 +1091,8 @@ Item {
   // the keyboard itself is drawn apart from them.
   function kind(key) {
     var role = root.roleOf(root.effectiveKey(key))
-    // Caps Lock holds the keyboard's own Shift, so it is drawn locked when
-    // that is what it has done.
-    if (role === "caps") return root.mods.shift === "locked" ? "locked" : "special"
+    // Caps Lock is drawn locked while it is on.
+    if (role === "caps") return root.caps ? "locked" : "special"
     // Super is the key Omarchy is built around, so at rest it is drawn the
     // way Enter is rather than as another grey modifier. Armed, it drops
     // back to the latched and locked colours, because what it is doing then
@@ -1073,8 +1144,8 @@ Item {
   // Shift is the exception on a board that has a Caps key. Locking is what
   // that key is for, and one keyboard offering two ways to do one thing is
   // one too many, so there Shift only ever latches: off, on for the next
-  // key, off. A tap while it is locked still lets go, because the lock can
-  // only have come from Caps and a second way out of it costs nothing.
+  // key, off. A tap while it is locked still lets go: that lock can only
+  // have come over from the mobile board, which locks Shift by a second tap.
   function tapModifier(name) {
     var state = mods[name]
     if (state === "off") {
@@ -1089,12 +1160,12 @@ Item {
   function press(key) {
     key = root.effectiveKey(key)
     var role = root.roleOf(key)
-    // Caps Lock holds the keyboard's own Shift rather than sending the
-    // keysym. A real Caps Lock sets a state in the compositor that the caps
-    // drawn here cannot see, and a keyboard that types what it shows has to
-    // own that state itself.
+    // Caps Lock is the keyboard's own state rather than the keysym sent on.
+    // A real Caps Lock sets a state in the compositor that the caps drawn
+    // here cannot see, and a keyboard that types what it shows has to own
+    // that state itself.
     if (role === "caps") {
-      root.setMod("shift", root.mods.shift === "locked" ? "off" : "locked")
+      root.capsOn = !root.capsOn
       return
     }
     if (role in mods) { tapModifier(role); return }
@@ -1273,12 +1344,39 @@ Item {
     // finger has the shortest reach to the one nearest it. Layout names are
     // a list rather than a row of keys, so they sit centred on the space bar.
     var from = layouts ? slot.x + (slot.width - total) / 2 : slot.x
+    var y = slot.y - slot.height - root.theme.gap
+    // A key with no row above it has nowhere up for its card to go, and a
+    // card clamped to the top of the keyboard lands on the key itself, which
+    // is under the finger that is holding it: the one place on a touch
+    // screen nobody can read. So that card goes beside its key instead, to
+    // the right where there is room and to the left where there is not, and
+    // then its cells run the other way so the first is still the nearest.
+    // The mobile board's top letters are not this case: they have the short
+    // row above them, and a card of a dozen accents has no side to go to.
+    var beside = !layouts && slot.y - slot.height / 2 < root.popupTop
+      && slot.width + root.theme.gap + total <= room
+    if (beside) {
+      y = slot.y
+      from = slot.x + slot.width + root.theme.gap
+      if (from + total > root.width - root.theme.padding) {
+        from = slot.x - root.theme.gap - total
+        items = items.slice().reverse()
+      }
+    }
     var x = total > room ? (root.width - total) / 2
       : Math.min(Math.max(from, root.theme.padding), root.width - root.theme.padding - total)
     root.popupTravelled = false
+    // The one exception to nothing being chosen: a key whose corner prints
+    // its other level (see shiftLevelOf) opens with that cell chosen, so
+    // holding still and letting go types it, which is all "hold 1 for !"
+    // should take. It is the cell nearest the key, over it or beside it, so
+    // it is the one the finger was aimed at. Not when the card had to be
+    // pushed, for the reason above.
+    var near = beside && from < slot.x ? items.length - 1 : 0
+    var first = !layouts && x === from && items[near] === root.shiftLevelOf(key) ? near : -1
     root.popup = { key: key, kind: layouts ? "layouts" : "chars",
-                   items: items, pointId: root.pendingPoint, index: -1,
-                   x: x, y: Math.max(root.popupTop, slot.y - slot.height - root.theme.gap),
+                   items: items, pointId: root.pendingPoint, index: first, preset: first,
+                   x: x, y: Math.max(root.popupTop, y), beside: beside,
                    cellWidth: cell, cellHeight: slot.height }
   }
 
@@ -1297,6 +1395,11 @@ Item {
     var within = p.kind === "layouts"
       ? (y >= p.y && y <= p.y + p.cellHeight)
       : (y >= p.y - p.cellHeight / 2 && y <= p.y + p.cellHeight + root.theme.gap)
+    // A card beside its key shares a row with it, so being level with the
+    // card is not being on it: the finger still resting on the key is past
+    // the card's end, and that must stay no choice at all rather than be
+    // rounded to the nearest cell.
+    if (within && p.beside && (x < p.x || x > p.x + p.items.length * p.cellWidth)) within = false
     if (within) {
       index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
     }
@@ -1476,6 +1579,10 @@ Item {
   function moved(point) {
     if (root.popup !== null && point.pointId === root.popup.pointId) {
       if (root.travelled(point)) root.popupTravelled = true
+      // A cell chosen for the finger stays chosen until the finger goes
+      // somewhere: it is resting on the key below the card, which selectAt
+      // would read as having left it.
+      if (root.popup.preset !== -1 && !root.popupTravelled) return
       root.selectAt(point.x, point.y)
       return
     }

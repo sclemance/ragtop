@@ -55,8 +55,8 @@ Item {
     id: depsProc
     command: ["sh", "-c",
       'command -v monitor-sensor >/dev/null && echo iio-sensor-proxy; ' +
-      'python3 -c "import pywayland" 2>/dev/null && echo python-pywayland; ' +
-      'python3 -c "import gi" 2>/dev/null && echo python-gobject; ' +
+      '/usr/bin/python3 -c "import pywayland" 2>/dev/null && echo python-pywayland; ' +
+      '/usr/bin/python3 -c "import gi" 2>/dev/null && echo python-gobject; ' +
       'command -v git >/dev/null && echo git; true']
     stdout: StdioCollector {
       onStreamFinished: {

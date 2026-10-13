@@ -158,6 +158,7 @@ must never be translated. Ragtop's protocol strings, all of them:
 | `keyboard-helper.py` stdin/stdout | the commands (`type`, `key`, `down`, `up`, `hold`, `release`, `reload`, `quit`) and the replies `ok`, `error: …`, `labels <json>` |
 | `fcitx-osk-bridge.py` stdout | `show` |
 | `overlay-clones.sh status` | `<name>: installed…`, parsed by `install.sh`'s offer and printed by `ragtop overlay status` |
+| `overlay-clones.sh tappable` | the overlay names it prints, one per line, read by `Service.qml` |
 | `overlay-clones.sh`, `setup-check.sh` | the marker strings they grep for: `id: ragtopMode`, `// Ragtop: tablet settings.` |
 | IPC and layers | the `ragtop` IPC target, its function names, and the `ragtop-keyboard`, `ragtop-keyboard-handle`, `ragtop-picker-nav`, `ragtop-screensaver-catcher` layer namespaces |
 | `ragtop-layout.json`, `ragtop-style.json` | field names and values |

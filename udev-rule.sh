@@ -67,6 +67,14 @@ case "${1:-}" in
     # stops being applied, but the ACL already on the device stays, so the
     # switch goes on being readable until the machine reboots. Drop it here,
     # or uninstalling only looks like it worked.
+    #
+    # No rule file means nothing of ours to take back: either it was never
+    # installed, or a remove already ran and dropped the access with it. Say
+    # so and stop here, rather than asking for a password to do nothing.
+    if [[ ! -e $rule_file ]]; then
+      echo "not-installed"
+      exit 0
+    fi
     path=$(switch_path)
     as_root '
       [ -f "$1" ] && rm -f "$1"
@@ -92,7 +100,10 @@ case "${1:-}" in
         esac
       fi
       exit 0
-    ' "$rule_file" "$path" "${USER:-$(id -un)}"
+    ' "$rule_file" "$path" "$(id -un)"
+    # The account from id, not $USER: this name goes to setfacl as root, and
+    # the environment is anybody's to set, so it could name someone else's
+    # access to take away.
     ;;
   *)
     echo "Usage: $0 status|rule|install|remove" >&2; exit 2 ;;

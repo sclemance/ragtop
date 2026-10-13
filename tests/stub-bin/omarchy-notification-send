@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stands in for omarchy-notification-send in the tests, so nothing under test
+# can put a notification on the real desktop. Records what it was asked to say.
+[[ -z ${STUB_LOG:-} ]] || echo "notify $*" >>"$STUB_LOG"

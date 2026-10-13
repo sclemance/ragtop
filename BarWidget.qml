@@ -27,9 +27,6 @@ BarWidget {
   // not take silence for one: a slate would sit frozen and never turn.
   readonly property bool tabletModeKnown: root.service ? root.service.tabletModeKnown : false
 
-  // PopupCard calls its owner's close() when tapped outside.
-  onTabletModeChanged: if (!root.tabletMode) root.close()
-
   // Always there. Rotation follows the sensor whether or not the machine is
   // in tablet mode, so a screen can start turning while it is still a laptop,
   // and the one control that stops it should not be somewhere you have to

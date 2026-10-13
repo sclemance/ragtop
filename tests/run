@@ -1,0 +1,33 @@
+#!/bin/bash
+# Runs Ragtop's tests: every tests/*-test.sh, or the ones named.
+#
+#   tests/run                       all of them
+#   tests/run overlay-clones        just tests/overlay-clones-test.sh
+#
+# Needs bash, python3, jq and, for the QML tests, the quickshell that Omarchy
+# ships. Nothing here touches ~/.config, the installed Omarchy or the running
+# shell: see lib.sh.
+set -uo pipefail
+
+tests_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+files=()
+if (( $# == 0 )); then
+  files=("$tests_dir"/*-test.sh)
+else
+  for name in "$@"; do files+=("$tests_dir/${name%-test.sh}-test.sh"); done
+fi
+
+# Keeps going after a failing file, so one failure doesn't hide the rest.
+failed=()
+for file in "${files[@]}"; do
+  echo "==> ${file##*/}"
+  bash "$file" || failed+=("${file##*/}")
+done
+
+echo
+if (( ${#failed[@]} > 0 )); then
+  echo "${#failed[@]} of ${#files[@]} test files failed: ${failed[*]}"
+  exit 1
+fi
+echo "All ${#files[@]} test files passed."

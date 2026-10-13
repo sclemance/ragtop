@@ -95,7 +95,7 @@ Item {
     // focus mode.
     modeWriteProc.command = [
       "sh", "-c",
-      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-mode.tmp" && mv -f "$d/ragtop-mode.tmp" "$d/ragtop-mode"',
+      'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-mode.tmp" && mv -f "$d/ragtop-mode.tmp" "$d/ragtop-mode"',
       "--", tablet ? "tablet" : "laptop"
     ]
     modeWriteProc.running = true
@@ -817,7 +817,7 @@ Item {
     running: true
     command: ["sh", "-c",
       'mkdir -p "$HOME/.config/ragtop"; : >> "$HOME/.config/ragtop/settings.conf"; ' +
-      'd="${XDG_RUNTIME_DIR:-/tmp}"; [ -e "$d/ragtop-mode" ] || printf "laptop\n" > "$d/ragtop-mode"']
+      'd="${XDG_RUNTIME_DIR:-}"; [ -z "$d" ] || [ -e "$d/ragtop-mode" ] || printf "laptop\n" > "$d/ragtop-mode"']
   }
 
   // And if it goes missing while running, keep asking: a watcher that has
@@ -886,7 +886,7 @@ Item {
   }
   Process {
     id: focusBridgeProc
-    command: ["python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
+    command: ["/usr/bin/python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
     stdout: SplitParser {
       onRead: function(line) {
         if (line !== "show") return
@@ -978,10 +978,11 @@ Item {
     onTriggered: overlaySyncProc.running = true
   }
 
-  // Namespaces of overlays patched by overlay-clones.sh. An open overlay
-  // covers the bar, so the keyboard is brought up with it. With a stock
-  // overlay taps on the keyboard would only close it, so only patched ones
-  // count.
+  // Namespaces of the overlays a touch can get past to the keyboard: the
+  // ones patched by overlay-clones.sh, and Omarchy's own where it has
+  // cooperative focus and nothing has turned that off. An open overlay
+  // covers the bar, so the keyboard is brought up with it. With any other
+  // overlay taps on the keyboard would only close it, so only these count.
   property var patchedOverlays: []
   property var openOverlays: []
   property bool oskShownForOverlay: false
@@ -989,22 +990,21 @@ Item {
   // Omarchy's theme and background pickers are both its image picker, whose
   // surface is named for what it does rather than for the plugin.
   readonly property string pickerNamespace: "omarchy-image-selector"
-  // Whether the picker runs as a Ragtop clone, which is what makes the nav
-  // strip tappable at all. See PickerNav.qml.
+  // Whether the picker is one of those, which is what makes the nav strip
+  // tappable at all. See PickerNav.qml.
   property bool pickerPatched: false
 
   Process {
     id: patchCheckProc
-    command: ["sh", "-c",
-      'for p in menu:Menu emojis:Emojis clipboard:Clipboard polkit:PolkitAgent; do ' +
-      'grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.${p%%:*}/${p#*:}.qml" && echo "omarchy-${p%%:*}"; ' +
-      'done; ' +
-      'grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.image-picker/ImagePicker.qml" && ' +
-      'echo "omarchy-image-selector"; true']
+    // Asked once. Turning cooperative focus on or off in shell.json is
+    // noticed at the next shell restart, as a new clone is.
+    command: ["bash", Qt.resolvedUrl("overlay-clones.sh").toString().replace(/^file:\/\//, ""), "tappable"]
     running: true
     stdout: StdioCollector {
       onStreamFinished: {
-        var found = text.split("\n").filter(function(s) { return s !== "" })
+        var found = text.split("\n").filter(function(s) { return s !== "" }).map(function(name) {
+          return name === "image-picker" ? root.pickerNamespace : "omarchy-" + name
+        })
         root.pickerPatched = found.indexOf(root.pickerNamespace) !== -1
         // The picker is kept out of patchedOverlays: an open overlay brings
         // the keyboard up, and the picker wants it away (see pickerOpen).
@@ -1156,7 +1156,7 @@ Item {
   }
   Process {
     id: tabletModeProc
-    command: ["python3", Qt.resolvedUrl("tablet-switch.py").toString().replace(/^file:\/\//, ""), root.switchDevice]
+    command: ["/usr/bin/python3", Qt.resolvedUrl("tablet-switch.py").toString().replace(/^file:\/\//, ""), root.switchDevice]
     stdout: SplitParser {
       onRead: function(line) {
         if (line === "tablet" || line === "laptop") root.applySwitchReading(line === "tablet")
@@ -1187,7 +1187,7 @@ Item {
   // Sends its keys: QML can't be a Wayland virtual keyboard itself.
   Process {
     id: keyboardHelper
-    command: ["python3", Qt.resolvedUrl("keyboard-helper.py").toString().replace(/^file:\/\//, "")]
+    command: ["/usr/bin/python3", Qt.resolvedUrl("keyboard-helper.py").toString().replace(/^file:\/\//, "")]
     running: true
     stdinEnabled: true
     stdout: SplitParser {
@@ -1219,7 +1219,7 @@ Item {
     if (!root.keyLabels) return
     layoutWriteProc.command = [
       "sh", "-c",
-      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-layout.json.tmp" && mv -f "$d/ragtop-layout.json.tmp" "$d/ragtop-layout.json"',
+      'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-layout.json.tmp" && mv -f "$d/ragtop-layout.json.tmp" "$d/ragtop-layout.json"',
       "--", JSON.stringify(root.keyLabels)
     ]
     layoutWriteProc.running = true
@@ -2186,7 +2186,7 @@ Item {
   function writeStyleForLock() {
     styleWriteProc.command = [
       "sh", "-c",
-      'd="${XDG_RUNTIME_DIR:-/tmp}" && printf "%s\\n" "$1" > "$d/ragtop-style.json.tmp" && mv -f "$d/ragtop-style.json.tmp" "$d/ragtop-style.json"',
+      'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-style.json.tmp" && mv -f "$d/ragtop-style.json.tmp" "$d/ragtop-style.json"',
       "--", JSON.stringify(root.look)
     ]
     styleWriteProc.running = true
@@ -2604,7 +2604,8 @@ Item {
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {
       return JSON.stringify({ visible: root.oskVisible,
-                              page: keyboard.page, mods: keyboard.mods })
+                              page: keyboard.page, mods: keyboard.mods,
+                              caps: keyboard.caps })
     }
     function pickerState(): string {
       return JSON.stringify({ open: root.pickerOpen, patched: root.pickerPatched,

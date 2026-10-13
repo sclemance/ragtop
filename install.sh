@@ -22,6 +22,7 @@ id="sclemance.ragtop"
 plugins_dir="$HOME/.config/omarchy/plugins"
 plugin_dir="$plugins_dir/$id"
 state_dir="$HOME/.local/state/ragtop"
+config_dir="$HOME/.config/ragtop"
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 
 # Set from the flags. See the usage text.
@@ -41,12 +42,12 @@ menu_block() { "$repo/menu-block.sh" "$1"; }
 
 plugin_enabled() {
   omarchy plugin list --json 2>/dev/null |
-    python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' and p['enabled'] for p in json.load(sys.stdin)) else 1)"
+    /usr/bin/python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' and p['enabled'] for p in json.load(sys.stdin)) else 1)"
 }
 
 plugin_discovered() {
   omarchy plugin list --json 2>/dev/null |
-    python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' for p in json.load(sys.stdin)) else 1)"
+    /usr/bin/python3 -c "import json,sys; sys.exit(0 if any(p['id']=='$id' for p in json.load(sys.stdin)) else 1)"
 }
 
 check_deps() {
@@ -54,8 +55,11 @@ check_deps() {
   local missing=() hints=()
   command -v monitor-sensor >/dev/null || { missing+=(monitor-sensor); hints+=(iio-sensor-proxy); }
   command -v git >/dev/null || { missing+=(git); hints+=(git); }
-  python3 -c "import pywayland" 2>/dev/null || { missing+=(python-pywayland); hints+=(python-pywayland); }
-  python3 -c "import gi" 2>/dev/null || { missing+=(python-gobject); hints+=(python-gobject); }
+  # The system Python by path, here and everywhere Ragtop runs Python: the
+  # packages below are pacman's, installed for /usr/bin/python3 only, and a
+  # mise or pyenv python3 earlier on the PATH would not see them.
+  /usr/bin/python3 -c "import pywayland" 2>/dev/null || { missing+=(python-pywayland); hints+=(python-pywayland); }
+  /usr/bin/python3 -c "import gi" 2>/dev/null || { missing+=(python-gobject); hints+=(python-gobject); }
   for cmd in omarchy omarchy-shell hyprctl gdbus; do
     command -v "$cmd" >/dev/null || die "$cmd not found; Ragtop needs Omarchy 4 with Hyprland."
   done
@@ -98,7 +102,10 @@ offer_udev_rule() {
   rule=$("$repo/udev-rule.sh" rule)
   echo "   Ragtop can install a udev rule giving the logged-in user read access"
   echo "   to switch devices only (tablet mode, lid and headphone jack, never keyboards):"
-  printf '     %s\n' $rule
+  # Quoted and split on newlines only: `rule` prints the file and the rule on
+  # a line each, and unquoted the rule fell apart at every space.
+  local line
+  while IFS= read -r line; do printf '     %s\n' "$line"; done <<<"$rule"
   if (( skip_udev )); then
     echo "   left alone (--no-udev)"
     return 1
@@ -125,8 +132,16 @@ remove_udev_rule() {
     echo "   left alone (--no-udev)"
     return 0
   fi
+  # The first line `rule` prints is where the rule lives. Only ask for a
+  # password when there is one there to remove.
+  local rule_file
+  rule_file=$("$repo/udev-rule.sh" rule | head -n 1)
+  if [[ ! -e $rule_file ]]; then
+    echo "   not installed, nothing to remove"
+    return 0
+  fi
   echo "   removing the switch access rule needs your password"
-  "$repo/udev-rule.sh" remove && echo "   removed" || warn "couldn't remove it."
+  "$repo/udev-rule.sh" remove >/dev/null && echo "   removed" || warn "couldn't remove it."
 }
 
 # Touch typing in Omarchy's own overlays means running patched clones of them
@@ -220,10 +235,19 @@ link_plugin() {
   fi
 }
 
-# Everything Ragtop generates outside its own folder.
+# Everything Ragtop generates outside its own folder. Not the themes and
+# presets under ~/.config/ragtop: those are the user's own work, which Ragtop
+# only reads, and an uninstall is no reason to destroy them. They stay, and
+# the folder with them, until the user removes it.
 remove_files() {
-  rm -rf "$state_dir" "$HOME/.config/ragtop"
-  rm -f "${XDG_RUNTIME_DIR:-/tmp}"/ragtop-*.json "${XDG_RUNTIME_DIR:-/tmp}/ragtop-mode"
+  rm -rf "$state_dir"
+  if [[ -d $config_dir ]]; then
+    find "$config_dir" -mindepth 1 -maxdepth 1 ! -name themes ! -name presets -exec rm -rf {} +
+    rmdir "$config_dir" 2>/dev/null || true
+  fi
+  if [[ -n ${XDG_RUNTIME_DIR:-} ]]; then
+    rm -f "$XDG_RUNTIME_DIR"/ragtop-*.json "$XDG_RUNTIME_DIR/ragtop-mode"
+  fi
 }
 
 restart_shell() {
@@ -301,6 +325,9 @@ uninstall() {
     restart_shell
     # The shell that was running kept writing these until it went down.
     remove_files
+  fi
+  if [[ -d $config_dir ]]; then
+    echo "   kept your own themes in ${config_dir/#$HOME/\~} (delete it if you don't want them)"
   fi
   say "Ragtop removed."
 }

@@ -1,0 +1,21 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import Quickshell.Wayland
+
+// Stands in for an overlay's entry file. overlay-window-test.sh fills in the
+// window below with the one out of a real patched clone, as written, so what
+// is tested is the binding the clone actually has: when the window is shown,
+// when it wants the keyboard, and where it reads tablet mode from. Only what
+// those bindings read from `root` is made up.
+Scope {
+  id: root
+
+  property bool opened: false
+  property bool rowsLoaded: false
+  property bool imagesLoaded: false
+  property alias panel: panel
+
+@WINDOW@
+  }
+}

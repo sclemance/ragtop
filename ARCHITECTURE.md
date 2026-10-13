@@ -287,6 +287,36 @@ post-update hook. The polkit and lock clones keep their authentication
 capability because Omarchy stamps a clone with its source's capabilities via
 `clonedFrom`.
 
+Omarchy has written the overlays two ways. On 4.0.4 each is a `PanelWindow`
+in its entry file. At `7cc6a55` the menu and the three pickers are instances
+of `OverlayWindow`, a component in `qs.Ui`. Either way the surface maps when
+the overlay opens and unmaps when it closes, which is what the service's
+`openlayer` and `closelayer` handling goes by. The patcher tells the two
+apart by the entry file and refuses anything that is neither.
+
+For the second kind the clone gets `RagtopOverlayWindow.qml`, a copy of the
+shared component with the patch in it, and the entry file is changed only to
+name that type and pass it tablet mode. `.ragtop-base` gains a third line,
+the hash of the `OverlayWindow.qml` the copy was made from. That hash is
+what makes the copy part of the clone: `sync` compares it with Omarchy's
+file, and a clone only counts as Ragtop's own if taking the patch back out
+of the copy leaves exactly the file that was hashed.
+
+The copy differs from the per-window patch in two ways:
+
+- **Focus.** Hyprland gives an on-demand layer the keyboard when it maps and
+  not when an already mapped one starts asking, and the image picker maps
+  before its images have loaded and only then asks. So in tablet mode the
+  copy asks exclusively for 75 ms each time it starts wanting the keyboard,
+  then drops to on demand, as Omarchy's `KeyboardPanel` does.
+- **Being seen.** `OverlayWindow` keeps its content transparent until the
+  surface is the size of the whole screen and has the screen's scale. Out of
+  reserved space the surface is never that size, so in tablet mode the copy
+  waits for the scale alone. Without this the overlay would open invisible.
+
+The copy adds an `onBackingWindowVisibleChanged` handler, so a source that
+already has one is refused rather than copied into a window with two.
+
 **The lock screen is different.** A session lock hides every other surface,
 the keyboard included, so there is no way to put Ragtop's keyboard over it.
 The lock clone instead loads `LockKeyboard.qml` directly. That is why there
@@ -382,6 +412,45 @@ Not checked, because they come with the system it needs anyway:
 Rotation, auto-show and the fold switch each degrade on their own. A missing
 piece disables that feature and reports itself in `health`, rather than
 stopping the rest.
+
+## Tests
+
+```
+tests/run                    # everything
+tests/run overlay-clones     # one file: tests/overlay-clones-test.sh
+```
+
+Needs `bash`, `python3`, `jq` and `quickshell`. The tests cover the overlay
+clones, which is the part of Ragtop that breaks when Omarchy changes and
+cannot be checked by looking.
+
+Nothing in them touches the machine they run on. Each test gets a throwaway
+`HOME` and `XDG_RUNTIME_DIR` and an environment built from nothing, so there
+is no `WAYLAND_DISPLAY` or Hyprland socket to find. `omarchy plugin clone`
+and `remove` are stood in for by `tests/stub-bin/omarchy`, which does to the
+filesystem what the real ones do and leaves out the running shell.
+
+| File | What it runs |
+| --- | --- |
+| `overlay-clones-test.sh` | The real `overlay-clones.sh` against copies of two Omarchy trees in `tests/fixtures`: 4.0.4 and `7cc6a55`. Install, status, sync, remove, edited clones, failed patches, moving between the two, shapes it must refuse. |
+| `overlay-window-test.sh` | The window the patcher generates for a clone, loaded by quickshell offscreen: what it asks for closed and open, in laptop and tablet mode, and when it lets its content be seen. |
+
+The QML tests stop where the compositor starts. A `PanelWindow` cannot exist
+without one, so the generated window is loaded with `PanelWindow`, the
+`WlrLayershell` attached object and the `Hyprland` singleton swapped for
+stand-ins that only record what they are told
+(`tests/qml/FakePanelWindow.qml`). They prove what a clone asks
+Hyprland for. Where focus then goes, and what a touch then hits, still has
+to be tried by hand on a tablet.
+
+The fixtures are Omarchy's own files, unmodified, under its MIT licence
+(`tests/fixtures/LICENSE.omarchy`). `emojis.json` is left out for its size;
+the patcher only ever hashes it. When Omarchy changes an overlay, add the new
+tree beside the others rather than replacing one: the old shapes are still
+on people's machines. The one exception so far is the tree from `81145eb`,
+whose shared window stayed mapped between opens. Omarchy dropped that design
+ten days later (#14458) and no release ever carried it, so its fixture and
+the code for it are gone.
 
 ## What shaped the design
 

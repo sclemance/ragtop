@@ -21,12 +21,23 @@ typed into. Put it back and everything returns to normal.
 > **[Send a hardware report](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)** &middot;
 > **[Report a bug or share an idea](https://github.com/sclemance/ragtop/issues/new/choose)**
 
+## Quick start
+
+```bash
+omarchy pkg add iio-sensor-proxy python-pywayland
+omarchy plugin add https://github.com/sclemance/ragtop.git --enable
+```
+
+Setup opens in the shell by itself. Follow it, then fold the screen back or
+take the keyboard off. The rest of this page is the detail:
+[Install](#install) covers the options and the terminal installer.
+
 Two more documents sit beside this one. **[THEMING.md](THEMING.md)** is every
 field a keyboard theme may set. **[ARCHITECTURE.md](ARCHITECTURE.md)** is how
 Ragtop works underneath: the layer surfaces, the hardware it reads, and how
 it types.
 
-**Jump to:** [How it looks](#how-it-looks) &middot;
+**Jump to:** [Quick start](#quick-start) &middot; [How it looks](#how-it-looks) &middot;
 [Will it work on mine?](#which-tablets) &middot; [Features](#features) &middot;
 [Install](#install) &middot; [The keyboard](#the-keyboard) &middot;
 [Tiling mode](#tiling-mode-preview) &middot; [Settings](#settings) &middot;
@@ -364,7 +375,9 @@ and reaches all of it.
 **75%** is the compressed one: a function row on top and one more column hard
 against the right of the main block, no gap, which is the whole idea. Sixteen
 units. Arrows in the bottom row, Del, Home, PgUp, PgDn and End down the right.
-It has no room for a Menu key, so the tiling key holds it.
+It has no room for a Menu key, so the tiling key holds it. Right of the space
+bar are three keys of one unit, right Alt, **Fn** and tiling, as on a physical
+75%.
 
 The function row on both of these is drawn shorter than a row of letters, the
 way the mobile board's extra row is, because it is the same class of key: one
@@ -410,6 +423,12 @@ in the same place on every row and the clusters line up down the edge. If your
 layout turns out not to have some key, the block stretches back to fifteen
 units by its own ends rather than handing the width to a nav key.
 
+**On all three, digits and punctuation print their shifted character in the corner of the
+key**, `!` on the `1`, `+` on the `=`, `<` on the `,` and `:` on the `;`, and
+holding the key types it without a trip down to Shift. With Shift on it is
+the other way round, and the corner gives the plain one back. Letters keep
+their corner for AltGr, since a letter's other level is only its capital.
+
 The 60% board is drawn ANSI shaped whatever your layout. An ISO board's tall
 Enter is a keycap shape and nothing on a screen you tap is better for
 reproducing it. What an ISO layout does get is its extra key beside the left
@@ -440,13 +459,24 @@ the caps change to say what they do, so there is nothing to memorise:
 
 ```
         F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12  Del
-                          PgUp  Up   PgDn
-                    Home  Left  Down Right  End
+                          PgUp  Up   PgDn  PrtSc ScrLk Pause
+                    Home  Left  Down Right  End   Ins
                                         tiling -> Menu
 ```
 
+PrtSc, ScrLk and Pause are on `P`, `[` and `]` and Insert is on `'`, which is
+where a Poker keeps them and the nearest thing a 60% has to a convention.
+
 The arrows are an inverted T rather than a row of four, because a finger aims
 by shape even when the key says what it is.
+
+The 75% has an Fn as well, and a much smaller layer, because it already has
+its function row and its arrows. It reaches only what that board still lacks,
+down the column on the right edge where a physical 75% keeps it:
+
+```
+Del -> Ins    Home -> PrtSc    PgUp -> ScrLk    PgDn -> Pause    tiling -> Menu
+```
 
 **Tiling mode is a tap on every real board**, in the place a full keyboard
 keeps its right Super, for the same reason Fn takes that key on the 60%. The
@@ -466,7 +496,9 @@ well, and does.
   again, however long you take over it. **Shift is the exception on a board
   that has a Caps key**, where it only ever latches: locking is what Caps is
   for, and one keyboard offering two ways to do one thing is one too many.
-  Tapping Shift while Caps holds it still lets go.
+  Caps capitalises letters and nothing else, as it does on a physical board:
+  digits stay digits, shortcuts go out without a Shift on them, and Shift
+  under Caps types a small letter.
 - **Your layout's letters:** the letter keys follow the active Hyprland
   layout, and the space bar shows its name. **Hold the space bar** to switch
   to another of the layouts you have configured in Hyprland, if you have
@@ -860,6 +892,35 @@ What turning one on means:
   interfere with your session in other ways, but it's the one to think about
   before turning on.
 
+### Overlays that share a window
+
+Omarchy 4.0.4 draws each overlay in a window of its own. Later Omarchy
+(checked at commit `7cc6a55`) draws the menu and the emoji, clipboard and
+image pickers in one shared kind of window. The password prompt and the lock
+screen are as they were.
+
+Ragtop patches both. For the four that changed, the lines it needs are no
+longer in the overlay but in the shared window, which every other overlay in
+Omarchy uses too, so Ragtop leaves it alone. The clone gets a patched copy of
+that window to itself, `RagtopOverlayWindow.qml` inside the clone's folder,
+and Omarchy's file is never written to. Three things follow from that:
+
+- **The copy counts as part of the clone.** If you edit it, the clone is
+  yours and Ragtop won't replace or remove it, the same as any other edit.
+  If Omarchy changes its shared window, the clone is re-cloned, the same as
+  when the overlay itself changes.
+- **An opening overlay holds the keyboard for a moment.** In tablet mode each
+  open asks for the keyboard exclusively for 75 milliseconds and then lets
+  go, so that a tap can reach the on-screen keyboard. That is what Omarchy's
+  own bar panels do, and where the number is from.
+- **It appears as soon as the screen's scale is known.** Omarchy holds an
+  overlay back until it fills the whole screen. Above the keyboard it never
+  does, so in tablet mode the clone doesn't wait for that.
+
+Ragtop only patches what it recognises. If Omarchy rewrites an overlay or the
+shared window in a way it hasn't seen, the clone is removed, Omarchy's own
+overlay stays in use, and `./ragtop overlay status` shows it as not installed.
+
 ### The menu's Apps list
 
 Omarchy 4 (checked on 4.0.4) doesn't give a third-party menu plugin its
@@ -1182,6 +1243,10 @@ reaches them through [Fn](#which-board).
 This removes any overlay clones you turned on, Ragtop's rows in the Omarchy
 menu, the switch access rule, Ragtop's settings and generated files, and the
 plugin itself (or unlinks it, if it was linked from a checkout).
+
+Your own themes are kept. Anything in `~/.config/ragtop/themes` (and
+`~/.config/ragtop/presets`, from before 0.39) stays where it is, and the
+uninstaller says so. Delete `~/.config/ragtop` yourself if you don't want them.
 
 ## Language
 

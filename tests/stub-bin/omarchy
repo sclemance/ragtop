@@ -1,0 +1,86 @@
+#!/bin/bash
+# Stands in for `omarchy plugin clone` and `omarchy plugin remove` in the
+# tests. The real ones talk to the running shell (rescan, enable, notify), so
+# they cannot be run in a sandbox, and they would replace the user's own
+# plugins if they were. This does what they do to the filesystem and nothing
+# else, following omarchy-plugin-clone and omarchy-plugin-remove as shipped in
+# Omarchy 4.0.4, which are unchanged at 7cc6a55:
+#
+#   clone   copies the built-in's directory, rewrites its manifest (id, name,
+#           clonedFrom) and refuses a target that already exists
+#   remove  moves the plugin to a hidden timestamped backup beside it
+#
+# STUB_FAIL_CLONE and STUB_FAIL_REMOVE name an overlay whose clone or removal
+# should fail, and STUB_LOG is a file every call is appended to.
+set -euo pipefail
+
+plugins_dir="$HOME/.config/omarchy/plugins"
+
+fail() {
+  echo "omarchy-plugin-$command: $*" >&2
+  exit 1
+}
+
+[[ ${1:-} == plugin ]] || { echo "stub omarchy: only 'plugin' is supported, got: $*" >&2; exit 64; }
+command="${2:-}"
+shift 2
+
+case "$command" in
+clone)
+  source_id="${1:-}"
+  [[ -n $source_id && $# == 1 ]] || fail "clone source is required"
+  name="${source_id#omarchy.}"
+  source_dir="$OMARCHY_PATH/shell/plugins/$name"
+  [[ $source_id == omarchy.* && -f $source_dir/manifest.json ]] || fail "unknown built-in plugin: $source_id"
+  new_id="${USER:-$(id -un)}.$name"
+  target_dir="$plugins_dir/$new_id"
+  [[ ! -e $target_dir && ! -L $target_dir ]] || fail "$target_dir already exists"
+  [[ ${STUB_FAIL_CLONE:-} != "$name" ]] || fail "cloned plugin '$new_id' was not discovered"
+
+  mkdir -p "$plugins_dir"
+  stage=$(mktemp -d "$plugins_dir/.clone.XXXXXX")
+  cp -aL "$source_dir/." "$stage/"
+  jq --arg id "$new_id" --arg name "My $(jq -r '.name // .id' "$stage/manifest.json")" --arg sourceId "$source_id" '
+      .id = $id |
+      .name = $name |
+      if (.barWidget | type) == "object" then .barWidget.displayName = $name else . end |
+      .omarchy = ((if (.omarchy | type) == "object" then .omarchy else {} end) + { clonedFrom: $sourceId }) |
+      del(.omarchy.clonePaths)
+    ' "$stage/manifest.json" >"$stage/manifest.json.tmp"
+  mv "$stage/manifest.json.tmp" "$stage/manifest.json"
+  mv "$stage" "$target_dir"
+  [[ -z ${STUB_LOG:-} ]] || echo "clone $source_id" >>"$STUB_LOG"
+  echo "Cloned $source_id to $target_dir and switched to $new_id"
+  ;;
+remove)
+  id="" yes=0
+  for arg in "$@"; do
+    case "$arg" in
+    --yes | -y) yes=1 ;;
+    -*) fail "unknown remove option: $arg" ;;
+    *) [[ -z $id ]] || fail "unexpected argument: $arg"; id="$arg" ;;
+    esac
+  done
+  [[ -d $plugins_dir ]] || fail "no plugins installed"
+  [[ $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $id != *..* ]] || fail "invalid plugin id '$id'"
+  target="$plugins_dir/$id"
+  [[ -e $target || -L $target ]] || fail "plugin '$id' is not installed"
+  (( yes )) || fail "refusing to continue without confirmation; pass --yes"
+  [[ ${STUB_FAIL_REMOVE:-} != "${id#*.}" ]] || fail "failed to move $target to backup"
+
+  base="$plugins_dir/.${id}.bak.$(date -u +%Y%m%d%H%M%S)"
+  backup="$base"
+  n=1
+  while [[ -e $backup ]]; do
+    backup="${base}-${n}"
+    n=$((n + 1))
+  done
+  mv "$target" "$backup"
+  [[ -z ${STUB_LOG:-} ]] || echo "remove $id" >>"$STUB_LOG"
+  echo "Removed $id. Backup at: $backup"
+  ;;
+*)
+  echo "stub omarchy: unsupported plugin command: $command" >&2
+  exit 64
+  ;;
+esac
