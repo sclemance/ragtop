@@ -76,7 +76,7 @@ MOD_BITS = {"shift": 1 << 0, "lock": 1 << 1, "ctrl": 1 << 2, "alt": 1 << 3,
             "super": 1 << 6, "altgr": 1 << 7}
 MOD_KEYSYMS = {"shift": "Shift_L", "ctrl": "Control_L", "alt": "Alt_L",
                "super": "Super_L", "altgr": "ISO_Level3_Shift"}
-# How xkbcli-how-to-type names the modifiers a level needs.
+# The modifiers a level needs, by the names libxkbcommon gives them.
 HOW_TO_TYPE_MODS = {"Shift": "shift", "Mod5": "altgr", "LevelThree": None, "Lock": "lock"}
 KEYMAP_FORMAT_XKB_V1 = 1
 PRESSED, RELEASED = 1, 0
@@ -123,32 +123,54 @@ def hyprland_layout():
     return names, active
 
 
+_xkbcommon = None
+
+
+def xkbcommon():
+    """libxkbcommon, loaded once, with the signatures used here."""
+    global _xkbcommon
+    if _xkbcommon is not None:
+        return _xkbcommon
+    u32, ptr = ctypes.c_uint32, ctypes.c_void_p
+    lib = ctypes.CDLL(ctypes.util.find_library("xkbcommon"))
+    signatures = {
+        "xkb_context_new": (ptr, [ctypes.c_int]),
+        "xkb_keymap_new_from_string": (ptr, [ptr, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]),
+        "xkb_keymap_unref": (None, [ptr]),
+        "xkb_keymap_key_by_name": (u32, [ptr, ctypes.c_char_p]),
+        "xkb_keymap_key_get_syms_by_level": (ctypes.c_int, [ptr, u32, u32, u32, ctypes.POINTER(ctypes.POINTER(u32))]),
+        "xkb_keysym_to_utf32": (u32, [u32]),
+        "xkb_keysym_get_name": (ctypes.c_int, [u32, ctypes.c_char_p, ctypes.c_size_t]),
+        "xkb_keymap_layout_get_name": (ctypes.c_char_p, [ptr, u32]),
+        "xkb_keymap_num_layouts": (u32, [ptr]),
+        "xkb_utf32_to_keysym": (u32, [u32]),
+        "xkb_keysym_from_name": (u32, [ctypes.c_char_p, ctypes.c_int]),
+        "xkb_keymap_min_keycode": (u32, [ptr]),
+        "xkb_keymap_max_keycode": (u32, [ptr]),
+        "xkb_keymap_key_get_name": (ctypes.c_char_p, [ptr, u32]),
+        "xkb_keymap_num_layouts_for_key": (u32, [ptr, u32]),
+        "xkb_keymap_num_levels_for_key": (u32, [ptr, u32, u32]),
+        "xkb_keymap_key_get_mods_for_level": (ctypes.c_size_t, [ptr, u32, u32, u32, ctypes.POINTER(u32), ctypes.c_size_t]),
+        "xkb_keymap_num_mods": (u32, [ptr]),
+        "xkb_keymap_mod_get_name": (ctypes.c_char_p, [ptr, u32]),
+    }
+    # xkb_keymap_mod_get_mask2 came with virtual modifiers that map onto real
+    # ones. Without it a modifier is its own bit.
+    if hasattr(lib, "xkb_keymap_mod_get_mask2"):
+        signatures["xkb_keymap_mod_get_mask2"] = (u32, [ptr, u32])
+    for name, (restype, argtypes) in signatures.items():
+        fn = getattr(lib, name)
+        fn.restype, fn.argtypes = restype, argtypes
+    _xkbcommon = lib
+    return lib
+
+
 class XkbLabels:
     """What a keymap's keys type, read with libxkbcommon itself."""
 
     def __init__(self):
-        lib = ctypes.CDLL(ctypes.util.find_library("xkbcommon"))
-        lib.xkb_context_new.restype = ctypes.c_void_p
-        lib.xkb_context_new.argtypes = [ctypes.c_int]
-        lib.xkb_keymap_new_from_string.restype = ctypes.c_void_p
-        lib.xkb_keymap_new_from_string.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
-        lib.xkb_keymap_unref.argtypes = [ctypes.c_void_p]
-        lib.xkb_keymap_key_by_name.restype = ctypes.c_uint32
-        lib.xkb_keymap_key_by_name.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-        lib.xkb_keymap_key_get_syms_by_level.restype = ctypes.c_int
-        lib.xkb_keymap_key_get_syms_by_level.argtypes = [
-            ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32,
-            ctypes.POINTER(ctypes.POINTER(ctypes.c_uint32))]
-        lib.xkb_keysym_to_utf32.restype = ctypes.c_uint32
-        lib.xkb_keysym_to_utf32.argtypes = [ctypes.c_uint32]
-        lib.xkb_keysym_get_name.restype = ctypes.c_int
-        lib.xkb_keysym_get_name.argtypes = [ctypes.c_uint32, ctypes.c_char_p, ctypes.c_size_t]
-        lib.xkb_keymap_layout_get_name.restype = ctypes.c_char_p
-        lib.xkb_keymap_layout_get_name.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
-        lib.xkb_keymap_num_layouts.restype = ctypes.c_uint32
-        lib.xkb_keymap_num_layouts.argtypes = [ctypes.c_void_p]
-        self.lib = lib
-        self.context = lib.xkb_context_new(0)
+        self.lib = xkbcommon()
+        self.context = self.lib.xkb_context_new(0)
 
     # The letter rows of a physical keyboard, by xkb key name.
     ROWS = (("AD", 12), ("AC", 11), ("AB", 10))
@@ -426,6 +448,70 @@ class Keymap:
         self.spare = sorted(((name, code - 8) for name, code in codes.items()
                              if code <= MAX_KEYCODE and name not in with_symbols), key=lambda k: k[1])
         self.spare_codes = dict(self.spare)
+        self._index_levels()
+
+    def _index_levels(self):
+        """Every level that types exactly one keysym, by that keysym, read
+        from the keymap in this process. Asking a tool instead put each
+        character on its command line, which any local user can read, and a
+        password typed on this keyboard goes through here."""
+        lib = self.xkb = xkbcommon()
+        context = lib.xkb_context_new(0)
+        keymap = lib.xkb_keymap_new_from_string(context, self.base.encode(), 1, 0)
+        if not keymap:
+            raise RuntimeError("libxkbcommon could not read the keymap")
+        self.compiled = keymap
+        get_mask = getattr(lib, "xkb_keymap_mod_get_mask2", None)
+        self.mod_masks = []
+        for mod in range(lib.xkb_keymap_num_mods(keymap)):
+            name = lib.xkb_keymap_mod_get_name(keymap, mod)
+            mask = get_mask(keymap, mod) if get_mask else 1 << mod
+            self.mod_masks.append(((name or b"").decode(), mask))
+        self.levels = {}
+        syms = ctypes.POINTER(ctypes.c_uint32)()
+        for code in range(lib.xkb_keymap_min_keycode(keymap), lib.xkb_keymap_max_keycode(keymap) + 1):
+            if not lib.xkb_keymap_key_get_name(keymap, code):
+                continue
+            for layout in range(lib.xkb_keymap_num_layouts_for_key(keymap, code)):
+                for level in range(lib.xkb_keymap_num_levels_for_key(keymap, code, layout)):
+                    if lib.xkb_keymap_key_get_syms_by_level(keymap, code, layout, level, ctypes.byref(syms)) == 1:
+                        self.levels.setdefault(syms[0], []).append((code, layout, level))
+
+    def _keysym(self, target, keysym):
+        """The keysym for a character, or for a keysym name, read the way
+        xkbcli-how-to-type reads its argument. 0 for none."""
+        lib = self.xkb
+        if not keysym:
+            codepoint = None
+            if len(target) == 1:
+                codepoint = ord(target)
+            else:
+                raw, bases = (target[2:], (16,)) if target.startswith("U+") else (target, (10, 16))
+                for base in bases:
+                    try:
+                        codepoint = int(raw, base)
+                        break
+                    except ValueError:
+                        pass
+                if codepoint is not None and not 0 <= codepoint <= 0x10FFFF:
+                    codepoint = None
+            if codepoint is not None:
+                return lib.xkb_utf32_to_keysym(codepoint)
+        sym = lib.xkb_keysym_from_name(target.encode(), 0)
+        if not sym and target.isdigit():
+            sym = int(target)
+        return sym
+
+    def _positions(self, sym):
+        """(xkb keycode, layout index, modifier names) for each way to type
+        a keysym, one per modifier combination that reaches its level."""
+        lib, keymap = self.xkb, self.compiled
+        masks = (ctypes.c_uint32 * 100)()
+        for code, layout, level in self.levels.get(sym, ()):
+            count = lib.xkb_keymap_key_get_mods_for_level(keymap, code, layout, level, masks, len(masks))
+            for i in range(count):
+                mask = masks[i]
+                yield code, layout, [name for name, m in self.mod_masks if mask & m == m]
 
     def _section(self, name):
         start = self.base.index(name)
@@ -451,8 +537,6 @@ class Keymap:
         with self.lock:
             if key in self.lookups:
                 return self.lookups[key]
-        cmd = [f"{XKB}/xkbcli-how-to-type", *xkb_args(self.names)] + (["--keysym"] if keysym else []) + [target]
-        out = subprocess.run(cmd, capture_output=True, text=True).stdout.split("=== Access via Compose")[0]
         best = fallback = None
         # A named key like BackSpace, Return or space is the same key in every
         # layout, and how-to-type says so once, under the first one. Asking
@@ -462,15 +546,12 @@ class Keymap:
         # may take a line from any group. A character never may: the same
         # keycode types something else in each group.
         shared = keysym and len(target) > 1
-        for line in out.splitlines():
-            m = re.match(r"\s*(\d+)\s+\S+\s+(\d+)\s+.*?\[\s*(.*?)\s*\]\s*$", line)
-            if not m:
-                continue
-            mods = {HOW_TO_TYPE_MODS.get(x, x.lower()) for x in m.group(3).split()} - {None}
+        for code, layout, names in self._positions(self._keysym(target, keysym)):
+            mods = {HOW_TO_TYPE_MODS.get(x, x.lower()) for x in names} - {None}
             if "lock" in mods:
                 continue  # Caps Lock levels duplicate Shift ones
-            candidate = (int(m.group(1)) - 8, mods)
-            if int(m.group(2)) - 1 == self.group:
+            candidate = (code - 8, mods)
+            if layout == self.group:
                 if best is None or len(mods) < len(best[1]):
                     best = candidate
             elif shared and (fallback is None or len(mods) < len(fallback[1])):
@@ -683,11 +764,13 @@ def main():
     kb = None
     failure = None
     status = 0
+    ready = False
     try:
         # Starting up is in here too. A keyboard that fails to start has
         # already connected, so it has to leave by the same door.
         kb = Keyboard()
         print("ready", flush=True)
+        ready = True
         for line in sys.stdin:
             line = line.rstrip("\n")
             if not line:
@@ -710,7 +793,15 @@ def main():
                 else:
                     status = 0
             elif not isinstance(e, KeyboardInterrupt):
-                traceback.print_exc()
+                if ready:
+                    # Only where, never the message: past "ready" it can
+                    # carry what was being typed, which may be a password,
+                    # and stderr ends up in the journal.
+                    where = traceback.extract_tb(e.__traceback__)[-1]
+                    print(f"{type(e).__name__} at line {where.lineno}, in {where.name}",
+                          file=sys.stderr, flush=True)
+                else:
+                    traceback.print_exc()
         except Exception:
             pass
     finally:
