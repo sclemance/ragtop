@@ -18,7 +18,7 @@ body:
     id: device
     attributes:
       label: Machine and versions
-      placeholder: Surface Book 2 — detachable · Ragtop 0.45.0 · Omarchy 4.0.4
+      placeholder: Surface Book 2 — detachable · Ragtop 0.45.1 · Omarchy 4.0.4
     validations:
       required: true
   - type: textarea
