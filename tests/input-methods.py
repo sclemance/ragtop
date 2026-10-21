@@ -27,6 +27,7 @@ import importlib.util
 import json
 import os
 import queue
+import signal
 import subprocess
 import sys
 import threading
@@ -163,5 +164,37 @@ for step in steps:
 
 bridge.stdin.close()
 bridge.wait(5)
+
+
+def stop_mozc_server():
+    """Mozc's client starts mozc_server as a process of its own, which
+    outlives fcitx5. Left running, it aborts with a core dump when the
+    sandbox holding its socket is deleted, a burst of them per test run in
+    coredumpctl. So this test's own server, the one with this sandbox's
+    HOME, is asked to stop first, and given a moment to."""
+    home = ("HOME=" + os.environ["HOME"]).encode()
+    mine = []
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                if f.read().strip() != "mozc_server":
+                    continue
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                if home in f.read().split(b"\0"):
+                    mine.append(int(pid))
+        except OSError:
+            continue
+    for pid in mine:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for _ in range(50):
+        if not any(os.path.exists(f"/proc/{pid}") for pid in mine):
+            return
+        time.sleep(0.05)
+
+
+stop_mozc_server()
 fcitx.terminate()
 fcitx.wait(5)
