@@ -187,6 +187,15 @@ a_swipe_offers_the_runners_up() {
   assert_contains "$(swiped_lines)" '"world"'
 }
 
+# A path still being drawn is answered as a guess, never as a swipe.
+a_peek_is_only_a_guess() {
+  swipe_words
+  mapfile -t pre < <(swipes hello | sed '2s/^swipe /peek /')
+  suggest "$words"
+  assert_contains "$out" 'peeked ["hello"'
+  assert_lacks "$out" "swiped"
+}
+
 no_keys_no_swipe() {
   swipe_words
   pre=('swipe [[0,0],[100,0]]' 'swipe not json')
@@ -209,4 +218,5 @@ run_test "predictor: a swipe spells the word drawn" a_swipe_spells_its_word
 run_test "predictor: a swipe goes by where it ends, not only by which word is commoner" a_swipe_goes_by_where_it_ends
 run_test "predictor: a swipe offers the runners-up" a_swipe_offers_the_runners_up
 run_test "predictor: with no keys placed, or no path, a swipe spells nothing" no_keys_no_swipe
+run_test "predictor: a path still being drawn is answered as a guess" a_peek_is_only_a_guess
 finish

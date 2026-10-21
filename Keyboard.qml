@@ -1310,6 +1310,7 @@ Item {
     if (root.swipe !== null) {
       root.swipe = null
       trail.requestPaint()
+      root.service.swipeAbandoned()
     }
     if (root.stripTouch !== null) {
       root.stripTouch = null
@@ -1575,6 +1576,11 @@ Item {
   function swipeMoved(p) {
     var w = root.swipe
     if (!w || p.pointId !== w.pointId || root.popup !== null) return false
+    // A point only once the finger has moved a tenth of a key. Touch reports
+    // come many times a second, and a slow swipe sent hundreds of points
+    // that say nothing the next one does not.
+    var last = w.points[w.points.length - 1]
+    if (Math.hypot(p.x - last[0], p.y - last[1]) < root.unit * 0.1) return w.swiping
     w.points.push([p.x, p.y])
     if (!w.swiping) {
       var gone = Math.hypot(p.x - w.points[0][0], p.y - w.points[0][1]) > root.unit * 0.75
@@ -1585,6 +1591,8 @@ Item {
       holdTimer.stop()
     }
     trail.requestPaint()
+    // The strip shows the guess so far (Service.qml, swipeDrawn).
+    root.service.swipeDrawn(w.points.slice())
     return true
   }
 

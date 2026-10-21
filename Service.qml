@@ -1261,6 +1261,25 @@ Item {
   // One command per line. See keyboard-helper.py. Everything typed passes
   // here, which is what makes it the place to follow the word being typed.
   function sendKeys(command) {
+    // BackSpace straight after a swipe takes the whole word back, and the
+    // space after it, as on a phone: a wrong swipe is undone in one tap.
+    // The space a swipe put in front stays, ready for the next one. The
+    // key's release, when it comes, is swallowed: it was never pressed.
+    if (command === "down BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
+      var out = ""
+      for (var i = root.swipeLead.length; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+      keyboardHelper.write(out)
+      root.swipedWord = ""
+      root.autoSpaced = false
+      root.currentWord = ""
+      root.swallowBackSpaceUp = true
+      if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
+      return
+    }
+    if (command === "up BackSpace" && root.swallowBackSpaceUp) {
+      root.swallowBackSpaceUp = false
+      return
+    }
     // Punctuation straight after a space Ragtop put in itself goes before
     // that space, as on a phone: a swiped "test" then a comma is "test, ",
     // not "test ,". A space typed by hand is never moved.
@@ -1279,6 +1298,7 @@ Item {
     if (keyboardHelper.running) keyboardHelper.write(command + "\n")
   }
   readonly property string closingMarks: ".,!?;:"
+  property bool swallowBackSpaceUp: false
   // Whether the last thing typed was a space Ragtop added after a word.
   property bool autoSpaced: false
 
@@ -1448,7 +1468,49 @@ Item {
   // swipe, or a chosen suggestion there is nothing to separate.
   property string swipeLead: ""
   property bool swipeShifted: false
+  // The guess so far, while a finger is still drawing: Keyboard.qml calls
+  // this as the path grows. One guess is asked for at a time, and the next
+  // waits for its answer and then takes the path as it is by then, so a
+  // slow answer is never queued behind others that are already stale.
+  property bool swipeDrawing: false
+  property bool peekPending: false
+  property var peekPath: null
+  function swipeDrawn(points) {
+    if (!root.swipeActive || !predictorProc.running) return
+    root.swipeDrawing = true
+    root.peekPath = points
+    if (!root.peekPending) root.sendPeek()
+  }
+  function sendPeek() {
+    var path = root.peekPath
+    root.peekPath = null
+    if (!path) return
+    root.peekPending = true
+    predictorProc.write("peek " + JSON.stringify(path.map(function(p) {
+      return [Math.round(p[0]), Math.round(p[1])]
+    })) + "\n")
+  }
+  function peeked(words) {
+    root.peekPending = false
+    // A guess that lands after the finger has lifted is already out of date.
+    if (!root.swipeDrawing) return
+    if (words.length > 0)
+      root.setSuggestions("swipe", { items: words.map(function(w) { return { text: w, note: "" } }),
+                                     prev: false, next: false, cursor: 0 })
+    if (root.peekPath) root.sendPeek()
+  }
+  // A swipe that ended without a word, cancelled by a rotation: its guesses
+  // go with it.
+  function swipeAbandoned() {
+    if (!root.swipeDrawing) return
+    root.swipeDrawing = false
+    root.peekPath = null
+    if (root.suggestions.source === "swipe" && root.swipedWord === "")
+      root.setSuggestions("swipe", null)
+  }
   function swipe(points, shifted) {
+    root.swipeDrawing = false
+    root.peekPath = null
     if (!root.swipeActive || !predictorProc.running) return
     root.swipeShifted = shifted
     predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
@@ -1459,7 +1521,12 @@ Item {
     return root.swipeShifted ? word.charAt(0).toUpperCase() + word.slice(1) : word
   }
   function typeSwiped(words) {
-    if (!root.swipeActive || words.length === 0 || !keyboardHelper.running) return
+    if (!root.swipeActive || !keyboardHelper.running) return
+    if (words.length === 0) {
+      // Nothing it could spell: the guesses shown while drawing go too.
+      if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
+      return
+    }
     root.swipeLead = root.currentWord !== "" ? " " : ""
     var word = root.swipeLead + root.capitalised(words[0]) + " "
     keyboardHelper.write("type " + word + "\n")
@@ -1499,6 +1566,10 @@ Item {
           if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
         } else if (line === "missing") {
           root.wordsReady = false
+        } else if (line.startsWith("peeked ")) {
+          var guess
+          try { guess = JSON.parse(line.slice(7)) } catch (e) { root.peekPending = false; return }
+          root.peeked(guess)
         } else if (line.startsWith("swiped ")) {
           var found
           try { found = JSON.parse(line.slice(7)) } catch (e) { return }
@@ -1515,6 +1586,7 @@ Item {
     }
     onRunningChanged: {
       root.asked = []
+      root.peekPending = false
       if (running) root.retryStarted("predict")
       else root.wordsReady = false
     }

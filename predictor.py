@@ -20,12 +20,16 @@ then commands on stdin, one per line:
                       {"unit": key width, "keys": {"q": [x, y], ...}}
   swipe <json>        the path a finger drew across the keys, [[x, y], ...],
                       in the same coordinates
+  peek <json>         the same for a path still being drawn, for the strip
+                      to show the guess so far
   quit
 
 and answers "ready <count>" once the list is read, "missing" when there is
 no list at that path, then "suggest <json>" for each "complete": a list of
 words, most likely first, capitalised the way the typed word was, and
-"swiped <json>" for each "swipe", the words it most likely spelled.
+"swiped <json>" for each "swipe", the words it most likely spelled, and
+"peeked <json>" for each "peek", the same answer under its own name so a
+guess so far is never taken for a finished word.
 
 What is typed arrives here and nowhere else. It is never printed except as
 the suggestions, which only the service reads, and never logged: a word
@@ -341,14 +345,19 @@ class Swipes:
         sampled = resample(path)
         shape = normalised(sampled)
         travelled = path_length(path)
+        # How near the path comes to each key, the same for every word, so
+        # worked out once here rather than once per candidate: per candidate,
+        # it cost time in proportion to the path's points, and a slow finger
+        # gives hundreds. Measured, a 120-point swipe went from 330 ms to a
+        # small part of that.
+        closest = {k: min(math.dist(p, q) for q in path) for k, p in self.keys.items()}
         scored = []
         for a in starts:
             for b in ends:
                 for word in self.ends.get((a, b), ()):
-                    ideal = self.ideal(word)
-                    if any(min(math.dist(k, p) for p in path) > VISIT_SLACK * self.unit
-                           for k in ideal):
+                    if any(closest[c] > VISIT_SLACK * self.unit for c in word if c != "'"):
                         continue
+                    ideal = self.ideal(word)
                     template = resample(ideal)
                     location = mean_distance(sampled, template) / self.unit
                     form = mean_distance(shape, normalised(template))
@@ -384,14 +393,15 @@ def main():
                 swipes.set_keys(json.loads(rest))
             except (ValueError, TypeError, IndexError):
                 pass
-        elif cmd == "swipe":
+        elif cmd in ("swipe", "peek"):
             words = []
             if predictor:
                 try:
                     words = swipes.decode(json.loads(rest))
                 except (ValueError, TypeError):
                     pass
-            print("swiped " + json.dumps(words, ensure_ascii=False), flush=True)
+            reply = "swiped" if cmd == "swipe" else "peeked"
+            print(f"{reply} " + json.dumps(words, ensure_ascii=False), flush=True)
         elif cmd == "rows" and predictor:
             try:
                 predictor.set_rows(json.loads(rest))

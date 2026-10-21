@@ -411,6 +411,18 @@ apart, to and too, its and it's, which is what the runners-up in the strip
 are for. The simulation is not a hand, so the weights are a start rather than
 an answer.
 
+Speed is decided by points, not by words. The simulation drew six points
+between keys, and a real finger reports far more: on the Yoga, a slower
+swipe of a longer word took 400 to 600 ms to settle. How near the path
+comes to each key is the same for every candidate, so it is worked out once
+per swipe, and the keyboard keeps a point only once the finger has moved a
+tenth of a key. A 120-point path went from 330 ms at worst to 45, with the
+same words chosen. While a finger draws, the strip shows the guess so far
+(`peek`, answered as `peeked` so it is never taken for a finished word),
+one guess at a time, each taking the path as it is when the last returns.
+BackSpace straight after a swipe takes the word and its space back in one,
+keeping a space the swipe put in front.
+
 **What turns them off.** A layout whose xkb name is not English (the helper
 now reports `code` in its labels, since the name is translated), a CJK
 engine, and Omarchy's polkit prompt, the one password field Ragtop can see.

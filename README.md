@@ -643,9 +643,10 @@ layout, so `hwlp` offers help. Tap one and it replaces what you typed, with a
 space after it. Suggestions follow your capitals: `Hel` offers Help.
 
 **Swipe typing** lets you draw a word: put a finger on its first letter,
-slide through the others without lifting, and lift on the last. The word is
-typed with a space after it, and the strip offers the runners-up, to tap if
-the first guess was wrong. Words that draw the same path, such as to and
+slide through the others without lifting, and lift on the last. While you
+draw, the strip shows its guess so far. The word is typed with a space after
+it, and the strip offers the runners-up, to tap if the first guess was
+wrong. BackSpace straight after a swipe takes the whole word back. Words that draw the same path, such as to and
 too, or its and it's, can only be told apart there. A tap still types a
 letter, and a hold still opens the accents: a swipe begins only once the
 finger has left its key by most of a key's width and reached another letter.
