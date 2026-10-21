@@ -1,0 +1,172 @@
+import QtQuick
+
+// The band above the keys that offers what a word could be: the kanji for
+// some kana, the hanzi for some pinyin, and later whatever else fills it
+// (Service.qml, suggestions). It only draws. Which item a touch means is
+// asked of it (cellAt), and the keyboard's own touch layer does the asking,
+// the same as for every key, so a finger that comes down here and moves is a
+// scroll and one that lifts where it landed is a choice.
+Item {
+  id: strip
+
+  required property var theme
+  // [{ text, note }]. The note is what kind of thing the text is, drawn
+  // smaller after it: "カタカナ" beside a katakana spelling.
+  property var items: []
+  // The item the input method would take if asked now, -1 for none.
+  property int cursor: -1
+  property bool hasPrev: false
+  property bool hasNext: false
+  // How far the list is scrolled, owned by whoever handles the touches.
+  property real scroll: 0
+  // The cell under a finger: an item's index, prevCell, nextCell, or -1.
+  property int pressedIndex: -1
+  // Shown when there is nothing to choose: which input method is on, since
+  // nothing else on the keyboard is as near the text being written.
+  property string idleText: ""
+
+  readonly property int prevCell: -2
+  readonly property int nextCell: -3
+  readonly property real arrowWidth: Math.round(height * 1.1)
+  readonly property real listLeft: hasPrev ? arrowWidth : 0
+  readonly property real listWidth: width - listLeft - (hasNext ? arrowWidth : 0)
+  readonly property int textSize: Math.max(12, Math.round(height * 0.48))
+  readonly property int noteSize: Math.max(9, Math.round(textSize * 0.55))
+  readonly property real pad: Math.round(height * 0.4)
+
+  FontMetrics { id: textMetrics; font.family: strip.theme.fontFamily; font.pixelSize: strip.textSize }
+  FontMetrics { id: noteMetrics; font.family: strip.theme.fontFamily; font.pixelSize: strip.noteSize }
+
+  // Each item's cell, left to right, as { x, width } within the list. As
+  // wide as its text, and never narrower than it is tall, so a single
+  // character is still something a finger can land on.
+  readonly property var cells: {
+    var out = []
+    var x = 0
+    for (var i = 0; i < strip.items.length; i++) {
+      var item = strip.items[i]
+      var w = textMetrics.advanceWidth(item.text)
+      if (item.note) w += Math.round(strip.pad / 2) + noteMetrics.advanceWidth(item.note)
+      w = Math.max(strip.height, Math.ceil(w) + 2 * strip.pad)
+      out.push({ x: x, width: w })
+      x += w
+    }
+    return out
+  }
+  readonly property real contentWidth: cells.length > 0
+    ? cells[cells.length - 1].x + cells[cells.length - 1].width : 0
+  readonly property real maxScroll: Math.max(0, contentWidth - listWidth)
+
+  // A new list starts at its beginning.
+  onItemsChanged: strip.scroll = 0
+
+  // What a touch at x means.
+  function cellAt(x) {
+    if (strip.hasPrev && x < strip.arrowWidth) return strip.prevCell
+    if (strip.hasNext && x >= strip.width - strip.arrowWidth) return strip.nextCell
+    var at = x - strip.listLeft + strip.scroll
+    for (var i = 0; i < strip.cells.length; i++)
+      if (at >= strip.cells[i].x && at < strip.cells[i].x + strip.cells[i].width) return i
+    return -1
+  }
+
+  function scrollTo(value) { strip.scroll = Math.max(0, Math.min(strip.maxScroll, value)) }
+
+  Text {
+    // Never rich text: see KeyboardKey.qml.
+    textFormat: Text.PlainText
+    visible: strip.items.length === 0
+    anchors.fill: parent
+    horizontalAlignment: Text.AlignHCenter
+    verticalAlignment: Text.AlignVCenter
+    text: strip.idleText
+    color: strip.theme.specialText
+    font.family: strip.theme.fontFamily
+    font.pixelSize: strip.noteSize + 2
+    elide: Text.ElideRight
+  }
+
+  Item {
+    x: strip.listLeft
+    width: strip.listWidth
+    height: strip.height
+    clip: true
+
+    Repeater {
+      model: strip.items
+
+      Item {
+        required property int index
+        required property var modelData
+        readonly property var cell: strip.cells[index] || { x: 0, width: 0 }
+        readonly property bool chosen: index === strip.cursor
+        x: cell.x - strip.scroll
+        width: cell.width
+        height: strip.height
+
+        Rectangle {
+          anchors.fill: parent
+          anchors.margins: Math.round(strip.theme.gap / 2)
+          radius: strip.theme.keyRadius
+          color: strip.pressedIndex === index ? strip.theme.pressedKey
+            : parent.chosen ? strip.theme.specialKey : "transparent"
+        }
+
+        // A hairline between cells, as on a phone, rather than a box round
+        // each: the strip is a list of words, not a row of keys.
+        Rectangle {
+          visible: index > 0
+          width: 1
+          height: Math.round(strip.height * 0.5)
+          anchors.verticalCenter: parent.verticalCenter
+          color: strip.theme.outline
+        }
+
+        Row {
+          anchors.centerIn: parent
+          spacing: Math.round(strip.pad / 2)
+
+          Text {
+            textFormat: Text.PlainText
+            text: modelData.text
+            color: parent.parent.chosen ? strip.theme.accent : strip.theme.text
+            font.family: strip.theme.fontFamily
+            font.pixelSize: strip.textSize
+            anchors.verticalCenter: parent.verticalCenter
+          }
+          Text {
+            textFormat: Text.PlainText
+            visible: !!modelData.note
+            text: modelData.note || ""
+            color: strip.theme.specialText
+            font.family: strip.theme.fontFamily
+            font.pixelSize: strip.noteSize
+            anchors.verticalCenter: parent.verticalCenter
+          }
+        }
+      }
+    }
+  }
+
+  // The input method's own pages, where it has them. Pinyin sends its whole
+  // list at once and has none; that one scrolls.
+  Repeater {
+    model: [{ shown: strip.hasPrev, cell: strip.prevCell, glyph: "‹" },
+            { shown: strip.hasNext, cell: strip.nextCell, glyph: "›" }]
+
+    Text {
+      required property var modelData
+      textFormat: Text.PlainText
+      visible: modelData.shown
+      x: modelData.cell === strip.prevCell ? 0 : strip.width - strip.arrowWidth
+      width: strip.arrowWidth
+      height: strip.height
+      horizontalAlignment: Text.AlignHCenter
+      verticalAlignment: Text.AlignVCenter
+      text: modelData.glyph
+      color: strip.pressedIndex === modelData.cell ? strip.theme.accent : strip.theme.text
+      font.family: strip.theme.fontFamily
+      font.pixelSize: strip.textSize
+    }
+  }
+}

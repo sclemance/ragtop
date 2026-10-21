@@ -42,6 +42,30 @@ Item {
   readonly property var layoutRows: root.service.keyLabels && root.service.keyLabels.rows.length === 3
     ? root.service.keyLabels.rows : fallbackRows
   readonly property string layoutName: root.service.keyLabels ? root.service.keyLabels.name : ""
+  // What the space bar says: the layout, or the input method composing in
+  // the focused field when there is one, since that is what the keys type
+  // now. "あ Mozc" rather than "English (US)" while typing Japanese.
+  function engineName(e) { return e ? (e.label ? e.label + " " : "") + e.title : "" }
+  readonly property string spaceLabel: root.service.imeEngine && root.service.inputMethodsEnabled
+    ? root.engineName(root.service.imeEngine) : root.layoutName
+  // fcitx5's composing engines, offered after the layouts on the space bar's
+  // card. Choosing a layout there leaves the engine as well.
+  readonly property var engineList: root.service.inputMethodsEnabled && Array.isArray(root.service.imeEngines)
+    ? root.service.imeEngines : []
+  readonly property var choiceList: {
+    var layouts = root.layoutList.length > 0 ? root.layoutList : [root.layoutName]
+    return layouts.concat(root.engineList.map(root.engineName))
+  }
+  // Which of choiceList is on.
+  readonly property int activeChoice: {
+    var e = root.service.imeEngine
+    if (e && root.service.inputMethodsEnabled) {
+      for (var i = 0; i < root.engineList.length; i++)
+        if (root.engineList[i].name === e.name)
+          return Math.max(1, root.layoutList.length) + i
+    }
+    return root.activeLayout
+  }
   // Every layout Hyprland has configured, in its order, and which one is on.
   // A hold on the space bar offers the others. Ragtop does not keep a layout
   // of its own, so with one configured there is nothing to offer.
@@ -590,7 +614,7 @@ Item {
   // left, then what AltGr reaches, then the accents, which are the ones
   // that give way when a key has more than the card can hold.
   function holdItems(key) {
-    if (root.roleOf(key) === "space") return root.layoutList.length > 1 ? root.layoutList : []
+    if (root.roleOf(key) === "space") return root.choiceList.length > 1 ? root.choiceList : []
     // A key the layer has taken over is not the key its accents belong to.
     if (root.fnOn && (key in root.fnMap)) return []
     if (!root.isCharacter(key) && !(key in root.holdGrid)) return []
@@ -736,7 +760,8 @@ Item {
     var rows = root.rowHeightsOf(form)
     var h = 0
     rows.forEach(function(f) { h += Math.round(root.keyHeightUncapped * f) })
-    return root.topPadding + h + (rows.length - 1) * root.theme.gap + root.theme.padding
+    var strip = root.stripShown ? Math.round(root.keyHeightUncapped * root.stripFraction) + root.theme.gap : 0
+    return root.topPadding + strip + h + (rows.length - 1) * root.theme.gap + root.theme.padding
   }
 
   // The narrowest a key may get before a layout is not worth drawing. 48 is
@@ -779,6 +804,15 @@ Item {
   // A soft or bordered top edge (Setup › Tablet › Edge) gets its own space
   // above the keys, so it's clear of the first row.
   readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
+
+  // The suggestion strip, between the top edge and the first row, while
+  // there is something to fill it (Service.qml, suggestionsShown). As tall as
+  // the short extra row, give or take: it is read and tapped, not typed on.
+  readonly property bool stripShown: root.service.suggestionsShown === true
+  readonly property real stripFraction: 0.7
+  readonly property real stripHeight: root.stripShown ? Math.round(root.keyHeight * root.stripFraction) : 0
+  // Where the keys begin.
+  readonly property real keysTop: root.topPadding + (root.stripShown ? root.stripHeight + root.theme.gap : 0)
 
   // Keys that hold a width of their own on the top row, whatever else is
   // sharing it. The windows toggle keeps one place and one size on every
@@ -974,7 +1008,7 @@ Item {
   function slotsOf(page) {
     var gap = root.theme.gap
     var out = []
-    var y = root.topPadding
+    var y = root.keysTop
     root.formRows(page).forEach(function(row, i) {
       var total = row.reduce(function(a, e) { return a + e.w }, 0)
       var h = Math.round(root.keyHeight * row[0].h)
@@ -1039,7 +1073,7 @@ Item {
 
   function label(key) {
     var role = root.roleOf(root.effectiveKey(key))
-    if (role === "space") return layoutName
+    if (role === "space") return root.spaceLabel
     if (role in labels) return labels[role]
     return root.charFor(key)
   }
@@ -1273,6 +1307,10 @@ Item {
   // again. The pending hold goes with it, since the key it belongs to is
   // somewhere else now too.
   function cancelTouches() {
+    if (root.stripTouch !== null) {
+      root.stripTouch = null
+      strip.pressedIndex = -1
+    }
     if (root.popup === null && root.pendingPoint === -1) return
     root.popup = null
     holdTimer.stop()
@@ -1424,6 +1462,12 @@ Item {
       return
     }
     if (p.kind === "layouts") {
+      var layouts = Math.max(1, root.layoutList.length)
+      if (p.index >= layouts) {
+        root.service.switchEngine(root.engineList[p.index - layouts].name)
+        return
+      }
+      if (root.service.imeEngine) root.service.leaveEngine()
       if (p.index !== root.activeLayout) root.service.switchLayout(p.index)
       return
     }
@@ -1443,6 +1487,51 @@ Item {
   KeyboardSurface {
     anchors.fill: parent
     theme: root.theme
+  }
+
+  SuggestionStrip {
+    id: strip
+    visible: root.stripShown
+    theme: root.theme
+    x: Math.max(root.theme.padding, root.keysLeft)
+    y: root.topPadding
+    width: Math.min(root.width - root.theme.padding, root.keysRight) - x
+    height: root.stripHeight
+    items: root.service.suggestions.items
+    cursor: root.service.suggestions.cursor
+    hasPrev: root.service.suggestions.prev
+    hasNext: root.service.suggestions.next
+    idleText: root.service.imeEngine ? root.engineName(root.service.imeEngine) : ""
+  }
+
+  // A finger on the strip: { pointId, x, scroll, cell, scrolled }, or null.
+  // It scrolls once it has travelled, and chooses what it landed on if it
+  // lifts without having.
+  property var stripTouch: null
+
+  function stripPressed(p) {
+    var x = p.x - strip.x
+    root.stripTouch = { pointId: p.pointId, x: p.x, scroll: strip.scroll,
+                        cell: strip.cellAt(x), scrolled: false }
+    strip.pressedIndex = root.stripTouch.cell
+  }
+
+  function stripMoved(p) {
+    var t = root.stripTouch
+    if (!t.scrolled && Math.abs(p.x - t.x) < root.unit * 0.3) return
+    t.scrolled = true
+    strip.pressedIndex = -1
+    strip.scrollTo(t.scroll - (p.x - t.x))
+  }
+
+  function stripLifted(p) {
+    var t = root.stripTouch
+    root.stripTouch = null
+    strip.pressedIndex = -1
+    if (t.scrolled || t.cell === -1) return
+    if (t.cell === strip.prevCell) root.service.pageSuggestions(false)
+    else if (t.cell === strip.nextCell) root.service.pageSuggestions(true)
+    else root.service.chooseSuggestion(t.cell)
   }
 
   Repeater {
@@ -1512,7 +1601,7 @@ Item {
         // usually half covered by that finger. "accent" no longer fills,
         // since Enter took it and became an edge, so this takes "locked".
         kind: root.popup && index === root.popup.index ? "locked"
-          : root.popup && root.popup.kind === "layouts" && index === root.activeLayout ? "special"
+          : root.popup && root.popup.kind === "layouts" && index === root.activeChoice ? "special"
           : "normal"
         opaque: true
       }
@@ -1541,6 +1630,13 @@ Item {
       points.forEach(function(p) {
         // While a card is open the other fingers wait their turn.
         if (root.popup !== null) return
+        // Above the first row is the strip's, while it is there. Decided
+        // by where the finger came down, as a key is.
+        if (root.stripShown && root.stripTouch === null
+            && p.y < root.keysTop - root.theme.gap / 2) {
+          root.stripPressed(p)
+          return
+        }
         var key = root.keyAt(p.x, p.y)
         if (key === null) return
         // Another finger arriving settles whatever hold is still waiting:
@@ -1577,6 +1673,10 @@ Item {
   }
 
   function moved(point) {
+    if (root.stripTouch !== null && point.pointId === root.stripTouch.pointId) {
+      root.stripMoved(point)
+      return
+    }
     if (root.popup !== null && point.pointId === root.popup.pointId) {
       if (root.travelled(point)) root.popupTravelled = true
       // A cell chosen for the finger stays chosen until the finger goes
@@ -1596,7 +1696,9 @@ Item {
     var next = Object.assign({}, root.held)
     var lifted = []
     points.forEach(function(p) {
-      if (root.popup !== null && p.pointId === root.popup.pointId) {
+      if (root.stripTouch !== null && p.pointId === root.stripTouch.pointId) {
+        root.stripLifted(p)
+      } else if (root.popup !== null && p.pointId === root.popup.pointId) {
         root.choosePopup()
       } else if (p.pointId === root.pendingPoint) {
         var key = root.pendingKey

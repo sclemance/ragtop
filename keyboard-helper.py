@@ -16,6 +16,7 @@ commands on stdin, one per line:
   up <keysym>                 release a held key and its modifiers
   hold <mod> / release <mod>  sticky modifiers, applied to later keys
   reload                      re-read Hyprland's layouts, e.g. after a switch
+  route fcitx | wayland       where keys go: see FcitxRoute
   quit
 
 At startup and after each reload it also prints "labels <json>": the active
@@ -583,6 +584,46 @@ class Keymap:
             self.lookup(ch)
 
 
+class FcitxRoute:
+    """Keys sent through fcitx5's on-screen keyboard interface rather than
+    as a Wayland keyboard.
+
+    While a composing input method is on, Mozc or Pinyin, fcitx5 hands its
+    candidates to the on-screen keyboard only as long as it is in on-screen
+    keyboard mode, and the first key it sees from any keyboard device ends
+    that mode. Keys that come through here are the on-screen keyboard's own,
+    so the mode holds and the candidates keep coming (fcitx-osk-bridge.py).
+    A key fcitx5 does not use is passed on to the application by fcitx5
+    itself, through its own virtual keyboard, which is why the real keycode
+    goes with it.
+
+    Shortcuts never come this way: a key with Ctrl, Alt or Super goes as a
+    Wayland key, so Hyprland's bindings see it as they always have."""
+
+    SHORTCUT = {"ctrl", "alt", "super"}
+
+    def __init__(self):
+        from gi.repository import Gio  # only needed once a route is asked for
+        self.gio = Gio
+        self.bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+
+    def key(self, keysym, keycode, mods, release):
+        """Send one press or release. False when fcitx5 could not take it,
+        so the caller sends it the other way instead of losing it."""
+        from gi.repository import GLib
+        state = 0
+        for m in mods:
+            state |= MOD_BITS[m]
+        try:
+            self.bus.call_sync("org.fcitx.Fcitx5", "/virtualkeyboard",
+                               "org.fcitx.Fcitx5.VirtualKeyboardBackend1", "ProcessKeyEvent",
+                               GLib.Variant("(uuubu)", (keysym, keycode, state, release, 0)),
+                               None, self.gio.DBusCallFlags.NO_AUTO_START, 500, None)
+        except GLib.Error:
+            return False
+        return True
+
+
 class Keyboard:
     def __init__(self):
         self.display = Display()
@@ -599,6 +640,8 @@ class Keyboard:
         self.start = time.monotonic()
         self.held = set()     # sticky modifiers
         self.down = {}        # keysym -> (keycode, modifiers) for held keys
+        self.fcitx = None     # a FcitxRoute while keys go through fcitx5
+        self.fcitx_down = {}  # keysym -> (keysym value, keycode, modifiers)
         self.reload()
 
     def _global(self, registry, name, interface, version):
@@ -690,8 +733,28 @@ class Keyboard:
             self._new_device()
         return code, set()
 
+    def _fcitx_press(self, target, keysym, found, mods, release=True):
+        """Press (and by default release) a key through fcitx5, when that is
+        the route and the key is not a shortcut. False when it went nowhere
+        and is still to be sent."""
+        if self.fcitx is None or not found or (mods | self.held) & FcitxRoute.SHORTCUT:
+            return False
+        sym = self.keymap._keysym(target, keysym)
+        code = found[0] + 8  # fcitx5 counts in xkb keycodes, evdev's plus 8
+        mods = mods | self.held
+        if not self.fcitx.key(sym, code, mods, False):
+            return False
+        if release:
+            self.fcitx.key(sym, code, mods, True)
+        else:
+            self.fcitx_down[target] = (sym, code, mods)
+        return True
+
     def type(self, text):
         for ch in text:
+            found = self.keymap.lookup(ch)
+            if found and self._fcitx_press(ch, False, found, set(found[1]) - self.held):
+                continue
             code, mods = self._find(ch, keysym=False)
             mods = set(mods) - self.held
             self._press(code, mods)
@@ -700,25 +763,33 @@ class Keyboard:
     def key(self, keysym, mods):
         code, needed = self._find(keysym, keysym=True)
         mods = set(mods) | needed
+        if self._fcitx_press(keysym, True, (code, needed), mods):
+            return
         self._press(code, mods)
         self._release(code, mods)
 
     def key_down(self, keysym, mods):
-        if keysym in self.down:
+        if keysym in self.down or keysym in self.fcitx_down:
             return
         code, needed = self._find(keysym, keysym=True)
         mods = set(mods) | needed
+        if self._fcitx_press(keysym, True, (code, needed), mods, release=False):
+            return
         self.down[keysym] = (code, mods)
         self._press(code, mods)
 
     def key_up(self, keysym):
+        if keysym in self.fcitx_down:
+            sym, code, mods = self.fcitx_down.pop(keysym)
+            self.fcitx.key(sym, code, mods, True)
+            return
         if keysym not in self.down:
             raise ValueError(f"{keysym} isn't held")
         code, mods = self.down.pop(keysym)
         self._release(code, mods)
 
     def release_all(self):
-        for keysym in list(self.down):
+        for keysym in list(self.fcitx_down) + list(self.down):
             self.key_up(keysym)
         self.held.clear()
         self._send_mods()
@@ -738,6 +809,15 @@ class Keyboard:
         elif cmd in ("hold", "release") and rest in MOD_KEYSYMS:
             (self.held.add if cmd == "hold" else self.held.discard)(rest)
             self._send_mods()
+        elif cmd == "route" and rest in ("fcitx", "wayland"):
+            # A key held down goes up the way it went down.
+            for keysym in list(self.fcitx_down):
+                self.key_up(keysym)
+            try:
+                self.fcitx = FcitxRoute() if rest == "fcitx" else None
+            except Exception as e:
+                self.fcitx = None
+                raise ValueError(f"can't reach fcitx5: {type(e).__name__}")
         elif cmd == "reload":
             self.release_all()
             self.reload()

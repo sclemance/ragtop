@@ -95,6 +95,9 @@ rows = {
     "setup.tablet.auto-show": dict(icon="\U000f030c", label="Auto Keyboard",
         checked=f'"{cmd}" auto-show enabled',
         action=f'"{cmd}" auto-show toggle'),
+    "setup.tablet.input-methods": dict(icon="\U000f030c", label="CJK Choices on Keyboard",
+        checked=f'"{cmd}" input-methods enabled',
+        action=f'"{cmd}" input-methods toggle'),
     # Appearance. A theme writes the settings below, so what the menu
     # shows is always what the keyboard does.
     "setup.tablet.theme": dict(icon="\U000f03d8", label="Theme"),

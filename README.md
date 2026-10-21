@@ -1026,6 +1026,7 @@ the Settings button on the keyboard's own panel opens directly:
 | Turn the screen a quarter turn by hand | n/a | the controls panel, while Screen Rotation is Locked |
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
+| Chinese, Japanese and Korean choices in a strip on the keyboard (see [Chinese, Japanese and Korean](#chinese-japanese-and-korean)) | on | Setup › Tablet › CJK Choices on Keyboard |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key size against the theme's: Automatic, a percentage from 60 to 160, or one of five names | Automatic where you have not set one | the controls panel's slider, or Setup › Tablet › Key Size |
 | Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
@@ -1042,6 +1043,7 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
 `keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
+`input-methods toggle` (or `enable`, `disable`),
 `size-adjust set auto|<60-160>|smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
@@ -1095,9 +1097,10 @@ If tablet mode is never detected:
 True today, and worth saying if you want them gone:
 
 - **No swipe typing.** Keys are tapped one at a time.
-- **No CJK input.** Chinese, Japanese and Korean need an input method engine
-  and somewhere to put the candidates. See [Chinese, Japanese and
-  Korean](#chinese-japanese-and-korean).
+- **Chinese, Japanese and Korean are in beta.** They work through
+  fcitx5's engines, with their choices in a strip above the keys, and have
+  been tested against fixed expectations rather than by anyone who writes
+  them. See [Chinese, Japanese and Korean](#chinese-japanese-and-korean).
 - **No dead keys, on purpose.** Accents come from holding a letter rather
   than from a dead key followed by one. A real board still *draws* the dead
   keys your layout has, in their own places and showing the mark they apply,
@@ -1179,13 +1182,13 @@ reaches them through [Fn](#which-board).
   but a row of digits you can turn on, the way a phone keyboard offers one,
   is the honest fix.
 - **Spellcheck and word prediction**, through Hunspell for the dictionary and
-  fcitx5 for the plumbing. The unsolved part is not the spelling, it is where
-  the suggestions would live on a screen whose bottom third is already keys.
-  Hunspell would have to be installed separately, and the setting would appear
-  only once it is, the way the rotation setting does with `iio-sensor-proxy`.
-- **Chinese, Japanese and Korean.** See [Chinese, Japanese and
-  Korean](#chinese-japanese-and-korean), which has the research and the one
-  test that decides the size of it.
+  fcitx5 for the plumbing. Where the suggestions would live is answered now:
+  the strip that carries Chinese, Japanese and Korean choices above the keys
+  is built to take other sources, and this would be one. Hunspell would have
+  to be installed separately, and the setting would appear only once it is,
+  the way the rotation setting does with `iio-sensor-proxy`.
+- **Swipe typing**, drawing a word across the keys. The same strip is where
+  its guesses would go. The hard half is the guessing.
 - **Whether a folded machine silences its own keyboard.** On a Lenovo Yoga the
   built-in keyboard and touchpad appear to stop reporting when the screen is
   folded back, which would mean Ragtop has nothing to do. Whether that is the
@@ -1265,35 +1268,65 @@ drawn rather than written.
 
 ### Chinese, Japanese and Korean
 
-Not supported yet, and worth considering rather than ruled out.
+**Beta.** Typing these goes through fcitx5, the input method Omarchy
+already runs, with one of its engines: Mozc for Japanese, Pinyin (in
+`fcitx5-chinese-addons`) or Chewing for Chinese, Hangul for Korean. Install
+the engine, add it in fcitx5's configuration, and Ragtop takes it from there:
 
-The pipeline is already pointing the right way. Ragtop does not put characters
-into applications, it sends key events through a Wayland virtual keyboard, and
-every one of those passes through fcitx5, which is the thing that turns nihao
-into a list of candidates. Ragtop sits upstream of the input method rather
-than competing with it, so with an engine installed the typing half may
-already work. Nobody has tested it.
+```
+sudo pacman -S fcitx5-mozc            # or fcitx5-chinese-addons, fcitx5-hangul
+```
 
-What is missing is most likely the candidates rather than the keys. fcitx5
-draws its candidate list near the text cursor, and on a 768 pixel screen with
-a keyboard reserving the bottom third, a popup you have to reach with a finger
-is the part that will not fit. That is a layout problem, not an input one.
+While an engine is on in the field you are typing into, the space bar says
+so, for example **あ Mozc** in place of the layout's name, and a strip opens
+above the keys with the engine's choices for what you have typed. Tap one to
+take it. Drag along the strip to see more, and where the engine has pages,
+the arrows at the ends turn them. The strip keeps its place while the engine
+is on, so the keyboard does not change height at every word.
 
-If Ragtop has to draw the candidates itself, fcitx5 already has the protocol
-for it. Its `VirtualKeyboardBackend1` interface offers `SelectCandidate`,
-`NextPage` and `PrevPage`, which is the vocabulary a touch keyboard needs.
-The unsolved piece is how an on-screen keyboard receives the candidate text,
-since that interface has no signals carrying it.
+Each engine works its own way, and Ragtop leaves it to:
 
-So this is a day of testing to find out which of those it is, and then either
-a paragraph of documentation or a candidate strip. If you would use it, say so
-in an issue. Interest is what would move it.
+- **Japanese (Mozc):** type romaji. `nihongo` shows にほんご, and the strip
+  offers 日本語 among others. Tapping a choice settles it and **Return**
+  commits it. **Space** converts too, and Space again moves to the next
+  choice.
+- **Chinese (Pinyin):** type pinyin. `nihao` offers 你好, and tapping a
+  choice commits it at once.
+- **Korean (Hangul):** type on the two-set layout. Syllables build up as you
+  type and commit by themselves, so the strip stays empty. `gksrmf` is 한글.
 
-Two things are already decided about how it would look. Switching engines
-would be Ctrl+Space and not Super+Space, because Omarchy has Super+Space
-already. And the characters need a font that carries them, which on Arch means
-something like `noto-fonts-cjk`. Ragtop would say so rather than render
-boxes, the way setup already does for its other dependencies.
+The word being written appears underlined in the field itself, as with a
+physical keyboard. That needs the application to support input methods.
+Most GTK and Qt applications and terminals do. Chromium does only when it is
+started with `--enable-wayland-ime`, which Omarchy does not set: add it to
+`~/.config/chromium-flags.conf`.
+
+To switch, hold the space bar: the card that lists your keyboard layouts also
+lists the engines in your fcitx5 group. Choosing a layout there leaves the
+engine. fcitx5's own Ctrl+Space works too, from Ragtop's Ctrl and Space.
+fcitx5 keeps the choice per application, so a terminal can stay in English
+while a browser writes Japanese.
+
+The characters need a font that has them. On Arch that is `noto-fonts-cjk`.
+
+**Turning it off.** `ragtop input-methods disable`, or Setup › Tablet ›
+CJK Choices on Keyboard. The keys then go to fcitx5 the way a physical
+keyboard's do, as they did before this existed, and fcitx5 shows its own
+list of choices beside the text. That list pops up where the text is, and
+it disappears when touched, which is why the strip exists.
+
+How it works, for the curious: fcitx5 gives its choices to an on-screen
+keyboard only while that keyboard's keys go through fcitx5's own interface
+for one, and a key from any other keyboard ends it. So while an engine is
+on, Ragtop sends its keys that way, and shortcuts with Ctrl, Alt or Super
+still go as ordinary keys so Hyprland's bindings see them. See
+[ARCHITECTURE.md](ARCHITECTURE.md#input-methods).
+
+This was built and tested by someone who does not read these languages,
+against fixed expectations (`nihongo` is 日本語) rather than a feel for
+what is right. If you write Chinese, Japanese or Korean and something is
+wrong or awkward, please say so in an issue. That is the feedback that
+would make it good.
 
 ## Upgrading from an older Ragtop
 
