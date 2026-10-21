@@ -1097,7 +1097,7 @@ If tablet mode is never detected:
 True today, and worth saying if you want them gone:
 
 - **No swipe typing.** Keys are tapped one at a time.
-- **Chinese, Japanese and Korean are a preview.** They work through
+- **Chinese, Japanese and Korean are in beta.** They work through
   fcitx5's engines, with their choices in a strip above the keys, and have
   been tested against fixed expectations rather than by anyone who writes
   them. See [Chinese, Japanese and Korean](#chinese-japanese-and-korean).
@@ -1268,7 +1268,7 @@ drawn rather than written.
 
 ### Chinese, Japanese and Korean
 
-**Preview.** Typing these goes through fcitx5, the input method Omarchy
+**Beta.** Typing these goes through fcitx5, the input method Omarchy
 already runs, with one of its engines: Mozc for Japanese, Pinyin (in
 `fcitx5-chinese-addons`) or Chewing for Chinese, Hangul for Korean. Install
 the engine, add it in fcitx5's configuration, and Ragtop takes it from there:
