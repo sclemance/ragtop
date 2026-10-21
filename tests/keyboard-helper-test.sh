@@ -68,7 +68,37 @@ for group in (0, 1):
 1 (16, set()) (3, set()) (28, set())"
 }
 
+# Ergo-L, fr(ergol), puts é and the other accents behind a fifth level whose
+# modifier the helper cannot press. Asked to, it raised a KeyError, which is
+# not what it catches, and died with the word half typed. Such a way of
+# typing a character is skipped, and with none left the character goes
+# through a spare key, as é does on a US layout.
+unpressable_modifiers_are_skipped() {
+  helper '
+km = h.Keymap(dict(US, layout="us,fr", variant=",ergol"), 1)
+for c in "éçàe":
+    found = km.lookup(c)
+    print(c, found if found is None else sorted(found[1] - set(h.MOD_KEYSYMS)))'
+  assert_equal "$out" "é None
+ç None
+à None
+e []"
+}
+
+# xkb lists a key every layout shares, like space, under the first layout
+# only, so on a second one space was not found and went through a spare key,
+# replacing the virtual keyboard in the middle of a word. A key another
+# layout lists is taken when it types the same thing on this one.
+shared_keys_reach_every_layout() {
+  helper '
+km = h.Keymap(dict(US, layout="us,fr"), 1)
+print(km.lookup(" "), km.lookup("a"))'
+  assert_equal "$out" "(57, set()) (16, set())"
+}
+
 run_test "keyboard helper: looking up a character starts no process" lookups_start_no_process
+run_test "keyboard helper: a character needing a modifier it cannot press is not looked up there" unpressable_modifiers_are_skipped
+run_test "keyboard helper: a key every layout shares is found on any of them" shared_keys_reach_every_layout
 run_test "keyboard helper: finds the key and modifiers for a character or keysym" lookups_find_the_key
 run_test "keyboard helper: answers for the active layout, and named keys for any" lookups_follow_the_active_layout
 finish

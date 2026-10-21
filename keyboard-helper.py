@@ -504,15 +504,21 @@ class Keymap:
         return sym
 
     def _positions(self, sym):
-        """(xkb keycode, layout index, modifier names) for each way to type
-        a keysym, one per modifier combination that reaches its level."""
+        """(xkb keycode, layout index, level, modifier names) for each way to
+        type a keysym, one per modifier combination that reaches its level."""
         lib, keymap = self.xkb, self.compiled
         masks = (ctypes.c_uint32 * 100)()
         for code, layout, level in self.levels.get(sym, ()):
             count = lib.xkb_keymap_key_get_mods_for_level(keymap, code, layout, level, masks, len(masks))
             for i in range(count):
                 mask = masks[i]
-                yield code, layout, [name for name, m in self.mod_masks if mask & m == m]
+                yield code, layout, level, [name for name, m in self.mod_masks if mask & m == m]
+
+    def _types_here(self, code, level, sym):
+        """Whether `code` at `level` types `sym` in the active layout too."""
+        syms = ctypes.POINTER(ctypes.c_uint32)()
+        n = self.xkb.xkb_keymap_key_get_syms_by_level(self.compiled, code, self.group, level, ctypes.byref(syms))
+        return n == 1 and syms[0] == sym
 
     def _section(self, name):
         start = self.base.index(name)
@@ -546,16 +552,31 @@ class Keymap:
         # which left every one of those keys dead on a second layout. Those
         # may take a line from any group. A character never may: the same
         # keycode types something else in each group.
+        #
+        # The same goes for any key, named or not, that types the same thing
+        # in the active layout as in the one it is listed under: space is a
+        # character to "type", and on a second layout it was not found, so
+        # it went through a spare key and replaced the virtual keyboard in
+        # the middle of a word.
         shared = keysym and len(target) > 1
-        for code, layout, names in self._positions(self._keysym(target, keysym)):
+        sym = self._keysym(target, keysym)
+        for code, layout, level, names in self._positions(sym):
             mods = {HOW_TO_TYPE_MODS.get(x, x.lower()) for x in names} - {None}
             if "lock" in mods:
                 continue  # Caps Lock levels duplicate Shift ones
+            # A modifier the helper cannot press, such as the fifth level
+            # Ergo-L keeps its accents behind, makes this way of typing it
+            # no way at all. Pressing it raised a KeyError, not the
+            # ValueError the helper catches, and killed it mid-word. With no
+            # other way, the character goes through a spare key instead.
+            if mods - set(MOD_KEYSYMS):
+                continue
             candidate = (code - 8, mods)
             if layout == self.group:
                 if best is None or len(mods) < len(best[1]):
                     best = candidate
-            elif shared and (fallback is None or len(mods) < len(fallback[1])):
+            elif (shared or self._types_here(code, level, sym)) \
+                    and (fallback is None or len(mods) < len(fallback[1])):
                 fallback = candidate
         best = best if best is not None else fallback
         with self.lock:
