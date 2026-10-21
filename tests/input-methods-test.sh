@@ -87,6 +87,20 @@ deactivating_says_so() {
 engine null"
 }
 
+# A key from another keyboard is passed on as a hide, which is how the
+# service learns that the word it was following has been typed over.
+another_keyboard_is_reported() {
+  im other:a
+  assert_contains "$out" "hide"
+}
+
+# Keys through fcitx5's own interface are the on-screen keyboard's, and
+# say nothing of the kind.
+own_keys_are_not_reported() {
+  im bridge:"switch mozc" route:fcitx type:ka
+  assert_lacks "$out" "hide"
+}
+
 # Without the route, keys go the Wayland way and fcitx5 never hears them
 # from here. That is today's behaviour on a plain layout, and stays it.
 wayland_route_is_untouched() {
@@ -115,4 +129,6 @@ run_test "input methods: Korean composes with no candidates at all" korean_needs
 run_test "input methods: a shortcut goes the Wayland way, for Hyprland" shortcuts_stay_wayland
 run_test "input methods: switching back to the layout is reported" deactivating_says_so
 run_test "input methods: the Wayland route is what it was" wayland_route_is_untouched
+run_test "input methods: a key from another keyboard is reported" another_keyboard_is_reported
+run_test "input methods: the keyboard's own keys through fcitx5 are not" own_keys_are_not_reported
 finish

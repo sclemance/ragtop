@@ -374,7 +374,7 @@ keeps the damage to one word. Taking a suggestion sends one BackSpace per
 letter and then the word and a space, which works in any application, input
 method support or not.
 
-**Four rules found on the Yoga, each a bug before it was a rule:**
+**Five rules found on the Yoga, each a bug before it was a rule:**
 
 - *An empty list clears only its own source.* The bridge reports "no
   candidates" after every key on a plain layout, and that wiped the word
@@ -387,6 +387,15 @@ method support or not.
 - *An automatic space moves past punctuation.* The space a swipe or a
   suggestion adds goes after a `. , ! ? ; :` typed straight after it, so
   "test, " and not "test ,". A space typed by hand is never moved.
+- *Another keyboard's key finishes the word.* After a swipe, a physical
+  keyboard typing on left the strip armed: tapping a runner-up, or Ragtop's
+  BackSpace, took back eight characters of someone else's text. fcitx5
+  reports a key from any keyboard device with a hide, which the bridge now
+  passes on, and Ragtop's own keys cause one within moments of being sent,
+  so a hide more than 250 ms after Ragtop last sent a key (`writeKeys`, the
+  one place keys leave) finishes the word: nothing in progress, nothing to
+  take back, the strip cleared. So does leaving tablet mode. This needs the
+  bridge, which runs while auto-show or input methods are on.
 
 **Completion and correction.** Words starting with what was typed, ranked by
 wordfreq's centibel bucket. From three letters, words one edit away too, at a

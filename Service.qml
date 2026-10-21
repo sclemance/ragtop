@@ -896,6 +896,10 @@ Item {
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
+        if (line === "hide") {
+          if (Date.now() - root.lastKeysAt > root.ownHideWithin) root.finishWord()
+          return
+        }
         if (line === "show") {
           root.currentWord = ""
           root.autoShows++
@@ -1268,7 +1272,7 @@ Item {
     if (command === "down BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
       var out = ""
       for (var i = root.swipeLead.length; i < root.swipedWord.length; i++) out += "key BackSpace\n"
-      keyboardHelper.write(out)
+      root.writeKeys(out)
       root.swipedWord = ""
       root.autoSpaced = false
       root.currentWord = ""
@@ -1287,7 +1291,7 @@ Item {
       && root.closingMarks.indexOf(command[5]) !== -1
     if (mark && root.autoSpaced && keyboardHelper.running) {
       root.trackWord(command)
-      keyboardHelper.write("key BackSpace\ntype " + command[5] + " \n")
+      root.writeKeys("key BackSpace\ntype " + command[5] + " \n")
       root.autoSpaced = true
       return
     }
@@ -1295,9 +1299,35 @@ Item {
     // Only something typed counts. A release, a held modifier or a change of
     // route between a word and its full stop types nothing.
     if (/^(type|key|down) /.test(command)) root.autoSpaced = false
-    if (keyboardHelper.running) keyboardHelper.write(command + "\n")
+    if (keyboardHelper.running) root.writeKeys(command + "\n")
   }
   readonly property string closingMarks: ".,!?;:"
+
+  // Every key Ragtop sends goes through here, so it knows when it last
+  // typed: see finishWord.
+  property real lastKeysAt: 0
+  function writeKeys(text) {
+    root.lastKeysAt = Date.now()
+    keyboardHelper.write(text)
+  }
+
+  // The word in progress is over, by a route Ragtop cannot see: another
+  // keyboard typed, or focus left the field. Whatever it had armed to take
+  // back, a swiped word, a word's letters or an automatic space, would now
+  // take back someone else's text, so it is all let go.
+  //
+  // fcitx5 reports any key from a keyboard device with a hide, which the
+  // bridge passes on. Ragtop's own keys cause one too, within moments of
+  // being sent, so a hide that long after Ragtop's last key is somebody
+  // else's.
+  readonly property int ownHideWithin: 250
+  function finishWord() {
+    root.currentWord = ""
+    root.swipedWord = ""
+    root.autoSpaced = false
+    if (root.suggestions.source === "predict" || root.suggestions.source === "swipe")
+      root.setSuggestions(root.suggestions.source, null)
+  }
   property bool swallowBackSpaceUp: false
   // Whether the last thing typed was a space Ragtop added after a word.
   property bool autoSpaced: false
@@ -1440,7 +1470,7 @@ Item {
     if (!item || !keyboardHelper.running || root.currentWord === "") return
     var out = ""
     for (var i = 0; i < root.currentWord.length; i++) out += "key BackSpace\n"
-    keyboardHelper.write(out + "type " + item.text + " \n")
+    root.writeKeys(out + "type " + item.text + " \n")
     root.currentWord = ""
     root.autoSpaced = true
   }
@@ -1529,7 +1559,7 @@ Item {
     }
     root.swipeLead = root.currentWord !== "" ? " " : ""
     var word = root.swipeLead + root.capitalised(words[0]) + " "
-    keyboardHelper.write("type " + word + "\n")
+    root.writeKeys("type " + word + "\n")
     root.currentWord = ""
     root.swipedWord = word
     root.autoSpaced = true
@@ -1542,7 +1572,7 @@ Item {
     var out = ""
     for (var i = 0; i < root.swipedWord.length; i++) out += "key BackSpace\n"
     var word = root.swipeLead + item.text + " "
-    keyboardHelper.write(out + "type " + word + "\n")
+    root.writeKeys(out + "type " + word + "\n")
     root.swipedWord = word
     root.autoSpaced = true
     root.setSuggestions("swipe", { items: root.suggestions.items, prev: false, next: false, cursor: index })
@@ -2067,7 +2097,13 @@ Item {
   }
   // Tablet mode ending takes the mode with it, along with everything else
   // that only makes sense with a screen you are holding.
-  onTabletModeChanged: if (!root.tabletMode) root.closeTiling()
+  onTabletModeChanged: {
+    if (root.tabletMode) return
+    root.closeTiling()
+    // Out of tablet mode the physical keyboard is back, and what it types
+    // Ragtop does not see (finishWord).
+    root.finishWord()
+  }
 
   Process {
     id: tilingClientsProc
