@@ -8,10 +8,12 @@ carries its licence, CC-BY-SA 4.0, with it, and its author asks that it not
 be turned into a plain list that drops the attribution, so it is read as it
 is rather than converted (see read_wordlist).
 
-  predictor.py <wordlist.msgpack.gz>
+  predictor.py <words-dir>             lists at <dir>/<lang>/small_<lang>.msgpack.gz
+  predictor.py <wordlist.msgpack.gz>   one list, as English
 
 then commands on stdin, one per line:
 
+  lang <code>         use that language's list, reading it the first time
   complete <word>     suggestions for a partly typed word
   rows <json>         the active layout's letter rows, [["q", "w", ...], ...],
                       which decide which keys are neighbours (QWERTY until
@@ -24,8 +26,9 @@ then commands on stdin, one per line:
                       to show the guess so far
   quit
 
-and answers "ready <count>" once the list is read, "missing" when there is
-no list at that path, then "suggest <json>" for each "complete": a list of
+and answers "ready <count>" once a single list is read, "ready <lang>
+<count>" or "missing <lang>" for each "lang" (the service offers to fetch a
+missing one), then "suggest <json>" for each "complete": a list of
 words, most likely first, capitalised the way the typed word was, and
 "swiped <json>" for each "swipe", the words it most likely spelled, and
 "peeked <json>" for each "peek", the same answer under its own name so a
@@ -41,8 +44,10 @@ import gzip
 import heapq
 import json
 import math
+import os
 import struct
 import sys
+import unicodedata
 
 SHOWN = 8
 # A correction is a word one edit away from what was typed, typed wrong.
@@ -59,6 +64,30 @@ QWERTY = [list("qwertyuiop"), list("asdfghjkl"), list("zxcvbnm")]
 # letters are one edit from half the dictionary.
 CORRECT_FROM = 3
 LETTERS = "abcdefghijklmnopqrstuvwxyz'"
+# A word whose accents are not the ones typed still matches, since accents
+# are what a touch keyboard makes hardest to type ("ete" finds "été"), but
+# ranks as if this much rarer, so an accent that was typed is respected.
+ACCENT_PENALTY = 30
+# But an accent that was typed and that the word does not have is a choice
+# the word goes against: "ét" is not on its way to "et".
+TYPED_ACCENT_PENALTY = 300
+MISSPELLING_GAP = 100
+# Words that are only ever the first half of an elision, l' in l'été, and
+# which wordfreq lists on their own because it splits there. Never offered
+# as words; after one and an apostrophe, the rest is completed on its own.
+ELISIONS = {
+    "fr": {"l", "d", "j", "c", "n", "s", "m", "t", "qu", "jusqu", "lorsqu", "puisqu", "quoiqu"},
+}
+# Letters that come apart into two, which decomposition does not do.
+LIGATURES = {"œ": "oe", "æ": "ae"}
+
+
+def fold(word):
+    """`word` in plain lower-case letters: été as ete, œuvre as oeuvre. What
+    a word is matched by, so the letters on the keys reach it."""
+    word = "".join(LIGATURES.get(c, c) for c in word.lower())
+    return "".join(c for c in unicodedata.normalize("NFD", word)
+                   if not unicodedata.combining(c))
 
 
 def read_msgpack(data):
@@ -137,6 +166,27 @@ def cased(word, typed):
     return word
 
 
+def accents(word):
+    """How many letters of `word` carry an accent or are a ligature."""
+    return sum(1 for c in word if fold(c) != c)
+
+
+def spelled_right(words, ranks):
+    """`words` without the misspellings wordfreq also counts: "ete" and
+    "garcon" beside "été" and "garçon", "étre" beside "être". A word goes when
+    another with the same letters, as many accents or more, is at least ten
+    times commoner. A word is never beaten by one with fewer accents: the real
+    words without them are the commoner ones, "la" beside "là", "a" beside
+    "à", and how far apart a real pair is overlaps with how far a misspelling
+    is, so only the accents tell them apart."""
+    best = {}  # folded letters -> [(accent count, rank)]
+    for w in words:
+        best.setdefault(fold(w), []).append((accents(w), ranks[w]))
+    return [w for w in words
+            if not any(n >= accents(w) and ranks[w] - r >= MISSPELLING_GAP
+                       for n, r in best[fold(w)])]
+
+
 def neighbours(rows):
     """{letter: set of letters on the keys around it}. Rows are staggered on
     every board, so a key touches the one before and after it, and the two
@@ -155,9 +205,18 @@ def neighbours(rows):
 
 
 class Predictor:
-    def __init__(self, ranks):
-        self.ranks = ranks
-        self.words = sorted(ranks)
+    def __init__(self, ranks, lang="en"):
+        self.lang = lang
+        self.elisions = ELISIONS.get(lang, set())
+        self.ranks = {w: r for w, r in ranks.items() if w not in self.elisions}
+        self.words = sorted(self.ranks)
+        # Every word under its folded form, sorted, for prefix search, and by
+        # it, for corrections.
+        self.folded = sorted((fold(w), w) for w in self.ranks)
+        self.keys = [f for f, _ in self.folded]
+        self.by_fold = {}
+        for f, w in self.folded:
+            self.by_fold.setdefault(f, []).append(w)
         self.near = neighbours(QWERTY)
 
     def set_rows(self, rows):
@@ -165,17 +224,29 @@ class Predictor:
                 and all(isinstance(k, str) for r in rows for k in r)):
             self.near = neighbours([[k.lower() for k in r] for r in rows])
 
+    def rank(self, word, typed):
+        """A word's rank for what was typed: its own, or worse by
+        ACCENT_PENALTY when only its folded form matches the typing, and by
+        TYPED_ACCENT_PENALTY when the typing has an accent the word lacks."""
+        if word.startswith(typed):
+            return self.ranks[word]
+        against = any(t != w and fold(t) != t for t, w in zip(typed, word))
+        return self.ranks[word] + (TYPED_ACCENT_PENALTY if against else ACCENT_PENALTY)
+
     def completions(self, prefix):
-        """(rank, word) for every word starting with `prefix`."""
-        start = bisect.bisect_left(self.words, prefix)
-        for word in self.words[start:]:
-            if not word.startswith(prefix):
+        """(rank, word) for every word starting with `prefix`, accents or
+        not."""
+        key = fold(prefix)
+        start = bisect.bisect_left(self.keys, key)
+        for f, word in self.folded[start:]:
+            if not f.startswith(key):
                 break
-            yield self.ranks[word], word
+            yield self.rank(word, prefix), word
 
     def corrections(self, typed):
         """(rank, word) for every word one edit away from `typed`: a letter
         dropped, added, changed, or two swapped."""
+        typed = fold(typed)
         n = len(typed)
         edits = {}
 
@@ -195,11 +266,16 @@ class Predictor:
                     add(head + c + tail[1:], CORRECTION_PENALTY + (0 if near else FAR_SWAP_PENALTY))
                 add(head + c + tail, CORRECTION_PENALTY)
         edits.pop(typed, None)
-        for word, penalty in edits.items():
-            if word in self.ranks:
+        for key, penalty in edits.items():
+            for word in self.by_fold.get(key, ()):
                 yield self.ranks[word] + penalty, word
 
     def suggest(self, typed):
+        # After an elision and its apostrophe, l'ét, the rest is a word of
+        # its own: completed alone, and offered with the elision in front.
+        head, apostrophe, tail = typed.rpartition("'")
+        if apostrophe and head.lower() in self.elisions and not any(self.completions(typed.lower())):
+            return [head + "'" + w for w in self.suggest(tail)] if tail else []
         word = typed.lower()
         if not word:
             return []
@@ -218,6 +294,7 @@ class Predictor:
                     continue
                 if rank < found.get(w, 1 << 30):
                     found[w] = rank
+        found = {w: found[w] for w in spelled_right(list(found), self.ranks)}
         best = heapq.nsmallest(SHOWN, found.items(), key=lambda kv: (kv[1], kv[0]))
         return [cased(w, typed) for w, _ in best]
 
@@ -317,7 +394,7 @@ class Swipes:
         # pick between, and only words every letter of which has a key.
         self.ends = {}
         for word in self.ranks:
-            letters = [c for c in word if c != "'"]
+            letters = [c for c in fold(word) if c != "'"]
             if len(letters) >= 2 and all(c in self.keys for c in letters):
                 self.ends.setdefault((letters[0], letters[-1]), []).append(word)
 
@@ -325,7 +402,7 @@ class Swipes:
         """The path through a word's keys, a letter typed twice in a row
         being one stop, as it is for a finger."""
         out = []
-        for c in word:
+        for c in fold(word):
             if c == "'":
                 continue
             p = self.keys[c]
@@ -355,7 +432,7 @@ class Swipes:
         for a in starts:
             for b in ends:
                 for word in self.ends.get((a, b), ()):
-                    if any(closest[c] > VISIT_SLACK * self.unit for c in word if c != "'"):
+                    if any(closest[c] > VISIT_SLACK * self.unit for c in fold(word) if c != "'"):
                         continue
                     ideal = self.ideal(word)
                     template = resample(ideal)
@@ -367,48 +444,99 @@ class Swipes:
                              + LENGTH_WEIGHT * stretch + ENDS_WEIGHT * ends_off
                              + FREQUENCY_WEIGHT * self.ranks[word])
                     scored.append((score, word))
+        keep = set(spelled_right([w for _, w in scored], self.ranks))
+        scored = [(score, w) for score, w in scored if w in keep]
         return [w for _, w in heapq.nsmallest(SHOWN, scored)]
+
+
+# A language code is what names a list's folder and file, so it is checked
+# before it is let near a path.
+def valid_lang(code):
+    return 2 <= len(code) <= 3 and code.isascii() and code.isalpha() and code.islower()
+
+
+class Session:
+    """The language in use, its predictor and its swipe decoder, and the
+    layout's rows and keys, which carry over when the language changes."""
+
+    def __init__(self, source):
+        self.source = source
+        self.loaded = {}      # lang -> (Predictor, Swipes), or None when missing
+        self.predictor = self.swipes = None
+        self.rows = self.keys = None
+
+    def use(self, lang, path):
+        if lang not in self.loaded:
+            try:
+                p = Predictor(read_wordlist(path), lang)
+                self.loaded[lang] = (p, Swipes(p.ranks))
+            except FileNotFoundError:
+                self.loaded[lang] = None
+        if self.loaded[lang] is None:
+            self.predictor = self.swipes = None
+            return False
+        self.predictor, self.swipes = self.loaded[lang]
+        if self.rows is not None:
+            self.predictor.set_rows(self.rows)
+        if self.keys is not None:
+            self.swipes.set_keys(self.keys)
+        return True
 
 
 def main():
     if len(sys.argv) != 2:
-        sys.exit("usage: predictor.py <wordlist.msgpack.gz>")
-    try:
-        predictor = Predictor(read_wordlist(sys.argv[1]))
-    except FileNotFoundError:
-        print("missing", flush=True)
-        predictor = None
-    except (OSError, ValueError, EOFError) as e:
-        # The file, never what was typed: nothing has been typed yet.
-        sys.exit(f"can't read the word list: {e}")
-    if predictor:
-        print(f"ready {len(predictor.words)}", flush=True)
-        swipes = Swipes(predictor.ranks)
+        sys.exit("usage: predictor.py <words-dir | wordlist.msgpack.gz>")
+    source = sys.argv[1]
+    session = Session(source)
+    if not os.path.isdir(source):
+        # One list, the way this began: English, read now.
+        try:
+            if session.use("en", source):
+                print(f"ready {len(session.predictor.words)}", flush=True)
+            else:
+                print("missing", flush=True)
+        except (OSError, ValueError, EOFError) as e:
+            # The file, never what was typed: nothing has been typed yet.
+            sys.exit(f"can't read the word list: {e}")
     for line in sys.stdin:
         cmd, _, rest = line.rstrip("\n").partition(" ")
         if cmd == "quit":
             break
-        if cmd == "keys" and predictor:
+        if cmd == "lang" and os.path.isdir(source) and valid_lang(rest):
+            # Dropped from what is loaded and tried again when it was missing,
+            # so a list fetched since is found.
+            if session.loaded.get(rest, 0) is None:
+                del session.loaded[rest]
             try:
-                swipes.set_keys(json.loads(rest))
+                ok = session.use(rest, os.path.join(source, rest, f"small_{rest}.msgpack.gz"))
+            except (OSError, ValueError, EOFError):
+                ok = False
+            print(f"ready {rest} {len(session.predictor.words)}" if ok else f"missing {rest}", flush=True)
+        elif cmd == "keys":
+            try:
+                session.keys = json.loads(rest)
+                if session.swipes:
+                    session.swipes.set_keys(session.keys)
             except (ValueError, TypeError, IndexError):
                 pass
         elif cmd in ("swipe", "peek"):
             words = []
-            if predictor:
+            if session.swipes:
                 try:
-                    words = swipes.decode(json.loads(rest))
+                    words = session.swipes.decode(json.loads(rest))
                 except (ValueError, TypeError):
                     pass
             reply = "swiped" if cmd == "swipe" else "peeked"
             print(f"{reply} " + json.dumps(words, ensure_ascii=False), flush=True)
-        elif cmd == "rows" and predictor:
+        elif cmd == "rows":
             try:
-                predictor.set_rows(json.loads(rest))
+                session.rows = json.loads(rest)
+                if session.predictor:
+                    session.predictor.set_rows(session.rows)
             except ValueError:
                 pass
         elif cmd == "complete":
-            words = predictor.suggest(rest) if predictor else []
+            words = session.predictor.suggest(rest) if session.predictor else []
             print("suggest " + json.dumps(words, ensure_ascii=False), flush=True)
 
 

@@ -293,7 +293,7 @@ Ragtop types. It does not keep or send what you type.
 | --- | --- |
 | **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol, or through fcitx5 while a Chinese, Japanese or Korean engine is on. It keeps no history and writes no log. |
 | **Word suggestions and swipe** | Off unless you turn them on. With either on, Ragtop's own process holds the word being typed, in memory, to look it up in the word list, and forgets it at the next space. Nothing is written down, learned or sent. |
-| **Network** | One download, and only if you turn on word suggestions or swipe: wordfreq's English word list, 125 KB, from one fixed release on GitHub, checked against a fixed SHA-256 before it is kept. Otherwise nothing in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
+| **Network** | Only with word suggestions on, and only when you tap **Add** on a language's offer in the strip or run `ragtop words install`: that language's word list from wordfreq, 125 to 135 KB, from one fixed release on GitHub, checked against a fixed SHA-256 before it is kept. Otherwise nothing in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
 | **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
 | **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
 | **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
@@ -631,19 +631,29 @@ to a key.
 
 ### Word suggestions and swipe
 
-**Beta, in English, and off until you turn them on**, in Setup › Tablet ›
-**Word Suggestions (beta)**, or with the switches on the keyboard's controls
-panel. Turning suggestions on downloads the word list once (see
-[Privacy and security](#privacy-and-security)).
+**Beta, in English and French, and off until you turn them on**, in Setup ›
+Tablet › **Word Suggestions (beta)**, or with the switches on the keyboard's
+controls panel.
 
-Suggestions are **English, on English Layouts** or **English, on Any
-Layout**. The words are English either way; what differs is when. On English
-layouts, Ragtop decides by your layout's name (US, UK, Australian, New
-Zealand, Irish, South African, Dvorak and the other US variants included),
-so switching to another layout, say to write French, puts the strip away.
-On any layout is for writing English on another one, a German keyboard
-writing English, or an English layout Ragtop does not recognise. Switching
-them off and on again brings back whichever you chose.
+**On, in Your Layout's Language** follows the layout you are typing on:
+English words on a US or UK layout, French on a French or Canadian one,
+switching as you switch layouts. Ragtop decides by the layout's name and
+variant (Canadian English is English, Swiss French is French). **English, on
+Any Layout** is the way round that decision, for writing English on another
+layout, a German keyboard writing English. Switching suggestions off and on
+again brings back whichever you chose.
+
+**Each language's word list is offered where its words would go.** The first
+time you type on a layout whose list Ragtop has but you do not, the strip
+says *Add French word suggestions (135 KB)* and *Not now*. Add fetches it
+(see [Privacy and security](#privacy-and-security)) and suggestions start at
+once; Not now is remembered, and `ragtop words install fr` fetches it any
+time. Nothing is downloaded without that tap.
+
+Accents need not be typed: `ete` offers été, and a swipe through e, t, e
+finds it, though an accent you do type is kept to. In French, after l', d',
+j', qu' and the rest, the word after the apostrophe is completed with the
+elision kept: `l'ét` offers l'été.
 
 **Swipe Typing** is offered once suggestions are on, and goes off with
 them: it uses the same words, and the same strip for its runners-up. It
@@ -1081,7 +1091,7 @@ the Settings button on the keyboard's own panel opens directly:
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | Chinese, Japanese and Korean choices in a strip on the keyboard (see [Chinese, Japanese and Korean](#chinese-japanese-and-korean)) | on | Setup › Tablet › CJK Choices on Keyboard |
-| English word suggestions in the strip: Off, English on English Layouts, or English on Any Layout (see [Word suggestions and swipe](#word-suggestions-and-swipe)) | Off | Setup › Tablet › Word Suggestions (beta), or the controls panel |
+| Word suggestions in the strip: Off, On in Your Layout's Language, or English on Any Layout (see [Word suggestions and swipe](#word-suggestions-and-swipe)) | Off | Setup › Tablet › Word Suggestions (beta), or the controls panel |
 | Swipe typing, while suggestions are on | off | Setup › Tablet › Swipe Typing (beta), or the controls panel |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key size against the theme's: Automatic, a percentage from 60 to 160, or one of five names | Automatic where you have not set one | the controls panel's slider, or Setup › Tablet › Key Size |
@@ -1100,8 +1110,8 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
 `input-methods toggle` (or `enable`, `disable`),
-`predictions set off|english|all` (or `toggle`, `enable`, `disable`), `swipe toggle`
-(or `enable`, `disable`), `words status|install|remove`,
+`predictions set off|layout|all` (or `toggle`, `enable`, `disable`), `swipe toggle`
+(or `enable`, `disable`), `words languages|status|install <lang>|decline <lang>|remove <lang>`,
 `size-adjust set auto|<60-160>|smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
@@ -1154,7 +1164,7 @@ If tablet mode is never detected:
 
 True today, and worth saying if you want them gone:
 
-- **Word suggestions and swipe are English words only, and in beta.** See
+- **Word suggestions and swipe are English and French only, and in beta.** See
   [Word suggestions and swipe](#word-suggestions-and-swipe).
 - **Chinese, Japanese and Korean are in beta.** They work through
   fcitx5's engines, with their choices in a strip above the keys, and have
@@ -1244,9 +1254,10 @@ reaches them through [Fn](#which-board).
   a slip in it, and say nothing after a space. Guessing the next word needs
   counts of which words follow which, which wordfreq does not have, and
   learning them from your own typing would mean keeping what you type.
-- **Languages other than English** for suggestions and swipe. wordfreq has
-  lists for about forty, so it is the download and a way to choose that is
-  missing, not the method.
+- **More languages** for suggestions and swipe. wordfreq has lists for 42,
+  and each is added once its accents, apostrophes and capitals have been made
+  to work: Spanish and Portuguese next, then German, whose nouns wordfreq
+  keeps in lower case.
 - **Whether a folded machine silences its own keyboard.** On a Lenovo Yoga the
   built-in keyboard and touchpad appear to stop reporting when the screen is
   folded back, which would mean Ragtop has nothing to do. Whether that is the

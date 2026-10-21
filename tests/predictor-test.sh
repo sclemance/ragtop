@@ -203,6 +203,107 @@ no_keys_no_swipe() {
   assert_equal "$(swiped_lines | tr '\n' ' ')" "swiped [] swiped [] " "swipes with no keys placed"
 }
 
+# ---- Languages --------------------------------------------------------------
+
+# A folder of lists, as `ragtop words install` leaves them: French made up
+# for the test, with the misspellings wordfreq counts beside the words, and
+# the elision halves it splits off, and English beside it.
+make_languages() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/fr" "$langs/en"
+  wordlist "$langs/fr/small_fr.msgpack.gz" 127:de 140:l 150:d 157:la 174:à 200:a 210:j \
+    278:"été" 262:"être" 301:"là" 316:"déjà" 436:"garçon" 396:"œuvre" 441:oeuvre \
+    508:ete 423:etre 494:deja 575:garcon 520:"étre" 338:"aujourd'hui" 500:"état"
+  wordlist "$langs/en/small_en.msgpack.gz" 127:the 325:help
+}
+
+# language <lang ...> then complete <typed ...>, in that order.
+in_languages() {
+  pre=()
+  for l in "$@"; do pre+=("lang $l"); done
+}
+
+languages_load_by_name() {
+  make_languages
+  in_languages de fr
+  suggest "$langs" "ete"
+  assert_contains "$out" "missing de
+ready fr"
+  assert_contains "$out" 'suggest ["été", "être"'
+}
+
+a_language_path_is_refused() {
+  make_languages
+  in_languages ../en fr
+  suggest "$langs"
+  assert_lacks "$out" "ready ../en"
+  assert_contains "$out" "ready fr"
+}
+
+# The keys' letters reach accented words, and the misspellings wordfreq also
+# counts are not offered beside them; real pairs, la and là, both are.
+accents_need_not_be_typed() {
+  make_languages
+  in_languages fr
+  suggest "$langs" ete garc deja la a
+  assert_contains "$out" 'suggest ["été", "être"]'
+  assert_contains "$out" 'suggest ["garçon"]'
+  assert_contains "$out" 'suggest ["déjà"]'
+  assert_contains "$out" 'suggest ["la", "là"]'
+  # Typed without its accent, a is exactly what was typed, so it leads.
+  assert_contains "$out" 'suggest ["a", "à"'
+}
+
+# Typed, an accent is a choice: "ét" is on its way to été and état, and
+# être, whose ê is not the é typed, comes after them though it is commoner.
+a_typed_accent_is_kept() {
+  make_languages
+  in_languages fr
+  suggest "$langs" "ét"
+  assert_contains "$out" 'suggest ["été", "état", "être"]'
+}
+
+# l', d', j' are halves wordfreq splits off: never offered alone, and the
+# rest of l'ét is completed with the l' kept.
+elisions_complete_the_rest() {
+  make_languages
+  in_languages fr
+  suggest "$langs" "l'ét" "L'ét" l "aujourd'h"
+  assert_contains "$out" "suggest [\"l'été\", \"l'état\", \"l'être\"]"
+  assert_contains "$out" "suggest [\"L'été\""
+  assert_lacks "$(sed -n 4p <<<"$out")" '"l"'
+  assert_contains "$out" "suggest [\"aujourd'hui\"]"
+}
+
+switching_back_keeps_each_list() {
+  make_languages
+  pre=("lang fr" "complete ete" "lang en" "complete hel" "lang fr" "complete ete")
+  suggest "$langs"
+  assert_contains "$out" 'suggest ["help"]'
+  assert_equal "$(grep -c 'suggest \["été"' <<<"$out")" 2 "French answers"
+}
+
+# AZERTY has no é key on its letters: a swipe through e, t, e is été.
+a_swipe_needs_no_accents() {
+  make_languages
+  /usr/bin/python3 - >"$sandbox/azerty" <<'PY'
+import json
+U = 60.0
+rows, off = ["azertyuiop", "qsdfghjklm", "wxcvbn"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+stops = [keys[c] for c in "garcon"]
+path = []
+for a, b in zip(stops, stops[1:]):
+    path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang fr"; cat "$sandbox/azerty")
+  suggest "$langs"
+  assert_contains "$out" 'swiped ["garçon"'
+  assert_lacks "$out" '"garcon"'
+}
+
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing
 run_test "predictor: a word typed with one slip is corrected" one_slip_is_corrected
@@ -219,4 +320,11 @@ run_test "predictor: a swipe goes by where it ends, not only by which word is co
 run_test "predictor: a swipe offers the runners-up" a_swipe_offers_the_runners_up
 run_test "predictor: with no keys placed, or no path, a swipe spells nothing" no_keys_no_swipe
 run_test "predictor: a path still being drawn is answered as a guess" a_peek_is_only_a_guess
+run_test "predictor: a language's list is read by name, and a missing one says so" languages_load_by_name
+run_test "predictor: a language name that is not one never reaches a path" a_language_path_is_refused
+run_test "predictor: accents need not be typed, and misspellings are not offered" accents_need_not_be_typed
+run_test "predictor: an accent that was typed is kept to" a_typed_accent_is_kept
+run_test "predictor: after an elision the rest is completed, the elision kept" elisions_complete_the_rest
+run_test "predictor: each language keeps its own list" switching_back_keeps_each_list
+run_test "predictor: a swipe without accents finds the accented word" a_swipe_needs_no_accents
 finish

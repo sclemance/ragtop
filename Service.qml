@@ -1181,6 +1181,8 @@ Item {
     tabletModeProc.running = false
   }
   Component.onCompleted: {
+    // Which word lists there are, for the strip's offer.
+    root.readWordLanguages()
     tabletModeProc.running = root.watchSwitch
     applyLayerRules()
   }
@@ -1384,10 +1386,12 @@ Item {
   // while an engine is on, or suggestions are, items or not, so the keyboard
   // keeps one height through a sentence rather than jumping at every word.
   readonly property bool suggestionsShown: root.imeComposing || root.predicting || root.swipeActive
+    || root.offerLanguage !== ""
   function chooseSuggestion(index) {
     if (root.suggestions.source === "fcitx") root.sendBridge("select " + index)
     else if (root.suggestions.source === "predict") root.takeWord(index)
     else if (root.suggestions.source === "swipe") root.swapSwiped(index)
+    else if (root.suggestions.source === "offer") root.answerOffer(index)
   }
   function pageSuggestions(forward) {
     if (root.suggestions.source === "fcitx") root.sendBridge(forward ? "next" : "prev")
@@ -1396,29 +1400,119 @@ Item {
   // ---- Word suggestions --------------------------------------------------
 
   // What the word being typed could be, from predictor.py and wordfreq's
-  // English list, which `ragtop predictions enable` downloads. Off unless
-  // turned on: Ragtop cannot tell a password field in an application from
-  // any other, and the strip would show what one is being typed into.
-  // off, english (on for English layouts, decided by the layout's xkb name)
-  // or all (on whatever the layout, the way past that decision). "on" is
-  // what english was called before there were two.
-  readonly property string predictionsMode: root.settings["predictions"] === "on" ? "english"
-    : ["english", "all"].indexOf(root.settings["predictions"]) !== -1 ? root.settings["predictions"] : "off"
+  // lists. Off unless turned on: Ragtop cannot tell a password field in an
+  // application from any other, and the strip would show what one is being
+  // typed into.
+  //
+  // off; layout, in the language of the layout being typed on (Ragtop
+  // deciding by its xkb name: English on us, French on fr); or all, English
+  // on any layout, the way past that decision, for a German keyboard writing
+  // English. "on" and "english" are what layout was called before.
+  readonly property string predictionsMode: {
+    var m = root.settings["predictions"]
+    return m === "on" || m === "english" ? "layout" : m === "layout" || m === "all" ? m : "off"
+  }
   readonly property bool predictionsEnabled: root.predictionsMode !== "off"
-  readonly property string wordsFile: (Quickshell.env("XDG_DATA_HOME")
-    || Quickshell.env("HOME") + "/.local/share") + "/ragtop/words/en/small_en.msgpack.gz"
-  property bool wordsReady: false
-  // English layouts only, by their xkb name: the list is English, and
-  // suggesting English words to someone typing French is worse than none.
-  readonly property var englishLayouts: ["us", "gb", "au", "nz", "ie", "za"]
-  readonly property bool englishLayout: !!root.keyLabels
-    && root.englishLayouts.indexOf(root.keyLabels.code) !== -1
+  readonly property string wordsRoot: (Quickshell.env("XDG_DATA_HOME")
+    || Quickshell.env("HOME") + "/.local/share") + "/ragtop/words"
+
+  // The languages Ragtop has lists for, from the CLI's table, which is the
+  // one list of them: { "fr": { size, installed, declined, name } }.
+  property var wordLanguages: ({})
+  function readWordLanguages() { if (!wordLanguagesProc.running) wordLanguagesProc.running = true }
+  Process {
+    id: wordLanguagesProc
+    command: ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""), "words", "languages"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var out = {}
+        text.split("\n").forEach(function(line) {
+          var f = line.split(" ")
+          if (f.length >= 5)
+            out[f[0]] = { size: f[1], installed: f[2] === "installed", declined: f[3] === "declined",
+                          name: f.slice(4).join(" ") }
+        })
+        root.wordLanguages = out
+      }
+    }
+  }
+
+  // Which language a layout is typed in, by its xkb name and variant. Only
+  // a guess, which the all setting is the way past.
+  function languageOfLayout(code, variant) {
+    if (code === "ca") return variant === "eng" ? "en" : "fr"
+    if (code === "ch") return variant.indexOf("fr") === 0 ? "fr" : "de"
+    if (code === "in") return variant === "eng" ? "en" : ""
+    var by = { us: "en", gb: "en", au: "en", nz: "en", ie: "en", za: "en",
+               fr: "fr", be: "fr", de: "de", at: "de", es: "es", latam: "es",
+               pt: "pt", br: "pt", it: "it", nl: "nl", ru: "ru", ua: "uk" }
+    return by[code] || ""
+  }
+  // The language suggestions are in now, or "" when there are none to have:
+  // English on any layout, or the layout's own when Ragtop has a list for it.
+  readonly property string wordLanguage: {
+    if (!root.predictionsEnabled) return ""
+    if (root.predictionsMode === "all") return "en"
+    if (!root.keyLabels) return ""
+    var lang = root.languageOfLayout(root.keyLabels.code || "", root.keyLabels.variant || "")
+    return lang in root.wordLanguages ? lang : ""
+  }
+  onWordLanguageChanged: root.sendLanguage()
+  // The language whose list the predictor has open, "" until it says.
+  property string wordsLoaded: ""
+  readonly property bool wordsReady: root.wordLanguage !== "" && root.wordsLoaded === root.wordLanguage
+  function sendLanguage() {
+    if (predictorProc.running && root.wordLanguage !== "")
+      predictorProc.write("lang " + root.wordLanguage + "\n")
+  }
+
+  // A language Ragtop has a list for and has not fetched is offered in the
+  // strip, where its words would go, one tap to fetch it: the only way a
+  // list is downloaded without being asked for by name. "Not now" is kept,
+  // and the CLI can fetch it any time.
+  property bool wordsFetching: false
+  readonly property string offerLanguage: {
+    var lang = root.wordLanguage
+    var info = root.wordLanguages[lang]
+    return lang !== "" && info && !info.installed && !info.declined
+      && !root.imeComposing && !root.passwordOpen ? lang : ""
+  }
+  onOfferLanguageChanged: root.showOffer()
+  onWordsFetchingChanged: root.showOffer()
+  function showOffer() {
+    var lang = root.offerLanguage
+    if (lang === "") {
+      root.setSuggestions("offer", null)
+      return
+    }
+    var info = root.wordLanguages[lang]
+    root.setSuggestions("offer", { items: root.wordsFetching
+      ? [{ text: "Fetching " + info.name + " words\u2026", note: "" }]
+      : [{ text: "Add " + info.name + " word suggestions", note: info.size + " KB" },
+         { text: "Not now", note: "" }], prev: false, next: false, cursor: -1 })
+  }
+  function answerOffer(index) {
+    var lang = root.offerLanguage
+    if (lang === "" || root.wordsFetching || index > 1) return
+    wordsOfferProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                              "words", index === 0 ? "install" : "decline", lang]
+    root.wordsFetching = index === 0
+    wordsOfferProc.running = true
+  }
+  Process {
+    id: wordsOfferProc
+    onExited: {
+      root.wordsFetching = false
+      root.readWordLanguages()
+      // A list fetched is opened straight away.
+      root.sendLanguage()
+    }
+  }
   // The one password prompt Ragtop can see: Omarchy's polkit agent, whose
   // patched clone types with this keyboard.
   readonly property bool passwordOpen: root.openOverlays.indexOf("omarchy-polkit") !== -1
-  readonly property bool layoutAllowsWords: root.predictionsMode === "all" || root.englishLayout
   readonly property bool predicting: root.predictionsEnabled && root.wordsReady
-    && root.layoutAllowsWords && !root.imeComposing && !root.passwordOpen
+    && !root.imeComposing && !root.passwordOpen
   onPredictingChanged: {
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
@@ -1603,16 +1697,18 @@ Item {
   Process {
     id: predictorProc
     command: ["/usr/bin/python3", Qt.resolvedUrl("predictor.py").toString().replace(/^file:\/\//, ""),
-              root.wordsFile]
+              root.wordsRoot]
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
         if (line.startsWith("ready ")) {
-          root.wordsReady = true
+          root.wordsLoaded = line.split(" ")[1]
           root.sendRows()
           if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
-        } else if (line === "missing") {
-          root.wordsReady = false
+        } else if (line.startsWith("missing ")) {
+          root.wordsLoaded = ""
+          // The CLI may know better by now: a list removed by hand.
+          root.readWordLanguages()
         } else if (line.startsWith("peeked ")) {
           var guess
           try { guess = JSON.parse(line.slice(7)) } catch (e) { root.peekPending = false; return }
@@ -1634,8 +1730,11 @@ Item {
     onRunningChanged: {
       root.asked = []
       root.peekPending = false
-      if (running) root.retryStarted("predict")
-      else root.wordsReady = false
+      root.wordsLoaded = ""
+      if (running) {
+        root.retryStarted("predict")
+        root.sendLanguage()
+      }
     }
     onExited: {
       if (!root.wantPredictor) return
@@ -3020,6 +3119,7 @@ Item {
         raises: root.autoShows,
         inputMethod: !root.inputMethodsEnabled ? "off"
           : root.imeEngine ? root.imeEngine.name : "layout",
+        words: root.wordLanguage,
         swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
           : root.swipeActive ? "on" : "idle",
         predictions: !root.predictionsEnabled ? "off"

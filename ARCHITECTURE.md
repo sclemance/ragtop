@@ -354,9 +354,10 @@ way with fcitx5 drawing its own popup, as before.
 
 ## Word suggestions and swipe
 
-`predictor.py` is a child process like the helper, run while either is
-turned on. It reads wordfreq's `small_en.msgpack.gz` as wordfreq publishes
-it. The data is CC-BY-SA 4.0 and its author asks that it not be converted
+`predictor.py` is a child process like the helper, run while suggestions
+are on. It reads wordfreq's `small_<lang>.msgpack.gz` lists as wordfreq
+publishes them, from `~/.local/share/ragtop/words/<lang>/`, one language at
+a time (`lang fr`), answering `missing fr` for one not fetched. The data is CC-BY-SA 4.0 and its author asks that it not be converted
 into a plain list that sheds the attribution, so it is never converted: a
 forty-line reader for the subset of MessagePack the file uses reads it in
 place, and `ragtop words install` fetches it from the v3.2 tag, checks a
@@ -431,6 +432,28 @@ same words chosen. While a finger draws, the strip shows the guess so far
 one guess at a time, each taking the path as it is when the last returns.
 BackSpace straight after a swipe takes the word and its space back in one,
 keeping a space the swipe put in front.
+
+**Languages.** The CLI's `words_table` is the one list of languages Ragtop
+offers, each with its size and pinned SHA-256; the service reads it through
+`ragtop words languages`. The service maps the layout's xkb name and variant
+to a language (`languageOfLayout`), and a language the table has and the
+machine has not is offered in the strip: Add runs `ragtop words install`,
+Not now `ragtop words decline`, and that tap is the only thing that fetches
+a list. A language joins the table only once it works: French needed two
+things English did not.
+
+- *Accents.* Every word is indexed by its folded letters (été as ete, œuvre
+  as oeuvre), so the keys' letters reach it and a swipe through e, t, e
+  finds été. A word whose accents differ from what was typed ranks a little
+  worse, much worse when the typing has an accent the word lacks. wordfreq
+  also counts the unaccented misspellings (ete, garcon, étre), so a spelling
+  goes when another with the same letters and at least as many accents is
+  ten times commoner; never one beaten by fewer accents, since la and là, a
+  and à, are both words and the commoner has none. The distances overlap,
+  the direction does not.
+- *Elisions.* wordfreq splits l'été into l and été. The halves are never
+  offered, and after one and an apostrophe the rest is completed alone and
+  offered with it.
 
 **What turns them off.** A layout whose xkb name is not English (the helper
 now reports `code` in its labels, since the name is translated), unless the

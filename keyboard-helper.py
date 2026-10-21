@@ -685,6 +685,10 @@ class Keyboard:
             # language rather than on the keys: the name above is translated.
             codes = names.get("layout", "").split(",")
             labels["code"] = codes[group].strip() if group < len(codes) else ""
+            # And its variant, which can change the language: ca is French
+            # Canadian and ca(eng) is English.
+            variants = names.get("variant", "").split(",")
+            labels["variant"] = variants[group].strip() if group < len(variants) else ""
             print("labels " + json.dumps(labels, ensure_ascii=False), flush=True)
 
     def _new_device(self):

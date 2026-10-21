@@ -432,7 +432,7 @@ Item {
         Toggle {
           width: parent.width
           label: panel.service.predictionsMode === "all" ? "English word suggestions, on any layout"
-            : "English word suggestions, on English layouts"
+            : "Word suggestions, in your layout's language"
           checked: panel.service.predictionsEnabled
           foreground: Color.popups.text
           accent: Color.accent
