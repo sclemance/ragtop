@@ -51,6 +51,8 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `SetupWizard.qml` | First-run setup, in the shell rather than the terminal. |
 | `keyboard-helper.py` | Types characters. A Wayland virtual keyboard. |
 | `fcitx-osk-bridge.py` | Ragtop's side of fcitx5: "an app wants text input", which input method is on, and its choices. |
+| `predictor.py` | Word suggestions and swipe decoding, against wordfreq's English list. |
+| `words/NOTICE.md` | The word list's credits and licence, copied beside it on download. |
 | `tablet-switch.py` | Watches the fold switch. |
 | `find-tablet-switch.py` | Finds which device that is. |
 | `ragtop` | The command line tool. Settings, themes, overlays, diagnostics. |
@@ -350,6 +352,69 @@ hold on it opens lists fcitx5's engines after Hyprland's layouts.
 `ragtop input-methods disable` turns all of it off, and keys go the Wayland
 way with fcitx5 drawing its own popup, as before.
 
+## Word suggestions and swipe
+
+`predictor.py` is a child process like the helper, run while either is
+turned on. It reads wordfreq's `small_en.msgpack.gz` as wordfreq publishes
+it. The data is CC-BY-SA 4.0 and its author asks that it not be converted
+into a plain list that sheds the attribution, so it is never converted: a
+forty-line reader for the subset of MessagePack the file uses reads it in
+place, and `ragtop words install` fetches it from the v3.2 tag, checks a
+pinned SHA-256, and puts `words/NOTICE.md` beside it. Nothing of wordfreq's
+is in the repository, and the tests build their own small list in the same
+format.
+
+**Where the word comes from.** Ragtop has no view of the text being edited,
+only of the keys it sends, so `Service.qml` follows the word in `sendKeys`,
+the one place every key passes. A letter extends it, BackSpace shortens it,
+anything else starts again, and so do a focus change (the bridge's `show`)
+and the keyboard going away. A tap in the text moves the cursor without a
+key, which is the case this cannot see; starting again at the next non-letter
+keeps the damage to one word. Taking a suggestion sends one BackSpace per
+letter and then the word and a space, which works in any application, input
+method support or not.
+
+**Four rules found on the Yoga, each a bug before it was a rule:**
+
+- *An empty list clears only its own source.* The bridge reports "no
+  candidates" after every key on a plain layout, and that wiped the word
+  suggestions a moment after each appeared.
+- *Answers are matched to their question.* Replies come back a moment after
+  each key, in order. One that arrives after the word has changed (a quick
+  space) is dropped; taking it deleted nothing and glued the word on, "a" +
+  "test" as "atest". A suggestion is not taken with no word in progress.
+- *A swipe after tapped letters puts a space first.* "a" can only be tapped.
+- *An automatic space moves past punctuation.* The space a swipe or a
+  suggestion adds goes after a `. , ! ? ; :` typed straight after it, so
+  "test, " and not "test ,". A space typed by hand is never moved.
+
+**Completion and correction.** Words starting with what was typed, ranked by
+wordfreq's centibel bucket. From three letters, words one edit away too, at a
+penalty, and a changed letter is only a slip when the two keys are neighbours
+on the active layout's rows, which the service sends (`rows`). A shorter
+correction waits until nothing completes the word: otherwise "hel" offered
+"he", which is so common it beat every real completion.
+
+**Swipes** follow SHARK2. Keyboard.qml sends each letter key's centre in its
+own coordinates (`keys`) and, when a finger has drawn across the letters,
+the path (`swipe`). Candidates are the words whose first and last keys are
+near where the path began and ended and every one of whose keys the path
+passes near. Each is scored on five things: the mean distance between the
+path and the word's ideal path, both resampled to 32 points (location); the
+same after both are centred and scaled (shape); the difference in their
+lengths; how far the path's ends are from the word's first and last keys;
+and how common the word is. The weights came from a simulation, every one of
+160 common words drawn through its key centres with a random wobble of up to
+half a key: 95 to 98 percent come first and all of them come in the first
+three, at about 20 ms each. The misses are mostly pairs no path can tell
+apart, to and too, its and it's, which is what the runners-up in the strip
+are for. The simulation is not a hand, so the weights are a start rather than
+an answer.
+
+**What turns them off.** A layout whose xkb name is not English (the helper
+now reports `code` in its labels, since the name is translated), a CJK
+engine, and Omarchy's polkit prompt, the one password field Ragtop can see.
+
 ## The overlay clones
 
 Omarchy's full screen overlays take keyboard focus exclusively. Hyprland
@@ -517,6 +582,7 @@ filesystem what the real ones do and leaves out the running shell.
 | --- | --- |
 | `overlay-clones-test.sh` | The real `overlay-clones.sh` against copies of two Omarchy trees in `tests/fixtures`: 4.0.4 and `7cc6a55`. Install, status, sync, remove, edited clones, failed patches, moving between the two, shapes it must refuse. |
 | `input-methods-test.sh` | The real bridge and the helper's fcitx route against a private fcitx5 with Mozc, Pinyin and Hangul, on a bus of its own: 日本語, 你好 and 한글 typed and chosen, shortcuts kept off the route. Skipped where the engines are not installed. |
+| `predictor-test.sh` | `predictor.py` against a made-up list in wordfreq's format: ranking, capitals, corrections by neighbouring keys, and swipes drawn through QWERTY with a fixed miss at every key. |
 | `suggestion-strip-test.sh` | `SuggestionStrip.qml` loaded offscreen: which item a touch means, at the arrows and scrolled. |
 | `overlay-window-test.sh` | The window the patcher generates for a clone, loaded by quickshell offscreen: what it asks for closed and open, in laptop and tablet mode, and when it lets its content be seen. |
 

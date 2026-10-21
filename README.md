@@ -287,12 +287,13 @@ generated files in `~/.local/state/ragtop` and its settings in
 
 ## Privacy and security
 
-Ragtop does not read what you type. It types.
+Ragtop types. It does not keep or send what you type.
 
 | | |
 | --- | --- |
-| **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol. It keeps no history and writes no log. |
-| **Network** | There is none. Nothing in Ragtop opens a socket, calls out, or names an address. |
+| **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol, or through fcitx5 while a Chinese, Japanese or Korean engine is on. It keeps no history and writes no log. |
+| **Word suggestions and swipe** | Off unless you turn them on. With either on, Ragtop's own process holds the word being typed, in memory, to look it up in the word list, and forgets it at the next space. Nothing is written down, learned or sent. |
+| **Network** | One download, and only if you turn on word suggestions or swipe: wordfreq's English word list, 125 KB, from one fixed release on GitHub, checked against a fixed SHA-256 before it is kept. Otherwise nothing in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
 | **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
 | **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
 | **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
@@ -303,6 +304,13 @@ Ragtop does not read what you type. It types.
 What it cannot do anything about is the room. Keys light up when tapped, the
 way they do on every on-screen keyboard, so a password typed on a tablet is
 readable over a shoulder.
+
+Word suggestions make that worse, which is why they are off by default. The
+strip shows words that start the way your typing does, and Ragtop cannot
+tell a password field in an application from any other field. It turns
+suggestions off itself for Omarchy's password prompt, which it can see, and
+for nothing else. If you use them, a password typed in a browser shows
+suggestions like any other word.
 
 ## Using it
 
@@ -620,6 +628,38 @@ off is not the same as leaving tablet mode: tiling mode, the patched overlays
 and the rotation rules all still follow the switch. The same three are in
 Setup › Tablet › Keyboard, and `omarchy-shell ragtop cycleKeyboardMode` binds
 to a key.
+
+### Word suggestions and swipe
+
+**Beta, English layouts only, and off until you turn them on**, in Setup ›
+Tablet: **Word Suggestions (beta)** and **Swipe Typing (beta)**. Turning
+either on downloads the word list they share once (see
+[Privacy and security](#privacy-and-security)).
+
+**Word suggestions** fill the strip above the keys with what the word you are
+typing could be: `hel` offers help, held, hello. A slip of the finger is
+corrected, judged by which keys are really next to each other on your
+layout, so `hwlp` offers help. Tap one and it replaces what you typed, with a
+space after it. Suggestions follow your capitals: `Hel` offers Help.
+
+**Swipe typing** lets you draw a word: put a finger on its first letter,
+slide through the others without lifting, and lift on the last. The word is
+typed with a space after it, and the strip offers the runners-up, to tap if
+the first guess was wrong. Words that draw the same path, such as to and
+too, or its and it's, can only be told apart there. A tap still types a
+letter, and a hold still opens the accents: a swipe begins only once the
+finger has left its key by most of a key's width and reached another letter.
+Shift before a swipe capitalises the word. A swipe after letters you
+tapped puts a space between, since a one-letter word like "a" can only be
+tapped: tap a, swipe test, and you get "a test". The space a swipe or a
+suggestion adds after its word moves past punctuation typed straight after
+it, so a comma then is "test, " rather than "test ,". A space you typed
+yourself is never moved.
+
+Both use [wordfreq](https://github.com/rspeer/wordfreq)'s list of about
+29,000 English words, ranked by how common they are, and both are off for
+Omarchy's password prompt and while a Chinese, Japanese or Korean engine is
+on. Neither learns from your typing.
 
 ### Keybindings
 
@@ -1027,6 +1067,8 @@ the Settings button on the keyboard's own panel opens directly:
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | Chinese, Japanese and Korean choices in a strip on the keyboard (see [Chinese, Japanese and Korean](#chinese-japanese-and-korean)) | on | Setup › Tablet › CJK Choices on Keyboard |
+| English word suggestions in the strip (see [Word suggestions and swipe](#word-suggestions-and-swipe)) | off | Setup › Tablet › Word Suggestions (beta) |
+| Swipe typing, English | off | Setup › Tablet › Swipe Typing (beta) |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key size against the theme's: Automatic, a percentage from 60 to 160, or one of five names | Automatic where you have not set one | the controls panel's slider, or Setup › Tablet › Key Size |
 | Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
@@ -1044,6 +1086,7 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
 `input-methods toggle` (or `enable`, `disable`),
+`predictions toggle` and `swipe toggle` (the same three), `words status|install|remove`,
 `size-adjust set auto|<60-160>|smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
@@ -1096,7 +1139,8 @@ If tablet mode is never detected:
 
 True today, and worth saying if you want them gone:
 
-- **No swipe typing.** Keys are tapped one at a time.
+- **Word suggestions and swipe are English only, and in beta.** See
+  [Word suggestions and swipe](#word-suggestions-and-swipe).
 - **Chinese, Japanese and Korean are in beta.** They work through
   fcitx5's engines, with their choices in a strip above the keys, and have
   been tested against fixed expectations rather than by anyone who writes
@@ -1181,14 +1225,13 @@ reaches them through [Fn](#which-board).
   reach, since the leftovers go on the nearest letter's card, two to a card,
   but a row of digits you can turn on, the way a phone keyboard offers one,
   is the honest fix.
-- **Spellcheck and word prediction**, through Hunspell for the dictionary and
-  fcitx5 for the plumbing. Where the suggestions would live is answered now:
-  the strip that carries Chinese, Japanese and Korean choices above the keys
-  is built to take other sources, and this would be one. Hunspell would have
-  to be installed separately, and the setting would appear only once it is,
-  the way the rotation setting does with `iio-sensor-proxy`.
-- **Swipe typing**, drawing a word across the keys. The same strip is where
-  its guesses would go. The hard half is the guessing.
+- **The next word.** Suggestions complete the word being typed and correct
+  a slip in it, and say nothing after a space. Guessing the next word needs
+  counts of which words follow which, which wordfreq does not have, and
+  learning them from your own typing would mean keeping what you type.
+- **Languages other than English** for suggestions and swipe. wordfreq has
+  lists for about forty, so it is the download and a way to choose that is
+  missing, not the method.
 - **Whether a folded machine silences its own keyboard.** On a Lenovo Yoga the
   built-in keyboard and touchpad appear to stop reporting when the screen is
   folded back, which would mean Ragtop has nothing to do. Whether that is the
@@ -1391,4 +1434,12 @@ itself, is Ragtop's own business and can change in a patch.
   protocol (MIT). Its Python bindings are generated on your machine on first run.
 - Clones of Omarchy's overlays are made on your machine from Omarchy's
   MIT-licensed source.
+- Word suggestions and swipe read [wordfreq](https://github.com/rspeer/wordfreq)'s
+  English word list by Robyn Speer (CC-BY-SA 4.0), downloaded on your machine
+  when you turn them on and never part of Ragtop. It includes data from the
+  SUBTLEX word lists by Marc Brysbaert et al., which are freely available. The
+  full credits are in [words/NOTICE.md](words/NOTICE.md), and a copy is kept
+  beside the list.
+- The swipe decoder follows SHARK2 (Kristensson and Zhai, 2004), as
+  FlorisBoard's glide typing does.
 - Ragtop itself is released under the [MIT License](LICENSE).

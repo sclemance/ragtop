@@ -98,6 +98,12 @@ rows = {
     "setup.tablet.input-methods": dict(icon="\U000f030c", label="CJK Choices on Keyboard",
         checked=f'"{cmd}" input-methods enabled',
         action=f'"{cmd}" input-methods toggle'),
+    "setup.tablet.predictions": dict(icon="\U000f030c", label="Word Suggestions (beta)",
+        checked=f'"{cmd}" predictions enabled',
+        action=f'"{cmd}" predictions toggle'),
+    "setup.tablet.swipe": dict(icon="\U000f030c", label="Swipe Typing (beta)",
+        checked=f'"{cmd}" swipe enabled',
+        action=f'"{cmd}" swipe toggle'),
     # Appearance. A theme writes the settings below, so what the menu
     # shows is always what the keyboard does.
     "setup.tablet.theme": dict(icon="\U000f03d8", label="Theme"),

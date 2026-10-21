@@ -494,7 +494,10 @@ Item {
                  + "at the bottom to raise the keyboard by hand."],
     "switch": ["Tablet mode is not being noticed",
                "The tablet-mode switch watcher keeps stopping, so folding will not "
-               + "register. Setup › Tablet › Tablet Mode sets it by hand."]
+               + "register. Setup › Tablet › Tablet Mode sets it by hand."],
+    "predict": ["Word suggestions have stopped",
+                "Ragtop's word suggester keeps stopping. `ragtop words install` "
+                + "fetches the word list again."]
   })
   function retryTell(name) {
     var s = root.retryFor(name)
@@ -894,6 +897,7 @@ Item {
     stdout: SplitParser {
       onRead: function(line) {
         if (line === "show") {
+          root.currentWord = ""
           root.autoShows++
           if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
           return
@@ -1244,6 +1248,7 @@ Item {
   property var keyLabels: null
   onKeyLabelsChanged: {
     if (!root.keyLabels) return
+    root.sendRows()
     layoutWriteProc.command = [
       "sh", "-c",
       'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-layout.json.tmp" && mv -f "$d/ragtop-layout.json.tmp" "$d/ragtop-layout.json"',
@@ -1253,10 +1258,29 @@ Item {
   }
   Process { id: layoutWriteProc }
 
-  // One command per line. See keyboard-helper.py.
+  // One command per line. See keyboard-helper.py. Everything typed passes
+  // here, which is what makes it the place to follow the word being typed.
   function sendKeys(command) {
+    // Punctuation straight after a space Ragtop put in itself goes before
+    // that space, as on a phone: a swiped "test" then a comma is "test, ",
+    // not "test ,". A space typed by hand is never moved.
+    var mark = command.length === 6 && command.indexOf("type ") === 0
+      && root.closingMarks.indexOf(command[5]) !== -1
+    if (mark && root.autoSpaced && keyboardHelper.running) {
+      root.trackWord(command)
+      keyboardHelper.write("key BackSpace\ntype " + command[5] + " \n")
+      root.autoSpaced = true
+      return
+    }
+    root.trackWord(command)
+    // Only something typed counts. A release, a held modifier or a change of
+    // route between a word and its full stop types nothing.
+    if (/^(type|key|down) /.test(command)) root.autoSpaced = false
     if (keyboardHelper.running) keyboardHelper.write(command + "\n")
   }
+  readonly property string closingMarks: ".,!?;:"
+  // Whether the last thing typed was a space Ragtop added after a word.
+  property bool autoSpaced: false
 
   // ---- Input methods: Chinese, Japanese, Korean ------------------------
 
@@ -1295,7 +1319,11 @@ Item {
   readonly property var noSuggestions: ({ source: "", items: [], prev: false, next: false, cursor: -1 })
   property var suggestions: root.noSuggestions
   function setSuggestions(source, value) {
-    if (!value || !Array.isArray(value.items)) {
+    // Nothing from a source clears only what that source put there. The
+    // bridge says "no candidates" after every key on a plain layout, and
+    // without this it wiped the word suggestions a moment after each one
+    // appeared.
+    if (!value || !Array.isArray(value.items) || value.items.length === 0) {
       if (root.suggestions.source === source) root.suggestions = root.noSuggestions
       return
     }
@@ -1303,14 +1331,212 @@ Item {
                          next: !!value.next, cursor: value.cursor | 0 }
   }
   // Whether the strip has a place on the keyboard at all. It holds its place
-  // while an engine is on, items or not, so the keyboard keeps one height
-  // through a sentence rather than jumping at every word.
-  readonly property bool suggestionsShown: root.imeComposing
+  // while an engine is on, or suggestions are, items or not, so the keyboard
+  // keeps one height through a sentence rather than jumping at every word.
+  readonly property bool suggestionsShown: root.imeComposing || root.predicting || root.swipeActive
   function chooseSuggestion(index) {
     if (root.suggestions.source === "fcitx") root.sendBridge("select " + index)
+    else if (root.suggestions.source === "predict") root.takeWord(index)
+    else if (root.suggestions.source === "swipe") root.swapSwiped(index)
   }
   function pageSuggestions(forward) {
     if (root.suggestions.source === "fcitx") root.sendBridge(forward ? "next" : "prev")
+  }
+
+  // ---- Word suggestions --------------------------------------------------
+
+  // What the word being typed could be, from predictor.py and wordfreq's
+  // English list, which `ragtop predictions enable` downloads. Off unless
+  // turned on: Ragtop cannot tell a password field in an application from
+  // any other, and the strip would show what one is being typed into.
+  readonly property bool predictionsEnabled: root.settings["predictions"] === "on"
+  readonly property string wordsFile: (Quickshell.env("XDG_DATA_HOME")
+    || Quickshell.env("HOME") + "/.local/share") + "/ragtop/words/en/small_en.msgpack.gz"
+  property bool wordsReady: false
+  // English layouts only, by their xkb name: the list is English, and
+  // suggesting English words to someone typing French is worse than none.
+  readonly property var englishLayouts: ["us", "gb", "au", "nz", "ie", "za"]
+  readonly property bool englishLayout: !!root.keyLabels
+    && root.englishLayouts.indexOf(root.keyLabels.code) !== -1
+  // The one password prompt Ragtop can see: Omarchy's polkit agent, whose
+  // patched clone types with this keyboard.
+  readonly property bool passwordOpen: root.openOverlays.indexOf("omarchy-polkit") !== -1
+  readonly property bool predicting: root.predictionsEnabled && root.wordsReady
+    && root.englishLayout && !root.imeComposing && !root.passwordOpen
+  onPredictingChanged: {
+    root.currentWord = ""
+    if (!root.predicting) root.setSuggestions("predict", null)
+  }
+
+  // The word being typed, as far as the keys sent say. Only a guess: a tap
+  // in the text moves the cursor without a key, so anything that is not a
+  // letter, BackSpace aside, starts again rather than guess further.
+  property string currentWord: ""
+  property real backSpaceDownAt: 0
+  function trackWord(command) {
+    // Anything typed after a swipe makes its word final.
+    if (root.swipedWord !== "") {
+      root.swipedWord = ""
+      if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
+    }
+    var space = command.indexOf(" ")
+    var cmd = space < 0 ? command : command.slice(0, space)
+    var arg = space < 0 ? "" : command.slice(space + 1)
+    if (cmd === "type") {
+      var letters = arg.length > 0
+      for (var i = 0; i < arg.length; i++)
+        if (arg[i] !== "'" && arg[i].toLowerCase() === arg[i].toUpperCase()) letters = false
+      root.currentWord = letters ? root.currentWord + arg : ""
+    } else if (arg === "BackSpace" && (cmd === "key" || cmd === "down")) {
+      root.currentWord = root.currentWord.slice(0, -1)
+      if (cmd === "down") root.backSpaceDownAt = Date.now()
+    } else if (cmd === "up" && arg === "BackSpace") {
+      // Held long enough to repeat, it took an unknown number of letters.
+      if (Date.now() - root.backSpaceDownAt > 400) root.currentWord = ""
+    } else if (cmd !== "up" && cmd !== "hold" && cmd !== "release" && cmd !== "route") {
+      root.currentWord = ""
+    }
+  }
+  onCurrentWordChanged: {
+    if (!root.predicting) return
+    if (root.currentWord === "") {
+      root.setSuggestions("predict", null)
+    } else if (predictorProc.running) {
+      root.asked.push(root.currentWord)
+      predictorProc.write("complete " + root.currentWord + "\n")
+    }
+  }
+  // The words asked about, oldest first, which the answers come back in the
+  // order of. An answer for a word that has since changed is dropped: fast
+  // typing otherwise had one arrive after a space, offering words for what
+  // was no longer being typed, and taking one deleted nothing.
+  property var asked: []
+
+  // Swaps the word typed so far for the one chosen, and a space after it,
+  // the way a phone keyboard does.
+  function takeWord(index) {
+    var item = root.suggestions.items[index]
+    // No word in progress means these were for one already finished.
+    if (!item || !keyboardHelper.running || root.currentWord === "") return
+    var out = ""
+    for (var i = 0; i < root.currentWord.length; i++) out += "key BackSpace\n"
+    keyboardHelper.write(out + "type " + item.text + " \n")
+    root.currentWord = ""
+    root.autoSpaced = true
+  }
+
+  // ---- Swipes ------------------------------------------------------------
+
+  // A word drawn across the letters, decoded by predictor.py against the
+  // same list (Keyboard.qml draws and sends the path). Off unless turned on,
+  // since it changes what a finger moving over the keys means.
+  readonly property bool swipeEnabled: root.settings["swipe"] === "on"
+  readonly property bool swipeActive: root.swipeEnabled && root.wordsReady
+    && root.englishLayout && !root.imeComposing && !root.passwordOpen
+  onSwipeActiveChanged: if (!root.swipeActive) root.setSuggestions("swipe", null)
+  property var swipeKeys: null
+  function setSwipeKeys(value) {
+    root.swipeKeys = value
+    if (predictorProc.running) predictorProc.write("keys " + JSON.stringify(value) + "\n")
+  }
+  // The word the last swipe typed, with its spaces, so a tap on one of the
+  // others can take it back; and whether it began with a capital.
+  property string swipedWord: ""
+  // The space a swipe put in front of its word, or "". A swipe after letters
+  // that were tapped starts a word of its own: "a" can only be tapped, and
+  // "a" then a swiped "test" ran together as "atest". After a space, a
+  // swipe, or a chosen suggestion there is nothing to separate.
+  property string swipeLead: ""
+  property bool swipeShifted: false
+  function swipe(points, shifted) {
+    if (!root.swipeActive || !predictorProc.running) return
+    root.swipeShifted = shifted
+    predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
+      return [Math.round(p[0]), Math.round(p[1])]
+    })) + "\n")
+  }
+  function capitalised(word) {
+    return root.swipeShifted ? word.charAt(0).toUpperCase() + word.slice(1) : word
+  }
+  function typeSwiped(words) {
+    if (!root.swipeActive || words.length === 0 || !keyboardHelper.running) return
+    root.swipeLead = root.currentWord !== "" ? " " : ""
+    var word = root.swipeLead + root.capitalised(words[0]) + " "
+    keyboardHelper.write("type " + word + "\n")
+    root.currentWord = ""
+    root.swipedWord = word
+    root.autoSpaced = true
+    root.setSuggestions("swipe", { items: words.map(function(w) { return { text: root.capitalised(w), note: "" } }),
+                                   prev: false, next: false, cursor: 0 })
+  }
+  function swapSwiped(index) {
+    var item = root.suggestions.items[index]
+    if (!item || !keyboardHelper.running || root.swipedWord === "") return
+    var out = ""
+    for (var i = 0; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+    var word = root.swipeLead + item.text + " "
+    keyboardHelper.write(out + "type " + word + "\n")
+    root.swipedWord = word
+    root.autoSpaced = true
+    root.setSuggestions("swipe", { items: root.suggestions.items, prev: false, next: false, cursor: index })
+  }
+
+  readonly property bool wantPredictor: root.keyboardAvailable && (root.predictionsEnabled || root.swipeEnabled)
+  onWantPredictorChanged: {
+    predictorRestart.stop()
+    predictorProc.running = root.wantPredictor
+  }
+  Process {
+    id: predictorProc
+    command: ["/usr/bin/python3", Qt.resolvedUrl("predictor.py").toString().replace(/^file:\/\//, ""),
+              root.wordsFile]
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (line.startsWith("ready ")) {
+          root.wordsReady = true
+          root.sendRows()
+          if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
+        } else if (line === "missing") {
+          root.wordsReady = false
+        } else if (line.startsWith("swiped ")) {
+          var found
+          try { found = JSON.parse(line.slice(7)) } catch (e) { return }
+          root.typeSwiped(found)
+        } else if (line.startsWith("suggest ")) {
+          var forWord = root.asked.shift()
+          if (!root.predicting || forWord !== root.currentWord) return
+          var words
+          try { words = JSON.parse(line.slice(8)) } catch (e) { return }
+          root.setSuggestions("predict", { items: words.map(function(w) { return { text: w, note: "" } }),
+                                           prev: false, next: false, cursor: -1 })
+        }
+      }
+    }
+    onRunningChanged: {
+      root.asked = []
+      if (running) root.retryStarted("predict")
+      else root.wordsReady = false
+    }
+    onExited: {
+      if (!root.wantPredictor) return
+      predictorRestart.interval = root.retryAfterExit("predict")
+      predictorRestart.start()
+      root.retryTell("predict")
+    }
+  }
+  Timer {
+    id: predictorRestart
+    interval: 5000
+    onTriggered: predictorProc.running = root.wantPredictor
+  }
+  // The layout's letter rows, so a slip is judged by which keys are really
+  // neighbours on it.
+  function sendRows() {
+    if (!predictorProc.running || !root.keyLabels || !Array.isArray(root.keyLabels.rows)) return
+    predictorProc.write("rows " + JSON.stringify(root.keyLabels.rows.map(function(row) {
+      return row.map(function(k) { return k[0] })
+    })) + "\n")
   }
 
   function openSettings() {
@@ -1894,6 +2120,8 @@ Item {
     else root.openTiling()
   }
   onOskVisibleChanged: {
+    // A keyboard put away is the end of whatever word it was typing.
+    root.currentWord = ""
     if (!root.oskVisible) root.toolsOpen = false
     // The keyboard and tiling mode are exclusive: entering hides the
     // keyboard, and the keyboard coming back by any route ends the mode.
@@ -2667,6 +2895,12 @@ Item {
         raises: root.autoShows,
         inputMethod: !root.inputMethodsEnabled ? "off"
           : root.imeEngine ? root.imeEngine.name : "layout",
+        swipe: !root.swipeEnabled ? "off" : !root.wordsReady ? "nowords"
+          : root.swipeActive ? "on" : "idle",
+        predictions: !root.predictionsEnabled ? "off"
+          : !predictorProc.running ? root.retryHealth("predict", false)
+          : !root.wordsReady ? "nowords"
+          : root.predicting ? "on" : "idle",
         tabletSwitch: root.watchSwitch ? root.retryHealth("switch", tabletModeProc.running) : "off",
         sensor: !root.rotationAvailable ? "absent"
           // Told apart from "absent", which is the package, and from

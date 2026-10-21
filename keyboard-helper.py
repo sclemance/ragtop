@@ -660,6 +660,10 @@ class Keyboard:
         except OSError:
             labels = None  # no libxkbcommon to read: the keyboard keeps its US labels
         if labels:
+            # The layout's xkb name, "us" or "gb", for what depends on the
+            # language rather than on the keys: the name above is translated.
+            codes = names.get("layout", "").split(",")
+            labels["code"] = codes[group].strip() if group < len(codes) else ""
             print("labels " + json.dumps(labels, ensure_ascii=False), flush=True)
 
     def _new_device(self):

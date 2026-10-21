@@ -9,6 +9,9 @@
 #        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop input-methods (enabled | enable | disable | toggle)
+#        ragtop predictions (enabled | enable | disable | toggle)
+#        ragtop swipe (enabled | enable | disable | toggle)
+#        ragtop words (status | install | remove)    the English word list
 #        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop keyboard-layout (get | is <name> | set <name>)
 #        ragtop display (get | is <name> | set <name>)
@@ -179,15 +182,15 @@ locked() {
   ( flock 9; "$@" ) 9>"$settings.lock"
 }
 
-# switch <key> <enabled|enable|disable|toggle> for an on/off setting that
-# defaults to on.
+# switch <key> <enabled|enable|disable|toggle> [default] for an on/off
+# setting, which defaults to on unless the third argument says off.
 switch() {
-  local key="$1" value
+  local key="$1" value default="${3:-on}"
   case "${2:-}" in
-    enabled) [[ $(get "$key" on) == on ]]; return ;;
+    enabled) [[ $(get "$key" "$default") == on ]]; return ;;
     enable) value=on ;;
     disable) value=off ;;
-    toggle) [[ $(get "$key" on) == on ]] && value=off || value=on ;;
+    toggle) [[ $(get "$key" "$default") == on ]] && value=off || value=on ;;
     *) usage ;;
   esac
   put "$key" "$value"
@@ -196,7 +199,65 @@ switch() {
     "auto-show off") notify "The keyboard no longer comes up by itself on text fields." ;;
     "input-methods on") notify "Chinese, Japanese and Korean input methods now show their choices on the keyboard." ;;
     "input-methods off") notify "The keyboard no longer shows input method choices. fcitx5 shows its own." ;;
+    "predictions on") notify "Word suggestions are on, for English layouts." ;;
+    "predictions off") notify "Word suggestions are off." ;;
+    "swipe on") notify "Swipe typing is on, for English layouts: draw a word across the letters." ;;
+    "swipe off") notify "Swipe typing is off." ;;
   esac
+}
+
+# Word suggestions read wordfreq's English list, which is CC-BY-SA rather
+# than MIT and so is not in the repository. It is fetched when suggestions
+# are turned on, from one fixed release, checked against a fixed hash, and
+# kept exactly as published with its notice beside it (words/NOTICE.md).
+words_dir="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/words/en"
+words_file="$words_dir/small_en.msgpack.gz"
+words_url="https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data/small_en.msgpack.gz"
+words_sha256="f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247"
+
+words_installed() { [[ -f $words_file ]]; }
+
+words_install() {
+  words_installed && return 0
+  mkdir -p "$words_dir"
+  local tmp
+  tmp=$(mktemp "$words_dir/.download.XXXXXX")
+  if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 60 -o "$tmp" "$words_url"; then
+    rm -f "$tmp"
+    echo "Could not download the word list from GitHub." >&2
+    return 1
+  fi
+  if [[ $(sha256sum "$tmp" | cut -d' ' -f1) != "$words_sha256" ]]; then
+    rm -f "$tmp"
+    echo "The downloaded word list is not the one expected, so it was not kept." >&2
+    return 1
+  fi
+  cp "$repo/words/NOTICE.md" "$words_dir/NOTICE.md"
+  mv -f "$tmp" "$words_file"
+}
+
+words() {
+  case "${1:-}" in
+    status) words_installed && echo "installed: $words_file" || echo "not installed" ;;
+    install) words_install ;;
+    remove) rm -rf "$words_dir" ;;
+    *) usage ;;
+  esac
+}
+
+# needs_words <key> <verb> <what>: suggestions and swipes both read the word
+# list, so turning either on fetches it first, and it stays off if it can't.
+needs_words() {
+  if [[ $2 == enable || ( $2 == toggle && $(get "$1" off) != on ) ]]; then
+    if ! words_installed; then
+      notify "Downloading the English word list (125 KB, from wordfreq)."
+      if ! words_install; then
+        notify "$3 stays off: the word list could not be downloaded."
+        return 1
+      fi
+    fi
+  fi
+  switch "$1" "$2" off
 }
 
 # choice <key> <default> <get|is|set> [value] for a setting with named
@@ -633,6 +694,16 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   if [[ -n $ime ]]; then
     row "Input method" "$ime"
   fi
+  # on, off, idle (a layout that is not English, or a CJK engine on), or
+  # nowords when the list has not been downloaded.
+  swipe=$(health_field swipe)
+  if [[ -n $swipe ]]; then
+    row "Swipe typing" "$swipe"
+  fi
+  predictions=$(health_field predictions)
+  if [[ -n $predictions ]]; then
+    row "Word suggestions" "$predictions, word list $(words_installed && echo installed || echo absent)"
+  fi
 
   if [[ -z $health ]]; then
     row Background "unknown, the service did not answer"
@@ -698,6 +769,9 @@ case "${1:-} ${2:-}" in
   "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "input-methods "*) switch "$1" "${2:-}" ;;
+  "predictions "*) needs_words predictions "${2:-}" "Word suggestions" ;;
+  "swipe "*) needs_words swipe "${2:-}" "Swipe typing" ;;
+  "words "*) words "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;
