@@ -631,10 +631,23 @@ to a key.
 
 ### Word suggestions and swipe
 
-**Beta, English layouts only, and off until you turn them on**, in Setup ›
-Tablet: **Word Suggestions (beta)** and **Swipe Typing (beta)**. Turning
-either on downloads the word list they share once (see
+**Beta, in English, and off until you turn them on**, in Setup › Tablet ›
+**Word Suggestions (beta)**, or with the switches on the keyboard's controls
+panel. Turning suggestions on downloads the word list once (see
 [Privacy and security](#privacy-and-security)).
+
+Suggestions are **English, on English Layouts** or **English, on Any
+Layout**. The words are English either way; what differs is when. On English
+layouts, Ragtop decides by your layout's name (US, UK, Australian, New
+Zealand, Irish, South African, Dvorak and the other US variants included),
+so switching to another layout, say to write French, puts the strip away.
+On any layout is for writing English on another one, a German keyboard
+writing English, or an English layout Ragtop does not recognise. Switching
+them off and on again brings back whichever you chose.
+
+**Swipe Typing** is offered once suggestions are on, and goes off with
+them: it uses the same words, and the same strip for its runners-up. It
+follows the same layout rule.
 
 **Word suggestions** fill the strip above the keys with what the word you are
 typing could be: `hel` offers help, held, hello. A slip of the finger is
@@ -1068,8 +1081,8 @@ the Settings button on the keyboard's own panel opens directly:
 | On-screen keyboard: Follow Sensor (on in tablet mode), Always On or Always Off | Follow Sensor | Setup › Tablet › Keyboard, or the keyboard button in the bar |
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | Chinese, Japanese and Korean choices in a strip on the keyboard (see [Chinese, Japanese and Korean](#chinese-japanese-and-korean)) | on | Setup › Tablet › CJK Choices on Keyboard |
-| English word suggestions in the strip (see [Word suggestions and swipe](#word-suggestions-and-swipe)) | off | Setup › Tablet › Word Suggestions (beta) |
-| Swipe typing, English | off | Setup › Tablet › Swipe Typing (beta) |
+| English word suggestions in the strip: Off, English on English Layouts, or English on Any Layout (see [Word suggestions and swipe](#word-suggestions-and-swipe)) | Off | Setup › Tablet › Word Suggestions (beta), or the controls panel |
+| Swipe typing, while suggestions are on | off | Setup › Tablet › Swipe Typing (beta), or the controls panel |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key size against the theme's: Automatic, a percentage from 60 to 160, or one of five names | Automatic where you have not set one | the controls panel's slider, or Setup › Tablet › Key Size |
 | Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
@@ -1087,7 +1100,8 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
 `input-methods toggle` (or `enable`, `disable`),
-`predictions toggle` and `swipe toggle` (the same three), `words status|install|remove`,
+`predictions set off|english|all` (or `toggle`, `enable`, `disable`), `swipe toggle`
+(or `enable`, `disable`), `words status|install|remove`,
 `size-adjust set auto|<60-160>|smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
 `theme apply <name>` (`theme list` shows them). Settings other than the
@@ -1140,7 +1154,7 @@ If tablet mode is never detected:
 
 True today, and worth saying if you want them gone:
 
-- **Word suggestions and swipe are English only, and in beta.** See
+- **Word suggestions and swipe are English words only, and in beta.** See
   [Word suggestions and swipe](#word-suggestions-and-swipe).
 - **Chinese, Japanese and Korean are in beta.** They work through
   fcitx5's engines, with their choices in a strip above the keys, and have

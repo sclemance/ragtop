@@ -9,7 +9,7 @@
 #        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop input-methods (enabled | enable | disable | toggle)
-#        ragtop predictions (enabled | enable | disable | toggle)
+#        ragtop predictions (get | is <which> | set <which> | enabled | enable | disable | toggle)
 #        ragtop swipe (enabled | enable | disable | toggle)
 #        ragtop words (status | install | remove)    the English word list
 #        ragtop keyboard (get | is <mode> | set <mode>)
@@ -199,9 +199,7 @@ switch() {
     "auto-show off") notify "The keyboard no longer comes up by itself on text fields." ;;
     "input-methods on") notify "Chinese, Japanese and Korean input methods now show their choices on the keyboard." ;;
     "input-methods off") notify "The keyboard no longer shows input method choices. fcitx5 shows its own." ;;
-    "predictions on") notify "Word suggestions are on, for English layouts." ;;
-    "predictions off") notify "Word suggestions are off." ;;
-    "swipe on") notify "Swipe typing is on, for English layouts: draw a word across the letters." ;;
+    "swipe on") notify "Swipe typing is on: draw a word across the letters." ;;
     "swipe off") notify "Swipe typing is off." ;;
   esac
 }
@@ -245,19 +243,58 @@ words() {
   esac
 }
 
-# needs_words <key> <verb> <what>: suggestions and swipes both read the word
-# list, so turning either on fetches it first, and it stays off if it can't.
-needs_words() {
-  if [[ $2 == enable || ( $2 == toggle && $(get "$1" off) != on ) ]]; then
-    if ! words_installed; then
-      notify "Downloading the English word list (125 KB, from wordfreq)."
-      if ! words_install; then
-        notify "$3 stays off: the word list could not be downloaded."
-        return 1
-      fi
+# Word suggestions are off, on for English layouts ("english", which is
+# Ragtop deciding by the layout's xkb name), or on whatever the layout
+# ("all", the way past that decision: a German keyboard writing English).
+# Turning them on fetches the word list first, and they stay off if it
+# can't be had. enable and toggle bring back whichever of the two was last
+# chosen, kept as predictions-on. Before there were two, "on" meant english.
+predictions_mode() {
+  local mode
+  mode=$(get predictions off)
+  [[ $mode == on ]] && mode=english
+  echo "$mode"
+}
+
+predictions() {
+  local mode=""
+  case "${1:-}" in
+    get) predictions_mode; return ;;
+    is) [[ -n ${2:-} ]] || usage; [[ $(predictions_mode) == "$2" ]]; return ;;
+    enabled) [[ $(predictions_mode) != off ]]; return ;;
+    set) case "${2:-}" in off|english|all) mode=$2 ;; *) usage ;; esac ;;
+    enable) mode=$(get predictions-on english) ;;
+    disable) mode=off ;;
+    toggle) if [[ $(predictions_mode) == off ]]; then mode=$(get predictions-on english); else mode=off; fi ;;
+    *) usage ;;
+  esac
+  if [[ $mode != off ]] && ! words_installed; then
+    notify "Downloading the English word list (125 KB, from wordfreq)."
+    if ! words_install; then
+      notify "Word suggestions stay off: the word list could not be downloaded."
+      return 1
     fi
   fi
-  switch "$1" "$2" off
+  put predictions "$mode"
+  [[ $mode == off ]] || put predictions-on "$mode"
+  case "$mode" in
+    english) notify "English word suggestions are on, on English layouts." ;;
+    all) notify "English word suggestions are on, on any layout." ;;
+    off) notify "Word suggestions are off, and swipe typing with them." ;;
+  esac
+}
+
+# Swipe typing reads the same words and offers its runners-up in the same
+# strip, so it is only ever on with suggestions. Its own setting is kept
+# while they are off, and comes back with them.
+swipe() {
+  if [[ ${1:-} == enable || ( ${1:-} == toggle && $(get swipe off) != on ) ]]; then
+    if [[ $(predictions_mode) == off ]]; then
+      notify "Turn on word suggestions first: swipe typing uses the same words."
+      return 1
+    fi
+  fi
+  switch swipe "${1:-}" off
 }
 
 # choice <key> <default> <get|is|set> [value] for a setting with named
@@ -702,7 +739,7 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   fi
   predictions=$(health_field predictions)
   if [[ -n $predictions ]]; then
-    row "Word suggestions" "$predictions, word list $(words_installed && echo installed || echo absent)"
+    row "Word suggestions" "$(predictions_mode), $predictions, word list $(words_installed && echo installed || echo absent)"
   fi
 
   if [[ -z $health ]]; then
@@ -769,8 +806,8 @@ case "${1:-} ${2:-}" in
   "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "input-methods "*) switch "$1" "${2:-}" ;;
-  "predictions "*) needs_words predictions "${2:-}" "Word suggestions" ;;
-  "swipe "*) needs_words swipe "${2:-}" "Swipe typing" ;;
+  "predictions "*) predictions "${2:-}" "${3:-}" ;;
+  "swipe "*) swipe "${2:-}" ;;
   "words "*) words "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;

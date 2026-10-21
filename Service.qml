@@ -1399,7 +1399,12 @@ Item {
   // English list, which `ragtop predictions enable` downloads. Off unless
   // turned on: Ragtop cannot tell a password field in an application from
   // any other, and the strip would show what one is being typed into.
-  readonly property bool predictionsEnabled: root.settings["predictions"] === "on"
+  // off, english (on for English layouts, decided by the layout's xkb name)
+  // or all (on whatever the layout, the way past that decision). "on" is
+  // what english was called before there were two.
+  readonly property string predictionsMode: root.settings["predictions"] === "on" ? "english"
+    : ["english", "all"].indexOf(root.settings["predictions"]) !== -1 ? root.settings["predictions"] : "off"
+  readonly property bool predictionsEnabled: root.predictionsMode !== "off"
   readonly property string wordsFile: (Quickshell.env("XDG_DATA_HOME")
     || Quickshell.env("HOME") + "/.local/share") + "/ragtop/words/en/small_en.msgpack.gz"
   property bool wordsReady: false
@@ -1411,8 +1416,9 @@ Item {
   // The one password prompt Ragtop can see: Omarchy's polkit agent, whose
   // patched clone types with this keyboard.
   readonly property bool passwordOpen: root.openOverlays.indexOf("omarchy-polkit") !== -1
+  readonly property bool layoutAllowsWords: root.predictionsMode === "all" || root.englishLayout
   readonly property bool predicting: root.predictionsEnabled && root.wordsReady
-    && root.englishLayout && !root.imeComposing && !root.passwordOpen
+    && root.layoutAllowsWords && !root.imeComposing && !root.passwordOpen
   onPredictingChanged: {
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
@@ -1481,8 +1487,9 @@ Item {
   // same list (Keyboard.qml draws and sends the path). Off unless turned on,
   // since it changes what a finger moving over the keys means.
   readonly property bool swipeEnabled: root.settings["swipe"] === "on"
-  readonly property bool swipeActive: root.swipeEnabled && root.wordsReady
-    && root.englishLayout && !root.imeComposing && !root.passwordOpen
+  // Only ever with suggestions: the same words, and its runners-up in the
+  // same strip.
+  readonly property bool swipeActive: root.swipeEnabled && root.predicting
   onSwipeActiveChanged: if (!root.swipeActive) root.setSuggestions("swipe", null)
   property var swipeKeys: null
   function setSwipeKeys(value) {
@@ -1578,7 +1585,17 @@ Item {
     root.setSuggestions("swipe", { items: root.suggestions.items, prev: false, next: false, cursor: index })
   }
 
-  readonly property bool wantPredictor: root.keyboardAvailable && (root.predictionsEnabled || root.swipeEnabled)
+  readonly property bool wantPredictor: root.keyboardAvailable && root.predictionsEnabled
+
+  // The controls panel's switches. Through the CLI, which is what fetches
+  // the word list when it is missing and says so.
+  function toggleSetting(name) {
+    if (settingToggleProc.running) return   // a second tap mid-write would be lost
+    settingToggleProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                                 name, "toggle"]
+    settingToggleProc.running = true
+  }
+  Process { id: settingToggleProc }
   onWantPredictorChanged: {
     predictorRestart.stop()
     predictorProc.running = root.wantPredictor
@@ -3003,7 +3020,7 @@ Item {
         raises: root.autoShows,
         inputMethod: !root.inputMethodsEnabled ? "off"
           : root.imeEngine ? root.imeEngine.name : "layout",
-        swipe: !root.swipeEnabled ? "off" : !root.wordsReady ? "nowords"
+        swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
           : root.swipeActive ? "on" : "idle",
         predictions: !root.predictionsEnabled ? "off"
           : !predictorProc.running ? root.retryHealth("predict", false)

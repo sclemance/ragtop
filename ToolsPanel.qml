@@ -426,6 +426,29 @@ Item {
           onClicked: panel.service.toggleAutoShow()
         }
 
+        // Word suggestions and swipe, here because whether you want them
+        // changes with what you are writing. Swipe needs suggestions, so it
+        // waits on them, kept as it was set.
+        Toggle {
+          width: parent.width
+          label: panel.service.predictionsMode === "all" ? "English word suggestions, on any layout"
+            : "English word suggestions, on English layouts"
+          checked: panel.service.predictionsEnabled
+          foreground: Color.popups.text
+          accent: Color.accent
+          onClicked: panel.service.toggleSetting("predictions")
+        }
+        Toggle {
+          width: parent.width
+          label: "Swipe typing"
+          enabled: panel.service.predictionsEnabled
+          opacity: enabled ? 1 : 0.4
+          checked: panel.service.swipeEnabled && panel.service.predictionsEnabled
+          foreground: Color.popups.text
+          accent: Color.accent
+          onClicked: panel.service.toggleSetting("swipe")
+        }
+
         Item {
           width: parent.width
           height: settingsButton.implicitHeight

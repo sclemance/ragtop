@@ -433,8 +433,13 @@ BackSpace straight after a swipe takes the word and its space back in one,
 keeping a space the swipe put in front.
 
 **What turns them off.** A layout whose xkb name is not English (the helper
-now reports `code` in its labels, since the name is translated), a CJK
-engine, and Omarchy's polkit prompt, the one password field Ragtop can see.
+now reports `code` in its labels, since the name is translated), unless the
+setting is `all`, the override for that derived decision; a CJK engine; and
+Omarchy's polkit prompt, the one password field Ragtop can see. The setting
+is `predictions=off|english|all` (`on` from before is read as english), and
+`predictions-on` remembers which of the two a toggle brings back. Swipe is
+only active with suggestions (`swipeActive` requires `predicting`), and its
+own setting survives them being off.
 
 ## The overlay clones
 
