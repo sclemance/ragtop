@@ -1,0 +1,85 @@
+import QtQuick
+import Quickshell
+
+// The suggestion strip's hit testing: which item a touch at a given x
+// means, with the input method's page arrows at the ends and the list
+// scrolled. What it looks like is not tested here.
+ShellRoot {
+  id: test
+
+  Harness { id: t }
+
+  // Only what the strip reads from the keyboard's theme.
+  QtObject {
+    id: fakeTheme
+    property string fontFamily: "monospace"
+    property real gap: 4
+    property real keyRadius: 4
+    property color pressedKey: "gray"
+    property color specialKey: "darkgray"
+    property color accent: "blue"
+    property color text: "black"
+    property color specialText: "gray"
+    property color outline: "gray"
+  }
+
+  property SuggestionStrip strip: SuggestionStrip {
+    theme: fakeTheme
+    width: 800
+    height: 40
+  }
+
+  readonly property var few: [{ text: "日本語", note: "" }, { text: "ニホンゴ", note: "カタカナ" },
+                              { text: "にほんご", note: "ひらがな" }]
+  function many() {
+    var out = []
+    for (var i = 0; i < 40; i++) out.push({ text: "候補" + i, note: "" })
+    return out
+  }
+  function middleOf(i) { return test.strip.cells[i].x + test.strip.cells[i].width / 2 }
+
+  Component.onCompleted: t.run([
+    [0, function() {
+      test.strip.items = test.few
+      var c = test.strip.cells
+      t.equal(c.length, 3, "a cell for each item")
+      t.equal(c[0].x, 0, "the first cell starts the list")
+      t.ok(c[1].x === c[0].x + c[0].width && c[2].x === c[1].x + c[1].width, "cells sit edge to edge")
+      t.ok(c.every(function(e) { return e.width >= test.strip.height }), "no cell narrower than it is tall")
+      t.ok(c[1].width > c[0].width, "a note widens its cell")
+    }],
+    [0, function() {
+      t.equal(test.strip.cellAt(test.middleOf(0)), 0, "a touch on the first item means it")
+      t.equal(test.strip.cellAt(test.middleOf(2)), 2, "a touch on the last item means it")
+      t.ok(test.strip.contentWidth < test.strip.width, "three items leave room after them")
+      t.equal(test.strip.cellAt(test.strip.width - 1), -1, "a touch past the last item means nothing")
+    }],
+    [0, function() {
+      test.strip.hasPrev = true
+      test.strip.hasNext = true
+      t.equal(test.strip.cellAt(1), test.strip.prevCell, "the left end is the previous page")
+      t.equal(test.strip.cellAt(test.strip.width - 1), test.strip.nextCell, "the right end is the next page")
+      t.equal(test.strip.cellAt(test.strip.arrowWidth + test.middleOf(0)), 0,
+              "items start after the previous page's arrow")
+      test.strip.hasPrev = false
+      test.strip.hasNext = false
+    }],
+    [0, function() {
+      test.strip.items = test.many()
+      t.ok(test.strip.maxScroll > 0, "a long list can scroll")
+      test.strip.scrollTo(1e6)
+      t.equal(test.strip.scroll, test.strip.maxScroll, "scrolling stops at the end of the list")
+      t.equal(test.strip.cellAt(test.strip.width - 1), 39, "scrolled to the end, the right edge is the last item")
+      test.strip.scrollTo(-50)
+      t.equal(test.strip.scroll, 0, "scrolling stops at the start")
+      test.strip.scrollTo(test.strip.cells[10].x)
+      t.equal(test.strip.cellAt(1), 10, "scrolled, a touch means what is under it now")
+    }],
+    [0, function() {
+      test.strip.items = test.few
+      t.equal(test.strip.scroll, 0, "a new list starts at its beginning")
+      test.strip.items = []
+      t.equal(test.strip.cellAt(10), -1, "with nothing to choose, nothing is chosen")
+    }]
+  ])
+}

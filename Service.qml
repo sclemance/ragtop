@@ -866,7 +866,10 @@ Item {
   // bridge stopped following tablet mode at all and auto-show stayed dead
   // until the shell restarted. The switch watcher below already avoided this
   // by driving its process from a changed handler, and so does this now.
-  readonly property bool wantFocusBridge: root.keyboardAvailable && root.autoShowEnabled
+  // The bridge is also how Chinese, Japanese and Korean reach the keyboard
+  // (see the input methods below), so it runs for either.
+  readonly property bool wantFocusBridge: root.keyboardAvailable
+    && (root.autoShowEnabled || root.inputMethodsEnabled)
 
   // Whether a focused text field may raise the keyboard on its own. Asking
   // for it by hand still works in each of these: they go through
@@ -887,14 +890,33 @@ Item {
   Process {
     id: focusBridgeProc
     command: ["/usr/bin/python3", Qt.resolvedUrl("fcitx-osk-bridge.py").toString().replace(/^file:\/\//, "")]
+    stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
-        if (line !== "show") return
-        root.autoShows++
-        if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
+        if (line === "show") {
+          root.autoShows++
+          if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
+          return
+        }
+        var space = line.indexOf(" ")
+        var kind = line.slice(0, space)
+        var value
+        try { value = JSON.parse(line.slice(space + 1)) } catch (e) { return }
+        if (kind === "engine") root.imeEngine = value
+        else if (kind === "engines") root.imeEngines = Array.isArray(value) ? value : []
+        else if (kind === "candidates") root.setSuggestions("fcitx", value)
       }
     }
-    onRunningChanged: if (running) root.retryStarted("autoshow")
+    onRunningChanged: {
+      if (running) {
+        root.retryStarted("autoshow")
+      } else {
+        // Whatever it last said went with it.
+        root.imeEngine = null
+        root.imeEngines = []
+        root.setSuggestions("fcitx", null)
+      }
+    }
     onExited: {
       if (!root.wantFocusBridge) return
       focusBridgeRestart.interval = root.retryAfterExit("autoshow")
@@ -1197,7 +1219,12 @@ Item {
         }
       }
     }
-    onRunningChanged: if (running) root.retryStarted("keyboard")
+    onRunningChanged: {
+      if (!running) return
+      root.retryStarted("keyboard")
+      // A new helper starts on the Wayland route, whatever the old one was on.
+      if (root.imeComposing) root.sendRoute()
+    }
     onExited: {
       keyboardHelperRestart.interval = root.retryAfterExit("keyboard")
       keyboardHelperRestart.start()
@@ -1229,6 +1256,61 @@ Item {
   // One command per line. See keyboard-helper.py.
   function sendKeys(command) {
     if (keyboardHelper.running) keyboardHelper.write(command + "\n")
+  }
+
+  // ---- Input methods: Chinese, Japanese, Korean ------------------------
+
+  // Typing these goes through fcitx5, which turns romaji into kana and kanji,
+  // pinyin into hanzi, and jamo into Hangul syllables, and offers what it
+  // could mean. Its own list of those pops up by the text and cannot be
+  // touched, so while one of its composing engines is on in the focused
+  // field, the keyboard shows them in its suggestion strip instead, and its
+  // keys go through fcitx5's on-screen keyboard interface so the list keeps
+  // coming (keyboard-helper.py, FcitxRoute). A plain layout is untouched.
+  //
+  // Which engine is on is fcitx5's to say and the bridge passes it on. The
+  // setting is the way out of all of it: off, keys go the Wayland way as
+  // they always have and fcitx5 draws its own list.
+  readonly property bool inputMethodsEnabled: root.settings["input-methods"] !== "off"
+  // { name, label, title } for the composing engine on in the focused field,
+  // e.g. { "mozc", "あ", "Mozc" }, or null for a plain layout.
+  property var imeEngine: null
+  // Every composing engine in the user's fcitx5 group, the same objects, for
+  // a hold on the space bar to offer.
+  property var imeEngines: []
+  readonly property bool imeComposing: root.inputMethodsEnabled && root.imeEngine !== null
+  onImeComposingChanged: root.sendRoute()
+  function sendRoute() { root.sendKeys("route " + (root.imeComposing ? "fcitx" : "wayland")) }
+
+  function sendBridge(command) {
+    if (focusBridgeProc.running) focusBridgeProc.write(command + "\n")
+  }
+  function switchEngine(name) { root.sendBridge("switch " + name) }
+  function leaveEngine() { root.sendBridge("deactivate") }
+
+  // What the suggestion strip shows: { source, items: [{ text, note }],
+  // prev, next, cursor }. One strip whoever fills it. fcitx5 is the only
+  // source today; a source that predicts words, or reads a swipe, would fill
+  // the same object and answer chooseSuggestion for its own items.
+  readonly property var noSuggestions: ({ source: "", items: [], prev: false, next: false, cursor: -1 })
+  property var suggestions: root.noSuggestions
+  function setSuggestions(source, value) {
+    if (!value || !Array.isArray(value.items)) {
+      if (root.suggestions.source === source) root.suggestions = root.noSuggestions
+      return
+    }
+    root.suggestions = { source: source, items: value.items, prev: !!value.prev,
+                         next: !!value.next, cursor: value.cursor | 0 }
+  }
+  // Whether the strip has a place on the keyboard at all. It holds its place
+  // while an engine is on, items or not, so the keyboard keeps one height
+  // through a sentence rather than jumping at every word.
+  readonly property bool suggestionsShown: root.imeComposing
+  function chooseSuggestion(index) {
+    if (root.suggestions.source === "fcitx") root.sendBridge("select " + index)
+  }
+  function pageSuggestions(forward) {
+    if (root.suggestions.source === "fcitx") root.sendBridge(forward ? "next" : "prev")
   }
 
   function openSettings() {
@@ -2583,6 +2665,8 @@ Item {
         keyboard: root.retryHealth("keyboard", keyboardHelper.running),
         autoshow: root.wantFocusBridge ? root.retryHealth("autoshow", focusBridgeProc.running) : "off",
         raises: root.autoShows,
+        inputMethod: !root.inputMethodsEnabled ? "off"
+          : root.imeEngine ? root.imeEngine.name : "layout",
         tabletSwitch: root.watchSwitch ? root.retryHealth("switch", tabletModeProc.running) : "off",
         sensor: !root.rotationAvailable ? "absent"
           // Told apart from "absent", which is the package, and from

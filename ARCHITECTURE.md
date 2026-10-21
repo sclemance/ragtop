@@ -40,6 +40,7 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `KeyboardKey.qml` | How one key is drawn. Nothing else. |
 | `KeyboardTheme.qml` | Reads the look settings and resolves them into colours, sizes and corners. |
 | `KeyboardSurface.qml` | The shared backdrop and top border, used by the keyboard and the picker strip. |
+| `SuggestionStrip.qml` | The band above the keys with an input method's choices. Draws, and says which item a touch means. |
 | `KeyIcon.qml` | Icons Ragtop draws itself as paths rather than taking from a font. |
 | `LockKeyboard.qml` | A second, standalone keyboard for the lock screen. See below for why it is separate. |
 | `LockKeyIcon.qml` | The same idea for the lock screen. |
@@ -49,7 +50,7 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `PickerNav.qml` | A navigation strip for Omarchy's image picker. |
 | `SetupWizard.qml` | First-run setup, in the shell rather than the terminal. |
 | `keyboard-helper.py` | Types characters. A Wayland virtual keyboard. |
-| `fcitx-osk-bridge.py` | Listens for "an app wants text input" and says so. |
+| `fcitx-osk-bridge.py` | Ragtop's side of fcitx5: "an app wants text input", which input method is on, and its choices. |
 | `tablet-switch.py` | Watches the fold switch. |
 | `find-tablet-switch.py` | Finds which device that is. |
 | `ragtop` | The command line tool. Settings, themes, overlays, diagnostics. |
@@ -231,8 +232,8 @@ Hyprland's own `kb_*` options, and characters are looked up in it. Anything
 the layout cannot type is bound temporarily to a spare keycode at or below
 255 that carries no symbol, reused least recently first.
 
-The service talks to it over stdin, one line per command: `type`, `up`,
-`reload`, `quit`. The helper prints back a `labels` line of JSON describing
+The service talks to it over stdin, one line per command: `type`, `key`,
+`down`, `up`, `hold`, `release`, `route`, `reload`, `quit`. The helper prints back a `labels` line of JSON describing
 the active layout, its rows, the levels each key carries and the extra
 symbols it has. That is what the on-screen keyboard draws, which is why the
 keyboard shows the letters your layout actually types.
@@ -266,6 +267,88 @@ raising itself until the shell restarted.
 
 `ragtop health` reports a `raises` counter, which is the honest way to tell
 whether this path is alive.
+
+The bridge is also how input methods reach the keyboard (below), so it runs
+while either auto-show or input methods are on.
+
+## Input methods
+
+Chinese, Japanese and Korean are typed through fcitx5's composing engines,
+Mozc, Pinyin, Hangul and the like. fcitx5 shows an engine's choices in a
+popup by the text, and on a touch screen that popup is no use: tested on the
+Yoga, it vanishes when touched. So Ragtop shows them itself, in
+`SuggestionStrip.qml` above the keys.
+
+fcitx5 hands them over through its virtual keyboard addon, the same
+D-Bus interface the bridge already claims for auto-show. It calls the
+holder of `org.fcitx.Fcitx5.VirtualKeyboard` with:
+
+| Call | Signature | Means |
+| --- | --- | --- |
+| `NotifyIMActivated` | `s` | this engine is now on in the focused field, or that field gained focus |
+| `NotifyIMDeactivated` | `s` | it is off, or the field lost focus |
+| `NotifyIMListChanged` | | the user's group changed |
+| `UpdateCandidateArea` | `as b b i i` | the choices, has a previous page, has a next page, page, highlighted one |
+| `UpdatePreeditArea`, `UpdatePreeditCaret` | `s`, `i` | the word being written. Unused: the application draws it in the field |
+
+and the keyboard answers through `/virtualkeyboard`,
+`org.fcitx.Fcitx5.VirtualKeyboardBackend1`: `SelectCandidate(i)`,
+`PrevPage`, `NextPage` and `ProcessKeyEvent(uuubu)`.
+
+**The catch, and why the keys change route.** fcitx5 sends the choices only
+while it is in on-screen keyboard mode, and any key from a keyboard device
+ends that mode, the on-screen keyboard's own Wayland keys included. That is
+the "hide" the bridge has always had to re-arm after. Measured: with keys
+going the Wayland way, the first key sends `HideVirtualKeyboard` and not one
+`UpdateCandidateArea` follows. Keys sent through `ProcessKeyEvent` are the
+on-screen keyboard's by definition, so the mode holds.
+
+So the helper has two routes. `route fcitx` sends each key through
+`ProcessKeyEvent`, with its real keysym, xkb keycode (evdev's plus 8) and
+modifier state. A key fcitx5 does not use, it passes on to the application
+itself through its own virtual keyboard, which is why the keycode matters.
+`route wayland` is the helper as it always was. The service picks the route:
+fcitx while the focused field has a composing engine on and input methods
+are enabled, Wayland otherwise. A plain layout never changes route.
+
+Three things stay on the Wayland route whatever it is:
+
+- **Shortcuts.** A key with Ctrl, Alt or Super goes as a Wayland key, so
+  Hyprland's bindings see it exactly as before.
+- **A character the layout cannot type.** It needs the helper's spare-key
+  trick, which only exists on the Wayland side.
+- **Anything fcitx5 refuses.** A failed call falls back rather than losing
+  the key.
+
+**Knowing which engine is on.** fcitx5 says so on focus, by
+`NotifyIMActivated`, and keeps the choice per application, so focus moving to
+a terminal reports its plain layout. It does not say so after an arm,
+though, and an arm follows every Wayland-route key. So after each arm the
+bridge asks, with `Controller1.CurrentInputMethod`. Measured on a private
+fcitx5: focus out sends `NotifyIMDeactivated` then `Hide`, focus in sends
+`NotifyIMActivated` then `Show`, a second application gaining focus sends
+its own engine.
+
+**Never auto-start fcitx5.** Every call to `org.fcitx.Fcitx5` from the
+bridge, the helper and the tests carries `NO_AUTO_START`. D-Bus starts a
+fcitx5 for a call to the name when nobody holds it, and one started that way
+runs outside Omarchy's `omarchy-fcitx5` service. Found the hard way: a call
+during a restart of the service left a second fcitx5 holding the name and
+the service crash-looping behind it.
+
+**The strip** belongs to no input method. `Service.qml` holds `suggestions`,
+`{ source, items: [{ text, note }], prev, next, cursor }`, and answers
+`chooseSuggestion` and `pageSuggestions` by asking whichever source filled
+it. fcitx5 is the only source today. Word prediction or swipe would be
+others. The strip keeps its place while an engine is on, items or not, so
+the keyboard is one height through a sentence. Touches on it go through the
+keyboard's one touch layer like every key's: a finger that moves scrolls,
+one that lifts where it landed chooses.
+
+The space bar names the engine while one is on ("あ Mozc"), and the card a
+hold on it opens lists fcitx5's engines after Hyprland's layouts.
+`ragtop input-methods disable` turns all of it off, and keys go the Wayland
+way with fcitx5 drawing its own popup, as before.
 
 ## The overlay clones
 
@@ -433,6 +516,8 @@ filesystem what the real ones do and leaves out the running shell.
 | File | What it runs |
 | --- | --- |
 | `overlay-clones-test.sh` | The real `overlay-clones.sh` against copies of two Omarchy trees in `tests/fixtures`: 4.0.4 and `7cc6a55`. Install, status, sync, remove, edited clones, failed patches, moving between the two, shapes it must refuse. |
+| `input-methods-test.sh` | The real bridge and the helper's fcitx route against a private fcitx5 with Mozc, Pinyin and Hangul, on a bus of its own: 日本語, 你好 and 한글 typed and chosen, shortcuts kept off the route. Skipped where the engines are not installed. |
+| `suggestion-strip-test.sh` | `SuggestionStrip.qml` loaded offscreen: which item a touch means, at the arrows and scrolled. |
 | `overlay-window-test.sh` | The window the patcher generates for a clone, loaded by quickshell offscreen: what it asks for closed and open, in laptop and tablet mode, and when it lets its content be seen. |
 
 The QML tests stop where the compositor starts. A `PanelWindow` cannot exist
