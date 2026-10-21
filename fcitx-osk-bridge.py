@@ -75,9 +75,13 @@ def arm():
             # coming up by itself. It happens when fcitx5 is still starting.
             rearm_in(2000)
 
+    # Never with auto-start. D-Bus will start a fcitx5 for a call to a name
+    # nobody holds, and one started that way runs outside Omarchy's service:
+    # an arm landing while the service's own fcitx5 is restarting leaves two
+    # of them, one holding the name and the service's crash-looping behind it.
     bus.call("org.fcitx.Fcitx5", "/virtualkeyboard",
              "org.fcitx.Fcitx.VirtualKeyboard1", "ShowVirtualKeyboard",
-             None, None, Gio.DBusCallFlags.NONE, 2000, None, done)
+             None, None, Gio.DBusCallFlags.NO_AUTO_START, 2000, None, done)
     return GLib.SOURCE_REMOVE
 
 
