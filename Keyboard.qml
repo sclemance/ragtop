@@ -760,7 +760,9 @@ Item {
     var rows = root.rowHeightsOf(form)
     var h = 0
     rows.forEach(function(f) { h += Math.round(root.keyHeightUncapped * f) })
-    var strip = root.stripShown ? Math.round(root.keyHeightUncapped * root.stripFraction) + root.theme.gap : 0
+    // Counted whenever a strip could appear, shown or not: a board chosen by
+    // height that changed with the strip would swap boards mid-sentence.
+    var strip = root.service.stripPossible ? Math.round(root.keyHeightUncapped * root.stripFraction) + root.theme.gap : 0
     return root.topPadding + strip + h + (rows.length - 1) * root.theme.gap + root.theme.padding
   }
 
@@ -806,10 +808,23 @@ Item {
   readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
 
   // The suggestion strip, between the top edge and the first row, while
-  // there is something to fill it (Service.qml, suggestionsShown). As tall as
-  // the short extra row, give or take: it is read and tapped, not typed on.
-  readonly property bool stripShown: root.service.suggestionsShown === true
-  readonly property real stripFraction: 0.7
+  // there is something to fill it (Service.qml, suggestionsShown). Half a
+  // row: it is read and tapped, not typed on, and it is screen given up.
+  //
+  // It comes and goes only while no finger is down. Appearing moves every key
+  // down by its height, which under a finger mid-tap or mid-swipe would put
+  // the keys somewhere else than the touch, so the change waits for the
+  // fingers to lift.
+  readonly property bool stripWanted: root.service.suggestionsShown === true
+  property bool stripShown: false
+  readonly property bool touching: Object.keys(root.held).length > 0 || root.swipe !== null
+    || root.popup !== null || root.stripTouch !== null || root.pendingPoint !== -1
+  function syncStrip() {
+    if (!root.touching && root.stripShown !== root.stripWanted) root.stripShown = root.stripWanted
+  }
+  onStripWantedChanged: root.syncStrip()
+  onTouchingChanged: root.syncStrip()
+  readonly property real stripFraction: 0.5
   readonly property real stripHeight: root.stripShown ? Math.round(root.keyHeight * root.stripFraction) : 0
   // Where the keys begin.
   readonly property real keysTop: root.topPadding + (root.stripShown ? root.stripHeight + root.theme.gap : 0)
@@ -1315,6 +1330,7 @@ Item {
     if (root.stripTouch !== null) {
       root.stripTouch = null
       strip.pressedIndex = -1
+      formsHold.stop()
     }
     if (root.popup === null && root.pendingPoint === -1) return
     root.popup = null
@@ -1435,7 +1451,7 @@ Item {
     // grace above, where a finger reaching up can overshoot, and down to
     // the gap between the card and the key, so there is no dead band at
     // the edge the finger arrives through.
-    var within = p.kind === "layouts"
+    var within = p.kind !== "chars"
       ? (y >= p.y && y <= p.y + p.cellHeight)
       : (y >= p.y - p.cellHeight / 2 && y <= p.y + p.cellHeight + root.theme.gap)
     // A card beside its key shares a row with it, so being level with the
@@ -1459,6 +1475,10 @@ Item {
     root.popup = null
     root.endHold()
     if (!p) return
+    if (p.kind === "forms") {
+      if (p.index >= 0) root.service.takeForm(p.items[p.index])
+      return
+    }
     if (p.index < 0) {
       // A finger that never went anywhere was a slow tap on the key, and
       // types it. The space bar has already typed by the time its hold
@@ -1519,12 +1539,56 @@ Item {
     root.stripTouch = { pointId: p.pointId, x: p.x, scroll: strip.scroll,
                         cell: strip.cellAt(x), scrolled: false }
     strip.pressedIndex = root.stripTouch.cell
+    // A hold on a word offers its other forms (formsHold).
+    if (root.stripTouch.cell >= 0 && root.service.suggestions.source !== "offer") formsHold.restart()
+  }
+
+  // ---- A word's other forms ------------------------------------------------
+
+  // A hold on a word in the strip asks for its forms, summed and sums for
+  // sum, and they come up on a card below the strip, which the finger slides
+  // down onto and lifts from, as on a key's card. Nothing to offer, or a
+  // finger that lifts first, and the hold was a tap on the word.
+  Timer { id: formsHold; interval: 420; onTriggered: root.askForms() }
+  property string formsWord: ""
+  function askForms() {
+    var t = root.stripTouch
+    if (!t || t.scrolled || t.cell < 0) return
+    var item = root.service.suggestions.items[t.cell]
+    if (!item) return
+    root.formsWord = item.text
+    root.service.askForms(item.text)
+  }
+  Connections {
+    target: root.service
+    function onFormsArrived(word, forms) {
+      var t = root.stripTouch
+      if (!t || t.scrolled || word !== root.formsWord || forms.length === 0) return
+      root.openForms(t, forms)
+    }
+  }
+  function openForms(t, forms) {
+    var c = strip.cells[t.cell]
+    var room = root.width - 2 * root.theme.padding
+    var cell = Math.min(root.wordCell(forms), room / forms.length)
+    var total = cell * forms.length
+    // Centred on the word held, kept on the keyboard.
+    var middle = strip.x + strip.listLeft + c.x - strip.scroll + c.width / 2
+    var x = Math.min(Math.max(middle - total / 2, root.theme.padding), root.width - root.theme.padding - total)
+    root.popupTravelled = false
+    root.popup = { key: "", kind: "forms", items: forms, pointId: t.pointId, index: -1, preset: -1,
+                   x: x, y: root.keysTop, beside: false, cellWidth: cell,
+                   cellHeight: Math.round(root.keyHeight * 0.8) }
+    // The finger is the card's now.
+    root.stripTouch = null
+    strip.pressedIndex = -1
   }
 
   function stripMoved(p) {
     var t = root.stripTouch
     if (!t.scrolled && Math.abs(p.x - t.x) < root.unit * 0.3) return
     t.scrolled = true
+    formsHold.stop()
     strip.pressedIndex = -1
     strip.scrollTo(t.scroll - (p.x - t.x))
   }
@@ -1634,6 +1698,7 @@ Item {
 
   function stripLifted(p) {
     var t = root.stripTouch
+    formsHold.stop()
     root.stripTouch = null
     strip.pressedIndex = -1
     if (t.scrolled || t.cell === -1) return
@@ -1704,7 +1769,7 @@ Item {
         width: (root.popup ? root.popup.cellWidth : 0) - root.theme.gap
         height: parent.height
         label: modelData
-        labelKind: root.popup && root.popup.kind === "layouts" ? "word" : "char"
+        labelKind: root.popup && root.popup.kind !== "chars" ? "word" : "char"
         // The cell under the finger is filled, not merely edged: it is
         // usually half covered by that finger. "accent" no longer fills,
         // since Enter took it and became an edge, so this takes "locked".

@@ -1382,11 +1382,29 @@ Item {
     root.suggestions = { source: source, items: value.items, prev: !!value.prev,
                          next: !!value.next, cursor: value.cursor | 0 }
   }
-  // Whether the strip has a place on the keyboard at all. It holds its place
-  // while an engine is on, or suggestions are, items or not, so the keyboard
-  // keeps one height through a sentence rather than jumping at every word.
-  readonly property bool suggestionsShown: root.imeComposing || root.predicting || root.swipeActive
+  // Whether the strip has a place on the keyboard. Only while it has
+  // something in it, since an empty band is screen given up for nothing, and
+  // for a few seconds after (stripLingers), so that while someone is typing
+  // it stays, and the windows above move once when typing starts and once
+  // when it stops rather than at every word.
+  readonly property bool suggestionsSource: root.imeComposing || root.predicting || root.swipeActive
     || root.offerLanguage !== ""
+  readonly property bool suggestionsShown: root.suggestionsSource
+    && (root.suggestions.items.length > 0 || root.stripLingers)
+  property bool stripLingers: false
+  onSuggestionsChanged: {
+    if (root.suggestions.items.length > 0) {
+      root.stripLingers = true
+      stripLinger.stop()
+    } else {
+      stripLinger.restart()
+    }
+  }
+  Timer { id: stripLinger; interval: 4000; onTriggered: root.stripLingers = false }
+  // Whether a strip could appear at all, for the keyboard to choose a board
+  // that has room for it either way.
+  readonly property bool stripPossible: root.predictionsEnabled
+    || (root.inputMethodsEnabled && root.imeEngines.length > 0)
   function chooseSuggestion(index) {
     if (root.suggestions.source === "fcitx") root.sendBridge("select " + index)
     else if (root.suggestions.source === "predict") root.takeWord(index)
@@ -1566,13 +1584,32 @@ Item {
   // the way a phone keyboard does.
   function takeWord(index) {
     var item = root.suggestions.items[index]
+    if (item) root.typeInPlace(item.text)
+  }
+  function typeInPlace(text) {
     // No word in progress means these were for one already finished.
-    if (!item || !keyboardHelper.running || root.currentWord === "") return
+    if (!keyboardHelper.running || root.currentWord === "") return
     var out = ""
     for (var i = 0; i < root.currentWord.length; i++) out += "key BackSpace\n"
-    root.writeKeys(out + "type " + item.text + " \n")
+    root.writeKeys(out + "type " + text + " \n")
     root.currentWord = ""
     root.autoSpaced = true
+  }
+
+  // A word's other forms, for a hold on it in the strip: summed and sums
+  // for sum. The answer comes as formsArrived, for the keyboard to offer.
+  signal formsArrived(string word, var forms)
+  property var formsAsked: []
+  function askForms(word) {
+    if (!predictorProc.running || word === "") return
+    root.formsAsked.push(word)
+    predictorProc.write("forms " + word + "\n")
+  }
+  // One taken from the card, in the place of whatever the strip was
+  // offering for: the word being typed, or the word a swipe typed.
+  function takeForm(text) {
+    if (root.suggestions.source === "predict") root.typeInPlace(text)
+    else if (root.suggestions.source === "swipe") root.swapTo(text, -1)
   }
 
   // ---- Swipes ------------------------------------------------------------
@@ -1669,10 +1706,15 @@ Item {
   }
   function swapSwiped(index) {
     var item = root.suggestions.items[index]
-    if (!item || !keyboardHelper.running || root.swipedWord === "") return
+    if (item) root.swapTo(item.text, index)
+  }
+  // Swaps the swiped word for `text`, and marks `index` in the strip as the
+  // one now typed (-1 for a word from elsewhere, a form off the card).
+  function swapTo(text, index) {
+    if (!keyboardHelper.running || root.swipedWord === "") return
     var out = ""
     for (var i = 0; i < root.swipedWord.length; i++) out += "key BackSpace\n"
-    var word = root.swipeLead + item.text + " "
+    var word = root.swipeLead + text + " "
     root.writeKeys(out + "type " + word + "\n")
     root.swipedWord = word
     root.autoSpaced = true
@@ -1709,6 +1751,11 @@ Item {
           root.wordsLoaded = ""
           // The CLI may know better by now: a list removed by hand.
           root.readWordLanguages()
+        } else if (line.startsWith("forms ")) {
+          var forWhat = root.formsAsked.shift()
+          var forms
+          try { forms = JSON.parse(line.slice(6)) } catch (e) { return }
+          if (forWhat !== undefined) root.formsArrived(forWhat, forms)
         } else if (line.startsWith("peeked ")) {
           var guess
           try { guess = JSON.parse(line.slice(7)) } catch (e) { root.peekPending = false; return }
@@ -1729,6 +1776,7 @@ Item {
     }
     onRunningChanged: {
       root.asked = []
+      root.formsAsked = []
       root.peekPending = false
       root.wordsLoaded = ""
       if (running) {

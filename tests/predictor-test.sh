@@ -304,6 +304,60 @@ PY
   assert_lacks "$out" '"garcon"'
 }
 
+# ---- Word forms ---------------------------------------------------------------
+
+form_words() {
+  wordlist "$words" 200:sum 300:sums 320:summed 250:summer 210:try 260:tried 270:trying \
+    290:tries 590:tri 150:go 230:went 240:going 280:goes 300:gone 400:child 420:children \
+    590:childs 380:happy 450:happier 470:happiest 330:stop 360:stopped 370:stopping 380:stops
+}
+
+# forms_of <word ...>: one "forms" line each.
+forms_of() {
+  pre=()
+  for w in "$@"; do pre+=("forms $w"); done
+  suggest "$words"
+}
+
+forms_both_ways() {
+  form_words
+  forms_of sum summed stop
+  assert_contains "$out" 'forms ["sums", "summed"]'
+  assert_contains "$out" 'forms ["sum", "sums"]'
+  assert_contains "$out" 'forms ["stopped", "stopping", "stops"]'
+}
+
+# summer is in the list and is sum with -er, but it is not a form of sum:
+# -er and -est count only as a pair, which an adjective has.
+comparatives_only_as_a_pair() {
+  form_words
+  forms_of sum happy
+  assert_lacks "$out" "summer"
+  assert_contains "$out" 'forms ["happier", "happiest"]'
+}
+
+# tried could undo to tri, which the list has; the commoner root wins.
+the_commonest_root() {
+  form_words
+  forms_of tried
+  assert_contains "$out" 'forms ["try", "trying", "tries"]'
+  assert_lacks "$out" "tri\""
+}
+
+irregular_forms() {
+  form_words
+  forms_of went child
+  assert_contains "$out" 'forms ["go", "going", "goes", "gone"]'
+  assert_contains "$out" 'forms ["children"]'
+  assert_lacks "$out" "childs"
+}
+
+forms_follow_capitals() {
+  form_words
+  forms_of Stop
+  assert_contains "$out" 'forms ["Stopped", "Stopping", "Stops"]'
+}
+
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing
 run_test "predictor: a word typed with one slip is corrected" one_slip_is_corrected
@@ -327,4 +381,9 @@ run_test "predictor: an accent that was typed is kept to" a_typed_accent_is_kept
 run_test "predictor: after an elision the rest is completed, the elision kept" elisions_complete_the_rest
 run_test "predictor: each language keeps its own list" switching_back_keeps_each_list
 run_test "predictor: a swipe without accents finds the accented word" a_swipe_needs_no_accents
+run_test "predictor: a word's forms, from its root and back to it" forms_both_ways
+run_test "predictor: -er and -est are forms only as a pair, so summer is not sum's" comparatives_only_as_a_pair
+run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root
+run_test "predictor: irregular forms, and no rule-made misspellings beside them" irregular_forms
+run_test "predictor: forms take the word's capitals" forms_follow_capitals
 finish

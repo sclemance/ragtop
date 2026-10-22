@@ -20,6 +20,8 @@ then commands on stdin, one per line:
                       told)
   keys <json>         where each letter's key is, for swipes:
                       {"unit": key width, "keys": {"q": [x, y], ...}}
+  forms <word>        the word's other forms, summed and sums for sum, for a
+                      hold on a suggestion to offer
   swipe <json>        the path a finger drew across the keys, [[x, y], ...],
                       in the same coordinates
   peek <json>         the same for a path still being drawn, for the strip
@@ -30,6 +32,7 @@ and answers "ready <count>" once a single list is read, "ready <lang>
 <count>" or "missing <lang>" for each "lang" (the service offers to fetch a
 missing one), then "suggest <json>" for each "complete": a list of
 words, most likely first, capitalised the way the typed word was, and
+"forms <json>" for each "forms", most common first, and
 "swiped <json>" for each "swipe", the words it most likely spelled, and
 "peeked <json>" for each "peek", the same answer under its own name so a
 guess so far is never taken for a finished word.
@@ -299,6 +302,146 @@ class Predictor:
         return [cased(w, typed) for w, _ in best]
 
 
+# ---- Word forms -----------------------------------------------------------
+#
+# The almost-right word: sum when summed was wanted. A hold on a suggestion
+# offers the word's other forms, found by the rules of how the language
+# inflects and kept only where the word list has them, so a rule that makes
+# a word nobody writes makes nothing. English first.
+
+# English words whose forms the rules cannot make, each a family.
+IRREGULAR_EN = """
+arise arose arisen arises arising|awake awoke awoken|be am is are was were been being
+bear bore borne|beat beaten|become became becoming becomes|begin began begun beginning begins
+bend bent|bet bets betting|bind bound|bite bit bitten|bleed bled|blow blew blown
+break broke broken breaking breaks|breed bred|bring brought bringing brings|build built
+burn burnt|buy bought buying buys|catch caught catches catching|choose chose chosen choosing
+cling clung|come came coming comes|cost costs costing|creep crept|cut cuts cutting
+deal dealt|dig dug digging|do does did done doing|draw drew drawn drawing draws
+dream dreamt|drink drank drunk drinking drinks|drive drove driven driving drives
+eat ate eaten eating eats|fall fell fallen falling falls|feed fed|feel felt feeling feels
+fight fought fighting fights|find found finding finds|flee fled|fly flew flown flies flying
+forbid forbade forbidden|forget forgot forgotten forgetting forgets|forgive forgave forgiven
+freeze froze frozen|get got gotten getting gets|give gave given giving gives
+go goes went gone going|grind ground|grow grew grown growing grows|hang hung
+have has had having|hear heard hearing hears|hide hid hidden hiding hides
+hit hits hitting|hold held holding holds|hurt hurts hurting|keep kept keeping keeps
+kneel knelt|know knew known knowing knows|lay laid laying lays|lead led leading leads
+lean leant|leap leapt|learn learnt|leave left leaving leaves|lend lent|let lets letting
+lie lay lain lying lies|light lit|lose lost losing loses|make made making makes
+mean meant meaning means|meet met meeting meets|pay paid paying pays|put puts putting
+quit quits quitting|read reading reads|ride rode ridden riding rides|ring rang rung
+rise rose risen rising rises|run ran running runs|say said saying says|see saw seen seeing sees
+seek sought|sell sold selling sells|send sent sending sends|set sets setting
+sew sewn|shake shook shaken|shine shone|shoot shot shooting shoots|show shown
+shrink shrank shrunk|shut shuts shutting|sing sang sung singing sings|sink sank sunk
+sit sat sitting sits|sleep slept sleeping sleeps|slide slid|speak spoke spoken speaking speaks
+speed sped|spend spent spending spends|spin spun|split splits|spread spreads
+spring sprang sprung|stand stood standing stands|steal stole stolen|stick stuck
+sting stung|stink stank stunk|strike struck|strive strove striven|swear swore sworn
+sweep swept|swim swam swum swimming swims|swing swung|take took taken taking takes
+teach taught teaching teaches|tear tore torn|tell told telling tells|think thought thinking thinks
+throw threw thrown throwing throws|understand understood|wake woke woken|wear wore worn
+weep wept|win won winning wins|wind wound|write wrote written writing writes
+child children|man men|woman women|person people|mouse mice|foot feet|tooth teeth
+goose geese|life lives|knife knives|wife wives|leaf leaves|half halves|wolf wolves
+good better best|bad worse worst|far further furthest farther farthest|little less least
+"""
+
+
+def irregular_families(text):
+    out = {}
+    for group in text.replace("\n", "|").split("|"):
+        family = group.split()
+        for w in family:
+            out.setdefault(w, set()).update(family)
+    return out
+
+
+IRREGULAR = {"en": irregular_families(IRREGULAR_EN)}
+VOWELS = set("aeiou")
+
+
+def grow_en(base):
+    """Every form English's regular rules make from `base`, real or not."""
+    out = set()
+    if base.endswith(("s", "x", "z", "ch", "sh")):
+        out.add(base + "es")
+    elif base.endswith("y") and len(base) > 2 and base[-2] not in VOWELS:
+        out |= {base[:-1] + "ies", base[:-1] + "ied"}
+    else:
+        out.add(base + "s")
+    if base.endswith("e"):
+        out |= {base + "d", base[:-1] + "ing"}
+    elif base.endswith("ie"):
+        out.add(base[:-2] + "ying")
+    else:
+        out |= {base + "ed", base + "ing"}
+    # A short word ending consonant, vowel, consonant doubles the last:
+    # stop, stopped. Where it does not, the list has no such word.
+    if len(base) >= 3 and base[-1] not in VOWELS | set("wxy") and base[-2] in VOWELS \
+            and base[-3] not in VOWELS:
+        out |= {base + base[-1] + "ed", base + base[-1] + "ing"}
+    return out
+
+
+def comparatives_en(base, known):
+    """happier and happiest, but only as a pair: -er alone makes another
+    word as often as a form (summer is not more sum)."""
+    stem = base[:-1] + "i" if base.endswith("y") and len(base) > 2 else base
+    if len(base) >= 3 and base[-1] not in VOWELS | set("wxy") and base[-2] in VOWELS \
+            and base[-3] not in VOWELS:
+        doubled = (base + base[-1] + "er", base + base[-1] + "est")
+        if all(w in known for w in doubled):
+            return set(doubled)
+    pair = (stem.rstrip("e") + "er", stem.rstrip("e") + "est") if base.endswith("e") \
+        else (stem + "er", stem + "est")
+    return set(pair) if all(w in known for w in pair) else set()
+
+
+def roots_en(word):
+    """What `word` could be a form of, by undoing the rules."""
+    out = {word}
+    for suffix in ("es", "s", "ed", "d", "ing", "er", "est"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 2:
+            r = word[:-len(suffix)]
+            out |= {r, r + "e"}
+            if len(r) >= 3 and r[-1] == r[-2]:
+                out.add(r[:-1])
+    for suffix in ("ies", "ied", "ier", "iest"):
+        if word.endswith(suffix):
+            out.add(word[:-len(suffix)] + "y")
+    if word.endswith("ying"):
+        out.add(word[:-4] + "ie")
+    return out
+
+
+def forms_en(word, ranks):
+    """The other forms of `word` the list has, from its commonest root:
+    "tried" comes from try and not from tri, "making" from make and not
+    from mak."""
+    family = set(IRREGULAR["en"].get(word, ()))
+    roots = [r for r in roots_en(word) if r in ranks and (r == word or word in grow_en(r)
+                                                           | comparatives_en(r, ranks)
+                                                           | IRREGULAR["en"].get(r, set()))]
+    if roots:
+        root = min(roots, key=lambda r: ranks[r])
+        irregular = IRREGULAR["en"].get(root, set())
+        regular = grow_en(root) | comparatives_en(root, ranks)
+        if irregular:
+            # The rules run on child too, and wordfreq counts "childs" and
+            # "childrens" among its misspellings. Beside an irregular family
+            # a rule's form is kept only when it is not far rarer than the
+            # root: bears for bear, not childs for child.
+            regular = {w for w in regular if w in ranks and ranks[w] - ranks[root] < 150}
+        family |= {root} | regular | irregular
+    family.discard(word)
+    return sorted((w for w in family if w in ranks), key=lambda w: (ranks[w], w))
+
+
+FORMS = {"en": forms_en}
+
+
 # ---- Swipes ---------------------------------------------------------------
 #
 # A word drawn across the keys is decoded the way SHARK2 does it (Kristensson
@@ -535,6 +678,13 @@ def main():
                     session.predictor.set_rows(session.rows)
             except ValueError:
                 pass
+        elif cmd == "forms":
+            words = []
+            p = session.predictor
+            if p and p.lang in FORMS and rest:
+                low = rest.lower()
+                words = [cased(w, rest) for w in FORMS[p.lang](low, p.ranks)][:SHOWN]
+            print("forms " + json.dumps(words, ensure_ascii=False), flush=True)
         elif cmd == "complete":
             words = session.predictor.suggest(rest) if session.predictor else []
             print("suggest " + json.dumps(words, ensure_ascii=False), flush=True)

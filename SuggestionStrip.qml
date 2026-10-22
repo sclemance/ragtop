@@ -30,9 +30,9 @@ Item {
   readonly property real arrowWidth: Math.round(height * 1.1)
   readonly property real listLeft: hasPrev ? arrowWidth : 0
   readonly property real listWidth: width - listLeft - (hasNext ? arrowWidth : 0)
-  readonly property int textSize: Math.max(12, Math.round(height * 0.48))
+  readonly property int textSize: Math.max(12, Math.round(height * 0.6))
   readonly property int noteSize: Math.max(9, Math.round(textSize * 0.55))
-  readonly property real pad: Math.round(height * 0.4)
+  readonly property real pad: Math.round(height * 0.45)
 
   FontMetrics { id: textMetrics; font.family: strip.theme.fontFamily; font.pixelSize: strip.textSize }
   FontMetrics { id: noteMetrics; font.family: strip.theme.fontFamily; font.pixelSize: strip.noteSize }

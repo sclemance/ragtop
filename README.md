@@ -650,6 +650,12 @@ says *Add French word suggestions (135 KB)* and *Not now*. Add fetches it
 once; Not now is remembered, and `ragtop words install fr` fetches it any
 time. Nothing is downloaded without that tap.
 
+**Hold a word in the strip for its other forms.** The word that is almost
+right is the common annoyance: sum when you wanted summed. Hold a suggestion,
+or the word a swipe typed, and a card below the strip offers summed and sums;
+slide onto one and lift, and it takes the word's place. Irregular forms are
+there too: hold went for go, going, goes, gone. English only so far.
+
 Accents need not be typed: `ete` offers été, and a swipe through e, t, e
 finds it, though an accent you do type is kept to. In French, after l', d',
 j', qu' and the rest, the word after the apostrophe is completed with the

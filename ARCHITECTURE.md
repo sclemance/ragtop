@@ -455,6 +455,18 @@ things English did not.
   offered, and after one and an apostrophe the rest is completed alone and
   offered with it.
 
+**Word forms.** A hold on a word in the strip sends `forms <word>`, and the
+answer opens a card below the strip. The forms come from rules, not from a
+list of every form: English's inflections run both ways, sum to summed and
+summed back to sum, and the result is kept only where the word list has it,
+so a rule may make words nobody writes and nothing comes of them. Three
+guards keep the families clean: -er and -est count only as a pair, which an
+adjective has (summer is not more sum); a word comes from its commonest root
+(tried from try, not tri); and beside an irregular family, from a table of
+about 150, a rule-made form far rarer than the root is dropped (childs). The
+rules and table are about 6 KB, and other languages are expected at 10 to 25
+KB each, French's conjugations the largest.
+
 **What turns them off.** A layout whose xkb name is not English (the helper
 now reports `code` in its labels, since the name is translated), unless the
 setting is `all`, the override for that derived decision; a CJK engine; and
