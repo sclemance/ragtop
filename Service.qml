@@ -494,7 +494,10 @@ Item {
                  + "at the bottom to raise the keyboard by hand."],
     "switch": ["Tablet mode is not being noticed",
                "The tablet-mode switch watcher keeps stopping, so folding will not "
-               + "register. Setup › Tablet › Tablet Mode sets it by hand."]
+               + "register. Setup › Tablet › Tablet Mode sets it by hand."],
+    "predict": ["Word suggestions have stopped",
+                "Ragtop's word suggester keeps stopping. `ragtop words install` "
+                + "fetches the word list again."]
   })
   function retryTell(name) {
     var s = root.retryFor(name)
@@ -893,7 +896,12 @@ Item {
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
+        if (line === "hide") {
+          if (Date.now() - root.lastKeysAt > root.ownHideWithin) root.finishWord()
+          return
+        }
         if (line === "show") {
+          root.currentWord = ""
           root.autoShows++
           if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
           return
@@ -1173,6 +1181,8 @@ Item {
     tabletModeProc.running = false
   }
   Component.onCompleted: {
+    // Which word lists there are, for the strip's offer.
+    root.readWordLanguages()
     tabletModeProc.running = root.watchSwitch
     applyLayerRules()
   }
@@ -1244,6 +1254,7 @@ Item {
   property var keyLabels: null
   onKeyLabelsChanged: {
     if (!root.keyLabels) return
+    root.sendRows()
     layoutWriteProc.command = [
       "sh", "-c",
       'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-layout.json.tmp" && mv -f "$d/ragtop-layout.json.tmp" "$d/ragtop-layout.json"',
@@ -1253,10 +1264,75 @@ Item {
   }
   Process { id: layoutWriteProc }
 
-  // One command per line. See keyboard-helper.py.
+  // One command per line. See keyboard-helper.py. Everything typed passes
+  // here, which is what makes it the place to follow the word being typed.
   function sendKeys(command) {
-    if (keyboardHelper.running) keyboardHelper.write(command + "\n")
+    // BackSpace straight after a swipe takes the whole word back, and the
+    // space after it, as on a phone: a wrong swipe is undone in one tap.
+    // The space a swipe put in front stays, ready for the next one. The
+    // key's release, when it comes, is swallowed: it was never pressed.
+    if (command === "down BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
+      var out = ""
+      for (var i = root.swipeLead.length; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+      root.writeKeys(out)
+      root.swipedWord = ""
+      root.autoSpaced = false
+      root.currentWord = ""
+      root.swallowBackSpaceUp = true
+      if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
+      return
+    }
+    if (command === "up BackSpace" && root.swallowBackSpaceUp) {
+      root.swallowBackSpaceUp = false
+      return
+    }
+    // Punctuation straight after a space Ragtop put in itself goes before
+    // that space, as on a phone: a swiped "test" then a comma is "test, ",
+    // not "test ,". A space typed by hand is never moved.
+    var mark = command.length === 6 && command.indexOf("type ") === 0
+      && root.closingMarks.indexOf(command[5]) !== -1
+    if (mark && root.autoSpaced && keyboardHelper.running) {
+      root.trackWord(command)
+      root.writeKeys("key BackSpace\ntype " + command[5] + " \n")
+      root.autoSpaced = true
+      return
+    }
+    root.trackWord(command)
+    // Only something typed counts. A release, a held modifier or a change of
+    // route between a word and its full stop types nothing.
+    if (/^(type|key|down) /.test(command)) root.autoSpaced = false
+    if (keyboardHelper.running) root.writeKeys(command + "\n")
   }
+  readonly property string closingMarks: ".,!?;:"
+
+  // Every key Ragtop sends goes through here, so it knows when it last
+  // typed: see finishWord.
+  property real lastKeysAt: 0
+  function writeKeys(text) {
+    root.lastKeysAt = Date.now()
+    keyboardHelper.write(text)
+  }
+
+  // The word in progress is over, by a route Ragtop cannot see: another
+  // keyboard typed, or focus left the field. Whatever it had armed to take
+  // back, a swiped word, a word's letters or an automatic space, would now
+  // take back someone else's text, so it is all let go.
+  //
+  // fcitx5 reports any key from a keyboard device with a hide, which the
+  // bridge passes on. Ragtop's own keys cause one too, within moments of
+  // being sent, so a hide that long after Ragtop's last key is somebody
+  // else's.
+  readonly property int ownHideWithin: 250
+  function finishWord() {
+    root.currentWord = ""
+    root.swipedWord = ""
+    root.autoSpaced = false
+    if (root.suggestions.source === "predict" || root.suggestions.source === "swipe")
+      root.setSuggestions(root.suggestions.source, null)
+  }
+  property bool swallowBackSpaceUp: false
+  // Whether the last thing typed was a space Ragtop added after a word.
+  property bool autoSpaced: false
 
   // ---- Input methods: Chinese, Japanese, Korean ------------------------
 
@@ -1295,7 +1371,11 @@ Item {
   readonly property var noSuggestions: ({ source: "", items: [], prev: false, next: false, cursor: -1 })
   property var suggestions: root.noSuggestions
   function setSuggestions(source, value) {
-    if (!value || !Array.isArray(value.items)) {
+    // Nothing from a source clears only what that source put there. The
+    // bridge says "no candidates" after every key on a plain layout, and
+    // without this it wiped the word suggestions a moment after each one
+    // appeared.
+    if (!value || !Array.isArray(value.items) || value.items.length === 0) {
       if (root.suggestions.source === source) root.suggestions = root.noSuggestions
       return
     }
@@ -1303,14 +1383,378 @@ Item {
                          next: !!value.next, cursor: value.cursor | 0 }
   }
   // Whether the strip has a place on the keyboard at all. It holds its place
-  // while an engine is on, items or not, so the keyboard keeps one height
-  // through a sentence rather than jumping at every word.
-  readonly property bool suggestionsShown: root.imeComposing
+  // while an engine is on, or suggestions are, items or not, so the keyboard
+  // keeps one height through a sentence rather than jumping at every word.
+  readonly property bool suggestionsShown: root.imeComposing || root.predicting || root.swipeActive
+    || root.offerLanguage !== ""
   function chooseSuggestion(index) {
     if (root.suggestions.source === "fcitx") root.sendBridge("select " + index)
+    else if (root.suggestions.source === "predict") root.takeWord(index)
+    else if (root.suggestions.source === "swipe") root.swapSwiped(index)
+    else if (root.suggestions.source === "offer") root.answerOffer(index)
   }
   function pageSuggestions(forward) {
     if (root.suggestions.source === "fcitx") root.sendBridge(forward ? "next" : "prev")
+  }
+
+  // ---- Word suggestions --------------------------------------------------
+
+  // What the word being typed could be, from predictor.py and wordfreq's
+  // lists. Off unless turned on: Ragtop cannot tell a password field in an
+  // application from any other, and the strip would show what one is being
+  // typed into.
+  //
+  // off; layout, in the language of the layout being typed on (Ragtop
+  // deciding by its xkb name: English on us, French on fr); or all, English
+  // on any layout, the way past that decision, for a German keyboard writing
+  // English. "on" and "english" are what layout was called before.
+  readonly property string predictionsMode: {
+    var m = root.settings["predictions"]
+    return m === "on" || m === "english" ? "layout" : m === "layout" || m === "all" ? m : "off"
+  }
+  readonly property bool predictionsEnabled: root.predictionsMode !== "off"
+  readonly property string wordsRoot: (Quickshell.env("XDG_DATA_HOME")
+    || Quickshell.env("HOME") + "/.local/share") + "/ragtop/words"
+
+  // The languages Ragtop has lists for, from the CLI's table, which is the
+  // one list of them: { "fr": { size, installed, declined, name } }.
+  property var wordLanguages: ({})
+  function readWordLanguages() { if (!wordLanguagesProc.running) wordLanguagesProc.running = true }
+  Process {
+    id: wordLanguagesProc
+    command: ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""), "words", "languages"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var out = {}
+        text.split("\n").forEach(function(line) {
+          var f = line.split(" ")
+          if (f.length >= 5)
+            out[f[0]] = { size: f[1], installed: f[2] === "installed", declined: f[3] === "declined",
+                          name: f.slice(4).join(" ") }
+        })
+        root.wordLanguages = out
+      }
+    }
+  }
+
+  // Which language a layout is typed in, by its xkb name and variant. Only
+  // a guess, which the all setting is the way past.
+  function languageOfLayout(code, variant) {
+    if (code === "ca") return variant === "eng" ? "en" : "fr"
+    if (code === "ch") return variant.indexOf("fr") === 0 ? "fr" : "de"
+    if (code === "in") return variant === "eng" ? "en" : ""
+    var by = { us: "en", gb: "en", au: "en", nz: "en", ie: "en", za: "en",
+               fr: "fr", be: "fr", de: "de", at: "de", es: "es", latam: "es",
+               pt: "pt", br: "pt", it: "it", nl: "nl", ru: "ru", ua: "uk" }
+    return by[code] || ""
+  }
+  // The language suggestions are in now, or "" when there are none to have:
+  // English on any layout, or the layout's own when Ragtop has a list for it.
+  readonly property string wordLanguage: {
+    if (!root.predictionsEnabled) return ""
+    if (root.predictionsMode === "all") return "en"
+    if (!root.keyLabels) return ""
+    var lang = root.languageOfLayout(root.keyLabels.code || "", root.keyLabels.variant || "")
+    return lang in root.wordLanguages ? lang : ""
+  }
+  onWordLanguageChanged: root.sendLanguage()
+  // The language whose list the predictor has open, "" until it says.
+  property string wordsLoaded: ""
+  readonly property bool wordsReady: root.wordLanguage !== "" && root.wordsLoaded === root.wordLanguage
+  function sendLanguage() {
+    if (predictorProc.running && root.wordLanguage !== "")
+      predictorProc.write("lang " + root.wordLanguage + "\n")
+  }
+
+  // A language Ragtop has a list for and has not fetched is offered in the
+  // strip, where its words would go, one tap to fetch it: the only way a
+  // list is downloaded without being asked for by name. "Not now" is kept,
+  // and the CLI can fetch it any time.
+  property bool wordsFetching: false
+  readonly property string offerLanguage: {
+    var lang = root.wordLanguage
+    var info = root.wordLanguages[lang]
+    return lang !== "" && info && !info.installed && !info.declined
+      && !root.imeComposing && !root.passwordOpen ? lang : ""
+  }
+  onOfferLanguageChanged: root.showOffer()
+  onWordsFetchingChanged: root.showOffer()
+  function showOffer() {
+    var lang = root.offerLanguage
+    if (lang === "") {
+      root.setSuggestions("offer", null)
+      return
+    }
+    var info = root.wordLanguages[lang]
+    root.setSuggestions("offer", { items: root.wordsFetching
+      ? [{ text: "Fetching " + info.name + " words\u2026", note: "" }]
+      : [{ text: "Add " + info.name + " word suggestions", note: info.size + " KB" },
+         { text: "Not now", note: "" }], prev: false, next: false, cursor: -1 })
+  }
+  function answerOffer(index) {
+    var lang = root.offerLanguage
+    if (lang === "" || root.wordsFetching || index > 1) return
+    wordsOfferProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                              "words", index === 0 ? "install" : "decline", lang]
+    root.wordsFetching = index === 0
+    wordsOfferProc.running = true
+  }
+  Process {
+    id: wordsOfferProc
+    onExited: {
+      root.wordsFetching = false
+      root.readWordLanguages()
+      // A list fetched is opened straight away.
+      root.sendLanguage()
+    }
+  }
+  // The one password prompt Ragtop can see: Omarchy's polkit agent, whose
+  // patched clone types with this keyboard.
+  readonly property bool passwordOpen: root.openOverlays.indexOf("omarchy-polkit") !== -1
+  readonly property bool predicting: root.predictionsEnabled && root.wordsReady
+    && !root.imeComposing && !root.passwordOpen
+  onPredictingChanged: {
+    root.currentWord = ""
+    if (!root.predicting) root.setSuggestions("predict", null)
+  }
+
+  // The word being typed, as far as the keys sent say. Only a guess: a tap
+  // in the text moves the cursor without a key, so anything that is not a
+  // letter, BackSpace aside, starts again rather than guess further.
+  property string currentWord: ""
+  property real backSpaceDownAt: 0
+  function trackWord(command) {
+    // Anything typed after a swipe makes its word final.
+    if (root.swipedWord !== "") {
+      root.swipedWord = ""
+      if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
+    }
+    var space = command.indexOf(" ")
+    var cmd = space < 0 ? command : command.slice(0, space)
+    var arg = space < 0 ? "" : command.slice(space + 1)
+    if (cmd === "type") {
+      var letters = arg.length > 0
+      for (var i = 0; i < arg.length; i++)
+        if (arg[i] !== "'" && arg[i].toLowerCase() === arg[i].toUpperCase()) letters = false
+      root.currentWord = letters ? root.currentWord + arg : ""
+    } else if (arg === "BackSpace" && (cmd === "key" || cmd === "down")) {
+      root.currentWord = root.currentWord.slice(0, -1)
+      if (cmd === "down") root.backSpaceDownAt = Date.now()
+    } else if (cmd === "up" && arg === "BackSpace") {
+      // Held long enough to repeat, it took an unknown number of letters.
+      if (Date.now() - root.backSpaceDownAt > 400) root.currentWord = ""
+    } else if (cmd !== "up" && cmd !== "hold" && cmd !== "release" && cmd !== "route") {
+      root.currentWord = ""
+    }
+  }
+  onCurrentWordChanged: {
+    if (!root.predicting) return
+    if (root.currentWord === "") {
+      root.setSuggestions("predict", null)
+    } else if (predictorProc.running) {
+      root.asked.push(root.currentWord)
+      predictorProc.write("complete " + root.currentWord + "\n")
+    }
+  }
+  // The words asked about, oldest first, which the answers come back in the
+  // order of. An answer for a word that has since changed is dropped: fast
+  // typing otherwise had one arrive after a space, offering words for what
+  // was no longer being typed, and taking one deleted nothing.
+  property var asked: []
+
+  // Swaps the word typed so far for the one chosen, and a space after it,
+  // the way a phone keyboard does.
+  function takeWord(index) {
+    var item = root.suggestions.items[index]
+    // No word in progress means these were for one already finished.
+    if (!item || !keyboardHelper.running || root.currentWord === "") return
+    var out = ""
+    for (var i = 0; i < root.currentWord.length; i++) out += "key BackSpace\n"
+    root.writeKeys(out + "type " + item.text + " \n")
+    root.currentWord = ""
+    root.autoSpaced = true
+  }
+
+  // ---- Swipes ------------------------------------------------------------
+
+  // A word drawn across the letters, decoded by predictor.py against the
+  // same list (Keyboard.qml draws and sends the path). Off unless turned on,
+  // since it changes what a finger moving over the keys means.
+  readonly property bool swipeEnabled: root.settings["swipe"] === "on"
+  // Only ever with suggestions: the same words, and its runners-up in the
+  // same strip.
+  readonly property bool swipeActive: root.swipeEnabled && root.predicting
+  onSwipeActiveChanged: if (!root.swipeActive) root.setSuggestions("swipe", null)
+  property var swipeKeys: null
+  function setSwipeKeys(value) {
+    root.swipeKeys = value
+    if (predictorProc.running) predictorProc.write("keys " + JSON.stringify(value) + "\n")
+  }
+  // The word the last swipe typed, with its spaces, so a tap on one of the
+  // others can take it back; and whether it began with a capital.
+  property string swipedWord: ""
+  // The space a swipe put in front of its word, or "". A swipe after letters
+  // that were tapped starts a word of its own: "a" can only be tapped, and
+  // "a" then a swiped "test" ran together as "atest". After a space, a
+  // swipe, or a chosen suggestion there is nothing to separate.
+  property string swipeLead: ""
+  property bool swipeShifted: false
+  // The guess so far, while a finger is still drawing: Keyboard.qml calls
+  // this as the path grows. One guess is asked for at a time, and the next
+  // waits for its answer and then takes the path as it is by then, so a
+  // slow answer is never queued behind others that are already stale.
+  property bool swipeDrawing: false
+  property bool peekPending: false
+  property var peekPath: null
+  function swipeDrawn(points) {
+    if (!root.swipeActive || !predictorProc.running) return
+    root.swipeDrawing = true
+    root.peekPath = points
+    if (!root.peekPending) root.sendPeek()
+  }
+  function sendPeek() {
+    var path = root.peekPath
+    root.peekPath = null
+    if (!path) return
+    root.peekPending = true
+    predictorProc.write("peek " + JSON.stringify(path.map(function(p) {
+      return [Math.round(p[0]), Math.round(p[1])]
+    })) + "\n")
+  }
+  function peeked(words) {
+    root.peekPending = false
+    // A guess that lands after the finger has lifted is already out of date.
+    if (!root.swipeDrawing) return
+    if (words.length > 0)
+      root.setSuggestions("swipe", { items: words.map(function(w) { return { text: w, note: "" } }),
+                                     prev: false, next: false, cursor: 0 })
+    if (root.peekPath) root.sendPeek()
+  }
+  // A swipe that ended without a word, cancelled by a rotation: its guesses
+  // go with it.
+  function swipeAbandoned() {
+    if (!root.swipeDrawing) return
+    root.swipeDrawing = false
+    root.peekPath = null
+    if (root.suggestions.source === "swipe" && root.swipedWord === "")
+      root.setSuggestions("swipe", null)
+  }
+  function swipe(points, shifted) {
+    root.swipeDrawing = false
+    root.peekPath = null
+    if (!root.swipeActive || !predictorProc.running) return
+    root.swipeShifted = shifted
+    predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
+      return [Math.round(p[0]), Math.round(p[1])]
+    })) + "\n")
+  }
+  function capitalised(word) {
+    return root.swipeShifted ? word.charAt(0).toUpperCase() + word.slice(1) : word
+  }
+  function typeSwiped(words) {
+    if (!root.swipeActive || !keyboardHelper.running) return
+    if (words.length === 0) {
+      // Nothing it could spell: the guesses shown while drawing go too.
+      if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
+      return
+    }
+    root.swipeLead = root.currentWord !== "" ? " " : ""
+    var word = root.swipeLead + root.capitalised(words[0]) + " "
+    root.writeKeys("type " + word + "\n")
+    root.currentWord = ""
+    root.swipedWord = word
+    root.autoSpaced = true
+    root.setSuggestions("swipe", { items: words.map(function(w) { return { text: root.capitalised(w), note: "" } }),
+                                   prev: false, next: false, cursor: 0 })
+  }
+  function swapSwiped(index) {
+    var item = root.suggestions.items[index]
+    if (!item || !keyboardHelper.running || root.swipedWord === "") return
+    var out = ""
+    for (var i = 0; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+    var word = root.swipeLead + item.text + " "
+    root.writeKeys(out + "type " + word + "\n")
+    root.swipedWord = word
+    root.autoSpaced = true
+    root.setSuggestions("swipe", { items: root.suggestions.items, prev: false, next: false, cursor: index })
+  }
+
+  readonly property bool wantPredictor: root.keyboardAvailable && root.predictionsEnabled
+
+  // The controls panel's switches. Through the CLI, which is what fetches
+  // the word list when it is missing and says so.
+  function toggleSetting(name) {
+    if (settingToggleProc.running) return   // a second tap mid-write would be lost
+    settingToggleProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                                 name, "toggle"]
+    settingToggleProc.running = true
+  }
+  Process { id: settingToggleProc }
+  onWantPredictorChanged: {
+    predictorRestart.stop()
+    predictorProc.running = root.wantPredictor
+  }
+  Process {
+    id: predictorProc
+    command: ["/usr/bin/python3", Qt.resolvedUrl("predictor.py").toString().replace(/^file:\/\//, ""),
+              root.wordsRoot]
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (line.startsWith("ready ")) {
+          root.wordsLoaded = line.split(" ")[1]
+          root.sendRows()
+          if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
+        } else if (line.startsWith("missing ")) {
+          root.wordsLoaded = ""
+          // The CLI may know better by now: a list removed by hand.
+          root.readWordLanguages()
+        } else if (line.startsWith("peeked ")) {
+          var guess
+          try { guess = JSON.parse(line.slice(7)) } catch (e) { root.peekPending = false; return }
+          root.peeked(guess)
+        } else if (line.startsWith("swiped ")) {
+          var found
+          try { found = JSON.parse(line.slice(7)) } catch (e) { return }
+          root.typeSwiped(found)
+        } else if (line.startsWith("suggest ")) {
+          var forWord = root.asked.shift()
+          if (!root.predicting || forWord !== root.currentWord) return
+          var words
+          try { words = JSON.parse(line.slice(8)) } catch (e) { return }
+          root.setSuggestions("predict", { items: words.map(function(w) { return { text: w, note: "" } }),
+                                           prev: false, next: false, cursor: -1 })
+        }
+      }
+    }
+    onRunningChanged: {
+      root.asked = []
+      root.peekPending = false
+      root.wordsLoaded = ""
+      if (running) {
+        root.retryStarted("predict")
+        root.sendLanguage()
+      }
+    }
+    onExited: {
+      if (!root.wantPredictor) return
+      predictorRestart.interval = root.retryAfterExit("predict")
+      predictorRestart.start()
+      root.retryTell("predict")
+    }
+  }
+  Timer {
+    id: predictorRestart
+    interval: 5000
+    onTriggered: predictorProc.running = root.wantPredictor
+  }
+  // The layout's letter rows, so a slip is judged by which keys are really
+  // neighbours on it.
+  function sendRows() {
+    if (!predictorProc.running || !root.keyLabels || !Array.isArray(root.keyLabels.rows)) return
+    predictorProc.write("rows " + JSON.stringify(root.keyLabels.rows.map(function(row) {
+      return row.map(function(k) { return k[0] })
+    })) + "\n")
   }
 
   function openSettings() {
@@ -1769,7 +2213,13 @@ Item {
   }
   // Tablet mode ending takes the mode with it, along with everything else
   // that only makes sense with a screen you are holding.
-  onTabletModeChanged: if (!root.tabletMode) root.closeTiling()
+  onTabletModeChanged: {
+    if (root.tabletMode) return
+    root.closeTiling()
+    // Out of tablet mode the physical keyboard is back, and what it types
+    // Ragtop does not see (finishWord).
+    root.finishWord()
+  }
 
   Process {
     id: tilingClientsProc
@@ -1894,6 +2344,8 @@ Item {
     else root.openTiling()
   }
   onOskVisibleChanged: {
+    // A keyboard put away is the end of whatever word it was typing.
+    root.currentWord = ""
     if (!root.oskVisible) root.toolsOpen = false
     // The keyboard and tiling mode are exclusive: entering hides the
     // keyboard, and the keyboard coming back by any route ends the mode.
@@ -2667,6 +3119,13 @@ Item {
         raises: root.autoShows,
         inputMethod: !root.inputMethodsEnabled ? "off"
           : root.imeEngine ? root.imeEngine.name : "layout",
+        words: root.wordLanguage,
+        swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
+          : root.swipeActive ? "on" : "idle",
+        predictions: !root.predictionsEnabled ? "off"
+          : !predictorProc.running ? root.retryHealth("predict", false)
+          : !root.wordsReady ? "nowords"
+          : root.predicting ? "on" : "idle",
         tabletSwitch: root.watchSwitch ? root.retryHealth("switch", tabletModeProc.running) : "off",
         sensor: !root.rotationAvailable ? "absent"
           // Told apart from "absent", which is the package, and from

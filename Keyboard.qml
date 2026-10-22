@@ -1307,6 +1307,11 @@ Item {
   // again. The pending hold goes with it, since the key it belongs to is
   // somewhere else now too.
   function cancelTouches() {
+    if (root.swipe !== null) {
+      root.swipe = null
+      trail.requestPaint()
+      root.service.swipeAbandoned()
+    }
     if (root.stripTouch !== null) {
       root.stripTouch = null
       strip.pressedIndex = -1
@@ -1524,6 +1529,109 @@ Item {
     strip.scrollTo(t.scroll - (p.x - t.x))
   }
 
+  // ---- Swipes ---------------------------------------------------------------
+
+  // Whether a finger may draw a word across the letters. Only on the letters
+  // page, where the keys are letters, and only while the service can decode
+  // one (Service.qml, swipeActive).
+  readonly property bool swipeable: root.service.swipeActive === true && root.page === "letters"
+
+  // Each letter key's centre, by the letter it types unshifted, for the
+  // decoder: a swipe is matched against paths through these. Sent whenever
+  // the keys move, which a rotation or a different board does.
+  readonly property var letterCentres: {
+    var keys = {}
+    root.slots.forEach(function(s) {
+      var lv = root.grid[s.key]
+      var c = lv ? lv[0] : s.key
+      if (typeof c === "string" && c.length === 1 && c.toLowerCase() !== c.toUpperCase())
+        keys[c.toLowerCase()] = [s.x + s.width / 2, s.y + s.height / 2]
+    })
+    return { unit: root.unit, keys: keys }
+  }
+  onLetterCentresChanged: if (root.page === "letters") root.service.setSwipeKeys(root.letterCentres)
+  onPageChanged: if (root.page === "letters") root.service.setSwipeKeys(root.letterCentres)
+
+  // The finger drawing, while one is: { pointId, points: [[x, y], ...],
+  // swiping }. It starts as a tap in waiting on a letter, and only becomes a
+  // swipe once it has left its key by most of a key's width and is over
+  // another letter: a tap that wobbles, or a hold sliding up to its card,
+  // never reaches that.
+  property var swipe: null
+
+  function swipeStart(p, key) {
+    var others = Object.keys(root.held).length
+    root.swipe = root.swipeable && others === 0 && root.isLetterKey(key)
+      ? { pointId: p.pointId, key: key, points: [[p.x, p.y]], swiping: false } : null
+  }
+
+  function isLetterKey(key) {
+    var lv = root.grid[key]
+    var c = lv ? lv[0] : key
+    return typeof c === "string" && c.length === 1 && c.toLowerCase() !== c.toUpperCase()
+  }
+
+  // True when the finger is drawing a word, which the caller then leaves
+  // alone.
+  function swipeMoved(p) {
+    var w = root.swipe
+    if (!w || p.pointId !== w.pointId || root.popup !== null) return false
+    // A point only once the finger has moved a tenth of a key. Touch reports
+    // come many times a second, and a slow swipe sent hundreds of points
+    // that say nothing the next one does not.
+    var last = w.points[w.points.length - 1]
+    if (Math.hypot(p.x - last[0], p.y - last[1]) < root.unit * 0.1) return w.swiping
+    w.points.push([p.x, p.y])
+    if (!w.swiping) {
+      var gone = Math.hypot(p.x - w.points[0][0], p.y - w.points[0][1]) > root.unit * 0.75
+      var over = root.keyAt(p.x, p.y)
+      if (!gone || over === null || over === w.key || !root.isLetterKey(over)) return false
+      w.swiping = true
+      // It is not a hold any more, and not a tap.
+      holdTimer.stop()
+    }
+    trail.requestPaint()
+    // The strip shows the guess so far (Service.qml, swipeDrawn).
+    root.service.swipeDrawn(w.points.slice())
+    return true
+  }
+
+  // True when the lifting finger drew a word, which is then sent rather than
+  // the key it came down on.
+  function swipeLifted(p) {
+    var w = root.swipe
+    if (!w || p.pointId !== w.pointId) return false
+    root.swipe = null
+    trail.requestPaint()
+    if (!w.swiping) return false
+    root.endHold()
+    root.service.swipe(w.points, root.upper)
+    root.afterKey()
+    return true
+  }
+
+  // The path being drawn, so the finger can see where it has been.
+  Canvas {
+    id: trail
+    anchors.fill: parent
+    z: 9
+    onPaint: {
+      var ctx = getContext("2d")
+      ctx.reset()
+      var w = root.swipe
+      if (!w || !w.swiping || w.points.length < 2) return
+      ctx.strokeStyle = root.theme.accent
+      ctx.globalAlpha = 0.6
+      ctx.lineWidth = Math.max(4, root.unit * 0.12)
+      ctx.lineCap = "round"
+      ctx.lineJoin = "round"
+      ctx.beginPath()
+      ctx.moveTo(w.points[0][0], w.points[0][1])
+      for (var i = 1; i < w.points.length; i++) ctx.lineTo(w.points[i][0], w.points[i][1])
+      ctx.stroke()
+    }
+  }
+
   function stripLifted(p) {
     var t = root.stripTouch
     root.stripTouch = null
@@ -1661,6 +1769,7 @@ Item {
         var deep = root.holdOpenFor(key) !== "" || (key in root.holdGrid)
         if (role === "space" || root.isCharacter(eff) || deep)
           root.startHold(p, key)
+        if (role !== "space") root.swipeStart(p, key)
         if (root.liftKeys.indexOf(role) === -1 && !deep
             && (role === "space" || !root.isCharacter(eff))) pressed.push(key)
       })
@@ -1677,6 +1786,7 @@ Item {
       root.stripMoved(point)
       return
     }
+    if (root.swipeMoved(point)) return
     if (root.popup !== null && point.pointId === root.popup.pointId) {
       if (root.travelled(point)) root.popupTravelled = true
       // A cell chosen for the finger stays chosen until the finger goes
@@ -1698,6 +1808,8 @@ Item {
     points.forEach(function(p) {
       if (root.stripTouch !== null && p.pointId === root.stripTouch.pointId) {
         root.stripLifted(p)
+      } else if (root.swipeLifted(p)) {
+        // A word was drawn, and has gone. The key it started on is not typed.
       } else if (root.popup !== null && p.pointId === root.popup.pointId) {
         root.choosePopup()
       } else if (p.pointId === root.pendingPoint) {

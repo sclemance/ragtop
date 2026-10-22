@@ -9,6 +9,9 @@
 #        ragtop overlay sync              re-clones any that Omarchy or Ragtop moved on from
 #        ragtop auto-show (enabled | enable | disable | toggle)
 #        ragtop input-methods (enabled | enable | disable | toggle)
+#        ragtop predictions (get | is <which> | set <which> | enabled | enable | disable | toggle)
+#        ragtop swipe (enabled | enable | disable | toggle)
+#        ragtop words (languages | status | install [lang] | decline <lang> | remove [lang])
 #        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop keyboard-layout (get | is <name> | set <name>)
 #        ragtop display (get | is <name> | set <name>)
@@ -179,15 +182,15 @@ locked() {
   ( flock 9; "$@" ) 9>"$settings.lock"
 }
 
-# switch <key> <enabled|enable|disable|toggle> for an on/off setting that
-# defaults to on.
+# switch <key> <enabled|enable|disable|toggle> [default] for an on/off
+# setting, which defaults to on unless the third argument says off.
 switch() {
-  local key="$1" value
+  local key="$1" value default="${3:-on}"
   case "${2:-}" in
-    enabled) [[ $(get "$key" on) == on ]]; return ;;
+    enabled) [[ $(get "$key" "$default") == on ]]; return ;;
     enable) value=on ;;
     disable) value=off ;;
-    toggle) [[ $(get "$key" on) == on ]] && value=off || value=on ;;
+    toggle) [[ $(get "$key" "$default") == on ]] && value=off || value=on ;;
     *) usage ;;
   esac
   put "$key" "$value"
@@ -196,7 +199,138 @@ switch() {
     "auto-show off") notify "The keyboard no longer comes up by itself on text fields." ;;
     "input-methods on") notify "Chinese, Japanese and Korean input methods now show their choices on the keyboard." ;;
     "input-methods off") notify "The keyboard no longer shows input method choices. fcitx5 shows its own." ;;
+    "swipe on") notify "Swipe typing is on: draw a word across the letters." ;;
+    "swipe off") notify "Swipe typing is off." ;;
   esac
+}
+
+# Word suggestions read wordfreq's lists, which are CC-BY-SA rather than MIT
+# and so are not in the repository. Each is fetched when it is first wanted,
+# from one fixed release, checked against a fixed hash, and kept exactly as
+# published with its notice beside it (words/NOTICE.md).
+#
+# The languages Ragtop offers, one line each: code, size in KB, name, and
+# the list's SHA-256. Only languages made to work, accents and apostrophes
+# and all, are here, and this table is the one list of them: the service
+# reads it through `words languages`.
+words_root="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/words"
+words_release="https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data"
+words_table="\
+en 125 English f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247
+fr 135 French 8fbbf619ff2e6ff5b3d99d41e69c105daf5795771ce8ef36529f210d571abe6e"
+
+# words_field <lang> <n>: that language's nth field in the table, or nothing.
+words_field() { awk -v l="$1" -v n="$2" '$1 == l { print $n }' <<<"$words_table"; }
+words_file() { echo "$words_root/$1/small_$1.msgpack.gz"; }
+words_installed() { [[ -f $(words_file "${1:-en}") ]]; }
+
+words_install() {
+  local lang="${1:-en}" sha dir tmp
+  sha=$(words_field "$lang" 4)
+  if [[ -z $sha ]]; then
+    echo "Ragtop has no word list for \"$lang\"." >&2
+    return 2
+  fi
+  words_installed "$lang" && return 0
+  dir="$words_root/$lang"
+  mkdir -p "$dir"
+  tmp=$(mktemp "$dir/.download.XXXXXX")
+  if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 60 -o "$tmp" "$words_release/small_$lang.msgpack.gz"; then
+    rm -f "$tmp"
+    echo "Could not download the word list from GitHub." >&2
+    return 1
+  fi
+  if [[ $(sha256sum "$tmp" | cut -d' ' -f1) != "$sha" ]]; then
+    rm -f "$tmp"
+    echo "The downloaded word list is not the one expected, so it was not kept." >&2
+    return 1
+  fi
+  cp "$repo/words/NOTICE.md" "$dir/NOTICE.md"
+  mv -f "$tmp" "$(words_file "$lang")"
+}
+
+# words declined: the languages whose offer was answered "Not now", which
+# the strip does not offer again. Installing one takes it off.
+words_declined() { get words-declined "" | tr ',' '\n' | grep -v '^$' || true; }
+words_set_declined() { put words-declined "$(tr '\n' ',' | sed 's/,$//')"; }
+
+words() {
+  local lang="${2:-en}"
+  case "${1:-}" in
+    languages)
+      # code, size, whether it is installed, whether it was declined, name
+      while read -r code size name _; do
+        echo "$code $size $(words_installed "$code" && echo installed || echo absent)" \
+          "$(words_declined | grep -qx "$code" && echo declined || echo offered) $name"
+      done <<<"$words_table" ;;
+    status)
+      while read -r code _ name _; do
+        echo "$name: $(words_installed "$code" && echo "installed, $(words_file "$code")" || echo "not installed")"
+      done <<<"$words_table" ;;
+    install)
+      if words_install "$lang"; then
+        # grep finds nothing when it was the only one, which pipefail counts
+        # as failing.
+        { words_declined | grep -vx "$lang" || true; } | words_set_declined
+      else
+        return 1
+      fi ;;
+    decline)
+      [[ -n $(words_field "$lang" 1) ]] || usage
+      { words_declined; echo "$lang"; } | sort -u | words_set_declined ;;
+    remove) [[ -n $(words_field "$lang" 1) ]] || usage; rm -rf "${words_root:?}/$lang" ;;
+    *) usage ;;
+  esac
+}
+
+# Word suggestions are off; on in the language of the layout being typed on
+# ("layout", which is Ragtop deciding by the layout's xkb name, English on
+# us, French on fr); or English whatever the layout ("all", the way past that
+# decision: a German keyboard writing English). A language whose list is not
+# there yet is offered in the strip, one tap to fetch it, rather than
+# fetched here. enable and toggle bring back whichever of the two was last
+# chosen, kept as predictions-on. "on" and "english" are what layout was
+# called before.
+predictions_mode() {
+  local mode
+  mode=$(get predictions off)
+  [[ $mode == on || $mode == english ]] && mode=layout
+  echo "$mode"
+}
+
+predictions() {
+  local mode=""
+  case "${1:-}" in
+    get) predictions_mode; return ;;
+    is) [[ -n ${2:-} ]] || usage; [[ $(predictions_mode) == "$2" ]]; return ;;
+    enabled) [[ $(predictions_mode) != off ]]; return ;;
+    set) case "${2:-}" in off|layout|all) mode=$2 ;; english) mode=layout ;; *) usage ;; esac ;;
+    enable) mode=$(get predictions-on layout) ;;
+    disable) mode=off ;;
+    toggle) if [[ $(predictions_mode) == off ]]; then mode=$(get predictions-on layout); else mode=off; fi ;;
+    *) usage ;;
+  esac
+  [[ $mode == english ]] && mode=layout
+  put predictions "$mode"
+  [[ $mode == off ]] || put predictions-on "$mode"
+  case "$mode" in
+    layout) notify "Word suggestions are on, in your layout's language." ;;
+    all) notify "Word suggestions are on, in English on any layout." ;;
+    off) notify "Word suggestions are off, and swipe typing with them." ;;
+  esac
+}
+
+# Swipe typing reads the same words and offers its runners-up in the same
+# strip, so it is only ever on with suggestions. Its own setting is kept
+# while they are off, and comes back with them.
+swipe() {
+  if [[ ${1:-} == enable || ( ${1:-} == toggle && $(get swipe off) != on ) ]]; then
+    if [[ $(predictions_mode) == off ]]; then
+      notify "Turn on word suggestions first: swipe typing uses the same words."
+      return 1
+    fi
+  fi
+  switch swipe "${1:-}" off
 }
 
 # choice <key> <default> <get|is|set> [value] for a setting with named
@@ -633,6 +767,16 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   if [[ -n $ime ]]; then
     row "Input method" "$ime"
   fi
+  # on, off, idle (a layout that is not English, or a CJK engine on), or
+  # nowords when the list has not been downloaded.
+  swipe=$(health_field swipe)
+  if [[ -n $swipe ]]; then
+    row "Swipe typing" "$swipe"
+  fi
+  predictions=$(health_field predictions)
+  if [[ -n $predictions ]]; then
+    row "Word suggestions" "$(predictions_mode), $predictions, lists: $(words languages | awk '$3 == "installed" { printf "%s%s", sep, $1; sep = " " }')"
+  fi
 
   if [[ -z $health ]]; then
     row Background "unknown, the service did not answer"
@@ -698,6 +842,9 @@ case "${1:-} ${2:-}" in
   "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "input-methods "*) switch "$1" "${2:-}" ;;
+  "predictions "*) predictions "${2:-}" "${3:-}" ;;
+  "swipe "*) swipe "${2:-}" ;;
+  "words "*) words "${2:-}" "${3:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;

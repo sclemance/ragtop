@@ -5,7 +5,9 @@ Registers as fcitx5's on-screen keyboard (its "DBus Virtual Keyboard"
 addon), which fcitx5 tells three things:
 
 - when a text field gains focus, so the keyboard can come up by itself.
-  Printed as "show".
+  Printed as "show". And when a key came from a keyboard device or focus
+  left the field, printed as "hide": the service tells Ragtop's own keys,
+  which cause one too, from another keyboard's by when it last sent one.
 - which input method the focused field is using. Printed as "engine <json>"
   for one that composes text, Mozc, Pinyin or Hangul and the like, as
   {"name", "label", "title"}, and "engine null" for a plain keyboard layout or
@@ -219,6 +221,7 @@ def on_call(conn, sender, path, iface, method, params, invocation):
     if method == "ShowVirtualKeyboard" and not arming:
         print("show", flush=True)
     elif method == "HideVirtualKeyboard":
+        print("hide", flush=True)
         # Wait for a burst of typing to settle before re-arming.
         rearm_in(300)
     elif method == "NotifyIMActivated":

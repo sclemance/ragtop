@@ -98,6 +98,20 @@ rows = {
     "setup.tablet.input-methods": dict(icon="\U000f030c", label="CJK Choices on Keyboard",
         checked=f'"{cmd}" input-methods enabled',
         action=f'"{cmd}" input-methods toggle'),
+    # Off, or on with Ragtop deciding by the layout, or on whatever it is:
+    # anything derived has its way round.
+    "setup.tablet.predictions": dict(icon="\U000f030c", label="Word Suggestions (beta)"),
+    "setup.tablet.predictions.off": dict(icon="\U000f0322", label="Off",
+        checked=f'"{cmd}" predictions is off', action=f'"{cmd}" predictions set off'),
+    "setup.tablet.predictions.layout": dict(icon="\U000f006a", label="On, in Your Layout's Language",
+        checked=f'"{cmd}" predictions is layout', action=f'"{cmd}" predictions set layout'),
+    "setup.tablet.predictions.all": dict(icon="\U000f030c", label="English, on Any Layout",
+        checked=f'"{cmd}" predictions is all', action=f'"{cmd}" predictions set all'),
+    # Only offered once suggestions are on, which it needs.
+    "setup.tablet.swipe": dict(icon="\U000f030c", label="Swipe Typing (beta)",
+        when=f'"{cmd}" predictions enabled',
+        checked=f'"{cmd}" swipe enabled',
+        action=f'"{cmd}" swipe toggle'),
     # Appearance. A theme writes the settings below, so what the menu
     # shows is always what the keyboard does.
     "setup.tablet.theme": dict(icon="\U000f03d8", label="Theme"),

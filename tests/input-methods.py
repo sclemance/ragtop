@@ -14,6 +14,8 @@ prints one line per thing that happened, which the test compares:
   forward <keysym name>       fcitx5 passed a key on to the application
   wayland <keysym or char>    the helper sent a key the Wayland way instead
   has <text>                  the strip's candidates included <text>
+  hide                        fcitx5 said a keyboard device typed, or focus
+                              left the field
 
 Steps:
   bridge:<command>            a line on the bridge's stdin (switch mozc, ...)
@@ -21,12 +23,15 @@ Steps:
   key:<keysym> [mods]         the helper's "key ..."
   pick:<text>                 select the candidate whose text is <text>
   route:<fcitx|wayland>       the helper's "route ..."
+  other:<keysym>              a key from another keyboard: straight to the
+                              input context, as a physical one arrives
 """
 
 import importlib.util
 import json
 import os
 import queue
+import signal
 import subprocess
 import sys
 import threading
@@ -86,7 +91,9 @@ def drain():
     global candidates
     while not lines.empty():
         kind, _, rest = lines.get().strip().partition(" ")
-        if kind == "engine":
+        if kind == "hide":
+            out("hide")
+        elif kind == "engine":
             value = json.loads(rest)
             out("engine " + (value["name"] if value else "null"))
         elif kind == "candidates":
@@ -150,6 +157,12 @@ for step in steps:
         for ch in arg:
             kb.handle("type " + ch)
             pump(0.1)
+    elif kind == "other":
+        sym = Gdk.keyval_from_name(arg)
+        for release in (False, True):
+            bus.call_sync("org.fcitx.Fcitx5", ic, IC, "ProcessKeyEvent",
+                          GLib.Variant("(uuubu)", (sym, 0, 0, release, 0)), GLib.VariantType("(b)"),
+                          Gio.DBusCallFlags.NO_AUTO_START, 2000, None)
     elif kind in ("key", "route"):
         kb.handle(f"{kind} {arg}")
     elif kind == "pick":
@@ -163,5 +176,37 @@ for step in steps:
 
 bridge.stdin.close()
 bridge.wait(5)
+
+
+def stop_mozc_server():
+    """Mozc's client starts mozc_server as a process of its own, which
+    outlives fcitx5. Left running, it aborts with a core dump when the
+    sandbox holding its socket is deleted, a burst of them per test run in
+    coredumpctl. So this test's own server, the one with this sandbox's
+    HOME, is asked to stop first, and given a moment to."""
+    home = ("HOME=" + os.environ["HOME"]).encode()
+    mine = []
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                if f.read().strip() != "mozc_server":
+                    continue
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                if home in f.read().split(b"\0"):
+                    mine.append(int(pid))
+        except OSError:
+            continue
+    for pid in mine:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for _ in range(50):
+        if not any(os.path.exists(f"/proc/{pid}") for pid in mine):
+            return
+        time.sleep(0.05)
+
+
+stop_mozc_server()
 fcitx.terminate()
 fcitx.wait(5)
