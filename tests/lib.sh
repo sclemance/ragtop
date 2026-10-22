@@ -10,6 +10,9 @@ tests_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo=$(dirname -- "$tests_dir")
 old_omarchy="$tests_dir/fixtures/omarchy-4.0.4"
 new_omarchy="$tests_dir/fixtures/omarchy-7cc6a55"
+# The first release with the shared OverlayWindow, which from here on reads
+# qs.Commons to mirror itself for right-to-left languages.
+rc_omarchy="$tests_dir/fixtures/omarchy-4.5.0-rc1"
 
 failed=0
 sandbox=""
@@ -118,6 +121,9 @@ qml_harness() {
   harness="$sandbox/$1"
   mkdir -p "$harness"
   cp "$tests_dir/qml/Harness.qml" "$tests_dir/qml/$1/shell.qml" "${@:2}" "$harness/"
+  # What qs.Commons resolves to: a folder of that name at the shell's root,
+  # here a stand-in for the little of Omarchy's that a window reads.
+  cp -r "$tests_dir/qml/Commons" "$harness/"
 }
 
 # with_clone <overlay> <entry file> <directory>: puts a patched clone's window

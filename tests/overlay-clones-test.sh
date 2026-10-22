@@ -177,7 +177,7 @@ new_menu_gets_a_window_of_its_own() {
 shared_windows=(menu emojis clipboard image-picker)
 
 new_install_patches_every_overlay() {
-  make_sandbox "$new_omarchy"
+  make_sandbox "${shared:-$new_omarchy}"
   clones install
   assert_rc 0
   for o in "${all[@]}"; do
@@ -200,7 +200,7 @@ new_install_patches_every_overlay() {
   assert_equal "$(jq -c .omarchy.capabilities "$(clone_of polkit)/manifest.json")" '["authentication"]'
   assert_equal "$(jq -c .omarchy.capabilities "$(clone_of lock)/manifest.json")" '["authentication"]'
   # Omarchy's own component is read, never written.
-  cmp -s "$sandbox/omarchy/shell/Ui/OverlayWindow.qml" "$new_omarchy/shell/Ui/OverlayWindow.qml" || fail "the shared OverlayWindow was modified"
+  cmp -s "$sandbox/omarchy/shell/Ui/OverlayWindow.qml" "${shared:-$new_omarchy}/shell/Ui/OverlayWindow.qml" || fail "the shared OverlayWindow was modified"
   assert_equal "$(progress_files)" "" "progress markers left behind"
   clones installed
   assert_rc 0
@@ -269,7 +269,7 @@ old_stray_window_file_is_an_edit() {
 }
 
 new_sync_follows_the_shared_window() {
-  make_sandbox "$new_omarchy"
+  make_sandbox "${shared:-$new_omarchy}"
   clones install
   # Omarchy changes OverlayWindow and not one of the plugins that use it.
   echo '// upstream moved' >>"$sandbox/omarchy/shell/Ui/OverlayWindow.qml"
@@ -295,7 +295,7 @@ new_sync_follows_the_shared_window() {
 }
 
 new_edited_clone_survives_a_shared_window_change() {
-  make_sandbox "$new_omarchy"
+  make_sandbox "${shared:-$new_omarchy}"
   clones install menu emojis
   echo '// mine' >>"$(entry_of menu)"
   echo '// mine' >>"$(helper_of emojis)"
@@ -690,6 +690,39 @@ run_test "7cc6a55: a clone with edits of its own is kept when the shared Overlay
 run_test "7cc6a55: a clone whose generated window was edited or deleted is left alone" new_edited_window_is_left_alone
 run_test "4.0.4: a window file in a clone made without one counts as an edit" old_stray_window_file_is_an_edit
 run_test "7cc6a55: install patches all six, and status, installed and sync agree" new_install_patches_every_overlay
+
+# --- Omarchy 4.5.0-rc1: the shared OverlayWindow, mirrored for RTL --------
+
+# The same checks on the first release with the shared window, which reads
+# qs.Commons for right-to-left languages, a part the patch leaves alone.
+rc_install_patches_every_overlay() { shared=$rc_omarchy new_install_patches_every_overlay; }
+rc_sync_follows_the_shared_window() { shared=$rc_omarchy new_sync_follows_the_shared_window; }
+rc_edited_clone_survives() { shared=$rc_omarchy new_edited_clone_survives_a_shared_window_change; }
+
+# An Omarchy update from the window as it was to 4.5: every clone of a
+# changed built-in is re-cloned onto the new one, with nothing left over.
+updating_to_rc_moves_every_clone_over() {
+  make_sandbox "$new_omarchy"
+  clones install
+  assert_rc 0
+  switch_omarchy "$rc_omarchy"
+  clones sync
+  assert_rc 0
+  for o in "${shared_windows[@]}"; do
+    assert_contains "$out" "Re-cloned tester.$o from the updated built-in."
+    assert_contains "$(<"$(helper_of "$o")")" 'Commons.I18n.rightToLeft'
+    assert_contains "$(<"$(helper_of "$o")")" 'ragtopTablet'
+  done
+  clones status
+  for o in "${all[@]}"; do assert_contains "$out" "$o: installed, in sync with the built-in"; done
+  assert_lacks "$out" "edits besides"
+  assert_equal "$(progress_files)" "" "progress markers left behind"
+}
+
+run_test "4.5.0-rc1: install patches all six, and status, installed and sync agree" rc_install_patches_every_overlay
+run_test "4.5.0-rc1: sync re-clones what uses the shared OverlayWindow when Omarchy changes it" rc_sync_follows_the_shared_window
+run_test "4.5.0-rc1: a clone with edits of its own is kept when the shared OverlayWindow changes" rc_edited_clone_survives
+run_test "7cc6a55 to 4.5.0-rc1: sync moves every clone over to the new window" updating_to_rc_moves_every_clone_over
 run_test "7cc6a55: remove takes the clones away, and the hook with the last" new_remove_takes_clones_and_hook_away
 
 run_test "4.0.4: install patches all six, and status, installed and the hook agree" old_install_patches_every_overlay

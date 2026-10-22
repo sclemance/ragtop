@@ -629,11 +629,11 @@ filesystem what the real ones do and leaves out the running shell.
 
 | File | What it runs |
 | --- | --- |
-| `overlay-clones-test.sh` | The real `overlay-clones.sh` against copies of two Omarchy trees in `tests/fixtures`: 4.0.4 and `7cc6a55`. Install, status, sync, remove, edited clones, failed patches, moving between the two, shapes it must refuse. |
+| `overlay-clones-test.sh` | The real `overlay-clones.sh` against copies of three Omarchy trees in `tests/fixtures`: 4.0.4, `7cc6a55` and 4.5.0-rc1. Install, status, sync, remove, edited clones, failed patches, moving between the two, shapes it must refuse. |
 | `input-methods-test.sh` | The real bridge and the helper's fcitx route against a private fcitx5 with Mozc, Pinyin and Hangul, on a bus of its own: 日本語, 你好 and 한글 typed and chosen, shortcuts kept off the route. Skipped where the engines are not installed. |
 | `predictor-test.sh` | `predictor.py` against a made-up list in wordfreq's format: ranking, capitals, corrections by neighbouring keys, and swipes drawn through QWERTY with a fixed miss at every key. |
 | `suggestion-strip-test.sh` | `SuggestionStrip.qml` loaded offscreen: which item a touch means, at the arrows and scrolled. |
-| `overlay-window-test.sh` | The window the patcher generates for a clone, loaded by quickshell offscreen: what it asks for closed and open, in laptop and tablet mode, and when it lets its content be seen. |
+| `overlay-window-test.sh` | The window the patcher generates for a clone, from `7cc6a55` and from 4.5.0-rc1, loaded by quickshell offscreen: what it asks for closed and open, in laptop and tablet mode, and when it lets its content be seen. |
 
 The QML tests stop where the compositor starts. A `PanelWindow` cannot exist
 without one, so the generated window is loaded with `PanelWindow`, the
