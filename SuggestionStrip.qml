@@ -32,9 +32,22 @@ Item {
 
   readonly property int prevCell: -2
   readonly property int nextCell: -3
+  readonly property int scrollLeftCell: -4
+  readonly property int scrollRightCell: -5
   readonly property real arrowWidth: Math.round(height * 1.1)
-  readonly property real listLeft: hasPrev ? arrowWidth : 0
-  readonly property real listWidth: width - listLeft - (hasNext ? arrowWidth : 0)
+  // Between the input method's page arrows, when it has them.
+  readonly property real spanLeft: hasPrev ? arrowWidth : 0
+  readonly property real spanWidth: width - spanLeft - (hasNext ? arrowWidth : 0)
+  // More words than fit: a chevron at each end says which way there is more,
+  // ‹ while the list can scroll left and › while it can scroll right. Their
+  // room is kept at both ends for as long as the list overflows, so the
+  // words do not shift as one comes and goes. A tap on one scrolls.
+  readonly property real chevronWidth: Math.round(height * 0.7)
+  readonly property bool overflows: contentWidth > spanWidth
+  readonly property bool canScrollLeft: overflows && scroll > 0.5
+  readonly property bool canScrollRight: overflows && scroll < maxScroll - 0.5
+  readonly property real listLeft: spanLeft + (overflows ? chevronWidth : 0)
+  readonly property real listWidth: spanWidth - (overflows ? 2 * chevronWidth : 0)
   readonly property int textSize: Math.max(12, Math.round(height * 0.6))
   readonly property int noteSize: Math.max(9, Math.round(textSize * 0.55))
   readonly property real pad: Math.round(height * 0.45)
@@ -69,6 +82,10 @@ Item {
   function cellAt(x) {
     if (strip.hasPrev && x < strip.arrowWidth) return strip.prevCell
     if (strip.hasNext && x >= strip.width - strip.arrowWidth) return strip.nextCell
+    if (strip.overflows && x < strip.listLeft)
+      return strip.canScrollLeft ? strip.scrollLeftCell : -1
+    if (strip.overflows && x >= strip.listLeft + strip.listWidth)
+      return strip.canScrollRight ? strip.scrollRightCell : -1
     var at = x - strip.listLeft + strip.scroll
     for (var i = 0; i < strip.cells.length; i++)
       if (at >= strip.cells[i].x && at < strip.cells[i].x + strip.cells[i].width) return i
@@ -76,6 +93,8 @@ Item {
   }
 
   function scrollTo(value) { strip.scroll = Math.max(0, Math.min(strip.maxScroll, value)) }
+  // A chevron's tap: most of a strip's width that way, a word or so kept.
+  function scrollBy(direction) { strip.scrollTo(strip.scroll + direction * strip.listWidth * 0.8) }
 
   Text {
     // Never rich text: see KeyboardKey.qml.
@@ -144,6 +163,39 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
           }
         }
+      }
+    }
+  }
+
+  Repeater {
+    model: [{ shown: strip.canScrollLeft, cell: strip.scrollLeftCell, glyph: "‹",
+              x: strip.spanLeft },
+            { shown: strip.canScrollRight, cell: strip.scrollRightCell, glyph: "›",
+              x: strip.spanLeft + strip.spanWidth - strip.chevronWidth }]
+
+    // On a key's fill, outlined in the chevron's own colour, so it stands
+    // out from the words beside it.
+    Rectangle {
+      required property var modelData
+      visible: modelData.shown
+      x: modelData.x + Math.round(strip.theme.gap / 2)
+      width: strip.chevronWidth - strip.theme.gap
+      height: strip.height
+      radius: strip.theme.keyRadius
+      color: strip.pressedIndex === modelData.cell ? strip.theme.pressedKey : strip.theme.key
+      border.color: strip.theme.accent
+      border.width: Math.max(1, strip.theme.keyBorderWidth)
+
+      Text {
+        textFormat: Text.PlainText
+        anchors.fill: parent
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        text: parent.modelData.glyph
+        color: strip.theme.accent
+        font.family: strip.theme.fontFamily
+        font.pixelSize: Math.round(strip.textSize * 1.3)
+        font.bold: true
       }
     }
   }

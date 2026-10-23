@@ -1786,7 +1786,9 @@ Item {
     root.stripTouch = null
     strip.pressedIndex = -1
     if (t.scrolled || t.cell === -1) return
-    if (t.cell === strip.prevCell) root.service.pageSuggestions(false)
+    if (t.cell === strip.scrollLeftCell) strip.scrollBy(-1)
+    else if (t.cell === strip.scrollRightCell) strip.scrollBy(1)
+    else if (t.cell === strip.prevCell) root.service.pageSuggestions(false)
     else if (t.cell === strip.nextCell) root.service.pageSuggestions(true)
     else root.service.chooseSuggestion(t.cell)
   }

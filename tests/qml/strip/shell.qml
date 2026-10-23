@@ -21,6 +21,8 @@ ShellRoot {
     property color text: "black"
     property color specialText: "gray"
     property color outline: "gray"
+    property color key: "white"
+    property real keyBorderWidth: 1
   }
 
   property SuggestionStrip strip: SuggestionStrip {
@@ -69,15 +71,34 @@ ShellRoot {
       t.ok(test.strip.maxScroll > 0, "a long list can scroll")
       test.strip.scrollTo(1e6)
       t.equal(test.strip.scroll, test.strip.maxScroll, "scrolling stops at the end of the list")
-      t.equal(test.strip.cellAt(test.strip.width - 1), 39, "scrolled to the end, the right edge is the last item")
+      t.equal(test.strip.cellAt(test.strip.listLeft + test.strip.listWidth - 1), 39,
+              "scrolled to the end, the list's right edge is the last item")
       test.strip.scrollTo(-50)
       t.equal(test.strip.scroll, 0, "scrolling stops at the start")
       test.strip.scrollTo(test.strip.cells[10].x)
-      t.equal(test.strip.cellAt(1), 10, "scrolled, a touch means what is under it now")
+      t.equal(test.strip.cellAt(test.strip.listLeft + 1), 10, "scrolled, a touch means what is under it now")
+    }],
+    // Chevrons: which way there is more, and a tap that way scrolls.
+    [0, function() {
+      test.strip.scrollTo(0)
+      t.ok(test.strip.overflows, "a long list overflows")
+      t.ok(!test.strip.canScrollLeft && test.strip.canScrollRight, "at the start, only ›")
+      t.equal(test.strip.cellAt(test.strip.width - 1), test.strip.scrollRightCell, "the right end is ›")
+      t.equal(test.strip.cellAt(1), -1, "no ‹ at the start, so the left end means nothing")
+      test.strip.scrollBy(1)
+      t.ok(test.strip.scroll > 0, "a tap on › scrolls right")
+      t.ok(test.strip.canScrollLeft && test.strip.canScrollRight, "in the middle, both")
+      t.equal(test.strip.cellAt(1), test.strip.scrollLeftCell, "the left end is ‹")
+      test.strip.scrollTo(1e6)
+      t.ok(test.strip.canScrollLeft && !test.strip.canScrollRight, "at the end, only ‹")
+      test.strip.scrollTo(test.strip.maxScroll - 1)
+      t.equal(test.strip.listLeft, test.strip.spanLeft + test.strip.chevronWidth,
+              "the chevrons' room stays while the list overflows, so the words do not shift")
     }],
     [0, function() {
       test.strip.items = test.few
       t.equal(test.strip.scroll, 0, "a new list starts at its beginning")
+      t.ok(!test.strip.overflows, "three items fit, so no chevrons")
       test.strip.items = []
       t.equal(test.strip.cellAt(10), -1, "with nothing to choose, nothing is chosen")
     }]
