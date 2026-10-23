@@ -1182,8 +1182,18 @@ reaches them through [Fn](#which-board).
   is the honest fix.
 - **The next word.** Suggestions complete the word being typed and correct
   a slip in it, and say nothing after a space. Guessing the next word needs
-  counts of which words follow which, which wordfreq does not have, and
-  learning them from your own typing would mean keeping what you type.
+  counts of which words follow which (bigrams), which wordfreq does not have.
+  The way keyboards did this before AI is a pruned bigram list per language,
+  about the eight likeliest followers of each word, a megabyte or two,
+  downloaded like the word lists and checked the same way, with the plain
+  word frequencies to fall back on for a pair never seen. It would rank
+  completions by the word before as well (*of*, *if* and *or* depend almost
+  entirely on it), which helps swipe too. Lookups cost microseconds, so
+  nothing on the battery. What is missing is a source: Google Books Ngrams,
+  the Leipzig corpora and a count of Wikipedia are candidates, each with its
+  own licence and tone. Learning pairs from your own typing would mean keeping
+  what you type, so that could only be opt-in, kept on the machine, and never
+  fed from a password field or a terminal.
 - **More languages** for suggestions and swipe. wordfreq has lists for 42,
   and each is added once its accents, apostrophes and capitals have been made
   to work: Spanish and Portuguese next, then German, whose nouns wordfreq

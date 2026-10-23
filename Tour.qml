@@ -364,7 +364,8 @@ Item {
   // ---- The card -----------------------------------------------------------------
 
   readonly property real margin: Style.space(16)
-  readonly property real arrowSize: Style.space(12)
+  // How far the card stands off what is lit, which is the tail's length.
+  readonly property real arrowSize: Style.space(24)
   // Above what is lit where there is room, else below it, else over it at the
   // top of the screen with no arrow. A step that changes the keyboard's size
   // as it goes (themes, boards) puts it at the top from the start.
@@ -374,7 +375,7 @@ Item {
     : tour.target.y + tour.target.height + tour.arrowSize + tour.cardHeight <= tour.height - tour.margin ? "below"
     : "over"
   readonly property real targetMiddle: tour.target.x + tour.target.width / 2
-  readonly property real cardHeight: content.implicitHeight + bubble.contentTopInset + bubble.contentBottomInset
+  readonly property real cardHeight: content.implicitHeight + 2 * bubble.inset
 
   // Where the card settled once the step had laid itself out, and where it
   // then stays for the rest of the step. Following the keyboard as a theme
@@ -402,13 +403,113 @@ Item {
                               bottom: bubble.liveY + tour.cardHeight }
   }
 
-  BorderSurface {
+  // The card and its tail, one outline: traced around the card with the tail
+  // as part of the same path, then filled and edged once, so the tail grows
+  // out of the card instead of being a triangle stamped on its edge.
+  //
+  // Where the tail leaves the card and how it leans both follow where the
+  // card is on the screen, for the variety of it. A card further across the
+  // screen starts its tail further along its own edge, scaled into the middle
+  // three fifths of it so a tail never leaves from a corner, and leans
+  // it inwards, towards the middle of the screen, and the nearer the screen's
+  // edge, the further: 45 degrees at the very edge, none in the middle. The
+  // card is placed so that the leaning tail still ends on its key, and the
+  // tip always sits on the spotlight's edge.
+  // The cards for themes and boards sit at the top of the screen, so their
+  // tail is as long as the way down to the keyboard, and stretches and
+  // shrinks as the boards change height under a card that stays put.
+  readonly property bool tailDown: tour.side === "above" || tour.side === "top"
+  readonly property bool tailed: bubble.visible && (tour.tailDown || tour.side === "below")
+    && (tour.side !== "top" || tour.target.y > bubble.y + bubble.height + Style.space(8))
+  readonly property real tailHalf: Style.space(11)
+  // 0 at the screen's left edge, 1 at its right, for a card at x.
+  function across(x) { return Math.max(0, Math.min(1, (x + bubble.width / 2) / Math.max(1, tour.width))) }
+  // The tail's base on a card at x, before anything holds it to the card.
+  function baseAt(x) { return x + (0.2 + 0.6 * tour.across(x)) * bubble.width }
+  function leanAt(x) { return (0.5 - tour.across(x)) * Math.PI / 2 }
+  function tipFrom(x) { return tour.baseAt(x) + Math.tan(tour.leanAt(x)) * tour.arrowSize }
+  // Where a card must sit for its tail to end at t: a few steps of moving it
+  // by however far the tip missed, which settles at once, since the tip moves
+  // with the card nearly one for one.
+  function cardXFor(t) {
+    var x = t - bubble.width / 2
+    for (var i = 0; i < 6; i++) x += t - tour.tipFrom(x)
+    return Math.max(tour.margin, Math.min(tour.width - tour.margin - bubble.width, x))
+  }
+  // A key: its middle. Something wider than the card: wherever the tail
+  // lands on it.
+  readonly property bool narrowTarget: tour.target.width < bubble.width
+  readonly property real tailTipX: tour.narrowTarget ? tour.targetMiddle
+    : Math.max(tour.target.x + Style.space(12),
+               Math.min(tour.target.x + tour.target.width - Style.space(12), tour.tipFrom(bubble.x)))
+  // The base, kept on the card's straight edge and never leaning past 45
+  // degrees, which a card held in by the screen's margin could otherwise ask.
+  readonly property real tailBase: {
+    var r = Style.cornerRadius
+    var room = Math.max(tour.tailHalf + Style.space(6), bubble.width * 0.15)
+    var reach = Math.max(tour.arrowSize, tour.tailTipY - (bubble.y + bubble.height), bubble.y - tour.tailTipY)
+    var base = Math.max(tour.tailTipX - reach, Math.min(tour.tailTipX + reach, tour.baseAt(bubble.x)))
+    return Math.max(bubble.x + r + room, Math.min(bubble.x + bubble.width - r - room, base))
+  }
+  readonly property real tailTipY: tour.tailDown ? tour.target.y : tour.target.y + tour.target.height
+
+  Canvas {
+    id: outline
+    visible: bubble.visible
+    readonly property real edge: Math.max(1, Style.space(2))
+    x: Math.min(bubble.x, tour.tailed ? tour.tailTipX : bubble.x) - edge * 2
+    y: Math.min(bubble.y, tour.tailed ? tour.tailTipY : bubble.y) - edge * 2
+    width: Math.max(bubble.x + bubble.width, tour.tailed ? tour.tailTipX : 0) - x + edge * 2
+    height: Math.max(bubble.y + bubble.height, tour.tailed ? tour.tailTipY : 0) - y + edge * 2
+    readonly property var shape: [bubble.x, bubble.y, bubble.width, bubble.height, tour.tailed,
+                                  tour.tailBase, tour.tailTipX, tour.tailTipY, tour.side,
+                                  Color.popups.background, Color.popups.border]
+    onShapeChanged: requestPaint()
+    onWidthChanged: requestPaint()
+    onHeightChanged: requestPaint()
+    onPaint: {
+      var ctx = getContext("2d")
+      ctx.reset()
+      ctx.translate(-outline.x, -outline.y)
+      var x0 = bubble.x, y0 = bubble.y, x1 = x0 + bubble.width, y1 = y0 + bubble.height
+      var r = Math.min(Style.cornerRadius, bubble.width / 2, bubble.height / 2)
+      var b = tour.tailBase, h = tour.tailHalf
+      ctx.beginPath()
+      ctx.moveTo(x0 + r, y0)
+      if (tour.tailed && tour.side === "below") {
+        ctx.lineTo(b - h, y0)
+        ctx.lineTo(tour.tailTipX, tour.tailTipY)
+        ctx.lineTo(b + h, y0)
+      }
+      ctx.arcTo(x1, y0, x1, y1, r)
+      ctx.arcTo(x1, y1, x0, y1, r)
+      if (tour.tailed && tour.tailDown) {
+        ctx.lineTo(b + h, y1)
+        ctx.lineTo(tour.tailTipX, tour.tailTipY)
+        ctx.lineTo(b - h, y1)
+      }
+      ctx.arcTo(x0, y1, x0, y0, r)
+      ctx.arcTo(x0, y0, x1, y0, r)
+      ctx.closePath()
+      ctx.fillStyle = Color.popups.background
+      ctx.fill()
+      ctx.lineJoin = "round"
+      ctx.strokeStyle = Color.popups.border
+      ctx.lineWidth = outline.edge
+      ctx.stroke()
+    }
+  }
+
+  Item {
     id: bubble
     visible: tour.running || tour.offering
+    // The edge and the padding inside it, as Omarchy's popups have them.
+    readonly property real inset: outline.edge + Style.spacing.popupPadding
     width: Math.min(Style.space(460), tour.width - 2 * tour.margin)
     height: tour.cardHeight
     readonly property real liveX: tour.liveSide === "offer" || tour.liveSide === "top"
       ? (tour.width - width) / 2
+      : tour.target.width < width ? tour.cardXFor(tour.targetMiddle)
       : Math.max(tour.margin, Math.min(tour.width - tour.margin - width, tour.targetMiddle - width / 2))
     // Nothing while hidden: the shell's windows are still taking their sizes
     // as it starts, and following them then only reported a binding loop.
@@ -422,50 +523,12 @@ Item {
     y: !tour.pin ? liveY : tour.pin.side === "above" ? tour.pin.bottom - tour.cardHeight : tour.pin.y
     Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
     Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-    radius: Style.cornerRadius
-    color: Color.popups.background
-    borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
-                                          Color.popups.border, Math.max(1, Style.space(2)))
-    padding: Style.spacing.popupPadding
-
-    // The arrow, at the lit part's middle, kept within the card's straight edge.
-    Canvas {
-      id: arrow
-      visible: tour.side === "above" || tour.side === "below"
-      width: tour.arrowSize * 2
-      height: tour.arrowSize + 1
-      x: Math.max(Style.space(8), Math.min(bubble.width - width - Style.space(8),
-                                           tour.targetMiddle - bubble.x - width / 2))
-      y: tour.side === "above" ? bubble.height - 1 : -height + 1
-      readonly property bool down: tour.side === "above"
-      onDownChanged: requestPaint()
-      onVisibleChanged: requestPaint()
-      onPaint: {
-        var ctx = getContext("2d")
-        ctx.reset()
-        var w = width, h = height - 1, top = arrow.down ? 0 : h, tip = arrow.down ? h : 0
-        ctx.beginPath()
-        ctx.moveTo(0, top)
-        ctx.lineTo(w / 2, tip)
-        ctx.lineTo(w, top)
-        ctx.closePath()
-        ctx.fillStyle = Color.popups.background
-        ctx.fill()
-        ctx.beginPath()
-        ctx.moveTo(0, top)
-        ctx.lineTo(w / 2, tip)
-        ctx.lineTo(w, top)
-        ctx.strokeStyle = Color.popups.border
-        ctx.lineWidth = Math.max(1, Style.space(2))
-        ctx.stroke()
-      }
-    }
 
     Column {
       id: content
-      x: bubble.contentLeftInset
-      y: bubble.contentTopInset
-      width: bubble.width - bubble.contentLeftInset - bubble.contentRightInset
+      x: bubble.inset
+      y: bubble.inset
+      width: bubble.width - 2 * bubble.inset
       spacing: Style.space(8)
 
       Text {
