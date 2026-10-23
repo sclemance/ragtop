@@ -455,6 +455,26 @@ things English did not.
   offered, and after one and an apostrophe the rest is completed alone and
   offered with it.
 
+**Password fields.** fcitx5 knows what kind of field has focus, since
+applications say so through text-input (and GTK, Qt and X11 through their
+modules), and keeps it as capability flags. It does not tell an on-screen
+keyboard, but its Controller's `DebugInfo` lists every input context with
+its flags and which has focus, and the bridge reads that on every focus and
+reports `field {password, terminal, noCapitals}`. `Password` (0x8) and
+`Sensitive` (1 << 36) make `secretField`, as does Omarchy's polkit prompt,
+and while it holds, nothing typed is recorded: `trackWord`, `noteTyped` and
+`setFinished` return before keeping anything, what was held is cleared, and
+on leaving the helper is told to `forget` its cache of looked-up characters
+and the spare keys bound to them, which would say which were typed if not in
+what order. `Terminal` (1 << 32) joins the window-class check for the
+assists, and `NoAutoUpperCase`, `Email` and `Url` turn capitals off.
+DebugInfo is written for people, not programs, so it is read defensively:
+exactly one context marked `focus:1`, with a `cap:` field, or "null", which
+leaves things as they were before this. A context in no group, which is
+every one in the tests' display-less fcitx5, is listed without flags, so the
+tests check the parsing on the report's real shape instead (Brave's login
+form, tried by hand: password, then nocapitals for the e-mail field).
+
 **Typing assists.** Capitals and double-space full stops decide from
 `typedTail`, everything Ragtop typed in the field (up to 400 characters),
 kept in `writeKeys` with `typedFromStart`, whether it reaches back to the
@@ -491,7 +511,7 @@ KB each, French's conjugations the largest.
 **What turns them off.** A layout whose xkb name is not English (the helper
 now reports `code` in its labels, since the name is translated), unless the
 setting is `all`, the override for that derived decision; a CJK engine; and
-Omarchy's polkit prompt, the one password field Ragtop can see. The setting
+a password field, which turns off more than these (below). The setting
 is `predictions=off|english|all` (`on` from before is read as english), and
 `predictions-on` remembers which of the two a toggle brings back. Swipe is
 only active with suggestions (`swipeActive` requires `predicting`), and its

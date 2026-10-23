@@ -305,12 +305,20 @@ What it cannot do anything about is the room. Keys light up when tapped, the
 way they do on every on-screen keyboard, so a password typed on a tablet is
 readable over a shoulder.
 
-Word suggestions make that worse, which is why they are off by default. The
-strip shows words that start the way your typing does, and Ragtop cannot
-tell a password field in an application from any other field. It turns
-suggestions off itself for Omarchy's password prompt, which it can see, and
-for nothing else. If you use them, a password typed in a browser shows
-suggestions like any other word.
+**Password fields keep nothing.** An application tells the input method
+which of its fields hold passwords, and fcitx5 passes that on: browsers do,
+KeePassXC does, and so do most GTK and Qt applications. In such a field, and
+in Omarchy's own password prompt, Ragtop keeps nothing typed, not even for a
+moment: no word in progress, no record of the text for capitals, no swipe,
+and nothing is suggested, capitalised or sent to the word suggester. What it
+held is let go as the field takes focus, and the key sender forgets which
+characters it had to look up once the field is left. The lock screen's
+keyboard is a separate one that never holds anything at all.
+
+What Ragtop cannot know about is a field that does not say it is a password,
+so suggestions are still off by default. If an application of yours has a
+password field that shows suggestions, that application is not saying so;
+`ragtop predictions disable` is the way round it.
 
 ## Using it
 

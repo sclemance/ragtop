@@ -101,6 +101,53 @@ own_keys_are_not_reported() {
   assert_lacks "$out" "hide"
 }
 
+# What kind of field has focus, read from fcitx5's DebugInfo: a password
+# field (fcitx5's Password flag, 0x8), a terminal (Terminal, 1 << 32), and a
+# plain one. The service keeps nothing typed into the first. Read from the
+# report's real shape, copied from a session: a private fcitx5 with no
+# display puts its contexts in no group, and those it lists without their
+# flags, so a live test could not show this. Needs no fcitx5, so it runs
+# before the check for one.
+fields_are_told_apart() {
+  make_sandbox "$old_omarchy"
+  out=$(sandboxed /usr/bin/python3 - "$repo/fcitx-osk-bridge.py" <<'PY' 2>&1
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+b = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(b)
+report = """Group [wayland:] has 3 InputContext(s)
+  IC [5d2f] program:omawrite frontend:wayland_v2 cap:100000072 focus:{w}
+  IC [8911] program:KeePassXC frontend:wayland_v2 cap:{k} focus:{p}
+Group [x11::0] has 1 InputContext(s)
+  IC [5f00] program:keepassxc frontend:dbus cap:{e} focus:{x}
+Input Context without group
+  IC [d9b5] program:t frontend:dbus focus:{g}
+"""
+def show(**focus):
+    f = dict(w=0, p=0, x=0, g=0, k="72", e="72")
+    f.update(focus)
+    field = b.field_of(report.format(**f))
+    print(",".join(k for k in ("password", "terminal", "noCapitals") if field[k]) or "plain" if field else "null")
+show(w=1)                       # a terminal's context: Terminal, 1 << 32
+show(p=1, k="7a")               # a password field: Password, 0x8
+show(x=1, e="1000000072")       # a sensitive one: Sensitive, 1 << 36
+show(p=1, k="1072")             # a URL field: Url, 1 << 12
+show(p=1)                       # plain text
+show()                          # nothing focused
+show(g=1)                       # focused, but listed without its flags
+show(w=1, p=1)                  # two focused: no telling which
+PY
+)
+  assert_equal "$out" "terminal,noCapitals
+password,noCapitals
+password,noCapitals
+noCapitals
+plain
+null
+null
+null"
+}
+
 # Without the route, keys go the Wayland way and fcitx5 never hears them
 # from here. That is today's behaviour on a plain layout, and stays it.
 wayland_route_is_untouched() {
@@ -108,6 +155,8 @@ wayland_route_is_untouched() {
   assert_equal "$(grep -c '^wayland' <<<"$out")" 2 "keys sent the Wayland way"
   assert_lacks "$out" "commit"
 }
+
+run_test "input methods: a password field, a terminal and a plain field are told apart" fields_are_told_apart
 
 missing=""
 for need in fcitx5 dbus-run-session; do

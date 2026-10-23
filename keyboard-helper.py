@@ -17,6 +17,8 @@ commands on stdin, one per line:
   hold <mod> / release <mod>  sticky modifiers, applied to later keys
   reload                      re-read Hyprland's layouts, e.g. after a switch
   route fcitx | wayland       where keys go: see FcitxRoute
+  forget                      drop which characters have been looked up and
+                              any spare keys bound to them, after a password
   quit
 
 At startup and after each reload it also prints "labels <json>": the active
@@ -847,6 +849,15 @@ class Keyboard:
             except Exception as e:
                 self.fcitx = None
                 raise ValueError(f"can't reach fcitx5: {type(e).__name__}")
+        elif cmd == "forget":
+            # Which characters were looked up, and which have spare keys,
+            # says which were typed, a password's among them, if not in what
+            # order. The keyboard holds the device until a key is up again.
+            self.keymap.lookups.clear()
+            threading.Thread(target=self.keymap.warm, daemon=True).start()
+            if self.keymap.extras and not self.down and not self.fcitx_down:
+                self.keymap.extras.clear()
+                self._new_device()
         elif cmd == "reload":
             self.release_all()
             self.reload()

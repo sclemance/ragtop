@@ -151,7 +151,16 @@ Item {
   // Copied by hand from Keyboard.qml, table and all, because this file shares
   // no code with it. It shows what is being held, which anyone watching the
   // screen can see. So does a pressed key, and that is as far as it goes.
-  // There is no trail and never will be: see the note on swipe below.
+  // There is no trail and never will be.
+  //
+  // Nor swipe, word suggestions, word forms, automatic capitals or anything
+  // else the desktop keyboard does with what is typed, and never any of
+  // them: this keyboard types only a password. A swipe draws it on the screen
+  // for anyone to read, and a suggestion shows what it begins with. Each of
+  // those needs the keyboard to hold what has been typed, and this one holds
+  // nothing: a key goes straight into the password field and is gone from
+  // here. The desktop keyboard keeps nothing in a password field either
+  // (Service.qml, secretField), but this one has nothing to switch off.
   readonly property var variantTable: ({
     "a": ["à", "â", "á", "ä", "ã", "å", "æ"],
     "c": ["ç", "ć", "č"],

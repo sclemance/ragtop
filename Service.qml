@@ -915,6 +915,7 @@ Item {
         var value
         try { value = JSON.parse(line.slice(space + 1)) } catch (e) { return }
         if (kind === "engine") root.imeEngine = value
+        else if (kind === "field") root.fieldInfo = value
         else if (kind === "engines") root.imeEngines = Array.isArray(value) ? value : []
         else if (kind === "candidates") root.setSuggestions("fcitx", value)
       }
@@ -925,6 +926,7 @@ Item {
       } else {
         // Whatever it last said went with it.
         root.imeEngine = null
+        root.fieldInfo = null
         root.imeEngines = []
         root.setSuggestions("fcitx", null)
       }
@@ -1359,7 +1361,7 @@ Item {
   // while a CJK engine composes.
   readonly property bool assistsEnabled: root.settings["assists"] !== "off"
   readonly property bool assistsActive: root.assistsEnabled && !root.inTerminal
-    && !root.passwordOpen && !root.imeComposing
+    && !root.secretField && !root.imeComposing && !(root.fieldInfo && root.fieldInfo.noCapitals)
   readonly property bool capitalNext: root.assistsActive && root.sentenceStart
   readonly property int doubleSpaceWithin: 1500
   property string typedTail: ""
@@ -1376,6 +1378,7 @@ Item {
   // One command as sent, for typedTail and sentenceStart.
   function noteTyped(line) {
     if (line === "") return
+    if (root.secretField) return     // kept nowhere: see secretField
     var space = line.indexOf(" ")
     var cmd = space < 0 ? line : line.slice(0, space)
     var arg = space < 0 ? "" : line.slice(space + 1)
@@ -1440,6 +1443,7 @@ Item {
     }
   }
   readonly property bool inTerminal: {
+    if (root.fieldInfo && root.fieldInfo.terminal) return true
     var c = root.activeClass.toLowerCase()
     return c !== "" && (c === root.defaultTerminalClass || root.terminalClasses.indexOf(c) !== -1)
   }
@@ -1583,9 +1587,9 @@ Item {
   // ---- Word suggestions --------------------------------------------------
 
   // What the word being typed could be, from predictor.py and wordfreq's
-  // lists. Off unless turned on: Ragtop cannot tell a password field in an
-  // application from any other, and the strip would show what one is being
-  // typed into.
+  // lists. Off unless turned on: a field that does not say it is a password
+  // field is a password field Ragtop cannot see (see secretField), and the
+  // strip would show what is being typed into it.
   //
   // off; layout, in the language of the layout being typed on (Ragtop
   // deciding by its xkb name: English on us, French on fr); or all, English
@@ -1658,7 +1662,7 @@ Item {
     var lang = root.wordLanguage
     var info = root.wordLanguages[lang]
     return lang !== "" && info && !info.installed && !info.declined
-      && !root.imeComposing && !root.passwordOpen ? lang : ""
+      && !root.imeComposing && !root.secretField ? lang : ""
   }
   onOfferLanguageChanged: root.showOffer()
   onWordsFetchingChanged: root.showOffer()
@@ -1694,8 +1698,30 @@ Item {
   // The one password prompt Ragtop can see: Omarchy's polkit agent, whose
   // patched clone types with this keyboard.
   readonly property bool passwordOpen: root.openOverlays.indexOf("omarchy-polkit") !== -1
+
+  // What kind of field has focus, from fcitx5 through the bridge:
+  // { password, terminal, noCapitals }, or null when there is no telling.
+  property var fieldInfo: null
+  // A password or sensitive field, in an application or in Omarchy's prompt.
+  // Nothing typed into one is kept: not the field's text, not the word, not a
+  // swipe, and nothing is suggested or capitalised there. What was held when
+  // it took focus is let go, and the helper forgets which characters it had
+  // to look up once it is left.
+  readonly property bool secretField: root.passwordOpen || (!!root.fieldInfo && root.fieldInfo.password)
+  onSecretFieldChanged: {
+    root.typedTail = ""
+    root.typedFromStart = false
+    root.sentenceStart = false
+    root.currentWord = ""
+    root.swipedWord = ""
+    root.autoSpaced = false
+    root.setFinished("", "", false)
+    if (["predict", "swipe", "forms"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+    if (!root.secretField && keyboardHelper.running) keyboardHelper.write("forget\n")
+  }
   readonly property bool predicting: root.predictionsEnabled && root.wordsReady
-    && !root.imeComposing && !root.passwordOpen
+    && !root.imeComposing && !root.secretField
   onPredictingChanged: {
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
@@ -1707,6 +1733,10 @@ Item {
   property string currentWord: ""
   property real backSpaceDownAt: 0
   function trackWord(command) {
+    if (root.secretField) {
+      root.currentWord = ""
+      return
+    }
     // Anything typed after a swipe makes its word final.
     if (root.swipedWord !== "") {
       root.swipedWord = ""
@@ -1794,6 +1824,7 @@ Item {
   readonly property int formsAfter: 1000
   property bool finishedFormsAsked: false
   function setFinished(word, tail, swiped) {
+    if (root.secretField) word = ""
     root.finished = word !== "" ? { word: word, tail: tail, swiped: swiped } : null
     root.finishedFormsAsked = false
     if (root.finished && root.predicting) finishedPause.restart()
@@ -3398,6 +3429,8 @@ Item {
           : root.imeEngine ? root.imeEngine.name : "layout",
         words: root.wordLanguage,
         assists: !root.assistsEnabled ? "off" : root.inTerminal ? "terminal" : root.assistsActive ? "on" : "idle",
+        field: !root.fieldInfo ? "unknown" : root.fieldInfo.password ? "password"
+          : root.fieldInfo.terminal ? "terminal" : root.fieldInfo.noCapitals ? "nocapitals" : "plain",
         swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
           : root.swipeActive ? "on" : "idle",
         predictions: !root.predictionsEnabled ? "off"

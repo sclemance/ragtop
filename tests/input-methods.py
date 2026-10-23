@@ -23,6 +23,8 @@ Steps:
   key:<keysym> [mods]         the helper's "key ..."
   pick:<text>                 select the candidate whose text is <text>
   route:<fcitx|wayland>       the helper's "route ..."
+  cap:<hex>                   the field's capability flags, as an application
+                              declares them, then focus it again
   other:<keysym>              a key from another keyboard: straight to the
                               input context, as a physical one arrives
 """
@@ -93,6 +95,10 @@ def drain():
         kind, _, rest = lines.get().strip().partition(" ")
         if kind == "hide":
             out("hide")
+        elif kind == "field":
+            value = json.loads(rest)
+            out("field " + (",".join(k for k in ("password", "terminal", "noCapitals") if value[k])
+                            or "plain") if value else "field null")
         elif kind == "engine":
             value = json.loads(rest)
             out("engine " + (value["name"] if value else "null"))
@@ -157,6 +163,11 @@ for step in steps:
         for ch in arg:
             kb.handle("type " + ch)
             pump(0.1)
+    elif kind == "cap":
+        for method, args in (("FocusOut", None), ("SetCapability", GLib.Variant("(t)", (int(arg, 16),))),
+                             ("FocusIn", None)):
+            bus.call_sync("org.fcitx.Fcitx5", ic, IC, method, args, None,
+                          Gio.DBusCallFlags.NO_AUTO_START, 2000, None)
     elif kind == "other":
         sym = Gdk.keyval_from_name(arg)
         for release in (False, True):

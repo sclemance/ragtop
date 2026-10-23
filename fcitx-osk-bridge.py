@@ -13,6 +13,14 @@ addon), which fcitx5 tells three things:
   {"name", "label", "title"}, and "engine null" for a plain keyboard layout or
   no field at all. "engines <json>" lists every composing one in the user's
   fcitx5 group, the same objects, for the keyboard to offer.
+- what kind of field has focus. Printed as "field <json>", {"password",
+  "terminal", "noCapitals"}, or "field null" when there is no telling: a
+  password field, so that nothing typed into one is kept or offered; a
+  terminal, which is not prose; and one that asks for no capitals (an
+  e-mail address, a URL). Read from fcitx5's DebugInfo, which lists every
+  input context with its capability flags and which one has focus. It is a
+  report for people rather than an interface, so it is read defensively,
+  and anything unreadable is "null", never a guess.
 - what the composing one has to choose from. Printed as "candidates <json>",
   {"items": [{"text", "note"}], "prev", "next", "cursor"}, with "items"
   empty when there is nothing to choose.
@@ -44,10 +52,6 @@ import sys
 
 from gi.repository import Gio, GLib
 
-# End with the shell that started us. Nothing else would tell us it's gone
-# if it exits uncleanly, and a leftover copy would keep running unseen.
-ctypes.CDLL(None).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
-
 NAME = "org.fcitx.Fcitx5.VirtualKeyboard"
 PATH = "/org/fcitx/virtualkeyboard/impanel"
 IFACE = "org.fcitx.Fcitx5.VirtualKeyboard1"
@@ -75,7 +79,8 @@ XML = f"""
 </node>
 """
 
-bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+bus = None    # the session bus, from main(); the tests load this file without one
+loop = None
 arming = False
 rearm_source = 0
 # Whether fcitx5 has ever spoken to us. Until it has, a working arm and one
@@ -160,6 +165,42 @@ def refresh_methods():
     call(CONTROLLER, "AvailableInputMethods", reply="(a(ssssssb))", done=got_available)
 
 
+# fcitx5's capability flags (fcitx-utils/capabilityflags.h).
+CAP_PASSWORD = 1 << 3
+CAP_EMAIL = 1 << 7
+CAP_NO_AUTO_UPPER = 1 << 11
+CAP_URL = 1 << 12
+CAP_TERMINAL = 1 << 32
+CAP_SENSITIVE = 1 << 36
+FOCUSED = re.compile(r"\bcap:([0-9a-fA-F]+)\s+focus:1\b")
+
+
+def field_of(debug_info):
+    """The focused field's kind from DebugInfo's text, or None."""
+    found = FOCUSED.findall(debug_info)
+    if len(found) != 1:
+        return None
+    cap = int(found[0], 16)
+    return {"password": bool(cap & (CAP_PASSWORD | CAP_SENSITIVE)),
+            "terminal": bool(cap & CAP_TERMINAL),
+            "noCapitals": bool(cap & (CAP_NO_AUTO_UPPER | CAP_EMAIL | CAP_URL | CAP_TERMINAL
+                                      | CAP_PASSWORD | CAP_SENSITIVE))}
+
+
+printed_field = "unset"
+
+
+def ask_field():
+    """Which kind of field has focus, by asking fcitx5 for its report."""
+    def got(value):
+        global printed_field
+        field = field_of(value[0]) if value else None
+        if field != printed_field:
+            printed_field = field
+            say("field", field)
+    call(CONTROLLER, "DebugInfo", reply="(s)", done=got)
+
+
 def ask_engine():
     """fcitx5 names the engine when a field gains focus, and not when an arm
     puts it back into on-screen keyboard mode, so after an arm it is asked."""
@@ -197,6 +238,7 @@ def arm():
             rearm_in(2000)
             return
         ask_engine()
+        ask_field()
 
     bus.call(FCITX, "/virtualkeyboard",
              "org.fcitx.Fcitx.VirtualKeyboard1", "ShowVirtualKeyboard",
@@ -218,14 +260,19 @@ def on_call(conn, sender, path, iface, method, params, invocation):
     invocation.return_value(None)
     asked = True
     args = params.unpack() if params is not None else ()
-    if method == "ShowVirtualKeyboard" and not arming:
-        print("show", flush=True)
+    if method == "ShowVirtualKeyboard":
+        # Asked whenever a field may have changed, armed or not: a password
+        # field must be known before the first key is typed into it.
+        ask_field()
+        if not arming:
+            print("show", flush=True)
     elif method == "HideVirtualKeyboard":
         print("hide", flush=True)
         # Wait for a burst of typing to settle before re-arming.
         rearm_in(300)
     elif method == "NotifyIMActivated":
         set_engine(args[0])
+        ask_field()
     elif method == "NotifyIMDeactivated":
         set_engine("")
     elif method == "NotifyIMListChanged":
@@ -286,10 +333,6 @@ def watchdog():
     return GLib.SOURCE_CONTINUE
 
 
-bus.register_object_with_closures2(
-    PATH, Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0], on_call, None, None)
-
-
 def on_name(conn, name):
     # fcitx5 notices the new owner and switches its interface over.
     GLib.timeout_add(200, arm)
@@ -299,13 +342,24 @@ def on_name_lost(conn, name):
     sys.exit(1)
 
 
-Gio.bus_watch_name_on_connection(bus, FCITX, Gio.BusNameWatcherFlags.NONE,
-                                 on_fcitx_appeared, on_fcitx_vanished)
-GLib.timeout_add_seconds(10, watchdog)
-GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_command)
+def main():
+    global bus, loop
+    # End with the shell that started us. Nothing else would tell us it's
+    # gone if it exits uncleanly, and a leftover copy would keep running
+    # unseen.
+    ctypes.CDLL(None).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+    bus.register_object_with_closures2(
+        PATH, Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0], on_call, None, None)
+    Gio.bus_watch_name_on_connection(bus, FCITX, Gio.BusNameWatcherFlags.NONE,
+                                     on_fcitx_appeared, on_fcitx_vanished)
+    GLib.timeout_add_seconds(10, watchdog)
+    GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_command)
+    Gio.bus_own_name_on_connection(bus, NAME, Gio.BusNameOwnerFlags.NONE,
+                                   on_name, on_name_lost)
+    loop = GLib.MainLoop()
+    loop.run()
 
 
-Gio.bus_own_name_on_connection(bus, NAME, Gio.BusNameOwnerFlags.NONE,
-                               on_name, on_name_lost)
-loop = GLib.MainLoop()
-loop.run()
+if __name__ == "__main__":
+    main()
