@@ -3365,17 +3365,23 @@ Item {
 
   // On the built-in screen, reserving its space so windows move up out of
   // its way. It never takes keyboard focus, so typing goes to the window
-  // underneath. Created when shown, so it stacks above the handle.
+  // underneath. Kept mapped while there is a keyboard, so the handle never
+  // moves (see `visible` below); its layer rule stacks it above the handle.
   PanelWindow {
     id: keyboardWindow
     screen: root.keyboardScreen
-    visible: root.oskVisible && root.layerRulesReady
+    // Mapped for as long as there is a keyboard to have, and hidden by
+    // drawing nothing, taking no touch and reserving nothing, rather than
+    // by unmapping. Hyprland places a newly mapped layer at the screen's
+    // edge before its layer rules put it in order, so every show pushed the
+    // handle up above the keyboard for a moment and dropped it back: the
+    // handle slid at every show. A surface that stays never arrives.
+    visible: root.keyboardAvailable && root.layerRulesReady
 
-    // Where the keyboard takes touches (see Keyboard's touchArea): the whole
-    // surface while it draws a background, and only the keys' own extent
-    // when that background is fully clear, so a tap can reach the window
-    // underneath exactly where the keyboard doesn't cover it.
-    mask: Region { item: keyboard.touchArea }
+    // Where the keyboard takes touches (see Keyboard's touchArea): the keys'
+    // own extent, and nowhere while it is hidden.
+    mask: Region { item: root.oskVisible ? keyboard.touchArea : noTouch }
+    Item { id: noTouch; width: 0; height: 0 }
 
     WlrLayershell.namespace: "ragtop-keyboard"
     WlrLayershell.layer: WlrLayer.Top
@@ -3384,7 +3390,7 @@ Item {
     // not: the surface keeps one height and only the reservation changes,
     // so the keys never move (Keyboard.qml, stripSlot).
     exclusionMode: ExclusionMode.Normal
-    exclusiveZone: keyboard.visibleHeight
+    exclusiveZone: root.oskVisible ? keyboard.visibleHeight : 0
     anchors { bottom: true; left: true; right: true }
     implicitHeight: keyboard.implicitHeight
     color: "transparent"
@@ -3392,6 +3398,10 @@ Item {
     Keyboard {
       id: keyboard
       anchors.fill: parent
+      // A short fade in and out, which unmapping used to leave to Hyprland.
+      opacity: root.oskVisible ? 1 : 0
+      visible: opacity > 0
+      Behavior on opacity { NumberAnimation { duration: 120 } }
       service: root
       theme: keyboardTheme
       // How much of the screen the keyboard may take when it is choosing a

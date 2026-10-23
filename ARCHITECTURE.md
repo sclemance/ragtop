@@ -99,7 +99,11 @@ goes, its room kept clear when hidden, and reserves only what can be seen
 (`exclusiveZone: keyboard.visibleHeight`). Hyprland places a resized layer
 surface a frame late, which made the keys bounce; changing only the
 reservation moves the windows above and leaves the keyboard still. Its
-contents are laid out from the bottom for the same reason.
+contents are laid out from the bottom for the same reason. And the surface
+stays mapped for as long as there is a keyboard, hidden by drawing nothing,
+masking every touch out and reserving nothing: Hyprland puts a newly mapped
+layer at the screen's edge before its layer rule orders it, so mapping it at
+each show pushed the handle up above it for a tenth of a second.
 
 There is no background behind the keys, on the keyboard or the picker strip:
 an opinionated change in 0.48.0, in line with Omarchy's design, since the
