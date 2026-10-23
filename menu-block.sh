@@ -107,6 +107,9 @@ rows = {
         checked=f'"{cmd}" predictions is layout', action=f'"{cmd}" predictions set layout'),
     "setup.tablet.predictions.all": dict(icon="\U000f030c", label="English, on Any Layout",
         checked=f'"{cmd}" predictions is all', action=f'"{cmd}" predictions set all'),
+    "setup.tablet.assists": dict(icon="\U000f030c", label="Capitals and Full Stops",
+        checked=f'"{cmd}" assists enabled',
+        action=f'"{cmd}" assists toggle'),
     # Only offered once suggestions are on, which it needs.
     "setup.tablet.swipe": dict(icon="\U000f030c", label="Swipe Typing (beta)",
         when=f'"{cmd}" predictions enabled',

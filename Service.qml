@@ -897,11 +897,15 @@ Item {
     stdout: SplitParser {
       onRead: function(line) {
         if (line === "hide") {
-          if (Date.now() - root.lastKeysAt > root.ownHideWithin) root.finishWord()
+          // Not another keyboard: Ragtop's own keys cause one too, and so
+          // does focus settling into a field, which comes with a show.
+          if (Date.now() - root.lastKeysAt > root.ownHideWithin
+              && Date.now() - root.freshFieldAt > 500) root.finishWord()
           return
         }
         if (line === "show") {
           root.currentWord = ""
+          root.freshField()
           root.autoShows++
           if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
           return
@@ -1267,6 +1271,13 @@ Item {
   // One command per line. See keyboard-helper.py. Everything typed passes
   // here, which is what makes it the place to follow the word being typed.
   function sendKeys(command) {
+    // A space after a word finishes it (finished); anything else typed
+    // means the moment for its forms has passed.
+    if (/^(type|key|down) /.test(command)) {
+      var word = command === "key space" ? root.currentWord : ""
+      root.setFinished(word, " ", false)
+      if (root.suggestions.source === "forms") root.setSuggestions("forms", null)
+    }
     // BackSpace straight after a swipe takes the whole word back, and the
     // space after it, as on a phone: a wrong swipe is undone in one tap.
     // The space a swipe put in front stays, ready for the next one. The
@@ -1284,6 +1295,25 @@ Item {
     }
     if (command === "up BackSpace" && root.swallowBackSpaceUp) {
       root.swallowBackSpaceUp = false
+      return
+    }
+    // A space straight after punctuation that Ragtop already spaced, "test"
+    // taken from the strip and then a full stop, is swallowed, as on a
+    // phone: the space is there, and a second one would also use up the
+    // capital waiting for the next word.
+    if (command === "key space" && root.autoSpaced && root.assistsActive
+        && /[.,!?;:] $/.test(root.typedTail)) {
+      root.autoSpaced = false
+      return
+    }
+    // A second space soon after a word is a full stop, as on a phone: the
+    // first space goes back and ". " goes in, and the next word starts a
+    // sentence (capitalNext).
+    if (command === "key space" && root.assistsActive && keyboardHelper.running
+        && Date.now() - root.lastKeysAt < root.doubleSpaceWithin && root.endsWordThenSpace()) {
+      root.trackWord(command)
+      root.writeKeys("key BackSpace\ntype . \n")
+      root.autoSpaced = false
       return
     }
     // Punctuation straight after a space Ragtop put in itself goes before
@@ -1306,11 +1336,133 @@ Item {
   readonly property string closingMarks: ".,!?;:"
 
   // Every key Ragtop sends goes through here, so it knows when it last
-  // typed: see finishWord.
+  // typed (see finishWord) and what (typedTail).
   property real lastKeysAt: 0
   function writeKeys(text) {
     root.lastKeysAt = Date.now()
+    text.split("\n").forEach(root.noteTyped)
     keyboardHelper.write(text)
+  }
+
+  // ---- Typing assists ------------------------------------------------------
+
+  // A capital at the start of a sentence, and a full stop for a double
+  // space, as on a phone. Ragtop sees only the keys it sends, so it keeps
+  // what it typed in this field (typedTail) and decides from that, and
+  // where it cannot know, after an arrow or a tap in the text, it does
+  // nothing rather than guess.
+  //
+  // All of it, not the last few characters: BackSpace uncovers what came
+  // before, and keeping four meant deleting a short word after a full stop
+  // left nothing to say the full stop was there. On unless turned off; never in a terminal,
+  // where "ls" is not the start of a sentence, nor in a password prompt or
+  // while a CJK engine composes.
+  readonly property bool assistsEnabled: root.settings["assists"] !== "off"
+  readonly property bool assistsActive: root.assistsEnabled && !root.inTerminal
+    && !root.passwordOpen && !root.imeComposing
+  readonly property bool capitalNext: root.assistsActive && root.sentenceStart
+  readonly property int doubleSpaceWithin: 1500
+  property string typedTail: ""
+  // Whether typedTail reaches back to the start of the field, so that all of
+  // it deleted is the start of the field again rather than unknown.
+  property bool typedFromStart: false
+  readonly property int typedKept: 400
+  property bool sentenceStart: false
+  function isWordChar(c) { return c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9") }
+  function endsWordThenSpace() {
+    var t = root.typedTail
+    return t.length >= 2 && t[t.length - 1] === " " && root.isWordChar(t[t.length - 2])
+  }
+  // One command as sent, for typedTail and sentenceStart.
+  function noteTyped(line) {
+    if (line === "") return
+    var space = line.indexOf(" ")
+    var cmd = space < 0 ? line : line.slice(0, space)
+    var arg = space < 0 ? "" : line.slice(space + 1)
+    var t = root.typedTail
+    if (cmd === "type") t += arg
+    else if ((cmd === "key" || cmd === "down") && arg === "space") t += " "
+    else if ((cmd === "key" || cmd === "down") && arg === "Return") t += "\n"
+    else if ((cmd === "key" || cmd === "down") && arg === "BackSpace") t = t.slice(0, -1)
+    else if (cmd === "key" || cmd === "down") {         // an arrow, Tab, a shortcut: anywhere now
+      t = ""
+      root.typedFromStart = false
+    } else if (cmd === "up" && arg === "BackSpace" && Date.now() - root.backSpaceDownAt > 400) {
+      // Held long enough to repeat: the application took an unknown number
+      // of characters (see trackWord).
+      t = ""
+      root.typedFromStart = false
+    } else return                                       // up, hold, release, route
+    if (t.length > root.typedKept) {
+      t = t.slice(-root.typedKept)
+      root.typedFromStart = false
+    }
+    root.typedTail = t
+    root.sentenceStart = t === "" ? root.typedFromStart : /([.!?] |\n)$/.test(t)
+  }
+  // A field just focused is the start of something, and another keyboard
+  // having typed is anywhere at all.
+  function freshField() {
+    root.typedTail = ""
+    root.typedFromStart = true
+    root.sentenceStart = true
+    root.freshFieldAt = Date.now()
+  }
+  property real freshFieldAt: 0
+
+  // Which application has focus, by class, for inTerminal.
+  property string activeClass: ""
+  readonly property var terminalClasses: ["foot", "footclient", "alacritty", "kitty", "ghostty",
+    "com.mitchellh.ghostty", "org.wezfurlong.wezterm", "wezterm", "xterm", "urxvt", "st",
+    "st-256color", "konsole", "org.kde.konsole", "org.gnome.console", "gnome-terminal-server",
+    "org.gnome.terminal", "tilix", "com.gexperts.tilix", "terminator", "rio", "contour",
+    "warp", "dev.warp.warp", "blackbox", "com.raggesilver.blackbox", "ptyxis", "org.gnome.ptyxis"]
+  // And the one Omarchy is set to open, which is a terminal by fact rather
+  // than by the list: `omarchy-default-terminal` names Omarchy's four, and
+  // gives any other's desktop id, which is its window class.
+  property string defaultTerminalClass: ""
+  readonly property var omarchyTerminals: ({ alacritty: "alacritty", foot: "foot",
+                                             ghostty: "com.mitchellh.ghostty", kitty: "kitty" })
+  Process {
+    id: defaultTerminalProc
+    command: ["omarchy-default-terminal"]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var t = text.trim()
+        root.defaultTerminalClass = (root.omarchyTerminals[t] || t.replace(/\.desktop$/, "")).toLowerCase()
+      }
+    }
+  }
+  readonly property bool inTerminal: {
+    var c = root.activeClass.toLowerCase()
+    return c !== "" && (c === root.defaultTerminalClass || root.terminalClasses.indexOf(c) !== -1)
+  }
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (String(event && event.name ? event.name : "") !== "activewindow") return
+      var data = String(event.data || "")
+      root.activeClass = data.slice(0, data.indexOf(",") < 0 ? data.length : data.indexOf(","))
+      // A new window is a new place to type, and where in it is unknown,
+      // unless fcitx5 has just said a text field took focus: the two come
+      // together when a window is tapped into, the window's often second,
+      // and it undid the field's fresh start.
+      if (Date.now() - root.freshFieldAt < 500) return
+      root.typedTail = ""
+      root.typedFromStart = false
+      root.sentenceStart = false
+    }
+  }
+  Process {
+    id: activeClassProc
+    command: ["hyprctl", "-j", "activewindow"]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.activeClass = String(JSON.parse(text).class || "") } catch (e) {}
+      }
+    }
   }
 
   // The word in progress is over, by a route Ragtop cannot see: another
@@ -1324,6 +1476,10 @@ Item {
   // else's.
   readonly property int ownHideWithin: 250
   function finishWord() {
+    root.setFinished("", "", false)
+    root.typedTail = ""
+    root.typedFromStart = false
+    root.sentenceStart = false
     root.currentWord = ""
     root.swipedWord = ""
     root.autoSpaced = false
@@ -1410,6 +1566,10 @@ Item {
     else if (root.suggestions.source === "predict") root.takeWord(index)
     else if (root.suggestions.source === "swipe") root.swapSwiped(index)
     else if (root.suggestions.source === "offer") root.answerOffer(index)
+    else if (root.suggestions.source === "forms") {
+      var item = root.suggestions.items[index]
+      if (item) root.replaceFinished(item.text, index)
+    }
   }
   function pageSuggestions(forward) {
     if (root.suggestions.source === "fcitx") root.sendBridge(forward ? "next" : "prev")
@@ -1594,6 +1754,7 @@ Item {
     root.writeKeys(out + "type " + text + " \n")
     root.currentWord = ""
     root.autoSpaced = true
+    root.setFinished(text, " ", false)
   }
 
   // A word's other forms, for a hold on it in the strip: summed and sums
@@ -1606,10 +1767,69 @@ Item {
     predictorProc.write("forms " + word + "\n")
   }
   // One taken from the card, in the place of whatever the strip was
-  // offering for: the word being typed, or the word a swipe typed.
+  // offering for: the word being typed, the word a swipe typed, or the word
+  // just finished.
   function takeForm(text) {
     if (root.suggestions.source === "predict") root.typeInPlace(text)
     else if (root.suggestions.source === "swipe") root.swapTo(text, -1)
+    else if (root.suggestions.source === "forms") root.replaceFinished(text, -1)
+  }
+
+  // ---- The word just finished --------------------------------------------
+
+  // The almost-right word is usually noticed just after it is done: sum,
+  // and a space, when summed was meant. So a word just finished, typed and
+  // spaced, taken from the strip, or swiped, is remembered with what
+  // followed it, and when nothing more is typed for a moment the strip
+  // offers its other forms, a swipe's runners-up first. A tap swaps the
+  // word for one in place. Anything typed after it lets it go. In the
+  // strip, so nothing covers a key at the moment someone may be about to
+  // tap one, which a card would.
+  property var finished: null       // { word, tail, swiped }
+  readonly property int formsAfter: 1000
+  property bool finishedFormsAsked: false
+  function setFinished(word, tail, swiped) {
+    root.finished = word !== "" ? { word: word, tail: tail, swiped: swiped } : null
+    root.finishedFormsAsked = false
+    if (root.finished && root.predicting) finishedPause.restart()
+    else finishedPause.stop()
+  }
+  Timer {
+    id: finishedPause
+    interval: root.formsAfter
+    onTriggered: {
+      if (!root.finished || !root.predicting) return
+      root.finishedFormsAsked = true
+      root.askForms(root.finished.word)
+    }
+  }
+  function finishedForms(word, forms) {
+    var f = root.finished
+    if (!root.finishedFormsAsked || !f || word !== f.word || !root.predicting) return
+    root.finishedFormsAsked = false
+    var items = []
+    // A swipe's runners-up stay first: a wrong word is likelier than a
+    // wrong form of the right one.
+    if (f.swiped && root.suggestions.source === "swipe")
+      items = root.suggestions.items.filter(function(i) { return i.text !== f.word })
+    forms.forEach(function(w) {
+      if (!items.some(function(i) { return i.text === w })) items.push({ text: w, note: "" })
+    })
+    if (items.length > 0)
+      root.setSuggestions("forms", { items: items, prev: false, next: false, cursor: -1 })
+  }
+  // The finished word swapped for `text`, keeping what followed it.
+  function replaceFinished(text, index) {
+    var f = root.finished
+    if (!f || !keyboardHelper.running) return
+    var out = ""
+    for (var i = 0; i < f.word.length + f.tail.length; i++) out += "key BackSpace\n"
+    root.writeKeys(out + "type " + text + f.tail + "\n")
+    if (f.swiped) root.swipedWord = root.swipeLead + text + f.tail
+    root.finished = { word: text, tail: f.tail, swiped: f.swiped }
+    root.autoSpaced = true
+    if (index >= 0) root.setSuggestions("forms", { items: root.suggestions.items, prev: false,
+                                                   next: false, cursor: index })
   }
 
   // ---- Swipes ------------------------------------------------------------
@@ -1701,6 +1921,7 @@ Item {
     root.currentWord = ""
     root.swipedWord = word
     root.autoSpaced = true
+    root.setFinished(root.capitalised(words[0]), " ", true)
     root.setSuggestions("swipe", { items: words.map(function(w) { return { text: root.capitalised(w), note: "" } }),
                                    prev: false, next: false, cursor: 0 })
   }
@@ -1718,6 +1939,7 @@ Item {
     root.writeKeys(out + "type " + word + "\n")
     root.swipedWord = word
     root.autoSpaced = true
+    root.setFinished(text, " ", true)
     root.setSuggestions("swipe", { items: root.suggestions.items, prev: false, next: false, cursor: index })
   }
 
@@ -1755,7 +1977,9 @@ Item {
           var forWhat = root.formsAsked.shift()
           var forms
           try { forms = JSON.parse(line.slice(6)) } catch (e) { return }
-          if (forWhat !== undefined) root.formsArrived(forWhat, forms)
+          if (forWhat === undefined) return
+          root.finishedForms(forWhat, forms)
+          root.formsArrived(forWhat, forms)
         } else if (line.startsWith("peeked ")) {
           var guess
           try { guess = JSON.parse(line.slice(7)) } catch (e) { root.peekPending = false; return }
@@ -3168,6 +3392,7 @@ Item {
         inputMethod: !root.inputMethodsEnabled ? "off"
           : root.imeEngine ? root.imeEngine.name : "layout",
         words: root.wordLanguage,
+        assists: !root.assistsEnabled ? "off" : root.inTerminal ? "terminal" : root.assistsActive ? "on" : "idle",
         swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
           : root.swipeActive ? "on" : "idle",
         predictions: !root.predictionsEnabled ? "off"

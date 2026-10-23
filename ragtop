@@ -11,6 +11,7 @@
 #        ragtop input-methods (enabled | enable | disable | toggle)
 #        ragtop predictions (get | is <which> | set <which> | enabled | enable | disable | toggle)
 #        ragtop swipe (enabled | enable | disable | toggle)
+#        ragtop assists (enabled | enable | disable | toggle)   capitals and double-space full stops
 #        ragtop words (languages | status | install [lang] | decline <lang> | remove [lang])
 #        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop keyboard-layout (get | is <name> | set <name>)
@@ -201,6 +202,8 @@ switch() {
     "input-methods off") notify "The keyboard no longer shows input method choices. fcitx5 shows its own." ;;
     "swipe on") notify "Swipe typing is on: draw a word across the letters." ;;
     "swipe off") notify "Swipe typing is off." ;;
+    "assists on") notify "Capitals at the start of sentences, and a full stop for a double space, are on." ;;
+    "assists off") notify "Automatic capitals and double-space full stops are off." ;;
   esac
 }
 
@@ -769,6 +772,10 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   fi
   # on, off, idle (a layout that is not English, or a CJK engine on), or
   # nowords when the list has not been downloaded.
+  assists=$(health_field assists)
+  if [[ -n $assists ]]; then
+    row "Capitals and full stops" "$assists"
+  fi
   swipe=$(health_field swipe)
   if [[ -n $swipe ]]; then
     row "Swipe typing" "$swipe"
@@ -844,6 +851,7 @@ case "${1:-} ${2:-}" in
   "input-methods "*) switch "$1" "${2:-}" ;;
   "predictions "*) predictions "${2:-}" "${3:-}" ;;
   "swipe "*) swipe "${2:-}" ;;
+  "assists "*) switch assists "${2:-}" ;;
   "words "*) words "${2:-}" "${3:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;

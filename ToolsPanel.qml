@@ -440,6 +440,14 @@ Item {
         }
         Toggle {
           width: parent.width
+          label: "Capitals and double-space full stops"
+          checked: panel.service.assistsEnabled
+          foreground: Color.popups.text
+          accent: Color.accent
+          onClicked: panel.service.toggleSetting("assists")
+        }
+        Toggle {
+          width: parent.width
           label: "Swipe typing"
           enabled: panel.service.predictionsEnabled
           opacity: enabled ? 1 : 0.4

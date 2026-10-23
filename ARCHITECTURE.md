@@ -455,6 +455,27 @@ things English did not.
   offered, and after one and an apostrophe the rest is completed alone and
   offered with it.
 
+**Typing assists.** Capitals and double-space full stops decide from
+`typedTail`, everything Ragtop typed in the field (up to 400 characters),
+kept in `writeKeys` with `typedFromStart`, whether it reaches back to the
+start of the field. A field's focus (the bridge's `show`) starts it; an
+arrow, Tab, a shortcut, a held BackSpace, another keyboard or another window
+make it unknown, and unknown never capitalises. Found on the Yoga, each a
+bug first: the last four characters were not enough, since BackSpace
+uncovers what is before them; the window's focus event, arriving just after
+the field's, undid the fresh start, and so did the hide fcitx5 sends as
+focus settles, so neither counts within half a second of a `show`; a space
+straight after punctuation Ragtop already spaced is swallowed; and the
+keyboard latches Shift with `Qt.callLater`, after the key that made the
+capital due, since that key's own `afterKey` lets go of a latched Shift.
+Off in a terminal: a list of classes, plus whatever `omarchy-default-terminal`
+names.
+
+**The word just finished.** A word typed and spaced, taken from the strip,
+or swiped is kept as `finished`, with what followed it, and a second without
+typing offers its forms in the strip (a swipe's runners-up first); a tap
+swaps it in place, keeping the space. Anything typed lets it go.
+
 **Word forms.** A hold on a word in the strip sends `forms <word>`, and the
 answer opens a card below the strip. The forms come from rules, not from a
 list of every form: English's inflections run both ways, sum to summed and

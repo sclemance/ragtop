@@ -656,6 +656,22 @@ or the word a swipe typed, and a card below the strip offers summed and sums;
 slide onto one and lift, and it takes the word's place. Irregular forms are
 there too: hold went for go, going, goes, gone. English only so far.
 
+**A pause after a word offers its forms too.** Type sum and a space, or
+swipe it, and wait a second: the strip shows sums and summed, and a tap puts
+one in its place, keeping the space. Typing on lets it go.
+
+**Capitals and full stops.** Shift lights up by itself at the start of a
+text field and after a full stop, question or exclamation mark and a space,
+and two spaces after a word make a full stop. A tap on that Shift puts it
+away. A space after punctuation the keyboard already spaced is not doubled.
+None of this happens in a terminal, where "ls" does not start a sentence:
+Ragtop knows Omarchy's default terminal and the common others by their
+window. Ragtop sees only what it typed itself, so after a tap elsewhere in
+the text, an arrow key, or the physical keyboard, it does nothing until it
+knows again; and it cannot see what a field already holds, so returning to a
+half-written one gives a capital you may need to tap away. Off with
+`ragtop assists disable`, or Setup › Tablet › Capitals and Full Stops.
+
 Accents need not be typed: `ete` offers été, and a swipe through e, t, e
 finds it, though an accent you do type is kept to. In French, after l', d',
 j', qu' and the rest, the word after the apostrophe is completed with the
@@ -1098,6 +1114,7 @@ the Settings button on the keyboard's own panel opens directly:
 | Keyboard comes up on text fields | on | Setup › Tablet › Auto Keyboard |
 | Chinese, Japanese and Korean choices in a strip on the keyboard (see [Chinese, Japanese and Korean](#chinese-japanese-and-korean)) | on | Setup › Tablet › CJK Choices on Keyboard |
 | Word suggestions in the strip: Off, On in Your Layout's Language, or English on Any Layout (see [Word suggestions and swipe](#word-suggestions-and-swipe)) | Off | Setup › Tablet › Word Suggestions (beta), or the controls panel |
+| Capitals at the start of sentences and fields, and a full stop for a double space (never in a terminal) | on | Setup › Tablet › Capitals and Full Stops, or the controls panel |
 | Swipe typing, while suggestions are on | off | Setup › Tablet › Swipe Typing (beta), or the controls panel |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key size against the theme's: Automatic, a percentage from 60 to 160, or one of five names | Automatic where you have not set one | the controls panel's slider, or Setup › Tablet › Key Size |
@@ -1116,7 +1133,7 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
 `input-methods toggle` (or `enable`, `disable`),
-`predictions set off|layout|all` (or `toggle`, `enable`, `disable`), `swipe toggle`
+`assists toggle` (or `enable`, `disable`), `predictions set off|layout|all` (or `toggle`, `enable`, `disable`), `swipe toggle`
 (or `enable`, `disable`), `words languages|status|install <lang>|decline <lang>|remove <lang>`,
 `size-adjust set auto|<60-160>|smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and

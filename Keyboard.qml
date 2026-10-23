@@ -1169,6 +1169,29 @@ Item {
     return names
   }
 
+  // A capital due at the start of a sentence (Service.qml, capitalNext)
+  // latches Shift for the next key, shown as latched, as on a phone. Only a
+  // Shift that is off is latched this way, and only one latched this way is
+  // let go again when the capital stops being due: a Shift set by hand is
+  // the hand's.
+  //
+  // Applied once the key that caused it is done, not at once: the space
+  // after a full stop is what makes a capital due, and that space's own
+  // afterKey lets go of a latched Shift, so latching it straight away had it
+  // let go again in the same instant.
+  property bool autoShifted: false
+  readonly property bool capitalNext: root.service.capitalNext === true
+  onCapitalNextChanged: Qt.callLater(root.applyCapital)
+  function applyCapital() {
+    if (root.capitalNext && root.mods.shift === "off") {
+      root.setMod("shift", "latched")
+      root.autoShifted = true
+    } else if (!root.capitalNext && root.autoShifted) {
+      if (root.mods.shift === "latched") root.setMod("shift", "off")
+      root.autoShifted = false
+    }
+  }
+
   function setMod(name, state) {
     var next = Object.assign({}, mods)
     next[name] = state
@@ -1177,9 +1200,13 @@ Item {
 
   // Latched modifiers are used up by the next key.
   function afterKey() {
+    root.autoShifted = false
     var next = Object.assign({}, mods)
     for (var m in next) if (next[m] === "latched") next[m] = "off"
     mods = next
+    // A capital may still be due after this key, a space swallowed after a
+    // full stop Ragtop spaced itself, with nothing changing to say so.
+    Qt.callLater(root.applyCapital)
   }
 
   // Off, then latched for the next key, then locked, then off again. The
@@ -1196,6 +1223,13 @@ Item {
   // key, off. A tap while it is locked still lets go: that lock can only
   // have come over from the mobile board, which locks Shift by a second tap.
   function tapModifier(name) {
+    // A Shift the keyboard latched itself for a capital is put away by a
+    // tap, as on a phone: the tap says no capital, not caps lock.
+    if (name === "shift" && root.autoShifted) {
+      root.autoShifted = false
+      setMod("shift", "off")
+      return
+    }
     var state = mods[name]
     if (state === "off") {
       setMod(name, "latched")
