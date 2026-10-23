@@ -13,13 +13,15 @@
 #        ragtop swipe (enabled | enable | disable | toggle)
 #        ragtop assists (enabled | enable | disable | toggle)   capitals and double-space full stops
 #        ragtop words (languages | status | install [lang] | decline <lang> | remove [lang])
+#        ragtop update (check | run)       what an update would bring; Omarchy's updater
+#        ragtop tour (done | declined | reset)   whether the first-run tour is offered again
 #        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop keyboard-layout (get | is <name> | set <name>)
 #        ragtop display (get | is <name> | set <name>)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop size-adjust (get | is <adjust> | set <adjust>)
 #        ragtop rotation (get | is <mode> | set <mode>)
-#        ragtop theme (list | apply <theme>)
+#        ragtop theme (list | apply <theme> | show <theme>)
 #        ragtop setup                       open setup in the shell
 #        ragtop diagnostics [copy]          what a bug report needs
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
@@ -286,6 +288,53 @@ words() {
   esac
 }
 
+# Updates. Ragtop never checks by itself: `update check` runs when someone
+# taps Check for updates, and asks the one thing that matters, the version in
+# the manifest on main, since main is what `omarchy plugin update` installs.
+# One small file from the install's own repository, so a fork checks its
+# own. It prints "<state> <installed> <latest>", state being current,
+# available, dev (a working copy, linked in or not on main, which git
+# updates) or failed. `update run` opens Omarchy's own updater, which shows
+# the changes, asks, validates and rolls back.
+plugin_id=$(jq -r .id "$repo/manifest.json")
+
+version_newer() {   # version_newer <a> <b>: whether a is later than b
+  [[ $1 != "$2" && $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1) == "$1" ]]
+}
+
+update_check() {
+  local installed latest origin raw branch
+  installed=$(jq -r .version "$repo/manifest.json")
+  branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  if [[ -L "$HOME/.config/omarchy/plugins/$plugin_id" || $branch != main ]]; then
+    echo "dev $installed -"
+    return
+  fi
+  origin=$(git -C "$repo" remote get-url origin 2>/dev/null || echo "")
+  if [[ $origin =~ github\.com[:/]([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)$ ]]; then
+    raw="https://raw.githubusercontent.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}/main/manifest.json"
+  else
+    echo "failed $installed -"
+    return
+  fi
+  latest=$(curl -fsS --proto '=https' --tlsv1.2 --max-time 15 "$raw" 2>/dev/null | jq -r '.version // empty' 2>/dev/null)
+  if [[ ! $latest =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    echo "failed $installed -"
+  elif version_newer "$latest" "$installed"; then
+    echo "available $installed $latest"
+  else
+    echo "current $installed $latest"
+  fi
+}
+
+update() {
+  case "${1:-}" in
+    check) update_check ;;
+    run) omarchy-launch-floating-terminal-with-presentation omarchy plugin update "$plugin_id" ;;
+    *) usage ;;
+  esac
+}
+
 # Word suggestions are off; on in the language of the layout being typed on
 # ("layout", which is Ragtop deciding by the layout's xkb name, English on
 # us, French on fr); or English whatever the layout ("all", the way past that
@@ -514,9 +563,25 @@ themes() {
 # apply_theme <name>: write the theme's settings into settings.conf, so what
 # the menu shows is what the keyboard does.
 apply_theme() {
-  local file name
-  file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; exit 2; }
-  name=$(locked /usr/bin/python3 - "$file" "$settings" <<'EOF'
+  local name
+  name=$(locked theme_values "$1" "$settings") || exit 2
+  put theme "$1"
+  notify "The keyboard now looks like $name."
+}
+
+# show_theme <name>: the settings the theme would write, as key=value lines
+# after a name= line, with nothing written. The tour shows themes this way
+# and puts yours back after.
+show_theme() {
+  theme_values "$1" - || exit 2
+}
+
+# theme_values <name> <settings file, or - to print>: the one place a theme
+# file is read and checked.
+theme_values() {
+  local file
+  file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; return 2; }
+  /usr/bin/python3 - "$file" "$2" <<'EOF'
 import os, re, sys, tempfile, tomllib
 
 path, settings = sys.argv[1:]
@@ -578,6 +643,18 @@ if isinstance(v, str):
 # whatever the last one left, which is a keyboard whose keys stop changing
 # shape with the theme.
 look_keys = set(choices) | set(numbers) | set(colors) | {"corners"}
+label = raw.get("name")
+label = (label.strip() if isinstance(label, str) and label.strip()
+         else os.path.basename(os.path.dirname(path)))
+# For a preview (the tour's), the values as they would be written, and
+# nothing written: the same checks, so a theme cannot smuggle anything into
+# a preview either. A look key the theme leaves out is printed empty, which
+# the keyboard reads as its default, the same as a line stripped here.
+if settings == "-":
+    print(f"name={label}")
+    for k in sorted(look_keys):
+        print(f"{k}={values.get(k, '')}")
+    sys.exit(0)
 lines = []
 if os.path.exists(settings):
     lines = [l for l in open(settings).read().split("\n")
@@ -589,14 +666,8 @@ fd, tmp = tempfile.mkstemp(prefix=os.path.basename(settings) + ".",
 with os.fdopen(fd, "w") as f:
     f.write("\n".join(lines) + "\n")
 os.replace(tmp, settings)
-
-label = raw.get("name")
-print(label if isinstance(label, str) and label.strip()
-      else os.path.basename(os.path.dirname(path)))
+print(label)
 EOF
-  ) || exit 2
-  put theme "$1"
-  notify "The keyboard now looks like $name."
 }
 
 # What the issue forms ask for by hand, gathered in one place.
@@ -846,12 +917,18 @@ case "${1:-} ${2:-}" in
   "theme get") get theme omarchy ;;
   "theme is") [[ -n ${3:-} ]] || usage; [[ $(get theme omarchy) == "$3" ]] ;;
   "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
+  "theme show") [[ -n ${3:-} ]] || usage; show_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "input-methods "*) switch "$1" "${2:-}" ;;
   "predictions "*) predictions "${2:-}" "${3:-}" ;;
   "swipe "*) swipe "${2:-}" ;;
   "assists "*) switch assists "${2:-}" ;;
   "words "*) words "${2:-}" "${3:-}" ;;
+  "update "*) update "${2:-}" ;;
+  # The tour itself is the shell's; this only remembers that it was taken or
+  # turned down, so it is offered once. Reset offers it again.
+  "tour done"|"tour declined") put tour "$2" ;;
+  "tour reset") put tour "" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;

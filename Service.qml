@@ -181,8 +181,11 @@ Item {
   readonly property var keyboardLayouts:
     root.keyboardLayoutOptions.map(function(o) { return o.value })
   readonly property string keyboardLayout:
-    root.keyboardLayouts.indexOf(root.settings["keyboard-layout"]) !== -1
-      ? root.settings["keyboard-layout"] : "auto"
+    root.previewLayout !== "" ? root.previewLayout
+      : root.keyboardLayouts.indexOf(root.settings["keyboard-layout"]) !== -1
+        ? root.settings["keyboard-layout"] : "auto"
+  // A board the tour is showing, never written. Empty when it is not.
+  property string previewLayout: ""
   function setKeyboardLayout(name) {
     if (root.keyboardLayouts.indexOf(name) === -1 || keyboardLayoutProc.running) return
     keyboardLayoutProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
@@ -232,6 +235,12 @@ Item {
   // bottom bar keeps the edge with the handle above it, and the keyboard
   // opens above the handle, leaving the handle where it was.
   readonly property int handleHeight: 24
+  // Whether the handle is up on the keyboard's screen, which the overlay also
+  // needs to know: the keyboard sits on it when it is, and on the screen's
+  // edge when it is not.
+  readonly property bool handleShown: root.keyboardAvailable && root.layerRulesReady
+    && (!root.pickerOpen || root.pickerPatched)
+    && root.screensaverAddress === ""
 
   Variants {
     model: Quickshell.screens
@@ -246,10 +255,7 @@ Item {
       // Only on the screen the keyboard itself uses. One per screen is how
       // Variants works, and a handle on a monitor the keyboard will never
       // appear on is a switch wired to another room.
-      visible: modelData === root.keyboardScreen
-        && root.keyboardAvailable && root.layerRulesReady
-        && (!root.pickerOpen || root.pickerPatched)
-        && root.screensaverAddress === ""
+      visible: modelData === root.keyboardScreen && root.handleShown
 
       // The bar's, keyboard up or down: the handle is part of the screen's
       // frame, as the bar is, and the keyboard has no panel to match.
@@ -312,9 +318,9 @@ Item {
           capStyle: ShapePath.RoundCap
           joinStyle: ShapePath.RoundJoin
           startX: 0
-          startY: root.oskVisible ? 0 : 8
-          PathLine { x: 28; y: root.oskVisible ? 8 : 0 }
-          PathLine { x: 56; y: root.oskVisible ? 0 : 8 }
+          startY: root.keysShown ? 0 : 8
+          PathLine { x: 28; y: root.keysShown ? 8 : 0 }
+          PathLine { x: 56; y: root.keysShown ? 0 : 8 }
         }
       }
     }
@@ -800,6 +806,19 @@ Item {
   // Omarchy menu), as key=value lines. A missing key keeps its default.
   property var settings: ({})
   property bool settingsLoaded: false
+  // A theme the tour is showing, as `ragtop theme show` prints it: the look
+  // it would write, laid over the settings and never written. An empty value
+  // is a key the theme leaves out, so its default shows, the same as when
+  // the theme is applied. Empty when nothing is being shown.
+  property var previewSettings: ({})
+  readonly property var lookSettings: {
+    var out = Object.assign({}, root.settings)
+    for (var key in root.previewSettings) {
+      if (root.previewSettings[key] === "") delete out[key]
+      else out[key] = root.previewSettings[key]
+    }
+    return out
+  }
 
   // Whether Omarchy's bar is transparent (Style › Bar › Transparency), passed
   // on by the bar widget. The keyboard handle and, by default, the keyboard's
@@ -1600,7 +1619,7 @@ Item {
   // it stays, and the windows above move once when typing starts and once
   // when it stops rather than at every word.
   readonly property bool suggestionsSource: root.imeComposing || root.predicting || root.swipeActive
-    || root.offerLanguage !== "" || root.terminalSuggesting
+    || root.offerLanguage !== "" || root.terminalSuggesting || root.tourActive
   readonly property bool suggestionsShown: root.suggestionsSource
     && (root.suggestions.items.length > 0 || root.stripLingers)
   property bool stripLingers: false
@@ -1616,7 +1635,7 @@ Item {
   // Whether a strip could appear at all, for the keyboard to choose a board
   // that has room for it either way.
   readonly property bool stripPossible: root.predictionsEnabled
-    || (root.inputMethodsEnabled && root.imeEngines.length > 0)
+    || (root.inputMethodsEnabled && root.imeEngines.length > 0) || root.tourActive
   function chooseSuggestion(index) {
     if (root.suggestions.source === "fcitx") root.sendBridge("select " + index)
     else if (root.suggestions.source === "predict") root.takeWord(index)
@@ -2145,6 +2164,51 @@ Item {
 
   readonly property bool wantPredictor: root.keyboardAvailable && root.predictionsEnabled
 
+  // ---- Updates ----------------------------------------------------------
+
+  // Checked only when someone taps Check for updates on the controls panel:
+  // Ragtop starts no network traffic of its own accord. The CLI asks the
+  // repository what is on main, which is what an update installs, and the
+  // answer is "" (not asked), checking, current, available, dev (a working
+  // copy, updated with git) or failed.
+  property string updateState: ""
+  property string updateInstalled: ""
+  // The version installed, from the manifest, for the panel before any check.
+  Process {
+    command: ["jq", "-r", ".version", Qt.resolvedUrl("manifest.json").toString().replace(/^file:\/\//, "")]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: if (root.updateInstalled === "") root.updateInstalled = text.trim()
+    }
+  }
+  property string updateLatest: ""
+  function checkForUpdates() {
+    if (updateCheckProc.running) return
+    root.updateState = "checking"
+    updateCheckProc.running = true
+  }
+  Process {
+    id: updateCheckProc
+    command: ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""), "update", "check"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var f = text.trim().split(" ")
+        var known = ["current", "available", "dev", "failed"]
+        root.updateState = known.indexOf(f[0]) !== -1 ? f[0] : "failed"
+        root.updateInstalled = f[1] || ""
+        root.updateLatest = f[2] && f[2] !== "-" ? f[2] : ""
+      }
+    }
+    onExited: if (root.updateState === "checking") root.updateState = "failed"
+  }
+  // Omarchy's own updater, in a terminal, which shows the changes and asks.
+  function runUpdate() {
+    Quickshell.execDetached(["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                             "update", "run"])
+    root.toolsOpen = false
+    root.updateState = ""
+  }
+
   // The controls panel's switches. Through the CLI, which is what fetches
   // the word list when it is missing and says so.
   function toggleSetting(name) {
@@ -2248,6 +2312,46 @@ Item {
   // Ragtop's controls, on their own surface above the keyboard. They go away
   // with it, so they can never be left floating over nothing.
   property bool toolsOpen: false
+
+  // ---- The tour (Tour.qml) ----------------------------------------------------
+
+  property bool tourActive: false
+  // The tour's handle step lowers and raises the keys to show what the handle
+  // does, by drawing alone: the keyboard stays up, so the windows above keep
+  // their place and the tour keeps its keyboard.
+  property bool tourLowered: false
+  readonly property bool keysShown: root.oskVisible && !root.tourLowered
+  // Answered for this session, either way, so the offer does not come back
+  // before the setting it wrote has been read.
+  property bool tourAnswered: false
+  // Offered once: the first time the keyboard is up with nothing else over it,
+  // until it is taken or turned down (the `tour` setting).
+  readonly property bool tourOffered: root.settingsLoaded && !root.settings["tour"]
+    && !root.tourAnswered && root.oskVisible && !root.toolsOpen && !root.tourActive
+  function startTour() {
+    root.toolsOpen = false
+    root.tourAnswered = true
+    root.setOskVisible(true)
+    if (root.oskVisible) root.tourActive = true
+  }
+  // finished: written as taken, so it is not offered again. Skip counts.
+  function endTour(finished) {
+    root.tourActive = false
+    root.tourLowered = false
+    root.previewSettings = ({})
+    root.previewLayout = ""
+    root.setSuggestions("tour", null)
+    keyboard.demoClear()
+    if (finished !== false) root.tourSetting("done")
+  }
+  function declineTour() {
+    root.tourAnswered = true
+    root.tourSetting("declined")
+  }
+  function tourSetting(value) {
+    Quickshell.execDetached(["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                             "tour", value])
+  }
 
   // ---- window management -------------------------------------------------
 
@@ -2824,6 +2928,9 @@ Item {
     // A keyboard put away is the end of whatever word it was typing.
     root.currentWord = ""
     if (!root.oskVisible) root.toolsOpen = false
+    // A tour of a keyboard that is not there is over, and puts back what it
+    // was showing. Not marked as taken: it was not finished.
+    if (!root.oskVisible && root.tourActive) root.endTour(false)
     // The keyboard and tiling mode are exclusive: entering hides the
     // keyboard, and the keyboard coming back by any route ends the mode.
     // That covers the handle, auto-show on a text field, and the bar's own
@@ -2946,7 +3053,7 @@ Item {
     var scale = root.targetKeyMm * density / (84 * dpr)
     // Expressed against the theme's own size, so Auto lands on the target
     // whatever a theme asked for rather than being multiplied by it.
-    var themeSize = Number(root.settings["size"]) || 100
+    var themeSize = Number(root.lookSettings["size"]) || 100
     var pct = scale / (themeSize / 100) * 100
     return Math.max(root.sizeMin, Math.min(root.sizeMax, Math.round(pct)))
   }
@@ -3069,14 +3176,14 @@ Item {
   // settings.conf is a plain file anyone can edit.
   readonly property var look: {
     function pick(key, allowed, fallback) {
-      return allowed.indexOf(root.settings[key]) !== -1 ? root.settings[key] : fallback
+      return allowed.indexOf(root.lookSettings[key]) !== -1 ? root.lookSettings[key] : fallback
     }
     function num(key, low, high, fallback) {
-      var value = Number(root.settings[key])
+      var value = Number(root.lookSettings[key])
       return isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback
     }
     function color(key) {
-      var value = String(root.settings[key] || "")
+      var value = String(root.lookSettings[key] || "")
       return ["foreground", "background", "accent", "urgent"].indexOf(value) !== -1
         || /^#[0-9a-fA-F]{6,8}$/.test(value) ? value : ""
     }
@@ -3084,7 +3191,7 @@ Item {
     // silhouette none of the names cover. Anything that is not four known
     // words falls back to the shape's own corners rather than half-applying.
     function cornerSpec() {
-      var raw = String(root.settings["corners"] || "auto").trim().toLowerCase()
+      var raw = String(root.lookSettings["corners"] || "auto").trim().toLowerCase()
       if (raw === "" || raw === "auto") return "auto"
       var parts = raw.split(/\s+/)
       if (parts.length !== 4) return "auto"
@@ -3120,9 +3227,9 @@ Item {
       // Off-theme: set, and that part stops following the Omarchy theme.
       keyColor: color("key-color"),
       labelColor: color("label-color"),
-      keyFillAlpha: root.settings["key-fill-alpha"] === undefined ? "auto" : num("key-fill-alpha", 0, 1, "auto"),
-      borderWidth: root.settings["border-width"] === undefined ? "auto" : num("border-width", 0, 4, "auto"),
-      radius: root.settings["radius"] === undefined ? "auto" : num("radius", 0, 30, "auto")
+      keyFillAlpha: root.lookSettings["key-fill-alpha"] === undefined ? "auto" : num("key-fill-alpha", 0, 1, "auto"),
+      borderWidth: root.lookSettings["border-width"] === undefined ? "auto" : num("border-width", 0, 4, "auto"),
+      radius: root.lookSettings["radius"] === undefined ? "auto" : num("radius", 0, 30, "auto")
     }
   }
 
@@ -3131,7 +3238,7 @@ Item {
   // see-through windows too, so when Ragtop turns it on it also tells
   // Hyprland to leave every window alone, and only the keyboard blurs.
   // Nothing is written to the Hyprland config: `hyprctl reload` clears it.
-  readonly property bool blurKeyboard: root.settings["blur"] === "on"
+  readonly property bool blurKeyboard: root.lookSettings["blur"] === "on"
   // Whether Hyprland's global blur was already on, i.e. the user's own
   // choice, which Ragtop leaves alone.
   property bool globalBlurWasOn: false
@@ -3163,7 +3270,10 @@ Item {
       "hl.layer_rule({ match = { namespace = '^ragtop-tools$' }, order = 1 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-picker-nav$' }, order = -2 }) "
-      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -3 })"]
+      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -3 }) "
+      // Order is also how one layer draws over another, the lowest on top,
+      // and the overlay has to be over the keys: the tour dims them.
+      + "hl.layer_rule({ match = { namespace = '^ragtop-overlay$' }, order = -4 })"]
     layerRulesProc.running = true
   }
   Process {
@@ -3399,7 +3509,7 @@ Item {
       id: keyboard
       anchors.fill: parent
       // A short fade in and out, which unmapping used to leave to Hyprland.
-      opacity: root.oskVisible ? 1 : 0
+      opacity: root.keysShown ? 1 : 0
       visible: opacity > 0
       Behavior on opacity { NumberAnimation { duration: 120 } }
       service: root
@@ -3409,6 +3519,91 @@ Item {
       // at least the other half. A form factor asked for by name ignores
       // this: asking for it is asking for the height it needs.
       maxHeight: keyboardWindow.screen ? keyboardWindow.screen.height / 2 : 0
+    }
+  }
+
+  // Ragtop's overlay: one full-screen layer above the keys, for what has to
+  // be drawn over everything, the dim behind the controls and the tour
+  // (Tour.qml). Its mask decides what it takes touches on, and most of the
+  // time that is nothing.
+  //
+  // While the controls are up, the whole screen is dimmed, as Omarchy dims
+  // behind its own menus, but for the controls and the keys: the keys are
+  // the live preview of what the controls change. This layer dims all of it
+  // but the keyboard, which it leaves a hole for (and which dims the room
+  // between its own keys, Keyboard.qml, dimmed), and a tap on it puts the
+  // controls away and goes no further, so nothing that could not be seen
+  // properly is ever clicked. A tap on the keys closes them too.
+  //
+  // On the Top layer, ordered above the bar, the handle and the keys; the
+  // controls are on Overlay, always above it, so it can never take a touch meant for them,
+  // which an earlier sheet behind the tile did (see below).
+  //
+  // Mapped for as long as the keyboard is, and shown by fading in, never by
+  // mapping: Hyprland fades a newly mapped layer in by itself, so the dim
+  // around the keys arrived a beat after the keyboard's own dim between
+  // them. Both fade together now, by `dimmed` and the same duration.
+  readonly property color scrimColor: Color.menu.scrim
+  readonly property int dimFade: 150
+  readonly property bool dimmed: root.oskVisible && root.toolsOpen
+  PanelWindow {
+    id: overlayWindow
+    screen: keyboardWindow.screen
+    visible: root.keyboardAvailable && root.layerRulesReady
+    WlrLayershell.namespace: "ragtop-overlay"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
+
+    // Where the keys are, in this window: the keyboard sits on the handle,
+    // which sits on the screen's bottom edge.
+    readonly property real keysBottom: height - (root.tilingOpen || !root.handleShown ? 0 : root.handleHeight)
+    readonly property real keysTop: keysBottom - keyboard.visibleHeight
+
+    Item {
+      anchors.fill: parent
+      opacity: root.dimmed ? 1 : 0
+      Behavior on opacity { NumberAnimation { duration: root.dimFade } }
+
+      Rectangle { id: dimAbove; width: overlayWindow.width; height: overlayWindow.keysTop; color: root.scrimColor }
+      Rectangle {
+        id: dimBelow
+        y: overlayWindow.keysBottom
+        width: overlayWindow.width
+        height: overlayWindow.height - overlayWindow.keysBottom
+        color: root.scrimColor
+      }
+    }
+    // Taking touches only while it dims; otherwise every one passes through.
+    // The tour takes all of them, so nothing it shows types; its offer takes
+    // only its own card, so the keyboard under it still does.
+    mask: root.tourActive ? tourRegion
+      : tour.offering ? offerRegion
+      : root.dimmed ? dimRegion : noDimRegion
+    Region {
+      id: dimRegion
+      Region { item: dimAbove }
+      Region { item: dimBelow }
+    }
+    Region { id: noDimRegion; item: noDim }
+    Item { id: noDim; width: 0; height: 0 }
+    Region { id: tourRegion; item: tour }
+    Region { id: offerRegion; item: tour.card }
+
+    TapHandler {
+      onTapped: if (!root.tourActive) root.toolsOpen = false
+    }
+
+    Tour {
+      id: tour
+      anchors.fill: parent
+      service: root
+      keyboard: keyboard
+      keyboardTop: overlayWindow.keysBottom - keyboard.height
+      handleRect: root.handleShown && !root.tilingOpen
+        ? Qt.rect(0, overlayWindow.keysBottom, overlayWindow.width, root.handleHeight) : null
     }
   }
 
@@ -3573,6 +3768,7 @@ Item {
     function toggleKeyboard(): string { root.toggleOsk(); return "ok" }
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
     function openSetup(): string { root.openSetup(); return "ok" }
+    function startTour(): string { root.startTour(); return root.tourActive ? "ok" : "no keyboard" }
     // The things worth binding a key to, and every one of them takes no
     // argument, so nothing on this socket can be handed a value to act on.
     function toggleControls(): string {

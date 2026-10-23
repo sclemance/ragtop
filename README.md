@@ -293,7 +293,7 @@ Ragtop types. It does not keep or send what you type.
 | --- | --- |
 | **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol, or through fcitx5 while a Chinese, Japanese or Korean engine is on. It keeps no history and writes no log. |
 | **Word suggestions and swipe** | Off unless you turn them on. With either on, Ragtop's own process holds the word being typed, in memory, to look it up in the word list, and forgets it at the next space. Nothing is written down, learned or sent. |
-| **Network** | Only with word suggestions on, and only when you tap **Add** on a language's offer in the strip or run `ragtop words install`: that language's word list from wordfreq, 125 to 135 KB, from one fixed release on GitHub, checked against a fixed SHA-256 before it is kept. Otherwise nothing in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
+| **Network** | Only when you ask, never by itself, and two things. **Add** on a language's offer in the strip, or `ragtop words install`: that language's word list from wordfreq, 125 to 135 KB, from one fixed release on GitHub, checked against a fixed SHA-256 before it is kept. **Check for updates** on the controls panel, or `ragtop update check`: Ragtop's own `manifest.json` from its repository on GitHub, a couple of kilobytes, to read the version an update would install. Nothing else in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
 | **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
 | **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
 | **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
@@ -391,9 +391,9 @@ and reaches all of it.
 **75%** is the compressed one: a function row on top and one more column hard
 against the right of the main block, no gap, which is the whole idea. Sixteen
 units. Arrows in the bottom row, Del, Home, PgUp, PgDn and End down the right.
-It has no room for a Menu key, so the tiling key holds it. Right of the space
-bar are three keys of one unit, right Alt, **Fn** and tiling, as on a physical
-75%.
+It has no room for a Menu key, so the gear key holds it. Right of the space
+bar are three keys of one unit, right Alt, **Fn** and the gear, as on a
+physical 75%.
 
 The function row on both of these is drawn shorter than a row of letters, the
 way the mobile board's extra row is, because it is the same class of key: one
@@ -494,12 +494,12 @@ down the column on the right edge where a physical 75% keeps it:
 Del -> Ins    Home -> PrtSc    PgUp -> ScrLk    PgDn -> Pause    tiling -> Menu
 ```
 
-**Tiling mode is a tap on every real board**, in the place a full keyboard
-keeps its right Super, for the same reason Fn takes that key on the 60%. The
-context menu is behind it: hold the tiling key for Menu, or on the 60% reach
-it with Fn. A screen has no right click, so Menu is worth having at all, but
-arranging windows by touch is something you do constantly and Menu does
-nothing whatever in a terminal. The 80% has the room to keep a Menu key as
+**The gear key opens Ragtop's controls on every board**, in the place a full
+keyboard keeps its right Super, for the same reason Fn takes that key on the
+60%. The context menu is behind it: hold the gear for Menu, or on the 60%
+reach it with Fn. A screen has no right click, so Menu is worth having at
+all, but the controls are reached for far more often, and Menu does nothing
+whatever in a terminal. The 80% has the room to keep a Menu key as
 well, and does.
 
 ### What every board has
@@ -569,16 +569,35 @@ omarchy-shell ragtop toggleKeyboard    # also showKeyboard, hideKeyboard
 
 ### The controls
 
-Holding Super opens a small panel that sits below Omarchy's bar and holds
+The gear key opens a small panel that sits below Omarchy's bar and holds
 what you reach for while actually holding the machine. It is never taller
 than half the screen, which is where Automatic stops the keyboard growing, so
 the two cannot meet, and anything that does not fit scrolls. The keyboard stays
 drawn underneath, so changing the theme or the key size shows you the result
 as you do it. Tap anywhere on the keyboard to put it away.
 
-A tap on Super is still Super, and rolling off it into another key still
-works: hold Super, tap B, and the browser opens with Super applied. Only a
-hold that stays put long enough to be a hold reaches the panel.
+Super is plain Super. It used to open this panel on a hold, while the panel
+had no key of its own; the gear key is that key now, and it is lit while the
+panel is up.
+
+**Check for updates** is at the top of the panel. Ragtop never checks by
+itself: only a tap asks GitHub which version is on Ragtop's main branch,
+which is what an update installs. With a newer one, the button becomes
+**Update to** it, and opens Omarchy's own updater in a terminal, which shows
+the changes, asks, checks the result and rolls back if it fails. A copy of
+Ragtop linked in from a working tree, or not on main, says so and offers
+nothing: git updates those.
+
+**Take the tour**, beside it, is a minute's walk around the keyboard: the
+handle that lowers and raises it, where Super and the gear are, a few themes and boards, holding a letter for its
+accents and Space for your layouts, how Shift and the other modifiers stick
+and lock, Fn and AltGr, the suggestion strip and its forms, and swipe. Each
+step lights one part of the keyboard, dims the rest, and shows it working.
+It shows and never changes anything: the themes and boards are previews that
+go away when it ends, suggestions and swipe are shown whether you have them
+on or not, and nothing you touch during it types. The first time the
+keyboard comes up, a card offers it once; **No thanks** and it is not offered
+again, and it stays here for whenever.
 
 It is built from Omarchy's own panel components, so it is one of Omarchy's
 popup menus rather than a panel of Ragtop's: square cornered where your
@@ -740,7 +759,7 @@ worth having, in `~/.config/hypr/bindings.lua`:
 ```lua
 -- The keyboard, whatever the tablet switch thinks
 bind("SUPER SHIFT", "K", "exec", "omarchy-shell ragtop toggleKeyboard")
--- The panel a hold on Super opens
+-- The panel the gear key opens
 bind("SUPER SHIFT", "T", "exec", "omarchy-shell ragtop toggleControls")
 -- Locked, unlocked, automatic, round again
 bind("SUPER SHIFT", "R", "exec", "omarchy-shell ragtop cycleRotation")
@@ -778,7 +797,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Diagnostics | Copies everything a bug report needs to the clipboard |
 
 Theme, Layout, Key Size, rotation and the keyboard's own auto-expand are also
-on the panel a hold on Super opens, which is the quicker way to them while you
+on the panel the gear key opens, which is the quicker way to them while you
 are holding the machine.
 
 What a key looks like, its shape, relief, fill, how see-through it is and
@@ -1152,12 +1171,14 @@ From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
 `keyboard-layout set auto|mobile|60|75|80`, `display set auto|<monitor>`,
 `auto-show toggle` (or `enable`, `disable`),
-`input-methods toggle` (or `enable`, `disable`),
+`input-methods toggle` (or `enable`, `disable`), `update check` and `update run`,
+`tour reset` (offer the tour again the next time the keyboard comes up),
 `assists toggle` (or `enable`, `disable`), `predictions set off|layout|all` (or `toggle`, `enable`, `disable`), `swipe toggle`
 (or `enable`, `disable`), `words languages|status|install <lang>|decline <lang>|remove <lang>`,
 `size-adjust set auto|<60-160>|smallest|smaller|regular|larger|largest`,
 `rotation set locked|unlocked|auto`, and
-`theme apply <name>` (`theme list` shows them). Settings other than the
+`theme apply <name>` (`theme list` shows them, `theme show <name>` prints
+what one would set without setting it). Settings other than the
 overlays are kept in `~/.config/ragtop/settings.conf`, and changes apply
 straight away. The rest of the look has no verb, because it is the theme's
 to set.

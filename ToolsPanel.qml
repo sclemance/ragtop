@@ -86,6 +86,62 @@ Item {
         width: scroller.width
         spacing: Style.space(8)
 
+        // Whether there is a newer Ragtop, asked only when this is tapped:
+        // nothing else in Ragtop starts network traffic. With one to have,
+        // the button becomes the way to it, through Omarchy's own updater.
+        Item {
+          width: parent.width
+          height: updateButton.implicitHeight
+
+          Button {
+            id: updateButton
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property string state: panel.service.updateState
+            text: state === "checking" ? "Checking\u2026"
+              : state === "available" ? "Update to " + panel.service.updateLatest
+              : "Check for updates"
+            enabled: state !== "checking"
+            bordered: true
+            foreground: Color.popups.text
+            onClicked: {
+              if (state === "available") panel.service.runUpdate()
+              else panel.service.checkForUpdates()
+            }
+          }
+          Text {
+            textFormat: Text.PlainText
+            anchors.left: updateButton.right
+            anchors.leftMargin: Style.spacing.controlGap
+            anchors.right: tourButton.left
+            anchors.rightMargin: Style.spacing.controlGap
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property string state: panel.service.updateState
+            text: state === "current" ? "Up to date, " + panel.service.updateInstalled
+              : state === "available" ? "You have " + panel.service.updateInstalled
+              : state === "dev" ? "A working copy: update it with git"
+              : state === "failed" ? "Couldn't check. Try again later."
+              : "Ragtop " + panel.service.updateInstalled
+            color: Color.popups.text
+            opacity: 0.7
+            elide: Text.ElideRight
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+          }
+          // The tour (Tour.qml), which closes this panel and shows the keys.
+          Button {
+            id: tourButton
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Take the tour"
+            bordered: true
+            foreground: Color.popups.text
+            onClicked: panel.service.startTour()
+          }
+        }
+
+        PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+
         // The theme, stepped rather than listed: the keyboard behind redraws
         // as you go, which is a better way to choose one than reading names.
         PanelSectionHeader {

@@ -33,7 +33,7 @@ Item {
   // On a plain US layout there is nothing to reach, so the key would do
   // nothing and the row is better without it.
   readonly property var topRow: ["esc", "tab", "ctrl", "alt"]
-    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"], ["windows"])
+    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"], ["gear"])
   readonly property var fallbackRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
     [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
@@ -138,12 +138,12 @@ Item {
     // second set of keys the board already draws would only take them away.
     if (root.form === "75")
       return ({ "delete": "insert", "home": "prtsc", "pgup": "scrlk", "pgdn": "pause",
-                "windows": "menu" })
-    // Tiling mode is the tap and the context menu is behind Fn, not the other
-    // way round. A tablet has no right click, so Menu is worth having at all,
-    // but arranging windows by touch is something you do constantly and Menu
-    // does nothing whatever in a terminal.
-    var map = ({ "BKSP": "delete", "windows": "menu" })
+                "gear": "menu" })
+    // Ragtop's controls are the tap and the context menu is behind Fn, not
+    // the other way round. A tablet has no right click, so Menu is worth
+    // having at all, but the controls are reached for far more often, and
+    // Menu does nothing whatever in a terminal.
+    var map = ({ "BKSP": "delete", "gear": "menu" })
     // The number row carries the function keys, as it does on every board
     // with no row of its own for them.
     for (var i = 1; i <= 12; i++) map["AE" + (i < 10 ? "0" + i : "" + i)] = "f" + i
@@ -303,7 +303,7 @@ Item {
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
-    "windows": "", "caps": "Caps", "menu": "Menu",
+    "gear": "", "caps": "Caps", "menu": "Menu",
     "fn": "Fn", "delete": "Del", "home": "Home", "end": "End",
     "pgup": "PgUp", "pgdn": "PgDn", "insert": "Ins",
     "prtsc": "PrtSc", "scrlk": "ScrLk", "pause": "Pause"
@@ -338,12 +338,14 @@ Item {
   // Keys Ragtop draws an icon for (KeyIcon.qml) instead of a label, so they
   // don't depend on the font carrying a glyph and scale with the keys.
   readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace",
-                                   "enter", "settings", "windows"]
+                                   "enter", "settings"]
   // The focus arrows are the same four arrows, drawn under another name.
   readonly property var iconNames: ({
     // Super carries the system's mark, the way it does on a keyboard you
     // can touch.
-    "super": "omarchy"
+    "super": "omarchy",
+    // The gear key is Ragtop's controls, drawn as the gear they are.
+    "gear": "settings"
   })
   function iconFor(key) {
     var role = root.roleOf(root.effectiveKey(key))
@@ -365,17 +367,21 @@ Item {
   // This is the same reason a key with variants types on release. That one
   // waits so a hold can become a popup, this one waits so the finger has
   // somewhere to lift from.
-  readonly property var liftKeys: ["windows"]
+  //
+  // The gear key opens Ragtop's controls over the keyboard rather than
+  // taking it away, and still waits: a panel that comes up under a finger
+  // still down is no better a place for that finger to lift.
+  readonly property var liftKeys: ["gear"]
 
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right",
                                    "delete", "pgup", "pgdn"]
 
   // Keys whose hold reaches something that is not a character, drawn small in
-  // the key's corner the way a cap prints what AltGr types on it. Super holds
-  // the gear: Ragtop's controls used to have a key of their own beside the
-  // space bar, and Super took that place, so the gear moved into Super's
-  // corner rather than onto a row that has no room to spare.
+  // the key's corner the way a cap prints what AltGr types on it. Super used
+  // to hold the gear, while Ragtop's controls had no key of their own; the
+  // gear key, where the tiling key was, is that key now, and Super is plain
+  // Super again.
   //
   // A key here acts on release rather than on the way down, for the same
   // reason every character key does: the hold needs room to become the other
@@ -383,15 +389,12 @@ Item {
   // another finger arriving settles the hold as the tap it was. Hold Super,
   // tap B, and the browser opens with Super latched by commitPending.
   // Keyed by the drawn key where a board has more than one of something, and
-  // by role otherwise. Tiling mode briefly lived on a hold on the right
-  // Super, which was a use found for a key that had no business existing:
-  // that position is Fn now, and tiling is on the layer where it can be
-  // labelled.
-  // The tiling key holds the context menu. A 75% has no room for a Menu key
+  // by role otherwise.
+  // The gear key holds the context menu. A 75% has no room for a Menu key
   // and a tablet has no right click, so the one board that would otherwise
   // lose it keeps it, and the others gain a second way to it for nothing.
-  readonly property var holdOpensByKey: ({ "LWIN": "settings", "windows": "menu" })
-  readonly property var holdOpensByRole: ({ "super": "settings" })
+  readonly property var holdOpensByKey: ({ "gear": "menu" })
+  readonly property var holdOpensByRole: ({})
   function holdOpenFor(key) {
     if (key in root.holdOpensByKey) return root.holdOpensByKey[key]
     return root.holdOpensByRole[root.roleOf(key)] || ""
@@ -844,7 +847,7 @@ Item {
   // sharing it. The windows toggle keeps one place and one size on every
   // page, which is what makes it read as a switch rather than another key,
   // the way Super does on the row below.
-  readonly property var topRowFixed: ({ "windows": 1 })
+  readonly property var topRowFixed: ({ "gear": 1 })
 
   // A row that comes up short is stretched to the keyboard's width by its
   // own stretchy keys, rather than floating in the middle with a gap at
@@ -935,7 +938,7 @@ Item {
         // second Super is there so a touch typist can hit one without
         // leaving home position, and nobody touch types on this.
         [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-          key("RALT", 1.25), key("FN", 1.25), key("windows", 1.25), key("RCTL", 1.25)], []]
+          key("RALT", 1.25), key("FN", 1.25), key("gear", 1.25), key("RCTL", 1.25)], []]
       ]
     } else if (form === "75") {
       // Compressed: the extra column sits hard against the main block with
@@ -943,9 +946,9 @@ Item {
       // across the block rather than grouped in fours, for the same reason
       // and because a bigger key is worth more here than a familiar gap, but
       // it stops where the block stops so Del sits over the column below it.
-      // There is no room for a Menu key, so the tiling key holds it. Right
+      // There is no room for a Menu key, so the gear key holds it. Right
       // of the space bar is three keys of one unit, right Alt, Fn and then
-      // the key that would be the right Ctrl, which is the tiling key here
+      // the key that would be the right Ctrl, which is the gear key here
       // as it is on every board. That is the bottom row a physical 75% has,
       // and it leaves the space bar the 6.25 units a keycap set makes it.
       var fRow = ["ESC"].concat(root.positions("FK", 1, 12))
@@ -956,7 +959,7 @@ Item {
         [mainRows[2], [key("pgdn")]],
         [shift.concat([key("RTSH", 1.75), key("up")]), [key("end")]],
         [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-          key("RALT"), key("FN"), key("windows"), key("left"), key("down")],
+          key("RALT"), key("FN"), key("gear"), key("left"), key("down")],
          [key("right")]]
       ]
     } else {
@@ -973,10 +976,10 @@ Item {
         [mainRows[1], [gap(0.25), key("delete"), key("end"), key("pgdn")]],
         [mainRows[2], [gap(3.25)]],
         [shift.concat([key("RTSH", 2.75)]), [gap(1.25), key("up"), gap(1)]],
-        // The right Super gives way to tiling here as it does everywhere
+        // The right Super gives way to the gear here as it does everywhere
         // else, and this board has the room to keep its Menu key as well.
         [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-          key("RALT", 1.25), key("windows", 1.25), key("menu", 1.25), key("RCTL", 1.25)],
+          key("RALT", 1.25), key("gear", 1.25), key("menu", 1.25), key("RCTL", 1.25)],
          [gap(0.25), key("left"), key("down"), key("right")]]
       ]
     }
@@ -1160,6 +1163,9 @@ Item {
         : mods["super"] === "latched" ? "latched" : "accent"
     if (role in mods) return mods[role] === "locked" ? "locked" : mods[role] === "latched" ? "latched" : "special"
     if (role === "enter") return "accent"
+    // The gear is drawn as an active Shift is while the controls it opened
+    // are up, so it says what tapping it again will put away.
+    if (role === "gear") return root.service.toolsOpen ? "latched" : "special"
     // The space bar goes with them rather than with the letters, though it
     // does type a character: it is part of the frame around the letters, it
     // carries the layout's name instead of a legend, and no one hunts for it.
@@ -1270,12 +1276,12 @@ Item {
       return
     }
     if (role in mods) { tapModifier(role); return }
-    if (role === "windows") {
-      // Straight into tiling, rather than to a page of keys that say the
-      // same things. It waits for the finger to lift because it takes the
-      // keyboard off the screen: see liftKeys.
+    if (role === "gear") {
+      // Ragtop's controls, over the keyboard, so the keys stay under them
+      // while you change how they look. A tap anywhere on the keys puts them
+      // away again.
       root.afterKey()
-      root.service.openTiling()
+      root.service.toolsOpen = !root.service.toolsOpen
       return
     }
     switch (role) {
@@ -1580,6 +1586,20 @@ Item {
     return keys
   }
 
+  // While the controls are up, the room between the keys is dimmed as the
+  // rest of the screen is (Service.qml, toolsScrim), so the keys stand out
+  // of one dim whole rather than the dimming stopping at the keyboard's edge.
+  Rectangle {
+    id: dimmed
+    opacity: root.service.dimmed === true ? 1 : 0
+    visible: opacity > 0
+    Behavior on opacity { NumberAnimation { duration: root.service.dimFade } }
+    y: root.height - root.visibleHeight
+    width: root.width
+    height: root.visibleHeight
+    color: root.service.scrimColor
+  }
+
   // Everything the keyboard draws and takes touches on, laid out from the
   // bottom: the strip, the keys, their cards, a swipe's trail and the touch
   // layer, which all share these coordinates. The window is anchored to the
@@ -1778,6 +1798,141 @@ Item {
       for (var i = 1; i < w.points.length; i++) ctx.lineTo(w.points[i][0], w.points[i][1])
       ctx.stroke()
     }
+  }
+
+  // ---- The tour's demonstrations ---------------------------------------------
+
+  // The tour (Tour.qml) points at keys and shows what they do without a
+  // finger: a card opened as a hold would open it, modifiers set as taps
+  // would set them, a trail drawn as a swipe would draw it. Nothing here
+  // types. The tour's layer takes every touch while it runs, so no real
+  // finger ever meets these, and demoClear puts all of it back.
+
+  // A touch point id no finger has, for the cards the tour opens.
+  readonly property int demoPoint: 1000000
+
+  // Where a key is, in this item: the first one with that role ("super",
+  // "gear", "space", "shift", "fn", "altgr"), or the key that types that
+  // letter. null when this board has none.
+  function demoSlot(name) {
+    for (var i = 0; i < root.slots.length; i++) {
+      var s = root.slots[i]
+      var lv = root.grid[s.key]
+      var c = lv ? lv[0] : s.key
+      if (root.roleOf(s.key) === name || (name.length === 1 && c === name)) return s
+    }
+    return null
+  }
+  function demoRect(name) {
+    var r = name === "strip" ? (root.stripShown ? strip : null)
+      : name === "popup" ? (root.popup ? popupLayer : null)
+      // The keys, and the strip's room wherever there is one, shown or not,
+      // so a strip arriving does not change what is lit.
+      : name === "keys" ? { x: root.keysLeft, y: root.stripSlot > 0 ? root.topPadding : root.keysTop,
+                            width: root.keysRight - root.keysLeft,
+                            height: root.slotsBottom - (root.stripSlot > 0 ? root.topPadding : root.keysTop) }
+      : root.demoSlot(name)
+    if (!r) return null
+    return { x: r.x, y: board.y + r.y, width: r.width, height: r.height }
+  }
+
+  // The card a hold on that key opens, false when it has none.
+  function demoHold(name) {
+    root.cancelTouches()
+    var s = root.demoSlot(name)
+    if (!s) return false
+    root.pendingPoint = root.demoPoint
+    root.pendingKey = s.key
+    // Down under its finger, as a held key is.
+    var held = {}
+    held[root.demoPoint] = s.key
+    root.held = held
+    root.pendingX = s.x + s.width / 2
+    root.pendingY = s.y + s.height / 2
+    root.openPopup()
+    holdTimer.stop()
+    if (root.popup === null) { root.endHold(); root.held = ({}) }
+    return root.popup !== null
+  }
+  // Which cell of the open card looks chosen, -1 for none.
+  function demoChoose(index) {
+    if (root.popup === null) return
+    var next = Object.assign({}, root.popup)
+    next.index = index < next.items.length ? index : -1
+    root.popup = next
+  }
+  // The forms card for the strip's word at that index.
+  function demoForms(index, forms) {
+    root.cancelTouches()
+    if (!root.stripShown || !strip.cells[index]) return
+    root.openForms({ pointId: root.demoPoint, cell: index }, forms)
+  }
+
+  // A swipe through the letters of word, drawn as far as progress (0 to 1)
+  // along it. Letters this layout does not have are left out of the path.
+  // A finger turns in curves and never quite hits a key's centre, so the
+  // path is a Catmull-Rom curve through points a little off each centre,
+  // and a doubled letter is one stop, as it is for a real swipe.
+  function demoSwipe(word, progress) {
+    var centres = root.letterCentres.keys
+    var stops = []
+    for (var i = 0; i < word.length; i++) {
+      var c = centres[word[i]]
+      if (!c || (i > 0 && word[i] === word[i - 1])) continue
+      // Off centre by a fixed amount per letter, so it is the same each time.
+      var wobble = ((word.charCodeAt(i) * 37) % 21 - 10) / 10
+      stops.push([c[0] + wobble * root.unit * 0.12, c[1] - wobble * root.unit * 0.08])
+    }
+    if (stops.length < 2 || progress <= 0) {
+      if (root.swipe !== null) { root.swipe = null; trail.requestPaint() }
+      return
+    }
+    var steps = 24
+    var points = []
+    for (var j = 0; j < stops.length - 1; j++) {
+      var p0 = stops[Math.max(0, j - 1)], p1 = stops[j], p2 = stops[j + 1]
+      var p3 = stops[Math.min(stops.length - 1, j + 2)]
+      for (var k = 0; k < steps; k++) {
+        var t = k / steps, t2 = t * t, t3 = t2 * t
+        points.push([0, 1].map(function(a) {
+          return 0.5 * (2 * p1[a] + (p2[a] - p0[a]) * t
+                        + (2 * p0[a] - 5 * p1[a] + 4 * p2[a] - p3[a]) * t2
+                        + (3 * p1[a] - p0[a] - 3 * p2[a] + p3[a]) * t3)
+        }))
+      }
+    }
+    points.push(stops[stops.length - 1])
+    // Cut by distance along the curve, not by point count: the curve's
+    // points crowd on short stretches and spread on long ones, so counting
+    // them made the tip rush and stall from letter to letter. By distance,
+    // it is one movement, eased only at its start and finish.
+    var lengths = [0]
+    for (var m = 1; m < points.length; m++)
+      lengths.push(lengths[m - 1] + Math.hypot(points[m][0] - points[m - 1][0], points[m][1] - points[m - 1][1]))
+    var eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2
+    var reach = eased * lengths[lengths.length - 1]
+    var cut = [points[0]]
+    for (var n = 1; n < points.length; n++) {
+      if (lengths[n] <= reach) { cut.push(points[n]); continue }
+      // The tip, between two points of the curve.
+      var f = (reach - lengths[n - 1]) / Math.max(1e-6, lengths[n] - lengths[n - 1])
+      cut.push([points[n - 1][0] + (points[n][0] - points[n - 1][0]) * f,
+                points[n - 1][1] + (points[n][1] - points[n - 1][1]) * f])
+      break
+    }
+    points = cut.length > 1 ? cut : [points[0], points[0]]
+    root.swipe = { pointId: root.demoPoint, key: "", points: points, swiping: true }
+    trail.requestPaint()
+  }
+
+  // Everything the tour showed, gone: cards, trail, modifiers.
+  function demoClear() {
+    root.cancelTouches()
+    if (root.swipe !== null) { root.swipe = null; trail.requestPaint() }
+    var next = Object.assign({}, root.mods)
+    for (var m in next) next[m] = "off"
+    root.mods = next
+    root.autoShifted = false
   }
 
   function stripLifted(p) {

@@ -73,6 +73,7 @@ surface. There are six.
 | `ragtop-tools` | Top | Normal | The settings panel. |
 | `ragtop-picker-nav` | Top | Auto | The image picker strip. |
 | `ragtop-tiling` | Top | Ignore | The tiling overlay. Reserves nothing. |
+| `ragtop-overlay` | Top | Ignore | Full screen and above the keys: the dim behind the controls, and the tour. Takes no touches unless one of those is up. |
 | `ragtop-screensaver-catcher` | Overlay | Ignore | Swallows the first tap that dismisses the screensaver. |
 
 Two things decide what a touch hits.
@@ -85,7 +86,13 @@ ragtop-tools            order  1
 ragtop-keyboard-handle  order -1
 ragtop-picker-nav       order -2
 ragtop-keyboard         order -3
+ragtop-overlay          order -4
 ```
+
+Within a layer, order is also drawing order, the lowest on top. The overlay
+was first ordered 2 and drew under the keys, which the controls' dim never
+showed, since it leaves a hole for the keyboard. The tour dims the keys
+themselves, so it has to be over them.
 
 **Input masks** decide where a surface takes touches at all. Every surface
 sets `mask: Region { item: ... }` pointing at whatever it actually draws.
@@ -110,6 +117,16 @@ an opinionated change in 0.48.0, in line with Omarchy's design, since the
 keyboard reserves its room and what is behind it is the wallpaper. Blur, when
 a theme asks, is a Hyprland layer rule with `ignore_alpha`, so it blurs only
 behind what is at least partly opaque: the keys. The handle follows the bar.
+
+The tour (`Tour.qml`) shows rather than changes. A theme is shown by
+`ragtop theme show`, which runs the same checks as applying one and prints
+the result instead of writing it; the service lays that over the settings as
+`previewSettings`, and a board as `previewLayout`. Cards, modifiers and the
+swipe trail are the keyboard's own, set by its `demo` functions with a touch
+point id no finger has. The overlay takes every touch while the tour runs, so
+none of it can type, and ending it clears all of it. The keyboard drops every
+card when its surface changes size, which it does a moment after a board
+changes, so the hold steps open theirs again on the next beat.
 
 `ExclusionMode.Auto` means the surface reserves its height and Hyprland
 moves tiled windows out of the way. `Ignore` means it floats over them.
