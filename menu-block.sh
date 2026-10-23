@@ -67,7 +67,7 @@ rows = {
     "setup.tablet.mode.off": dict(icon="\U000f0322", label="Always Off",
         checked=f'"{cmd}" tablet-mode is off', action=f'"{cmd}" tablet-mode set off'),
     # Whether there is an on-screen keyboard at all. Separate from Tablet
-    # Mode, which still decides tiling mode and the patched overlays: a
+    # Mode, which still decides the patched overlays and rotation: a
     # machine can be a tablet and still not want keys, or be a laptop and
     # want them. Icons are reused from the rows above rather than picked by
     # codepoint, since a guessed Nerd Font codepoint draws the wrong thing.

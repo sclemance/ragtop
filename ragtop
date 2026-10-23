@@ -42,13 +42,13 @@
 # in tablet mode and holds it still in laptop mode. The keyboard's own <mode>
 # is sensor (on offer in tablet mode, which is what it has always done), on
 # (always, laptop mode included) or off (never), and it decides only the
-# keyboard: tiling mode and the patched overlays still follow tablet mode.
+# keyboard: the patched overlays and rotation still follow tablet mode.
 #
 # display <name> is which monitor Ragtop puts itself on: auto, or a monitor
 # name as hyprctl monitors prints it. Auto takes the monitor the compositor
 # binds the touchscreen to if one is bound, then the built-in panel, which on
-# a convertible is the touchscreen. The keyboard, its handle, the controls and
-# tiling mode all go to the same one. Rotation is the exception and stays with
+# a convertible is the touchscreen. The keyboard, its handle and the controls
+# all go to the same one. Rotation is the exception and stays with
 # the built-in panel, because that is the screen that physically turns.
 #
 # keyboard-layout <name> is which board is drawn: auto, which takes the

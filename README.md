@@ -8,9 +8,8 @@ the hardware reports the same way, and Ragtop switches your
 [Omarchy 4](https://github.com/omacom/omarchy) desktop into a touch-friendly
 mode: the screen rotates with the device, an on-screen keyboard themed like
 the rest of Omarchy is one tap away, in a phone layout or a real one, and the
-things that normally need a keyboard shortcut or a mouse work by touch. Your
-windows can be rearranged by dragging them around, and the Omarchy menu can be
-typed into. Put it back and everything returns to normal.
+things that normally need a keyboard shortcut or a mouse work by touch. The
+Omarchy menu can be typed into. Put it back and everything returns to normal.
 
 > [!TIP]
 > **Ragtop is in beta, and your machine is the test.** Install it, fold the
@@ -40,7 +39,7 @@ it types.
 **Jump to:** [Quick start](#quick-start) &middot; [How it looks](#how-it-looks) &middot;
 [Will it work on mine?](#which-tablets) &middot; [Features](#features) &middot;
 [Install](#install) &middot; [The keyboard](#the-keyboard) &middot;
-[Tiling mode](#tiling-mode-preview) &middot; [Settings](#settings) &middot;
+[Settings](#settings) &middot;
 [Troubleshooting](#troubleshooting) &middot;
 [Feedback](#tested-hardware-feedback-wanted)
 
@@ -61,8 +60,8 @@ is not one keyboard** either: Ragtop draws whichever board the screen can
 carry, from a tenkeyless down to the phone style, and changes its mind when
 the screen turns. More of it further down, beside what it shows:
 [the boards](#which-board), [themes](#themes),
-[accents](#what-every-board-has), [the pickers](#the-theme-and-background-pickers),
-[the lock screen](#the-lock-screen) and [tiling mode](#tiling-mode-preview).
+[accents](#what-every-board-has), [the pickers](#the-theme-and-background-pickers)
+and [the lock screen](#the-lock-screen).
 
 ## Which tablets?
 
@@ -91,7 +90,7 @@ thing:
 | --- | --- | --- |
 | A tablet-mode switch, or read access to one | Tablet mode switching by itself | Everything, once **Tablet Mode › Always On** is set: the keyboard, rotation, the handle, the overlays |
 | An accelerometer, or `iio-sensor-proxy` | The screen following the device, and with no accelerometer the bar's rotation button goes with it. Set rotation to Locked and turn it a quarter turn at a time from the controls panel instead, which is Hyprland and needs no sensor | The keyboard, the handle, tablet mode, the overlays |
-| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, tiling mode, the picker strip |
+| `python-pywayland` | The keyboard sends no keys | Rotation, tablet mode, the picker strip |
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously, but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
 
@@ -134,13 +133,6 @@ space until tablet mode turns on.
   Ragtop's controls come up over the keyboard: the theme, which board, key
   size, rotation, and which monitor Ragtop lives on where you have more than
   one. The keyboard stays drawn underneath, so you see what you changed.
-- **Tiling mode, as a preview.** Omarchy windows have no title bars and moving
-  or resizing them needs SUPER plus a mouse. Tiling mode puts a transparent
-  layer over the real windows so you can tap one to focus it, hold and drag it
-  onto another to swap them, and drag the squares and bars on its edges to
-  resize. The windows are the controls, at full size, with their content
-  visible and reflowing as you work. It is solid on one screen and unfinished
-  on more than one. See [Tiling mode](#tiling-mode-preview).
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
   you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
@@ -330,7 +322,6 @@ keyboard to reach:
 | --- | --- | --- |
 | Keyboard | Cycles whether there is an on-screen keyboard at all: Follow Sensor, Always On, Always Off. Takes the accent while it is not following the sensor, and the key is struck through while it is off | always |
 | Screen rotation | Cycles Auto-rotate, Locked and Unlocked. Takes the accent for anything but Auto-rotate, the arrow is struck through while rotation is held, and it goes urgent only when an accelerometer that exists has stopped answering | unless the machine has no accelerometer |
-| Tiling | Opens [tiling mode](#tiling-mode-preview). Tap it again to leave | in tablet mode |
 
 A slim handle, coloured like the bar, runs along the bottom of the screen in
 tablet mode. Tap it to show the keyboard (it shows a wide ^) and tap it again
@@ -477,7 +468,7 @@ the caps change to say what they do, so there is nothing to memorise:
         F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12  Del
                           PgUp  Up   PgDn  PrtSc ScrLk Pause
                     Home  Left  Down Right  End   Ins
-                                        tiling -> Menu
+                                         gear -> Menu
 ```
 
 PrtSc, ScrLk and Pause are on `P`, `[` and `]` and Insert is on `'`, which is
@@ -491,7 +482,7 @@ its function row and its arrows. It reaches only what that board still lacks,
 down the column on the right edge where a physical 75% keeps it:
 
 ```
-Del -> Ins    Home -> PrtSc    PgUp -> ScrLk    PgDn -> Pause    tiling -> Menu
+Del -> Ins    Home -> PrtSc    PgUp -> ScrLk    PgDn -> Pause    gear -> Menu
 ```
 
 **The gear key opens Ragtop's controls on every board**, in the place a full
@@ -651,8 +642,8 @@ whether there is an on-screen keyboard at all: **Follow Sensor**, which is
 tablet mode as before, **Always On**, which offers it in laptop mode too, and
 **Always Off**. It takes the accent for anything but Follow Sensor, and the
 key is struck through while it is off. Turning it
-off is not the same as leaving tablet mode: tiling mode, the patched overlays
-and the rotation rules all still follow the switch. The same three are in
+off is not the same as leaving tablet mode: the patched overlays and the
+rotation rules still follow the switch. The same three are in
 Setup › Tablet › Keyboard, and `omarchy-shell ragtop cycleKeyboardMode` binds
 to a key.
 
@@ -855,118 +846,6 @@ blurs behind its keyboard.
 
 The lock screen's keyboard takes the shape, fill and measurements too,
 checked again by its own code, but never the colours or the background.
-
-## Tiling mode (preview)
-
-Omarchy windows have no title bars, and moving or resizing them needs SUPER
-and a mouse. Tiling mode gives you the same thing with a finger.
-
-**This one is a preview.** It is good on a single screen and it is not
-finished on more than one. Ragtop draws the outlines for the screen it lives
-on, so windows on another monitor cannot be reached from it at all, and what
-it does do across several displays still has rough edges. Use it, report what
-you hit, and do not be surprised by it. Everything else in Ragtop is meant to
-be solid.
-
-It is named after Omarchy's own `bindings/tiling.lua`, which groups exactly
-these actions: split, float, tiled full screen, full width, the scratchpad and
-the workspaces. This is that file, reachable by touch.
-
-Get in by tapping the tiled icon at the end of the keyboard's top row, or
-the grid icon in the bar. The keyboard steps aside and a transparent layer
-covers the real windows, outlining each one with its title and size.
-
-The windows themselves are the controls. They stay at full size with their
-own content visible, and they reflow as you work, which is the whole reason
-it happens over them rather than over a scaled-down map.
-
-<p align="center">
-  <img src="screenshots/tiling-mode.webp" width="720" alt="Tiling mode over two tiled windows, with drag handles on each and the controls along the bottom">
-</p>
-
-Two tiles with their handles up, and the strip along the bottom: the
-workspaces and the scratchpad on the left, the shapes on the right, and the
-way out in the middle.
-
-| To | Do |
-| --- | --- |
-| Focus a window | Tap it. |
-| Move one | Press and hold it for a moment. It shrinks to an outline you drag. Let go over another window to swap the two. |
-| Resize | Drag the squares in a window's corners, or the bars along its edges. A corner moves both directions at once, an edge moves just that split. |
-| Move a floating window | Drag it. It goes where you put it, with no hold and no outline, because a float already has a position of its own. |
-
-Holding before dragging is what separates moving from tapping, so a tap that
-wanders slightly still counts as a tap. The outline you drag **is** the
-window, shrunk, rather than a copy left behind to explain.
-
-A tiled window dropped onto a floating one swaps them: the float takes the
-tile's place at full size and the tile becomes floating where the float was.
-The other direction is a plain move, since a float has nowhere it needs to
-be put. A float covering something you want is easiest solved by dragging
-the float out of the way first.
-
-Along the bottom, where the keyboard's handle sits, is everything a finger
-cannot say by dragging:
-
-| Control | Does |
-| --- | --- |
-| Send to | Arms the workspace keys, so the next one moves the window instead of going there. |
-| 1 to 10, Scratchpad | Go to that workspace, or send the window there when Send to is armed. |
-| Full width | Maximises without going truly full screen, so the keyboard is still reachable. |
-| Tiled full screen | Omarchy's tiled full screen, SUPER+CTRL+F. See below, it does something you might not expect. |
-| Split | Flips the split under the focused window. |
-| Float | Floats or unfloats it. |
-| Scrolling | Switches Hyprland to its scrolling layout, and back to the one you were on. This is the compositor's own layout setting, so it changes every workspace and not just this one. |
-| Finish tiling | Leaves. |
-
-**The shape buttons light up when what they do is already true**, so Float
-tells you the window is floating and the two full screen buttons tell you
-which kind of full screen it is in. Both kinds can be on at once. They are
-separate settings in Hyprland and neither cancels the other.
-
-**Tiled full screen greys out while a window floats**, and so does Split.
-Neither means anything without a tile. Hyprland suspends tiled full screen
-the moment a window floats and restores it when the window tiles again, and
-Split turns the divider of the tile a floating window does not have.
-
-### What tiled full screen actually does
-
-It does not resize anything. The window keeps its tile and stays exactly
-where it is. What changes is that the window is **told** it is full screen,
-and applications react to that by hiding their own chrome. A browser drops
-its tab strip and address bar, the way it would on F11.
-
-So it means "give me the app's full screen view without giving up my tile",
-which on a small screen is worth 80 to 120 pixels of content in a browser.
-It is also easy to forget you are in, because a browser with no tabs looks
-broken until you remember why. That is what the light on the button is for.
-
-**Full width** is the other one and does the opposite: it changes the
-geometry and tells the application nothing, so a browser keeps its tabs.
-
-### Grouped windows
-
-Omarchy can tab several windows into one tile, on SUPER+G. Tiling mode draws
-a group once, as the single tile it occupies, rather than once per tab. The
-group's own tab bar sits above the outline and is what says which window is
-on top.
-
-Moving or swapping a group moves all of it and keeps it together, because
-as far as the layout is concerned a group is one tile.
-
-### Leaving, and turning it sideways
-
-Turned on its side there is less width and more height, so the strip along the
-bottom becomes two rows rather than hiding anything behind a scroll.
-
-Tiling mode ends when you tap Finish tiling or the bar's own button, when the
-keyboard comes back by any route, when tablet mode ends, and after 90 seconds
-of nothing happening.
-
-One limit worth knowing before it surprises you: a boundary between two
-*groups* of tiles resizes the whole group, because the layout is a tree and
-that edge belongs to the branch rather than to one window. See
-[Known limitations](#known-limitations).
 
 ## Omarchy's overlays
 
@@ -1271,27 +1150,15 @@ True today, and worth saying if you want them gone:
   nothing useful, and keeps the connector alongside where two screens share a
   maker. Your laptop panel almost certainly reports its panel vendor and a hex
   model, which is why it is not called that.
-- **Ragtop lives on one monitor.** The keyboard, its handle, the controls and
-  tiling mode all go to the same screen: the one the compositor binds your
-  touchscreen to if you have bound one, otherwise the built-in panel, and you
-  can name a monitor yourself. Two screens of keyboard is not a thing anyone
-  asked for. What it does cost is tiling mode, which shows the windows on
-  Ragtop's own screen, so windows on another monitor cannot be arranged from
-  it. Rotation is the exception and stays with the built-in panel, because
+- **Ragtop lives on one monitor.** The keyboard, its handle and the controls
+  all go to the same screen: the one the compositor binds your touchscreen to
+  if you have bound one, otherwise the built-in panel, and you can name a
+  monitor yourself. Two screens of keyboard is not a thing anyone asked for.
+  Rotation is the exception and stays with the built-in panel, because
   that is the screen that physically turns.
-- **Tiling mode is a preview, and multi-monitor is where it shows.** On one
-  screen it does what it says. On more than one it reaches only the screen
-  Ragtop is on, and the rest is known to be rough rather than known to work.
-  See [Tiling mode](#tiling-mode-preview).
 - **The screen does not rotate while locked.** Omarchy's lock screen is not
   redrawn for a rotated display, so it keeps the orientation it was locked in
   and catches up when you unlock.
-- **Resizing a boundary between two groups of tiles resizes the whole group.**
-  Omarchy's layout is a tree, so the line between two tiles is sometimes the
-  edge of a group rather than of one window, and moving it shares the change
-  across everything inside. A mouse does the same thing. Nothing can name a
-  single split to move, so this is the layout showing through rather than
-  something Ragtop gets wrong.
 - **A cloned menu's Apps list is empty** on Omarchy 4 (checked on 4.0.4),
   which is an Omarchy bug rather than Ragtop's. Ragtop works around it and the
   workaround undoes itself once upstream lands a fix. See [The menu's Apps

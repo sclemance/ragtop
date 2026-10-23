@@ -10,7 +10,7 @@
   "entryPoints": { "barWidget": "BarWidget.qml", "service": "Service.qml" },
   "barWidget": {
     "displayName": "Ragtop",
-    "description": "The on-screen keyboard and screen rotation, always in the bar, plus tiling mode while the machine is a tablet",
+    "description": "The on-screen keyboard and screen rotation, always in the bar",
     "category": "Input",
     "allowMultiple": false,
     "defaultSection": "right",

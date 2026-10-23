@@ -103,32 +103,12 @@ BarWidget {
 
   Grid {
     id: grid
-    // Three across, though only two of them are there in laptop mode: Grid
-    // leaves out an invisible child rather than leaving a hole for it, so the
-    // row closes up on its own.
-    columns: root.vertical ? 1 : 3
+    columns: root.vertical ? 1 : 2
 
-    // All drawn by KeyIcon rather than set as a Nerd Font glyph, which is
-    // what the keyboard's own keys use. That makes the button that opens
-    // tiling mode the same mark as the key that opens it, so the bar and
-    // the keyboard are visibly the same control, and it means neither one
-    // depends on the bar's font carrying an icon at all.
-    BarIconButton {
-      id: shortcutsButton
-      visible: root.tabletMode
-      bar: root.bar
-      tooltipText: "Tiling: move and resize windows"
-      active: root.service !== null && root.service.tilingOpen
-      iconComponent: Component {
-        KeyIcon {
-          name: "windows"
-          color: shortcutsButton.active && shortcutsButton.useActiveColor
-            ? shortcutsButton.activeColor : shortcutsButton.foreground
-        }
-      }
-      onPressed: if (root.service) root.service.toggleTilingMode()
-    }
-
+    // Drawn by KeyIcon rather than set as a Nerd Font glyph, which is what
+    // the keyboard's own keys use, so neither depends on the bar's font
+    // carrying an icon at all.
+    //
     // Whether there is an on-screen keyboard on offer. Always here, like the
     // rotation button and for the same reason: the one control that turns the
     // keyboard on must not itself be somewhere you need the keyboard's mode to

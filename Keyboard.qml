@@ -352,6 +352,12 @@ Item {
     if (role in root.iconNames) return root.iconNames[role]
     return root.iconKeys.indexOf(role) !== -1 ? role : ""
   }
+  // What a key's corner draws for what its hold reaches. Menu is a mark there
+  // and a word on a key of its own, where there is room to say it.
+  function hintIconFor(key) {
+    var opens = root.holdOpenFor(key)
+    return opens === "menu" ? "menu" : root.iconFor(opens)
+  }
   function labelKind(key) {
     if (root.iconFor(key) !== "") return "drawn"
     return root.label(key).length > 1 ? "word" : "char"
@@ -380,8 +386,7 @@ Item {
   // Keys whose hold reaches something that is not a character, drawn small in
   // the key's corner the way a cap prints what AltGr types on it. Super used
   // to hold the gear, while Ragtop's controls had no key of their own; the
-  // gear key, where the tiling key was, is that key now, and Super is plain
-  // Super again.
+  // gear key is that key now, and Super is plain Super again.
   //
   // A key here acts on release rather than on the way down, for the same
   // reason every character key does: the hold needs room to become the other
@@ -844,7 +849,7 @@ Item {
   readonly property real visibleHeight: root.implicitHeight - (root.stripShown ? 0 : root.stripSlot)
 
   // Keys that hold a width of their own on the top row, whatever else is
-  // sharing it. The windows toggle keeps one place and one size on every
+  // sharing it. The gear keeps one place and one size on every
   // page, which is what makes it read as a switch rather than another key,
   // the way Super does on the row below.
   readonly property var topRowFixed: ({ "gear": 1 })
@@ -1009,8 +1014,8 @@ Item {
   }
 
   // The mobile layout: an extra row of desktop keys over the page's own rows.
-  // The extra row spreads over the full width, less whatever the windows
-  // toggle holds at the end of it, and the page rows take their widths from
+  // The extra row spreads over the full width, less whatever the gear holds
+  // at the end of it, and the page rows take their widths from
   // the table and then stretch to reach the edges.
   function mobileRows(page) {
     var fixed = 0, sharers = 0
@@ -1452,12 +1457,18 @@ Item {
     var key = root.pendingKey
     // One thing behind a key is not a card. A card of a single cell would ask
     // for a slide onto it and give nothing back for the trouble, so this acts
-    // straight away and the finger has nothing left to do. endHold is what
-    // stops the lift also counting as a tap: with no hold pending and no card
-    // open, the finger falls through to release(), which Super ignores.
+    // straight away and the finger has nothing left to do. The finger is
+    // let go of here as well as the hold: a key that acts on release, as the
+    // gear does, would otherwise take the lift for its tap, and Menu was
+    // followed by the controls opening. Super never showed this only because
+    // it does nothing on release.
     var opens = root.holdOpenFor(key)
     if (opens !== "") {
+      var point = root.pendingPoint
       root.endHold()
+      var held = Object.assign({}, root.held)
+      delete held[point]
+      root.held = held
       root.press(opens)
       return
     }
@@ -1966,9 +1977,9 @@ Item {
       // label, and saying so twice would be noise.
       hintLeft: root.form === "mobile" && root.page === "letters"
         ? (root.symbolOf[modelData.key] || "") : ""
-      // What a hold reaches, drawn rather than written: the gear is an icon
-      // and there is no character that says "settings".
-      hintIcon: root.iconFor(root.holdOpenFor(modelData.key))
+      // What a hold reaches, drawn rather than written: the gear's hold is
+      // Menu, drawn as a pointer on a bar (hintIconFor).
+      hintIcon: root.hintIconFor(modelData.key)
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconFor(modelData.key)

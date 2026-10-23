@@ -103,7 +103,15 @@ Item {
       beat: function(n) { tour.keyboard.setMod("super", n % 2 ? "latched" : "off") } },
 
     { target: ["gear"], title: "Ragtop's controls",
-      body: "The gear opens the controls: key size, themes, boards, suggestions, swipe, updates, and this tour again. Hold it for the Menu key instead." },
+      body: "The gear opens the controls: key size, themes, boards, suggestions, swipe, updates, and this tour again." },
+
+    { target: ["menu", "gear"], title: "The Menu key",
+      body: function() {
+        var where = tour.keyboard.demoSlot("menu") ? "This board has a key of its own for it."
+          : tour.keyboard.hasFnKey ? "Hold the gear for it, or tap the gear with Fn on."
+          : "Hold the gear for it: the mark in its corner says so."
+        return "Menu opens the right-click menu where you are typing, in browsers, file managers and most apps: the right click a tablet does not have. A terminal ignores it.\n\n" + where
+      } },
 
     { target: ["keys"], top: true, title: "Themes",
       body: function() {

@@ -202,8 +202,8 @@ Item {
   //           nothing or someone who wants touch keys at a desk
   //   off      never, for a machine with a keyboard attached for good
   //
-  // Only the keyboard reads this. Tablet mode itself still decides tiling
-  // mode, the overlay clones and whether rotation follows the sensor, because
+  // Only the keyboard reads this. Tablet mode itself still decides the
+  // overlay clones and whether rotation follows the sensor, because
   // turning the keys off is not the same as saying this is a laptop.
   readonly property var keyboardModes: ["sensor", "on", "off"]
   readonly property string keyboardMode:
@@ -269,9 +269,7 @@ Item {
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Auto
       anchors { bottom: true; left: true; right: true }
-      // The bar says how much room it needs, since a narrow screen puts it
-      // on two rows and a wide one does not.
-      implicitHeight: root.tilingOpen ? tilingBar.neededHeight : root.handleHeight
+      implicitHeight: root.handleHeight
       color: "transparent"
 
       Rectangle {
@@ -284,26 +282,13 @@ Item {
       // target reads touch instead of a mouse event synthesised from it.
       TapHandler {
         id: handleTap
-        // Only a handle when it is a handle. While tiling, the bar's own
-        // controls take the taps and a miss between them should do nothing
-        // rather than drop you out of the mode.
-        enabled: !root.tilingOpen
         onTapped: root.toggleOsk()
-      }
-
-      // While tiling, the strip is the controls.
-      TilingBar {
-        id: tilingBar
-        anchors.fill: parent
-        visible: root.tilingOpen
-        service: root
       }
 
       // A wide ^ while the keyboard is hidden, a wide v while it's showing.
       Shape {
         id: chevron
         anchors.centerIn: parent
-        visible: !root.tilingOpen
         width: 56
         height: 8
         opacity: handleTap.pressed ? 0.5 : 1
@@ -605,8 +590,8 @@ Item {
 
   // The built-in panel, which is the one with the accelerometer.
   // Which display Ragtop puts itself on. Every one of its surfaces asks this,
-  // so the keyboard, its handle, the controls, the picker strip, setup and
-  // tiling mode can never end up on different screens.
+  // so the keyboard, its handle, the controls, the picker strip and setup
+  // can never end up on different screens.
   //
   //   the "display" setting, when it names a monitor that is actually there
   //   the monitor the compositor binds the touchscreen to, if the user has
@@ -627,13 +612,6 @@ Item {
   readonly property var keyboardScreen:
     Quickshell.screens.find(function(s) { return s.name === root.keyboardMonitorName })
       || Quickshell.screens[0]
-  // The same monitor as Hyprland knows it, for its origin and its workspace.
-  readonly property var keyboardMonitor: {
-    var monitors = Hyprland.monitors.values
-    for (var i = 0; i < monitors.length; i++)
-      if (monitors[i].name === root.keyboardMonitorName) return monitors[i]
-    return Hyprland.focusedMonitor
-  }
 
   // Asked at startup and whenever the monitors change. Unset it reads
   // "[[Auto]]", which is not a monitor name and so falls through.
@@ -657,10 +635,8 @@ Item {
   }
 
   // What the monitors say about themselves is read off them rather than
-  // tracked, so it has to be read again when they change. Not gated on
-  // tiling mode, unlike the other rawEvent handler: which screen Ragtop
-  // belongs on and how many pixels it has to the millimetre matter whether
-  // or not anything is open.
+  // tracked, so it has to be read again when they change: which screen
+  // Ragtop belongs on and how many pixels it has to the millimetre.
   Connections {
     target: Hyprland
     function onRawEvent(event) {
@@ -762,14 +738,6 @@ Item {
 
   Process {
     id: rotateManualProc
-    // Same as the sensor's own apply: turning the screen moves every window
-    // on it and Hyprland says nothing per window, so the outlines are told.
-    onExited: {
-      if (root.tilingOpen) {
-        tilingIdle.restart()
-        tilingSettle.restart()
-      }
-    }
   }
 
   function rotateNow(orientation) {
@@ -783,18 +751,7 @@ Item {
     rotateApplyProc.running = true
     root.appliedOrientation = orientation
   }
-  Process {
-    id: rotateApplyProc
-    // Turning the screen moves and resizes every window on it, and Hyprland
-    // says nothing per window about that, so the outlines would keep the
-    // shape the screen had before. Same trap as the keyboard's exclusive
-    // zone. Read the geometry back once the transform has landed.
-    onExited: {
-      if (!root.tilingOpen) return
-      tilingSettle.again = 2
-      tilingSettle.restart()
-    }
-  }
+  Process { id: rotateApplyProc }
   // The interval is set by wantSensor, from the deadline.
   Timer {
     id: rotationRestart
@@ -896,13 +853,10 @@ Item {
   // setOskVisible rather than through the bridge.
   //
   // Not while the picker is up, because the keyboard covers the preview the
-  // picker exists to show. Not while tiling, because the keyboard coming
-  // back ends the mode, and the bar's own buttons change which window has
-  // focus, so a window with a text field would close the mode out from
-  // under the button just tapped. Not while the screensaver is up, because
+  // picker exists to show. Not while the screensaver is up, because
   // nothing should be drawn over it.
   readonly property bool autoShowAllowed: root.keyboardAvailable && root.autoShowEnabled
-    && !root.pickerOpen && !root.tilingOpen && root.screensaverAddress === ""
+    && !root.pickerOpen && root.screensaverAddress === ""
   onWantFocusBridgeChanged: {
     focusBridgeRestart.stop()
     focusBridgeProc.running = root.wantFocusBridge
@@ -2353,577 +2307,14 @@ Item {
                              "tour", value])
   }
 
-  // ---- window management -------------------------------------------------
-
-  // What the keyboard's windows page can do, by name. The keyboard asks for
-  // a name and this looks it up, so a name is the only thing that ever
-  // crosses into a command line and an unknown one does nothing. These are
-  // the same dispatches the bar's popup used to run, which is where they
-  // came from.
-  readonly property var windowActions: ({
-    // True fullscreen is deliberately not here. It covers the whole monitor,
-    // reserved space and all, so the keyboard and the bar both go under it
-    // and the only two ways back are invisible. On a machine that is folded
-    // shut there is no third way, and the toggle that would undo it is the
-    // key you can no longer see. Maximized gets the same "make this big"
-    // without taking the way out with it.
-    "wide": 'hl.dsp.window.fullscreen({ mode = "maximized" })',
-    // Omarchy's own SUPER + CTRL + F. The window keeps its place in the
-    // layout and only the client is told it is fullscreen, so an app drops
-    // its chrome while the bar and the keyboard stay exactly where they are.
-    // This is the fullscreen a machine with no other keyboard can afford.
-    "tiled": 'hl.dsp.exec_cmd("omarchy-hyprland-window-tiled-fullscreen-toggle")',
-    "float": 'hl.dsp.window.float({ action = "toggle" })',
-    "split": 'hl.dsp.layout("togglesplit")',
-    "scratch": 'hl.dsp.workspace.toggle_special("scratchpad")',
-    "toscratch": 'hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })'
-  })
-  // One process per tap, so quick repeated taps are not dropped.
-  property Component windowActionProc: Component { Process { onExited: destroy() } }
-  // How the workspace arranges its windows, which Hyprland keeps as
-  // general:layout. Read rather than assumed, because Omarchy ships dwindle
-  // and a user may already be on something else.
-  //
-  // This is Hyprland's global layout, not one workspace's. Nothing in
-  // Hyprland lets a workspace carry its own without a rule written ahead of
-  // time, so the button says what it does and does not pretend otherwise.
-  property string workspaceLayout: ""
-  // What to go back to. Coming off scrolling on a machine set up for master
-  // should give master back rather than quietly converting it to dwindle,
-  // which is what a plain two way toggle would have done.
-  property string layoutBefore: ""
-  readonly property bool scrollingLayout: root.workspaceLayout === "scrolling"
-
-  Process {
-    id: layoutReadProc
-    command: ["hyprctl", "getoption", "general:layout", "-j"]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        try {
-          var v = JSON.parse(text)
-          if (v && typeof v.str === "string") root.workspaceLayout = v.str.trim()
-        } catch (e) {}
-      }
-    }
-  }
-
-  function toggleWorkspaceLayout() {
-    if (layoutSetProc.running) return
-    var next
-    if (root.scrollingLayout) {
-      next = root.layoutBefore !== "" ? root.layoutBefore : "dwindle"
-    } else {
-      root.layoutBefore = root.workspaceLayout
-      next = "scrolling"
-    }
-    layoutSetProc.command = ["hyprctl", "eval",
-      "hl.config({ general = { layout = \"" + next + "\" } })"]
-    layoutSetProc.running = true
-  }
-
-  Process {
-    id: layoutSetProc
-    onExited: {
-      // Read it back rather than assuming it took. A layout Hyprland does not
-      // have would leave the button lit for something that never happened.
-      layoutReadProc.running = true
-      // Changing the layout rearranges every window, and Hyprland sends no
-      // event for it, so the outlines have to be told to catch up.
-      if (root.tilingOpen) {
-        tilingIdle.restart()
-        tilingSettle.restart()
-      }
-    }
-  }
-
-  function runWindowAction(name) {
-    var lua = root.windowActions[name]
-    if (!lua) return
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
-    if (proc) proc.running = true
-    // The bar's own buttons land here. Two things follow from that.
-    //
-    // Whatever this dispatched moved or resized something, and only some of
-    // them emit an event saying so. togglesplit emits nothing at all, which
-    // is why Split left the outlines drawn around the old shape while the
-    // windows underneath had already changed. Say so rather than depending
-    // on which dispatch happens to be noisy.
-    //
-    // And a tap on the bar is someone using the mode, so it is not idle.
-    // Without this the ninety second timeout ran while you were working.
-    if (root.tilingOpen) {
-      // Read twice for the two that change a window's fullscreen state.
-      // What the bar shows there is fullscreenClient, which is Hyprland's
-      // record of what it last told the window rather than anything the
-      // window has confirmed, and the application repaints on its own
-      // schedule. One read 260ms later can land between the two and latch a
-      // value that is already wrong. A second read a beat behind costs one
-      // hyprctl call and catches it.
-      if (name === "tiled" || name === "wide") tilingSettle.again = 1
-      tilingSettle.restart()
-      tilingIdle.restart()
-    }
-  }
-
-  // Which workspaces the strip offers, by Omarchy's own rule: always 1 to 5,
-  // plus any other that exists up to 10. Copied from its Workspaces widget
-  // so the keyboard and the bar never disagree about what there is.
-  readonly property var workspaceIds: {
-    var ids = [1, 2, 3, 4, 5]
-    var values = Hyprland.workspaces.values
-    for (var i = 0; i < values.length; i++) {
-      var id = values[i].id
-      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
-    }
-    ids.sort(function(a, b) { return a - b })
-    return ids
-  }
-  readonly property int focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
-  // The workspace tiling mode is about, which is the one on Ragtop's own
-  // screen and not the one with keyboard focus. The outlines already came
-  // from here. The strip did not, so with focus on another monitor it lit
-  // the number of a workspace whose windows were nowhere on screen. Falls
-  // back to the focused one, which is the right answer on one monitor and
-  // the only answer before Hyprland has reported a monitor at all.
-  readonly property int tilingWorkspace: {
-    var m = root.keyboardMonitor
-    return m && m.activeWorkspace ? m.activeWorkspace.id : root.focusedWorkspace
-  }
-
-  // A number rather than a name, checked against the range Hyprland has, so
-  // the only thing that reaches a command line is a digit this decided on.
-  function workspaceLua(id, send) {
-    var n = parseInt(id, 10)
-    if (!(n >= 1 && n <= 10)) return ""
-    return send ? 'hl.dsp.window.move({ workspace = "' + n + '" })'
-                : 'hl.dsp.focus({ workspace = "' + n + '" })'
-  }
-  // Hyprland switches the workspace on whichever monitor has focus, so a tap
-  // on the strip used to change a screen you were not looking at while the
-  // outlines beside it stayed where they were. Ragtop's own monitor is taken
-  // first, which is a no-op on one screen and names the right one on more.
-  // Only for going to a workspace: sending a window somewhere follows the
-  // window, which is already on this screen.
-  function runWorkspace(id, send) {
-    var lua = root.workspaceLua(id, send)
-    if (lua === "") return
-    var name = root.keyboardMonitorName
-    var pre = (!send && name !== "")
-      ? "hl.dispatch(hl.dsp.focus({ monitor = '" + name + "' })) " : ""
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval", pre + "hl.dispatch(" + lua + ")"] })
-    if (proc) proc.running = true
-    // The bar's own buttons land here. Two things follow from that.
-    //
-    // Whatever this dispatched moved or resized something, and only some of
-    // them emit an event saying so. togglesplit emits nothing at all, which
-    // is why Split left the outlines drawn around the old shape while the
-    // windows underneath had already changed. Say so rather than depending
-    // on which dispatch happens to be noisy.
-    //
-    // And a tap on the bar is someone using the mode, so it is not idle.
-    // Without this the ninety second timeout ran while you were working.
-    if (root.tilingOpen) {
-      tilingSettle.restart()
-      tilingIdle.restart()
-    }
-  }
-
-  // ---- tiling mode -------------------------------------------------------
-
-  // A transparent layer over the real windows, for rearranging them by hand.
-  // It draws outlines and nothing solid: the whole reason to do this over the
-  // windows instead of over a map is that their content is visible and
-  // reflows as you work, and a panel on top of a window is a panel you cannot
-  // judge a split through.
-  //
-  // Phase one only shows where the windows are and gets out of the way again.
-  // Nothing here moves or resizes anything yet. What it does prove is the
-  // geometry matching, the timing around the keyboard's exclusive zone, and
-  // every way back out.
-  // The Send latch, which used to live on the keyboard's windows page. Off,
-  // then armed for the next workspace, then locked, then off, the same
-  // ladder Shift climbs and the same one Omarchy spells as SUPER versus
-  // SUPER + SHIFT.
-  property string sendMod: "off"
-  function stepSendMod() {
-    root.sendMod = root.sendMod === "off" ? "latched"
-      : root.sendMod === "latched" ? "locked" : "off"
-  }
-  function takeWorkspace(id) {
-    root.runWorkspace(id, root.sendMod !== "off")
-    if (root.sendMod === "latched") root.sendMod = "off"
-  }
-  function takeScratchpad() {
-    root.runWindowAction(root.sendMod !== "off" ? "toscratch" : "scratch")
-    if (root.sendMod === "latched") root.sendMod = "off"
-  }
-
   // How many times the focus bridge has asked for the keyboard. Zero after a
   // long session is the signature of an input method gone quiet: everything
   // reports healthy and nothing ever comes up.
   property int autoShows: 0
 
-  // Whether a special workspace is showing on Ragtop's screen. The scratchpad
-  // is not the focused workspace while it is up: it is an overlay, and it
-  // lives in the monitor's own specialWorkspace rather than in
-  // focusedWorkspace, so asking the usual place says no every time.
-  property bool specialShown: false
-
-  property bool tilingOpen: false
-  property var tilingWindows: []
-  // The window the shape buttons act on, so the bar can say what is already
-  // true rather than offering a toggle with no state on it.
-  readonly property var tilingFocused: {
-    for (var i = 0; i < root.tilingWindows.length; i++)
-      if (root.tilingWindows[i].focused) return root.tilingWindows[i]
-    return null
-  }
-
-  function openTiling() {
-    // The keyboard's strip is reserved, so hiding it first lets the windows
-    // reflow to the full screen. The list is read after that settles, or the
-    // outlines would be drawn around where the windows used to be.
-    root.setOskVisible(false)
-    root.tilingOpen = true
-    layoutReadProc.running = true
-    specialReadProc.running = true
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-  // Done came from the keyboard, so it goes back to it. A timeout or tablet
-  // mode ending did not, and putting a keyboard up for nobody would only
-  // shrink the windows again.
-  function closeTiling(restore) {
-    // Cleared before the keyboard is asked for, or the rule below would see
-    // it come up and call this a second time.
-    root.tilingOpen = false
-    root.sendMod = "off"
-    tilingIdle.stop()
-    tilingSettle.stop()
-    if (restore) root.setOskVisible(true)
-  }
-
-  // The keyboard and this mode are exclusive: entering hides the keyboard,
-  // and the keyboard coming back by any route ends the mode. That is the
-  // handle, auto-show on a text field, and the bar's own button.
-  //
-  // It is also the fix for a real fault. The keyboard's exclusive zone
-  // changing relayouts every window, and Hyprland emits no resizewindow for
-  // that, so the event-driven refresh never fired and the outlines sat over
-  // a keyboard, around windows that had already shrunk away from them.
-  // Focus a window by its address. Checked against the shape Hyprland gives
-  // them before it goes anywhere, so the only thing that reaches a command
-  // line is an address this recognised.
-  function focusWindow(address) {
-    if (!/^0x[0-9a-f]+$/.test(address)) return
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval",
-                  "hl.dispatch(hl.dsp.focus({ window = \"address:" + address + "\" }))"] })
-    if (proc) proc.running = true
-    tilingIdle.restart()
-  }
-
-  // Resize by a relative delta, as fast as a finger can ask for it.
-  //
-  // One hyprctl at a time: a drag asks far more often than a process can
-  // answer, so the newest ask is held while one is in flight and sent when
-  // it finishes, adding up anything that arrived meanwhile. Nothing is
-  // dropped and nothing queues up behind the finger. The size slider learnt
-  // this the same way.
-  property var resizeHeld: null
-  property bool resizeBusy: false
-
-  function resizeWindow(address, dx, dy) {
-    if (!/^0x[0-9a-f]+$/.test(address)) return
-    if (dx === 0 && dy === 0) return
-    if (root.resizeBusy) {
-      if (root.resizeHeld && root.resizeHeld.address === address) {
-        root.resizeHeld.dx += dx
-        root.resizeHeld.dy += dy
-      } else {
-        root.resizeHeld = { address: address, dx: dx, dy: dy }
-      }
-      return
-    }
-    root.sendResize(address, dx, dy)
-  }
-
-  function sendResize(address, dx, dy) {
-    root.resizeBusy = true
-    resizeProc.command = ["hyprctl", "eval",
-      "hl.dispatch(hl.dsp.window.resize({ window = \"address:" + address
-      + "\", x = " + Math.round(dx) + ", y = " + Math.round(dy)
-      + ", relative = true }))"]
-    resizeProc.running = true
-    // Hyprland emits no geometry event for a resize asked for this way, and
-    // an outline drawn where a window used to be is not only wrong to look
-    // at: windowAt reads these same rectangles to decide what a drag lands
-    // on, so a stale one picks the wrong window to swap with.
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-
-  Process {
-    id: resizeProc
-    onExited: {
-      root.resizeBusy = false
-      var held = root.resizeHeld
-      root.resizeHeld = null
-      if (held) {
-        root.sendResize(held.address, held.dx, held.dy)
-        return
-      }
-      // Read the geometry back the moment the resize lands, so the outlines
-      // keep up with the windows. Resizing a tile moves its neighbour as
-      // well, so guessing the new shape locally would draw one of them
-      // right and the other wrong. This rides the resize rate, which is
-      // already limited to one at a time.
-      if (root.tilingOpen && !tilingClientsProc.running)
-        tilingClientsProc.running = true
-    }
-  }
-
-  // A floating window has no splits, and a relative resize grows it from
-  // the centre, which can never move one edge on its own. So its rectangle
-  // is set outright instead: position and size in one dispatch, latest ask
-  // wins, no deltas to accumulate and nothing to drift.
-  property var geomHeld: null
-  property bool geomBusy: false
-
-  function setWindowGeom(address, x, y, w, h) {
-    if (!/^0x[0-9a-f]+$/.test(address)) return
-    if (root.geomBusy) {
-      root.geomHeld = { address: address, x: x, y: y, w: w, h: h }
-      return
-    }
-    root.sendGeom(address, x, y, w, h)
-  }
-
-  function sendGeom(address, x, y, w, h) {
-    root.geomBusy = true
-    var win = "\"address:" + address + "\""
-    geomProc.command = ["hyprctl", "eval",
-      "hl.dispatch(hl.dsp.window.resize({ window = " + win
-        + ", x = " + Math.round(w) + ", y = " + Math.round(h) + " })) "
-      + "hl.dispatch(hl.dsp.window.move({ window = " + win
-        + ", x = " + Math.round(x) + ", y = " + Math.round(y) + " }))"]
-    geomProc.running = true
-    // As above. Setting a floating window's geometry moves it with no event
-    // to say so.
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-
-  Process {
-    id: geomProc
-    onExited: {
-      root.geomBusy = false
-      var held = root.geomHeld
-      root.geomHeld = null
-      if (held) {
-        root.sendGeom(held.address, held.x, held.y, held.w, held.h)
-        return
-      }
-      if (root.tilingOpen && !tilingClientsProc.running)
-        tilingClientsProc.running = true
-    }
-  }
-
-  // Swap two windows by address. A tile has no free position, so dropping
-  // one on another is an exchange rather than a move, and Hyprland takes
-  // both addresses for it, which means no guessing a direction from the
-  // drag.
-  function swapWindows(from, to) {
-    if (from === to) return
-    if (!/^0x[0-9a-f]+$/.test(from) || !/^0x[0-9a-f]+$/.test(to)) return
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval",
-                  "hl.dispatch(hl.dsp.window.swap({ window = \"address:" + from
-                  + "\", target = \"address:" + to + "\" }))"] })
-    if (proc) proc.running = true
-    // Measured on the socket: a swap emits no movewindow and no resizewindow,
-    // and it does not change focus either, so nothing arrives to notice it
-    // by. Tapping a window first happened to fix it only because focusing
-    // does emit activewindow. Say so directly instead.
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-
-  // Read on the way in, because the scratchpad may already be up, and again
-  // on every activespecial event.
-  Process {
-    id: specialReadProc
-    command: ["hyprctl", "-j", "monitors"]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        try {
-          var any = false
-          JSON.parse(text).forEach(function(m) {
-            // Only this screen's. A scratchpad up on another monitor put its
-            // windows in the layer here, drawn at coordinates belonging to a
-            // display Ragtop is not on.
-            if (m.name !== root.keyboardMonitorName) return
-            if (m.specialWorkspace && m.specialWorkspace.id !== 0) any = true
-          })
-          root.specialShown = any
-        } catch (e) {}
-      }
-    }
-  }
-
-  Timer {
-    id: tilingSettle
-    interval: 260
-    // Twice, a beat apart: a rotation is still settling when the first read
-    // happens, and one stale set of outlines is worth a second look.
-    property int again: 0
-    onTriggered: {
-      tilingClientsProc.running = true
-      if (again > 0) {
-        again--
-        tilingSettle.restart()
-      }
-    }
-  }
-  Timer {
-    id: tilingIdle
-    interval: 90000
-    onTriggered: root.closeTiling()
-  }
-  // Tablet mode ending takes the mode with it, along with everything else
-  // that only makes sense with a screen you are holding.
-  onTabletModeChanged: {
-    if (root.tabletMode) return
-    root.closeTiling()
-    // Out of tablet mode the physical keyboard is back, and what it types
-    // Ragtop does not see (finishWord).
-    root.finishWord()
-  }
-
-  Process {
-    id: tilingClientsProc
-    command: ["hyprctl", "clients", "-j"]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        if (!root.tilingOpen) return
-        // The monitor this surface is actually on, not whichever one has
-        // focus. Hyprland reports a window at its place across the whole
-        // desktop, so the origin subtracted here has to belong to the screen
-        // the outlines are drawn on. Taking the focused monitor's origin drew
-        // another screen's windows onto this one, at that screen's
-        // coordinates: the handles appeared over the wrong display, and
-        // dragging them resized windows you were not looking at.
-        var monitor = root.keyboardMonitor
-        var ox = monitor ? monitor.x : 0
-        var oy = monitor ? monitor.y : 0
-        // And its workspace, for the same reason. The focused workspace is on
-        // whichever monitor has focus, which need not be this one.
-        var ws = root.tilingWorkspace
-        var out = []
-        try {
-          JSON.parse(text).forEach(function(c) {
-            if (!c.mapped || c.hidden) return
-            // A special workspace is drawn over the normal one, so while it
-            // is up its windows are on screen and belong in the layer too.
-            if (!c.workspace) return
-            if (c.workspace.id !== ws
-                && !(root.specialShown && c.workspace.id < 0)) return
-            if (c.size[0] <= 0 || c.size[1] <= 0) return
-            out.push({ address: c.address, x: c.at[0] - ox, y: c.at[1] - oy,
-                       w: c.size[0], h: c.size[1],
-                       name: c.title || c["class"] || "", floating: !!c.floating,
-                       // What the bar's shape buttons light from. `fullscreen`
-                       // is the internal state, which maximized sets, and
-                       // `fullscreenClient` is the one Omarchy's tiled toggle
-                       // reads and writes, where 2 means it is on.
-                       full: Number(c.fullscreen) || 0,
-                       fullClient: Number(c.fullscreenClient) || 0,
-                       // A key shared by every member of a group, and "" for
-                       // a window in none. Sorted, so the members agree on it
-                       // whichever one is being read.
-                       group: Array.isArray(c.grouped) && c.grouped.length > 1
-                         ? c.grouped.slice().sort().join(",") : "",
-                       order: Number(c.focusHistoryID),
-                       focused: c.focusHistoryID === 0 })
-          })
-        } catch (e) {
-          return
-        }
-        // One row per group, not one per window in it.
-        //
-        // Grouped windows are tabs sharing a tile, and Hyprland reports
-        // every member at the same geometry with hidden false on all of
-        // them. Left alone that is N outlines, N chips and N sets of
-        // handles stacked exactly on top of each other, and a tap resolves
-        // by whatever the tiebreak happens to pick, possibly a tab you
-        // cannot see.
-        //
-        // Any member will do as the handle. Measured: swapping one member
-        // with another tile moves the whole group and leaves it intact, so
-        // a group is a tile as far as the tree is concerned and the members
-        // are interchangeable for every action here.
-        //
-        // The one kept is the most recently focused, which is almost always
-        // the visible tab, so the title chip usually matches. It is only the
-        // chip: the group's own tab bar sits above this outline and is what
-        // actually says which window is on top.
-        var byGroup = {}
-        out = out.filter(function(w) {
-          if (!w.group) return true
-          var seen = byGroup[w.group]
-          if (seen === undefined || w.order < seen) {
-            byGroup[w.group] = w.order
-            return true
-          }
-          return false
-        }).filter(function(w) {
-          return !w.group || byGroup[w.group] === w.order
-        })
-
-        // A stable order, so the model's rows never reshuffle when focus
-        // or stacking changes. Reordering rebuilds every delegate, which
-        // kills whatever gesture is in flight. What is drawn on top is
-        // decided in the layer instead.
-        out.sort(function(a, b) { return a.address < b.address ? -1 : 1 })
-        root.tilingWindows = out
-      }
-    }
-  }
-  // Anything that moves a window moves an outline with it.
-  Connections {
-    target: Hyprland
-    function onRawEvent(event) {
-      if (!root.tilingOpen) return
-      var n = event.name
-      if (n === "activespecial" && !specialReadProc.running) {
-        // Asked rather than parsed out of the event. The event carries
-        // "workspacename,monitorname" and this only cares about one monitor,
-        // so reading the monitors back is both shorter and the authority on
-        // which screen the scratchpad landed on. It fires on a scratchpad
-        // toggle and nowhere near as often as the client reads do.
-        specialReadProc.running = true
-      }
-      // The monitor ones matter because a rotation from anywhere else, the
-      // bar's button or a keybinding, has to be noticed too.
-      if (n === "openwindow" || n === "closewindow" || n === "movewindow"
-          || n === "resizewindow" || n === "activewindow" || n === "changefloatingmode"
-          || n === "fullscreen" || n === "monitorlayoutchanged"
-          || n === "monitoradded" || n === "monitorremoved"
-          || n === "configreloaded" || n === "activespecial") {
-        tilingSettle.restart()
-      }
-    }
-  }
-
-  // What the bar's window button does, and the socket below with it: one
-  // way in and out of tiling, so both agree about what a second tap
-  // means.
-  function toggleTilingMode() {
-    if (root.tilingOpen) root.closeTiling(true)
-    else root.openTiling()
-  }
+  // Out of tablet mode the physical keyboard is back, and what it types
+  // Ragtop does not see (finishWord).
+  onTabletModeChanged: if (!root.tabletMode) root.finishWord()
   onOskVisibleChanged: {
     // A keyboard put away is the end of whatever word it was typing.
     root.currentWord = ""
@@ -2931,14 +2322,6 @@ Item {
     // A tour of a keyboard that is not there is over, and puts back what it
     // was showing. Not marked as taken: it was not finished.
     if (!root.oskVisible && root.tourActive) root.endTour(false)
-    // The keyboard and tiling mode are exclusive: entering hides the
-    // keyboard, and the keyboard coming back by any route ends the mode.
-    // That covers the handle, auto-show on a text field, and the bar's own
-    // button, and it is also the fix for a real fault: the keyboard's
-    // exclusive zone changing relayouts every window, Hyprland emits no
-    // resizewindow for that, so the outlines used to sit over a keyboard,
-    // drawn around windows that had already shrunk away from them.
-    if (root.oskVisible && root.tilingOpen) root.closeTiling()
   }
 
 
@@ -3318,13 +2701,8 @@ Item {
   // when the screensaver starts. The catcher next door covers the screen
   // and swallows the touch, so the keyboard was never doing anything there,
   // it was only sitting on top of a screensaver looking like a fault.
-  //
-  // Tiling ends rather than pausing. Coming back to a tiling layer
-  // drawn around windows that may have moved while the screen was off is
-  // worse than coming back to the desktop.
   onScreensaverAddressChanged: {
     if (root.screensaverAddress !== "") {
-      if (root.tilingOpen) root.closeTiling(true)
       if (root.oskVisible) {
         root.oskHiddenForScreensaver = true
         root.setOskVisible(false)
@@ -3440,39 +2818,6 @@ Item {
     }
   }
 
-  // Tiling mode's surface. Top rather than Overlay, and ordered below the
-  // bar and the keyboard's handle, so both of those stay tappable the whole
-  // time it is up. The screensaver catcher next door is Overlay because it
-  // has to cover everything. This one must not: a full-screen layer that
-  // swallows every touch is the worst thing to get stuck on a machine that
-  // is folded shut, and those two surfaces are two more ways back out.
-  PanelWindow {
-    screen: keyboardWindow.screen
-    visible: root.tilingOpen && root.layerRulesReady
-
-    WlrLayershell.namespace: "ragtop-tiling"
-    WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    exclusionMode: ExclusionMode.Ignore
-    anchors { top: true; bottom: true; left: true; right: true }
-    color: "transparent"
-
-    // The surface covers the screen so the outlines can be drawn at the
-    // windows' own coordinates, but it only takes touches where it has
-    // something to take them with. Everything else falls through, which is
-    // how the bar and the keyboard's handle stay usable underneath it
-    // without depending on layer ordering to arrange that. Layer order was
-    // the first attempt and it put this on top of both.
-    mask: Region { item: tilingLayer.touchArea }
-
-    TilingLayer {
-      id: tilingLayer
-      anchors.fill: parent
-      service: root
-      windows: root.tilingWindows
-    }
-  }
-
   // On the built-in screen, reserving its space so windows move up out of
   // its way. It never takes keyboard focus, so typing goes to the window
   // underneath. Kept mapped while there is a keyboard, so the handle never
@@ -3559,7 +2904,7 @@ Item {
 
     // Where the keys are, in this window: the keyboard sits on the handle,
     // which sits on the screen's bottom edge.
-    readonly property real keysBottom: height - (root.tilingOpen || !root.handleShown ? 0 : root.handleHeight)
+    readonly property real keysBottom: height - (root.handleShown ? root.handleHeight : 0)
     readonly property real keysTop: keysBottom - keyboard.visibleHeight
 
     Item {
@@ -3602,7 +2947,7 @@ Item {
       service: root
       keyboard: keyboard
       keyboardTop: overlayWindow.keysBottom - keyboard.height
-      handleRect: root.handleShown && !root.tilingOpen
+      handleRect: root.handleShown
         ? Qt.rect(0, overlayWindow.keysBottom, overlayWindow.width, root.handleHeight) : null
     }
   }
@@ -3825,10 +3170,6 @@ Item {
       })
     }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
-    function toggleTiling(): string {
-      root.toggleTilingMode()
-      return root.tilingOpen ? "open" : "closed"
-    }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {
