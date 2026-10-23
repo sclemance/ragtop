@@ -39,7 +39,7 @@ Item {
   readonly property real unit: Math.min((width - 2 * theme.padding) / totalUnits, Math.round(84 * theme.keyScale))
   readonly property real keyHeight: Math.max(Math.round(36 * theme.keyScale),
     Math.min(Math.round(unit * 0.78), Math.round(60 * theme.keyScale)))
-  readonly property real topPadding: theme.padding + theme.edgeFade + theme.edgeBorder
+  readonly property real topPadding: theme.padding
 
   implicitHeight: topPadding + keyHeight + theme.padding
 
@@ -67,11 +67,6 @@ Item {
     if (button.hold) service.sendKeys("up " + button.keysym)
   }
 
-  // The background and top edge, shared with the keyboard.
-  KeyboardSurface {
-    anchors.fill: parent
-    theme: root.theme
-  }
 
   Repeater {
     model: root.slots

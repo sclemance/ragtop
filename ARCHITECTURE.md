@@ -39,7 +39,6 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `Keyboard.qml` | The on-screen keyboard: layouts, pages, which key a touch means. |
 | `KeyboardKey.qml` | How one key is drawn. Nothing else. |
 | `KeyboardTheme.qml` | Reads the look settings and resolves them into colours, sizes and corners. |
-| `KeyboardSurface.qml` | The shared backdrop and top border, used by the keyboard and the picker strip. |
 | `SuggestionStrip.qml` | The band above the keys with an input method's choices. Draws, and says which item a touch means. |
 | `KeyIcon.qml` | Icons Ragtop draws itself as paths rather than taking from a font. |
 | `LockKeyboard.qml` | A second, standalone keyboard for the lock screen. See below for why it is separate. |
@@ -69,7 +68,7 @@ surface. There are six.
 
 | Namespace | Layer | Exclusion | What it is |
 | --- | --- | --- | --- |
-| `ragtop-keyboard` | Top | Auto | The keyboard. Reserves its own height. |
+| `ragtop-keyboard` | Top | Normal | The keyboard. Reserves its visible height (below). |
 | `ragtop-keyboard-handle` | Top | Auto | The grab handle when the keyboard is down. |
 | `ragtop-tools` | Top | Normal | The settings panel. |
 | `ragtop-picker-nav` | Top | Auto | The image picker strip. |
@@ -94,6 +93,19 @@ Outside that region touches fall through to whatever is underneath. This is
 why the tiling overlay can cover the screen and still let you reach the bar
 and the keyboard handle. Layer ordering was tried first for that and it put
 the overlay on top of both.
+
+The keyboard's surface keeps one height while a suggestion strip comes and
+goes, its room kept clear when hidden, and reserves only what can be seen
+(`exclusiveZone: keyboard.visibleHeight`). Hyprland places a resized layer
+surface a frame late, which made the keys bounce; changing only the
+reservation moves the windows above and leaves the keyboard still. Its
+contents are laid out from the bottom for the same reason.
+
+There is no background behind the keys, on the keyboard or the picker strip:
+an opinionated change in 0.48.0, in line with Omarchy's design, since the
+keyboard reserves its room and what is behind it is the wallpaper. Blur, when
+a theme asks, is a Hyprland layer rule with `ignore_alpha`, so it blurs only
+behind what is at least partly opaque: the keys. The handle follows the bar.
 
 `ExclusionMode.Auto` means the surface reserves its height and Hyprland
 moves tiled windows out of the way. `Ignore` means it floats over them.
@@ -474,6 +486,24 @@ leaves things as they were before this. A context in no group, which is
 every one in the tests' display-less fcitx5, is listed without flags, so the
 tests check the parsing on the report's real shape instead (Brave's login
 form, tried by hand: password, then nocapitals for the e-mail field).
+
+**Terminals.** At a shell's prompt the strip offers commands, then files
+(`predictor.py`, `Terminal`: PATH plus the shell's built-ins, notes from
+`apropos -l`, files from the folder `omarchy-cmd-terminal-cwd` gives, the
+line split as the shell splits it, and each suggestion carrying how many
+characters it replaces). "At the prompt" is the kernel's answer, not a
+guess: the terminal's shell's foreground process group (`/proc/<shell>/stat`
+field 8) is the shell itself, read again every 1.5 s while the keyboard is up
+in a terminal, since starting or leaving a program changes it with no focus
+change. Anything else in front, Claude Code, vim, gets English. The line is
+`typedTail` from its last Enter, which now has a cursor: ← → Home End move
+it, typing and deleting happen at it, and ↑ ↓, Tab and shortcuts make it
+unknown. Held keys are repeated by the keyboard (`keyRepeat`), at Hyprland's
+`repeat_delay` and `repeat_rate`, rather than by the application, so each
+repeat passes through the record; with the application repeating, a held
+BackSpace lost the line. A terminal newly focused at its prompt is taken to
+be at an empty line (`termJustFocused`, set on every focus event, since two
+terminals share a class).
 
 **Typing assists.** Capitals and double-space full stops decide from
 `typedTail`, everything Ragtop typed in the field (up to 400 characters),

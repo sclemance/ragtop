@@ -28,9 +28,9 @@
 # on or off.
 #
 # What a key looks like is a Ragtop theme's to say, so shape, relief, fill,
-# background, edge and both transparencies have no verb here and no menu
-# row. Whether the keyboard has a background at all follows Omarchy's bar,
-# which a double tap on it toggles. What is left is <adjust>, one of
+# transparency and blur have no verb here and no menu row. The keyboard has
+# no background at all, and its handle follows Omarchy's bar, which a double
+# tap on the bar makes transparent. What is left is <adjust>, one of
 # smallest, smaller, regular, larger or largest, or a percentage from 60 to
 # 160, or auto. It sizes the keys against whatever the theme asked for and is
 # never written by applying one. Auto asks the screen: Ragtop reads how many
@@ -436,7 +436,9 @@ if os.path.exists(settings_path):
             value, changed = str(SIZE[value]), True
         elif key == "preset":
             key, changed = "theme", True
-        elif key == "modifiers":
+        elif key in ("modifiers", "background", "transparency", "edge", "edge-fade"):
+            # Retired: the keyboard has had no background, and so no edge to
+            # it, since 0.48.0.
             changed = True
             continue
         out.append("%s=%s" % (key, value))
@@ -524,17 +526,14 @@ choices = {
     "relief": ["flat", "raised"],
     "fill": ["auto", "dark", "light", "outline"],
 
-    "background": ["tint", "gradient"],
-
-    "edge": ["border", "fade", "none"],
     "labels": ["small", "normal", "large"],
     "special-keys": ["off", "darker", "lighter"],
     "blur": ["on", "off"],
 }
-numbers = {"depth": (0, 10), "chamfer": (0, 20), "edge-fade": (0, 24),
+numbers = {"depth": (0, 10), "chamfer": (0, 20),
            "key-fill-alpha": (0, 1), "border-width": (0, 4), "radius": (0, 30),
            # 0 is solid and 100 is gone. Size is a percentage of the usual.
-           "transparency": (0, 100), "key-transparency": (0, 100), "size": (60, 160)}
+           "key-transparency": (0, 100), "size": (60, 160)}
 colors = ("key-color", "label-color")
 
 try:

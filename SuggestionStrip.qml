@@ -2,7 +2,10 @@ import QtQuick
 
 // The band above the keys that offers what a word could be: the kanji for
 // some kana, the hanzi for some pinyin, and later whatever else fills it
-// (Service.qml, suggestions). It only draws. Which item a touch means is
+// (Service.qml, suggestions). It only draws. Each suggestion is a key, thin
+// and as long as its word, in the theme's shape and in Enter's style
+// (keyKind): there is no panel behind the keyboard for plain words to sit
+// on, and a key reads over any wallpaper. Which item a touch means is
 // asked of it (cellAt), and the keyboard's own touch layer does the asking,
 // the same as for every key, so a finger that comes down here and moves is a
 // scroll and one that lifts where it landed is a choice.
@@ -10,6 +13,8 @@ Item {
   id: strip
 
   required property var theme
+  // How the keyboard draws Enter, which the suggestions are drawn as.
+  property string keyKind: "accent"
   // [{ text, note }]. The note is what kind of thing the text is, drawn
   // smaller after it: "カタカナ" beside a katakana spelling.
   property var items: []
@@ -104,22 +109,16 @@ Item {
         width: cell.width
         height: strip.height
 
-        Rectangle {
-          anchors.fill: parent
-          anchors.margins: Math.round(strip.theme.gap / 2)
-          radius: strip.theme.keyRadius
-          color: strip.pressedIndex === index ? strip.theme.pressedKey
-            : parent.chosen ? strip.theme.specialKey : "transparent"
-        }
-
-        // A hairline between cells, as on a phone, rather than a box round
-        // each: the strip is a list of words, not a row of keys.
-        Rectangle {
-          visible: index > 0
-          width: 1
-          height: Math.round(strip.height * 0.5)
-          anchors.verticalCenter: parent.verticalCenter
-          color: strip.theme.outline
+        KeyboardKey {
+          x: Math.round(strip.theme.gap / 2)
+          width: parent.width - strip.theme.gap
+          height: parent.height
+          theme: strip.theme
+          label: ""
+          // The one the input method would take is filled, as a card's
+          // chosen cell is.
+          kind: parent.chosen ? "locked" : strip.keyKind
+          pressed: strip.pressedIndex === index
         }
 
         Row {
@@ -129,7 +128,8 @@ Item {
           Text {
             textFormat: Text.PlainText
             text: modelData.text
-            color: parent.parent.chosen ? strip.theme.accent : strip.theme.text
+            color: parent.parent.chosen ? strip.theme.accentText
+              : strip.keyKind === "accent" ? strip.theme.accent : strip.theme.text
             font.family: strip.theme.fontFamily
             font.pixelSize: strip.textSize
             anchors.verticalCenter: parent.verticalCenter
@@ -154,19 +154,17 @@ Item {
     model: [{ shown: strip.hasPrev, cell: strip.prevCell, glyph: "‹" },
             { shown: strip.hasNext, cell: strip.nextCell, glyph: "›" }]
 
-    Text {
+    KeyboardKey {
       required property var modelData
-      textFormat: Text.PlainText
       visible: modelData.shown
-      x: modelData.cell === strip.prevCell ? 0 : strip.width - strip.arrowWidth
-      width: strip.arrowWidth
+      x: (modelData.cell === strip.prevCell ? 0 : strip.width - strip.arrowWidth) + Math.round(strip.theme.gap / 2)
+      width: strip.arrowWidth - strip.theme.gap
       height: strip.height
-      horizontalAlignment: Text.AlignHCenter
-      verticalAlignment: Text.AlignVCenter
-      text: modelData.glyph
-      color: strip.pressedIndex === modelData.cell ? strip.theme.accent : strip.theme.text
-      font.family: strip.theme.fontFamily
-      font.pixelSize: strip.textSize
+      theme: strip.theme
+      label: modelData.glyph
+      labelKind: "word"
+      kind: strip.keyKind
+      pressed: strip.pressedIndex === modelData.cell
     }
   }
 }

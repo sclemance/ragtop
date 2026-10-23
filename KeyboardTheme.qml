@@ -13,11 +13,9 @@ import qs.Commons
 QtObject {
   id: theme
 
-  // Background opacity, from Setup › Tablet › Transparency (0 = fully clear).
-  property real backgroundOpacity: 1
   // The keyboard's look, from Setup › Tablet (see Service.qml's `look`).
-  property var look: ({ shape: "omarchy", relief: "flat", fill: "solid", size: "normal", background: "tint",
-                        keyTransparency: "opaque", edge: "none", labels: "normal", depth: 4, chamfer: 8, edgeFade: 8,
+  property var look: ({ shape: "omarchy", relief: "flat", fill: "solid", size: "normal",
+                        keyTransparency: "opaque", labels: "normal", depth: 4, chamfer: 8,
                         keyColor: "", labelColor: "", keyFillAlpha: "auto",
                         borderWidth: "auto", radius: "auto", corners: "auto" })
 
@@ -53,51 +51,19 @@ QtObject {
 
   // The keyboard is a popup-like surface, so it takes Omarchy's popup
   // colours, and the keys are controls, so they take its control states.
+  // There is no background behind the keys, ever: the keyboard reserves its
+  // own room, so what is behind it is the wallpaper, and a panel over that
+  // did nothing but hide it. `surface` is still the colour the keys are
+  // measured against, lighter or darker, as the panel's would have been.
   property color surface: Color.popups.background
   property color text: role(look.labelColor, Color.popups.text)
   property color accent: Color.accent
   property color accentText: Color.background
 
-  // "tint" (a flat colour), "blur" (the same, with what's behind blurred by
-  // Hyprland) or "gradient" (towards the accent colour at the top).
-  property string backgroundStyle: look.background
-  property color background: Qt.rgba(surface.r, surface.g, surface.b, surface.a * backgroundOpacity)
-  property color gradientTop: Qt.tint(surface, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18))
-  property color backgroundTop: backgroundStyle === "gradient"
-    ? Qt.rgba(gradientTop.r, gradientTop.g, gradientTop.b, surface.a * backgroundOpacity)
-    : background
 
-  // How the keyboard's top edge meets the desktop (Setup › Tablet › Edge):
-  // "border" (Omarchy's own active window border), "fade" (the background
-  // fading out over the style's edgeFade pixels) or "none" (a hard edge).
-  readonly property string edgeStyle: look.edge
-  property var borderSpec: Border.hyprlandActiveSpec(Color.accent, 2)
-  property color borderColor: Border.color(borderSpec)
-  // Two or more colours when the theme's border is a gradient.
-  //
-  // Faded with the background rather than held at full strength. The edge is
-  // part of the panel, not a thing sitting on top of it, so a keyboard turned
-  // see-through that kept a solid line along its top read as a stray rule
-  // across the screen with nothing under it.
-  property var borderColors: {
-    var base = borderSpec.gradient && borderSpec.gradient.enabled
-      ? borderSpec.gradient.colors : [borderColor]
-    var a = backgroundOpacity
-    return base.map(function (c) { return Qt.rgba(c.r, c.g, c.b, c.a * a) })
-  }
-  property real edgeFade: edgeStyle === "fade" ? look.edgeFade : 0
-  property real edgeBorder: edgeStyle === "border" ? Math.max(0, Border.top(borderSpec)) : 0
-  property color backgroundClear: Qt.rgba(backgroundTop.r, backgroundTop.g, backgroundTop.b, 0)
-
-  // Whether the background is actually drawn. Fully clear (Setup › Tablet ›
-  // BG Transparency › Full) hides nothing, so taps off the keys can reach
-  // what is behind the keyboard. Any visible background does hide it, and
-  // then the keyboard keeps those taps to itself.
-  readonly property bool backgroundVisible: Math.max(background.a, backgroundTop.a) > 0.01
-
-  // How see-through the keys are, as the theme asked. What shows through is
-  // the keyboard's own background, so the desktop only shows if that is
-  // see-through too, or gone because the bar is.
+  // How see-through the keys are, as the theme asked: the wallpaper shows
+  // through, blurred if the theme asks for blur (Service.qml, applyBlur,
+  // which blurs only what is at least partly opaque, so only the keys).
   readonly property real keyOpacity: 1 - look.keyTransparency / 100
   function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
 

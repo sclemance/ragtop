@@ -358,6 +358,58 @@ forms_follow_capitals() {
   assert_contains "$out" 'forms ["Stopped", "Stopping", "Stops"]'
 }
 
+# ---- Terminals -----------------------------------------------------------------
+
+# term <line ...>: one "termsuggest" line each, for a made-up folder.
+term() {
+  local cwd="$sandbox/home/project"
+  mkdir -p "$cwd/src/sub" "$cwd/my docs" "$cwd/.hidden"
+  touch "$cwd/src/main.py" "$cwd/README.md"
+  pre=()
+  for l in "$@"; do pre+=("term $(jq -cn --arg c "$cwd" --arg l "$l" '{cwd: $c, line: $l}')"); done
+  wordlist "$words" 127:the
+  suggest "$words"
+  out=$(grep '^termsuggest' <<<"$out" | sed 's/^termsuggest //' | jq -c '[.[] | .text]')
+}
+
+commands_at_the_start() {
+  term gre "sudo pac" "git log | gre" "echo hi && gre"
+  assert_equal "$(sed -n 1p <<<"$out" | jq -r '.[0]')" grep "first word"
+  assert_equal "$(sed -n 2p <<<"$out" | jq -r '.[0]')" pacman "after sudo"
+  assert_equal "$(sed -n 3p <<<"$out" | jq -r '.[0]')" grep "after a pipe"
+  assert_equal "$(sed -n 4p <<<"$out" | jq -r '.[0]')" grep "after &&"
+}
+
+files_after_it() {
+  term "cat R" "cat sr" "cat src/" "cat src/ma" "ls ." "cat "
+  assert_equal "$out" '["README.md"]
+["src/"]
+["src/sub/","src/main.py"]
+["src/main.py"]
+[".hidden/"]
+[]'
+}
+
+# A name with a space is offered escaped, and completed when typed so.
+escaped_names() {
+  term "cd m" "cat my\\ d" "cat 'my d"
+  assert_equal "$out" '["my\\ docs/"]
+["my\\ docs/"]
+[]'
+}
+
+cd_offers_folders() {
+  term "cd " "cd s"
+  assert_equal "$out" '["my\\ docs/","src/"]
+["src/"]'
+}
+
+flags_are_not_guessed() {
+  term "ls -" "grep --"
+  assert_equal "$out" '[]
+[]'
+}
+
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing
 run_test "predictor: a word typed with one slip is corrected" one_slip_is_corrected
@@ -386,4 +438,9 @@ run_test "predictor: -er and -est are forms only as a pair, so summer is not sum
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root
 run_test "predictor: irregular forms, and no rule-made misspellings beside them" irregular_forms
 run_test "predictor: forms take the word's capitals" forms_follow_capitals
+run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
+run_test "predictor: then files and folders from the terminal's folder" files_after_it
+run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names
+run_test "predictor: after cd, folders only" cd_offers_folders
+run_test "predictor: flags are not guessed" flags_are_not_guessed
 finish

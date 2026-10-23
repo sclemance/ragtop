@@ -20,6 +20,8 @@ then commands on stdin, one per line:
                       told)
   keys <json>         where each letter's key is, for swipes:
                       {"unit": key width, "keys": {"q": [x, y], ...}}
+  term <json>         for a terminal: {"cwd", "line"}, the command line as far
+                      as it has been typed, answered with commands or files
   forms <word>        the word's other forms, summed and sums for sum, for a
                       hold on a suggestion to offer
   swipe <json>        the path a finger drew across the keys, [[x, y], ...],
@@ -32,7 +34,9 @@ and answers "ready <count>" once a single list is read, "ready <lang>
 <count>" or "missing <lang>" for each "lang" (the service offers to fetch a
 missing one), then "suggest <json>" for each "complete": a list of
 words, most likely first, capitalised the way the typed word was, and
-"forms <json>" for each "forms", most common first, and
+"forms <json>" for each "forms", most common first, "termsuggest <json>"
+for each "term", [{"text", "note", "kind", "back"}] with kind command,
+dir or file and back the characters of the line it replaces, and
 "swiped <json>" for each "swipe", the words it most likely spelled, and
 "peeked <json>" for each "peek", the same answer under its own name so a
 guess so far is never taken for a finished word.
@@ -48,7 +52,9 @@ import heapq
 import json
 import math
 import os
+import shlex
 import struct
+import subprocess
 import sys
 import unicodedata
 
@@ -442,6 +448,171 @@ def forms_en(word, ranks):
 FORMS = {"en": forms_en}
 
 
+# ---- Terminals --------------------------------------------------------------
+#
+# In a terminal the strip offers what a command line is made of rather than
+# English: the commands on PATH, with what each is for from its manual, at
+# the start of a command, and the files and folders of the terminal's folder
+# after it. Only the line as far as Ragtop typed it, which the service sends.
+
+# The commands most typed, first. Anything else on PATH ranks by length.
+COMMON_COMMANDS = """cd ls cat grep git vim nvim nano less cp mv rm mkdir sudo man ssh
+pacman yay paru top htop btop ps kill find tar curl wget python python3 make
+chmod chown echo touch head tail diff systemctl journalctl hyprctl omarchy
+code open xdg-open du df free ping ip rsync scp zip unzip sed awk sort uniq
+wc tree which exit clear history source export alias jq tmux docker npm node
+cargo go rg fd bat fzf lazygit gh""".split()
+# Built in to the shell, so on no PATH: bash's, which zsh's mostly are, and
+# fish's own, by the shell the terminal runs (the "shell" the service sends).
+BUILTINS = {
+    "bash": """cd pushd popd dirs export alias unalias source exit history jobs fg bg
+set unset type umask ulimit wait eval exec read echo printf test true false
+help builtin command trap shift times""".split(),
+    "fish": """cd pushd popd dirs set alias functions function funced funcsave source
+exit history jobs fg bg type eval exec read echo printf test true false
+builtin command abbr and or not begin end if else switch case while for
+string math status contains count""".split(),
+}
+BUILTINS["zsh"] = BUILTINS["bash"] + "setopt unsetopt autoload compdef bindkey".split()
+# After one of these, the next word is a command again.
+LEADS_TO_COMMAND = {"|", "||", "&&", ";", "sudo", "doas", "time", "exec", "nohup",
+                    "watch", "xargs", "env", "nice", "then", "do", "else",
+                    "and", "or", "not"}
+SHELL_SPECIAL = set(" \t'\"\\$`&()|;<>*?[]#~!{}")
+
+
+def shell_escaped(name):
+    return "".join("\\" + c if c in SHELL_SPECIAL else c for c in name)
+
+
+def shell_tokens(line):
+    """The line's words as typed, split where the shell splits them: at a
+    space that is not escaped and not inside quotes. my\\ docs is one word."""
+    tokens, current, quote, escaped = [], "", "", False
+    for c in line:
+        if escaped:
+            current += c
+            escaped = False
+        elif c == "\\" and quote != "'":
+            current += c
+            escaped = True
+        elif quote:
+            current += c
+            if c == quote:
+                quote = ""
+        elif c in "'\"":
+            current += c
+            quote = c
+        elif c == " ":
+            tokens.append(current)
+            current = ""
+        else:
+            current += c
+    tokens.append(current)
+    return tokens
+
+
+class Terminal:
+    def __init__(self):
+        self.commands = None    # name -> rank, read the first time it is needed
+        self.notes = {}
+        self.shell = "bash"
+
+    def set_shell(self, shell):
+        shell = shell if shell in BUILTINS else "bash"
+        if shell != self.shell:
+            self.shell = shell
+            self.commands = None
+
+    def load(self):
+        names = set(BUILTINS[self.shell])
+        for d in os.environ.get("PATH", "").split(":"):
+            try:
+                for n in os.listdir(d):
+                    p = os.path.join(d, n)
+                    if os.access(p, os.X_OK) and not os.path.isdir(p):
+                        names.add(n)
+            except OSError:
+                pass
+        common = {n: i for i, n in enumerate(COMMON_COMMANDS)}
+        self.commands = {n: common.get(n, len(COMMON_COMMANDS) + len(n)) for n in names}
+        # What each is for, from the manuals' one-line descriptions. Sections
+        # 1 and 8, commands, and the first found where there are several.
+        try:
+            out = subprocess.run(["apropos", "-l", "-s", "1,8", "."], capture_output=True,
+                                 text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        for line in out.splitlines():
+            name, _, rest = line.partition(" ")
+            _, dash, note = rest.partition(" - ")
+            if dash and name in self.commands:
+                self.notes.setdefault(name, note.strip())
+
+    def suggest(self, cwd, line):
+        """Suggestions, each with "back", how many characters of what was
+        typed it replaces: the word being typed, escapes and quotes and all."""
+        token = shell_tokens(line)[-1]
+        found = self.suggest_for(cwd, line)
+        for f in found:
+            f["back"] = len(token)
+            # A manual's description can run to a sentence, and a cell is a
+            # word wide.
+            if len(f["note"]) > 30:
+                f["note"] = f["note"][:29].rstrip() + "\u2026"
+        return found
+
+    def suggest_for(self, cwd, line):
+        tokens = shell_tokens(line)
+        token = tokens[-1]
+        before = [t for t in tokens[:-1] if t]
+        command_place = not before or before[-1] in LEADS_TO_COMMAND \
+            or before[-1].endswith(("|", ";", "&&"))
+        if token.startswith("-"):
+            return []
+        if command_place:
+            return self.command_names(token)
+        command = next((t for t in reversed(before) if t not in LEADS_TO_COMMAND), "")
+        return self.files(cwd, token, folders_only=command in ("cd", "pushd", "rmdir"))
+
+    def command_names(self, prefix):
+        if not prefix:
+            return []
+        if self.commands is None:
+            self.load()
+        found = [n for n in self.commands if n.startswith(prefix)]
+        found.sort(key=lambda n: (self.commands[n], n))
+        return [{"text": n, "note": self.notes.get(n, ""), "kind": "command"} for n in found[:SHOWN]]
+
+    def files(self, cwd, token, folders_only):
+        # The typed path as the shell will read it: unescaped, ~ for home.
+        try:
+            plain = "".join(shlex.split(token)) if token else ""
+        except ValueError:
+            return []        # an open quote: nothing sure to offer
+        if not token and not folders_only:
+            return []
+        head, base = os.path.split(plain)
+        where = os.path.join(cwd, os.path.expanduser(head)) if head else cwd
+        try:
+            entries = os.listdir(where)
+        except OSError:
+            return []
+        typed_head = token[:len(token) - len(shell_escaped(base))] if base else token
+        out = []
+        for name in entries:
+            if not name.startswith(base) or (name.startswith(".") and not base.startswith(".")):
+                continue
+            is_dir = os.path.isdir(os.path.join(where, name))
+            if folders_only and not is_dir:
+                continue
+            out.append((not is_dir, name.lower(), {
+                "text": typed_head + shell_escaped(name) + ("/" if is_dir else ""),
+                "note": "", "kind": "dir" if is_dir else "file"}))
+        out.sort(key=lambda e: e[:2])
+        return [e[2] for e in out[:SHOWN]]
+
+
 # ---- Swipes ---------------------------------------------------------------
 #
 # A word drawn across the keys is decoded the way SHARK2 does it (Kristensson
@@ -631,6 +802,7 @@ def main():
         sys.exit("usage: predictor.py <words-dir | wordlist.msgpack.gz>")
     source = sys.argv[1]
     session = Session(source)
+    terminal = Terminal()
     if not os.path.isdir(source):
         # One list, the way this began: English, read now.
         try:
@@ -678,6 +850,21 @@ def main():
                     session.predictor.set_rows(session.rows)
             except ValueError:
                 pass
+        elif cmd == "term":
+            found = []
+            try:
+                req = json.loads(rest)
+                cwd, line = req["cwd"], req["line"]
+                # Nushell quotes and escapes otherwise: nothing rather than
+                # words it would read wrongly.
+                if req.get("shell") == "nu":
+                    raise ValueError("nushell")
+                terminal.set_shell(req.get("shell", "bash"))
+                if isinstance(cwd, str) and isinstance(line, str) and os.path.isabs(cwd):
+                    found = terminal.suggest(cwd, line)
+            except (ValueError, KeyError, TypeError):
+                pass
+            print("termsuggest " + json.dumps(found, ensure_ascii=False), flush=True)
         elif cmd == "forms":
             words = []
             p = session.predictor

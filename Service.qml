@@ -251,14 +251,12 @@ Item {
         && (!root.pickerOpen || root.pickerPatched)
         && root.screensaverAddress === ""
 
-      // Under an open keyboard the handle takes the keyboard's background
-      // and text colours, so the two read as one panel with the handle as
-      // its tab, and otherwise it matches the bar. Only on the keyboard's screen.
-      readonly property bool underKeyboard: root.oskVisible && modelData === keyboardWindow.screen
-      readonly property color fill: underKeyboard ? keyboardTheme.background
-        : root.barTransparent ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
+      // The bar's, keyboard up or down: the handle is part of the screen's
+      // frame, as the bar is, and the keyboard has no panel to match.
+      readonly property color fill: root.barTransparent
+        ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
         : Color.bar.background
-      readonly property color line: underKeyboard ? keyboardTheme.text : Color.bar.text
+      readonly property color line: Color.bar.text
 
       WlrLayershell.namespace: "ragtop-keyboard-handle"
       WlrLayershell.layer: WlrLayer.Top
@@ -944,14 +942,6 @@ Item {
     onTriggered: focusBridgeProc.running = root.wantFocusBridge
   }
 
-  // Whether the keyboard has a background at all is Omarchy's call, not a
-  // setting of ours: double-tapping the bar makes it transparent, and the
-  // keyboard's background goes with it, so the keys float over the desktop
-  // the way the bar does. With the bar solid, the background is whatever the
-  // theme asked for.
-  readonly property real backgroundOpacity: root.barTransparent
-    ? 0 : 1 - root.look.transparency / 100
-
   Process { id: modeWriteProc }
 
   // A plugin added with `omarchy plugin add` runs without install.sh having
@@ -1284,7 +1274,7 @@ Item {
     // space after it, as on a phone: a wrong swipe is undone in one tap.
     // The space a swipe put in front stays, ready for the next one. The
     // key's release, when it comes, is swallowed: it was never pressed.
-    if (command === "down BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
+    if (command === "key BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
       var out = ""
       for (var i = root.swipeLead.length; i < root.swipedWord.length; i++) out += "key BackSpace\n"
       root.writeKeys(out)
@@ -1304,7 +1294,7 @@ Item {
     // phone: the space is there, and a second one would also use up the
     // capital waiting for the next word.
     if (command === "key space" && root.autoSpaced && root.assistsActive
-        && /[.,!?;:] $/.test(root.typedTail)) {
+        && /[.,!?;:] $/.test(root.beforeCursor)) {
       root.autoSpaced = false
       return
     }
@@ -1337,6 +1327,26 @@ Item {
   }
   readonly property string closingMarks: ".,!?;:"
 
+  // How a held key repeats, Hyprland's own setting, for the keyboard, which
+  // repeats its keys itself (Keyboard.qml, keyRepeat). Its defaults until read.
+  property int repeatDelay: 600
+  property int repeatInterval: 40
+  Process {
+    id: repeatProc
+    command: ["bash", "-c", 'hyprctl getoption input:repeat_delay -j; hyprctl getoption input:repeat_rate -j']
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var all = JSON.parse("[" + text.replace(/}\s*{/g, "},{") + "]")
+          var delay = all[0].int, rate = all[1].int
+          if (delay > 0) root.repeatDelay = delay
+          if (rate > 0) root.repeatInterval = Math.max(10, Math.round(1000 / rate))
+        } catch (e) {}
+      }
+    }
+  }
+
   // Every key Ragtop sends goes through here, so it knows when it last
   // typed (see finishWord) and what (typedTail).
   property real lastKeysAt: 0
@@ -1365,6 +1375,11 @@ Item {
   readonly property bool capitalNext: root.assistsActive && root.sentenceStart
   readonly property int doubleSpaceWithin: 1500
   property string typedTail: ""
+  // Where in typedTail the cursor is, which ← → Home End move and which
+  // typing and deleting happen at, as in a line editor; past its end when
+  // typedTail has been emptied, which reads as its end.
+  property int typedCursor: 0
+  readonly property string beforeCursor: root.typedTail.slice(0, Math.min(root.typedCursor, root.typedTail.length))
   // Whether typedTail reaches back to the start of the field, so that all of
   // it deleted is the start of the field again rather than unknown.
   property bool typedFromStart: false
@@ -1372,10 +1387,12 @@ Item {
   property bool sentenceStart: false
   function isWordChar(c) { return c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9") }
   function endsWordThenSpace() {
-    var t = root.typedTail
+    var t = root.beforeCursor
     return t.length >= 2 && t[t.length - 1] === " " && root.isWordChar(t[t.length - 2])
   }
-  // One command as sent, for typedTail and sentenceStart.
+  // One command as sent, for typedTail and sentenceStart. Everything that
+  // cannot be followed, ↑ ↓, Tab, a shortcut, leaves it unknown, and unknown
+  // never capitalises or suggests.
   function noteTyped(line) {
     if (line === "") return
     if (root.secretField) return     // kept nowhere: see secretField
@@ -1383,30 +1400,58 @@ Item {
     var cmd = space < 0 ? line : line.slice(0, space)
     var arg = space < 0 ? "" : line.slice(space + 1)
     var t = root.typedTail
+    var c = Math.min(root.typedCursor, t.length)
     // A named key's modifiers follow it: Shift+Return is a new line still,
     // and only Ctrl, Alt or Super make it a shortcut, which could do anything.
     var parts = arg.split(" ")
     var keysym = parts[0]
     var shortcut = parts.slice(1).some(function(m) { return m !== "shift" })
-    if (cmd === "type") t += arg
-    else if ((cmd === "key" || cmd === "down") && !shortcut && keysym === "space") t += " "
-    else if ((cmd === "key" || cmd === "down") && !shortcut && keysym === "Return") t += "\n"
-    else if ((cmd === "key" || cmd === "down") && !shortcut && keysym === "BackSpace") t = t.slice(0, -1)
-    else if (cmd === "key" || cmd === "down") {         // an arrow, Tab, a shortcut: anywhere now
+    var named = (cmd === "key" || cmd === "down") && !shortcut
+    var lineStart = t.lastIndexOf("\n", c - 1) + 1
+    var unknown = false
+    function insert(text) {
+      t = t.slice(0, c) + text + t.slice(c)
+      c += text.length
+    }
+    if (cmd === "type") insert(arg)
+    else if (named && keysym === "space") insert(" ")
+    else if (named && keysym === "Return") {
+      // At a shell's prompt Enter runs the line, all of it, and the next
+      // starts empty; anywhere else it breaks the line at the cursor.
+      if (root.atPrompt) { t = "\n"; c = 1 } else insert("\n")
+    } else if (named && keysym === "BackSpace") {
+      if (c > 0) { t = t.slice(0, c - 1) + t.slice(c); c-- }
+      else unknown = !root.typedFromStart
+    } else if (named && keysym === "Delete") {
+      if (c < t.length) t = t.slice(0, c) + t.slice(c + 1)
+    } else if (named && keysym === "Left") {
+      if (c > 0) c--
+      else unknown = !root.typedFromStart
+    } else if (named && keysym === "Right") {
+      if (c < t.length) c++
+    } else if (named && keysym === "Home") {
+      if (lineStart === 0 && !root.typedFromStart) unknown = true
+      else c = lineStart
+    } else if (named && keysym === "End") {
+      var next = t.indexOf("\n", c)
+      c = next < 0 ? t.length : next
+    } else if (cmd === "key" || cmd === "down") unknown = true   // ↑ ↓, Tab, a shortcut
+    else return                                                  // up, hold, release, route
+    if (unknown) {
       t = ""
+      c = 0
       root.typedFromStart = false
-    } else if (cmd === "up" && arg === "BackSpace" && Date.now() - root.backSpaceDownAt > 400) {
-      // Held long enough to repeat: the application took an unknown number
-      // of characters (see trackWord).
-      t = ""
-      root.typedFromStart = false
-    } else return                                       // up, hold, release, route
+    }
     if (t.length > root.typedKept) {
-      t = t.slice(-root.typedKept)
+      var cut = t.length - root.typedKept
+      t = t.slice(cut)
+      c = Math.max(0, c - cut)
       root.typedFromStart = false
     }
     root.typedTail = t
-    root.sentenceStart = t === "" ? root.typedFromStart : /([.!?] |\n)$/.test(t)
+    root.typedCursor = c
+    var before = t.slice(0, c)
+    root.sentenceStart = before === "" ? root.typedFromStart : /([.!?] |\n)$/.test(before)
   }
   // A field just focused is the start of something, and another keyboard
   // having typed is anywhere at all.
@@ -1453,6 +1498,8 @@ Item {
       if (String(event && event.name ? event.name : "") !== "activewindow") return
       var data = String(event.data || "")
       root.activeClass = data.slice(0, data.indexOf(",") < 0 ? data.length : data.indexOf(","))
+      root.termJustFocused = true
+      Qt.callLater(root.readTermPlace)
       // A new window is a new place to type, and where in it is unknown,
       // unless fcitx5 has just said a text field took focus: the two come
       // together when a window is tapped into, the window's often second,
@@ -1553,7 +1600,7 @@ Item {
   // it stays, and the windows above move once when typing starts and once
   // when it stops rather than at every word.
   readonly property bool suggestionsSource: root.imeComposing || root.predicting || root.swipeActive
-    || root.offerLanguage !== ""
+    || root.offerLanguage !== "" || root.terminalSuggesting
   readonly property bool suggestionsShown: root.suggestionsSource
     && (root.suggestions.items.length > 0 || root.stripLingers)
   property bool stripLingers: false
@@ -1575,6 +1622,7 @@ Item {
     else if (root.suggestions.source === "predict") root.takeWord(index)
     else if (root.suggestions.source === "swipe") root.swapSwiped(index)
     else if (root.suggestions.source === "offer") root.answerOffer(index)
+    else if (root.suggestions.source === "term") root.takeTerm(index)
     else if (root.suggestions.source === "forms") {
       var item = root.suggestions.items[index]
       if (item) root.replaceFinished(item.text, index)
@@ -1721,7 +1769,7 @@ Item {
     if (!root.secretField && keyboardHelper.running) keyboardHelper.write("forget\n")
   }
   readonly property bool predicting: root.predictionsEnabled && root.wordsReady
-    && !root.imeComposing && !root.secretField
+    && !root.imeComposing && !root.secretField && !root.atPrompt
   onPredictingChanged: {
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
@@ -1808,6 +1856,122 @@ Item {
     if (root.suggestions.source === "predict") root.typeInPlace(text)
     else if (root.suggestions.source === "swipe") root.swapTo(text, -1)
     else if (root.suggestions.source === "forms") root.replaceFinished(text, -1)
+  }
+
+  // ---- Terminals ------------------------------------------------------------
+
+  // In a terminal the strip offers a command line's parts rather than
+  // English (predictor.py, Terminal): commands, then files and folders from
+  // the terminal's folder. Only for a line Ragtop typed all of since the last
+  // Enter, which typedTail holds, since it cannot see one recalled with Up or
+  // typed on the physical keyboard, and offers nothing rather than guess.
+  // Part of word suggestions, and never in a password field.
+  //
+  // Only at the shell's prompt, though: a terminal is often running
+  // something else, Claude Code, vim, less, where what is typed is that
+  // program's and mostly prose, and English and swipe stay. Which program
+  // holds the terminal is the kernel's to say (the shell's foreground
+  // process group), and it can change with no focus change at all, so it is
+  // read again every moment the keyboard is up in a terminal. Not known yet
+  // counts as not the prompt.
+  property string termForeground: ""
+  readonly property bool atPrompt: root.inTerminal && root.termForeground !== ""
+    && root.termForeground === root.termShell
+  readonly property bool terminalSuggesting: root.predictionsEnabled && root.atPrompt
+    && !root.secretField && !root.imeComposing
+  // The command line as Ragtop typed it, or null when it does not know it.
+  readonly property var termLine: {
+    var t = root.beforeCursor
+    var nl = t.lastIndexOf("\n")
+    return nl >= 0 ? t.slice(nl + 1) : root.typedFromStart ? t : null
+  }
+  // The terminal's folder and shell, from Omarchy's own way of finding the
+  // folder (omarchy-cmd-terminal-cwd) and the same shell process's name.
+  property string termCwd: ""
+  property string termShell: "bash"
+  function readTermPlace() {
+    if (root.inTerminal && !termPlaceProc.running) termPlaceProc.running = true
+  }
+  Process {
+    id: termPlaceProc
+    command: ["bash", "-c", 'cwd=$(omarchy-cmd-terminal-cwd 2>/dev/null); '
+      + 'pid=$(hyprctl activewindow 2>/dev/null | awk \'/pid:/ {print $2}\'); '
+      + 'sp=$(pgrep -P "$pid" | tail -n1); '
+      + 'shell=$(basename "$(readlink -f /proc/$sp/exe 2>/dev/null)" 2>/dev/null); '
+      + 'fg=$(cat /proc/$(awk \'{print $8}\' /proc/$sp/stat 2>/dev/null)/comm 2>/dev/null); '
+      + 'printf "%s\\t%s\\t%s\\n" "$cwd" "${shell:-bash}" "$fg"']
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var f = text.replace(/\n$/, "").split("\t")
+        if (f.length === 3 && f[0].charAt(0) === "/") {
+          var moved = f[0] !== root.termCwd
+          root.termCwd = f[0]
+          root.termShell = f[1] || "bash"
+          root.termForeground = f[2]
+          // A terminal just focused, at its shell's prompt, is taken to be at
+          // an empty line, which is what a prompt mostly is. Otherwise its
+          // line is unknown until an Enter, and the strip offered nothing at
+          // all. A half-typed line left in it makes a first suggestion wrong,
+          // and nothing happens without a tap.
+          if (root.termJustFocused) {
+            root.termJustFocused = false
+            if (root.atPrompt && root.typedTail === "" && !root.typedFromStart) {
+              root.typedFromStart = true
+              root.typedCursor = 0
+              moved = true
+            }
+          }
+          if (moved) root.askTerm()
+        }
+      }
+    }
+  }
+  Timer {
+    interval: 1500
+    repeat: true
+    running: root.inTerminal && root.oskVisible && root.predictionsEnabled
+    onTriggered: root.readTermPlace()
+  }
+  onAtPromptChanged: {
+    root.setSuggestions("term", null)
+    root.askTerm()
+  }
+  onInTerminalChanged: {
+    root.setSuggestions("term", null)
+    root.termForeground = ""
+    root.readTermPlace()
+  }
+  // Set on every window focus, two terminals of one class included, which a
+  // change of class would miss (the activewindow handler).
+  property bool termJustFocused: false
+  property var termAsked: []
+  function askTerm() {
+    var line = root.termLine
+    if (!root.terminalSuggesting || line === null || root.termCwd === "" || !predictorProc.running) {
+      root.setSuggestions("term", null)
+      return
+    }
+    root.termAsked.push(line)
+    predictorProc.write("term " + JSON.stringify({ cwd: root.termCwd, line: line, shell: root.termShell }) + "\n")
+  }
+  onTermLineChanged: {
+    root.askTerm()
+    // An Enter may have run cd.
+    if (root.termLine === "") root.readTermPlace()
+  }
+  function termAnswer(found) {
+    var forLine = root.termAsked.shift()
+    if (!root.terminalSuggesting || forLine !== root.termLine) return
+    root.setSuggestions("term", { items: found, prev: false, next: false, cursor: -1 })
+  }
+  // A suggestion in place of the word being typed: a command or file with a
+  // space after it, a folder without, to go on into.
+  function takeTerm(index) {
+    var item = root.suggestions.items[index]
+    if (!item || !keyboardHelper.running || root.termLine === null) return
+    var out = ""
+    for (var i = 0; i < (item.back | 0); i++) out += "key BackSpace\n"
+    root.writeKeys(out + "type " + item.text + (item.kind === "dir" ? "" : " ") + "\n")
   }
 
   // ---- The word just finished --------------------------------------------
@@ -2009,6 +2173,10 @@ Item {
           root.wordsLoaded = ""
           // The CLI may know better by now: a list removed by hand.
           root.readWordLanguages()
+        } else if (line.startsWith("termsuggest ")) {
+          var found
+          try { found = JSON.parse(line.slice(12)) } catch (e) { root.termAsked.shift(); return }
+          root.termAnswer(found)
         } else if (line.startsWith("forms ")) {
           var forWhat = root.formsAsked.shift()
           var forms
@@ -2037,6 +2205,7 @@ Item {
     onRunningChanged: {
       root.asked = []
       root.formsAsked = []
+      root.termAsked = []
       root.peekPending = false
       root.wordsLoaded = ""
       if (running) {
@@ -2889,7 +3058,6 @@ Item {
 
   KeyboardTheme {
     id: keyboardTheme
-    backgroundOpacity: root.backgroundOpacity
     look: root.look
   }
 
@@ -2930,7 +3098,6 @@ Item {
       // How see-through the keys are over the keyboard's background, and the
       // background over the desktop. 0 is solid and 100 is gone.
       keyTransparency: num("key-transparency", 0, 100, 0),
-      transparency: num("transparency", 0, 100, 0),
       // Raised keys stand on a side, like a keycap, and flat ones don't.
       relief: pick("relief", ["flat", "raised"], "flat"),
       fill: pick("fill", ["auto", "dark", "light", "outline"], "light"),
@@ -2945,14 +3112,11 @@ Item {
       sizeAdjust: String(root.settings["size-adjust"] || "regular").trim(),
       sizeNudge: (root.sizeAuto ? root.autoSizePercent
         : root.sizePercent(root.settings["size-adjust"])) / 100,
-      background: pick("background", ["tint", "gradient"], "tint"),
-      edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),
       // How far the keys that produce no character sit from the letters.
       specialKeys: pick("special-keys", ["off", "darker", "lighter"], "darker"),
       depth: num("depth", 0, 10, 4),
       chamfer: num("chamfer", 0, 20, 8),
-      edgeFade: num("edge-fade", 0, 24, 8),
       // Off-theme: set, and that part stops following the Omarchy theme.
       keyColor: color("key-color"),
       labelColor: color("label-color"),
@@ -3216,7 +3380,11 @@ Item {
     WlrLayershell.namespace: "ragtop-keyboard"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    exclusionMode: ExclusionMode.Auto
+    // Reserves what can be seen, which a hidden suggestion strip's room is
+    // not: the surface keeps one height and only the reservation changes,
+    // so the keys never move (Keyboard.qml, stripSlot).
+    exclusionMode: ExclusionMode.Normal
+    exclusiveZone: keyboard.visibleHeight
     anchors { bottom: true; left: true; right: true }
     implicitHeight: keyboard.implicitHeight
     color: "transparent"
@@ -3434,6 +3602,7 @@ Item {
         swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
           : root.swipeActive ? "on" : "idle",
         predictions: !root.predictionsEnabled ? "off"
+          : root.terminalSuggesting ? "prompt"
           : !predictorProc.running ? root.retryHealth("predict", false)
           : !root.wordsReady ? "nowords"
           : root.predicting ? "on" : "idle",

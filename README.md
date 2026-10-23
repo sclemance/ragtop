@@ -110,9 +110,9 @@ space until tablet mode turns on.
   Unlocked, the choice is remembered, and while it is Locked there are two
   buttons to turn the screen a quarter turn by hand.
 - **An on-screen keyboard that fits Omarchy.** Drawn by the Omarchy shell in
-  your theme's colours and font, and restyled the moment you switch themes. Its
-  background is see-through as its theme asks, and goes entirely when you make
-  Omarchy's bar transparent.
+  your theme's colours and font, and restyled the moment you switch themes. No
+  panel behind it: the keys sit on your wallpaper, as Omarchy's own windows
+  do.
 - **Four boards, and it picks one.** Mobile is the phone style, three letter
   rows with the symbols behind `?123`. 60%, 75% and 80% are the real thing,
   with every symbol where your fingers already know it is, a function row and
@@ -336,8 +336,8 @@ A slim handle, coloured like the bar, runs along the bottom of the screen in
 tablet mode. Tap it to show the keyboard (it shows a wide ^) and tap it again
 to hide it (a wide v). It reserves its own space, so windows never sit under
 it. With the bar at the bottom, the handle sits just above the bar. While the
-keyboard is open, the handle fades to the keyboard's background, so the two
-read as one panel.
+handle follows the bar, solid or transparent, whether the keyboard is open
+or not: it is part of the screen's frame, as the bar is.
 
 The keyboard also comes up on its own when you tap into a text field, or
 switch to a window that takes typing, like a terminal. Ragtop learns about
@@ -668,6 +668,23 @@ there too: hold went for go, going, goes, gone. English only so far.
 swipe it, and wait a second: the strip shows sums and summed, and a tap puts
 one in its place, keeping the space. Typing on lets it go.
 
+**In a terminal, at the shell's prompt, the strip offers the command line
+instead of English**: the commands on your PATH at the start of a command
+(after `sudo`, a `|` or `&&` too), each with what it is for from its manual
+(`grep`, print lines that match patterns), and then the files and folders of
+the terminal's folder, a folder filled in with its `/` and no space so you
+can go on into it, and only folders after `cd`. Names with spaces come
+escaped. Ragtop asks the kernel which program has the terminal, so with
+Claude Code, vim or less in front it is English and swipe as anywhere else.
+It knows only a line it typed all of: after ↑ recalls one, or Tab
+completes one, it says nothing until the next Enter. A terminal you switch
+to is taken to be at an empty prompt. Bash, zsh and fish; not nushell,
+whose quoting differs. Flags after a `-` are not offered yet.
+
+Held keys, BackSpace and the arrows, are repeated by the keyboard itself at
+Hyprland's repeat speed, so Ragtop knows what each did, and corrections with
+them keep the line rather than losing it.
+
 **Capitals and full stops.** Shift lights up by itself at the start of a
 text field and after a full stop, question or exclamation mark and a space,
 and two spaces after a word make a full stop. A tap on that Shift puts it
@@ -764,27 +781,25 @@ Theme, Layout, Key Size, rotation and the keyboard's own auto-expand are also
 on the panel a hold on Super opens, which is the quicker way to them while you
 are holding the machine.
 
-What a key looks like, its shape, relief, fill, how see-through it is, the
-background behind it and the top edge, belongs to the theme, so it is set in
+What a key looks like, its shape, relief, fill, how see-through it is and
+whether what is behind it is blurred, belongs to the theme, so it is set in
 a theme file and not row by row. What stays here is the one thing no theme
 author can know: how big the keys have to be on your screen for your eyes.
 Key Size is a nudge against whatever the theme asked for, and it is yours, so
 applying a theme never resets it.
 
-**Whether the keyboard has a background at all is Omarchy's call, not a
-setting here.** Double-tap the bar to make it transparent and the keyboard's
-background goes with it, so the keys float over the desktop the way the bar
-does. Make the bar solid again and the background comes back as the theme
-asked for it.
+**There is no background behind the keys, and no setting for one.** This
+is an opinionated change, made in 0.48.0, in line with Omarchy's own
+design: no panel where none is needed. The keyboard reserves its own room,
+so windows move out of its way and what is behind it is your wallpaper; a
+panel over that only hid it. Keys can still be partly see-through, and a
+theme can ask for what is behind them to be blurred, which Hyprland then does
+behind the keys alone. Suggestions are drawn as keys too, thin ones in
+Enter's style, so they read over any wallpaper. A fully see-through
+keyboard is yours to make in a theme of your own; none ships with Ragtop.
 
 Whatever a key looks like, a touch goes to the nearest key, so no shape
 makes keys harder to hit.
-
-**Edge** sets how the keyboard's top edge meets the desktop. Border gives it
-the same border your tiled windows have, taken from the Omarchy theme itself
-(the shell's own active-window border spec), so it follows a theme switch
-live, gradients included. Fade fades the background out over `edge-fade`
-pixels. None leaves a hard edge.
 
 ### Themes
 
@@ -1126,15 +1141,12 @@ the Settings button on the keyboard's own panel opens directly:
 | Swipe typing, while suggestions are on | off | Setup › Tablet › Swipe Typing (beta), or the controls panel |
 | A saved look, which writes the rows below (see [Themes](#themes)) | Omarchy | Setup › Tablet › Theme |
 | Key size against the theme's: Automatic, a percentage from 60 to 160, or one of five names | Automatic where you have not set one | the controls panel's slider, or Setup › Tablet › Key Size |
-| Key shape, relief, fill, transparency, background and top edge | set by the theme | `themes/<name>/ragtop.toml` |
-| Whether the keyboard has a background | follows the bar | double-tap Omarchy's bar |
+| Key shape, relief, fill, transparency and blur | set by the theme | `themes/<name>/ragtop.toml` |
 | Touch typing in each overlay, the picker nav strip, and the lock screen's keyboard | off | Setup › Tablet › System Overlays (see [Omarchy's overlays](#omarchys-overlays)) |
 
-The bar follows Style › Bar › Transparency, which a double tap on it
-toggles: a transparent bar takes the keyboard's background away entirely, and
-a solid one gives back whatever the theme asked for. The handle along the
-bottom follows the bar the same way while the keyboard is closed, and the
-keyboard while it's open.
+The handle along the bottom follows the bar, Style › Bar › Transparency,
+which a double tap on the bar toggles. The keyboard itself has no background
+to follow it.
 
 From a terminal, `./ragtop <setting> ...` does the same as the menu rows:
 `tablet-mode set auto|on|off`, `keyboard set sensor|on|off`,
@@ -1229,9 +1241,8 @@ True today, and worth saying if you want them gone:
   asks `iio-sensor-proxy` whether an accelerometer exists rather than
   concluding it from claims that never land, so such a machine is never told
   that rotation is broken when there was never anything to break.
-- **The keyboard takes every tap inside it.** A theme that draws no background
-  at all is the exception, and then only the keys take one. There is no gap
-  between keys to reach the window underneath.
+- **The keys take every tap among them.** There is no gap between keys to
+  reach what is underneath; beside the keys, taps pass through.
 - **Monitors are named by their maker, not their connector.** DP-1 is a
   socket rather than a screen, so the controls panel says LG or Samsung where
   the monitor reports something a person would recognise, and Built-in for the

@@ -141,25 +141,27 @@ label-color = "#ffcc00"
 Both take `foreground`, `background`, `accent`, `urgent`, or a hex colour
 of 6 or 8 digits. Only what you set stops following your Omarchy theme.
 
-## The background behind the keys
+## What is behind the keys
 
 ```toml
-background = "tint"
-transparency = 30
 key-transparency = 15
-edge = "fade"
-edge-fade = 16
 blur = false
 ```
 
-`background` is `tint` or `gradient`. `transparency` is the backdrop over
-your desktop and `key-transparency` is the keys over that backdrop, both
-0 solid to 100 gone. `edge` is how the backdrop ends: `border`, `fade` or
-`none`, with `edge-fade` the pixels a fade takes.
+There is no background behind the keys, and nothing to set for one. This
+is an opinionated change, made in 0.48.0, in line with Omarchy's design:
+the keyboard reserves its own room, so what is behind it is the wallpaper,
+and a panel over that only hid it. `background`, `transparency`, `edge` and
+`edge-fade` are gone; a theme that still names them has them ignored, and
+`ragtop migrate` drops them from your settings.
 
-`blur` asks the compositor to blur what is behind the keyboard. It costs
-something to draw, so it is off unless a theme asks. It takes a TOML boolean
-or the strings `"on"` and `"off"`, since both read naturally in a file.
+`key-transparency` is how see-through the keys are, 0 solid to 100 gone.
+`blur` asks the compositor to blur what is behind the keys, and only the
+keys, since it blurs only what is at least partly opaque. It costs something
+to draw, so it is off unless a theme asks. It takes a TOML boolean or the
+strings `"on"` and `"off"`, since both read naturally in a file. The themes
+Ragtop ships keep the keys mostly solid; a fully see-through keyboard is
+there to make in a theme of your own.
 
 ## Labels and size
 

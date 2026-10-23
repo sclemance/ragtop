@@ -763,6 +763,7 @@ Item {
     // Counted whenever a strip could appear, shown or not: a board chosen by
     // height that changed with the strip would swap boards mid-sentence.
     var strip = root.service.stripPossible ? Math.round(root.keyHeightUncapped * root.stripFraction) + root.theme.gap : 0
+    // (The same room stripSlot keeps, measured by the uncapped height.)
     return root.topPadding + strip + h + (rows.length - 1) * root.theme.gap + root.theme.padding
   }
 
@@ -805,7 +806,7 @@ Item {
   // affects which key a touch means.
   // A soft or bordered top edge (Setup › Tablet › Edge) gets its own space
   // above the keys, so it's clear of the first row.
-  readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
+  readonly property real topPadding: root.theme.padding
 
   // The suggestion strip, between the top edge and the first row, while
   // there is something to fill it (Service.qml, suggestionsShown). Half a
@@ -825,9 +826,19 @@ Item {
   onStripWantedChanged: root.syncStrip()
   onTouchingChanged: root.syncStrip()
   readonly property real stripFraction: 0.5
-  readonly property real stripHeight: root.stripShown ? Math.round(root.keyHeight * root.stripFraction) : 0
-  // Where the keys begin.
-  readonly property real keysTop: root.topPadding + (root.stripShown ? root.stripHeight + root.theme.gap : 0)
+  //
+  // Its room is kept above the keys whenever a strip could appear, shown or
+  // not, so the keyboard's surface never changes height as it comes and goes:
+  // the compositor places a resized layer surface a frame late, and the keys
+  // jumped. Hidden, that room is clear and lets touches through, and only the
+  // visible part is drawn, taken for touches and reserved (visibleHeight).
+  readonly property real stripSlot: root.service.stripPossible
+    ? Math.round(root.keyHeight * root.stripFraction) + root.theme.gap : 0
+  readonly property real stripHeight: Math.max(0, root.stripSlot - root.theme.gap)
+  // Where the keys begin, the same whether the strip is shown or not.
+  readonly property real keysTop: root.topPadding + root.stripSlot
+  // How much of the keyboard is there to see, from the bottom.
+  readonly property real visibleHeight: root.implicitHeight - (root.stripShown ? 0 : root.stripSlot)
 
   // Keys that hold a width of their own on the top row, whatever else is
   // sharing it. The windows toggle keeps one place and one size on every
@@ -1055,16 +1066,14 @@ Item {
     id: keysBounds
     x: Math.max(0, root.keysLeft - root.theme.gap)
     width: Math.min(root.width - x, root.keysRight - root.keysLeft + 2 * root.theme.gap)
-    y: 0
-    height: root.height
+    y: root.height - root.visibleHeight
+    height: root.visibleHeight
   }
-  // What the surface takes touches on (the service masks it to this): you
-  // can only touch through the keyboard where it isn't there. With a drawn
-  // background the whole surface takes them, so a tap in the margins does
-  // nothing rather than reaching a window the background hides. When the
-  // background is fully clear there is nothing to hide, and the margins
-  // pass taps through, so tapping away from a menu closes it.
-  readonly property Item touchArea: root.theme.backgroundVisible ? root : keysBounds
+  // What the surface takes touches on (the service masks it to this): the
+  // keys' own extent and the strip's while it shows. There is no background
+  // to hide anything, so the margins beside the keys pass taps through to
+  // what is behind them, and tapping away from a menu closes it.
+  readonly property Item touchArea: keysBounds
 
   implicitHeight: slotsBottom + theme.padding
 
@@ -1282,7 +1291,16 @@ Item {
       return
     }
     if (holdable.indexOf(role) !== -1) {
-      service.sendKeys(["down", keysyms[role]].concat(namedKeyMods()).join(" "))
+      // Pressed once now and again while held, by the keyboard rather than
+      // by the application's own repeat, so every BackSpace and arrow passes
+      // through the service, which then knows what it did (noteTyped). With
+      // the application repeating, a held BackSpace took an unknown number
+      // of characters and the line was lost.
+      var command = ["key", keysyms[role]].concat(namedKeyMods()).join(" ")
+      service.sendKeys(command)
+      root.repeating = command
+      keyRepeat.interval = root.service.repeatDelay
+      keyRepeat.restart()
       return
     }
     if (role in keysyms) {
@@ -1309,8 +1327,21 @@ Item {
       return
     }
     if (holdable.indexOf(role) !== -1) {
-      service.sendKeys("up " + keysyms[role])
+      keyRepeat.stop()
+      root.repeating = ""
       afterKey()
+    }
+  }
+
+  // The key held down, as sent, repeated after Hyprland's delay at its rate.
+  property string repeating: ""
+  Timer {
+    id: keyRepeat
+    repeat: true
+    onTriggered: {
+      if (root.repeating === "") { stop(); return }
+      root.service.sendKeys(root.repeating)
+      interval = root.service.repeatInterval
     }
   }
 
@@ -1380,13 +1411,11 @@ Item {
     holdTimer.stop()
     root.pendingPoint = -1
     root.pendingKey = ""
-    var was = root.held
     root.held = ({})
-    // A key sent down has to be sent up whatever else happens, or it
-    // repeats for as long as the shell is running.
-    for (var id in was)
-      if (root.holdable.indexOf(was[id]) !== -1)
-        root.service.sendKeys("up " + root.keysyms[was[id]])
+    // A held key stops repeating whatever else happens, or it repeats for as
+    // long as the shell is running.
+    keyRepeat.stop()
+    root.repeating = ""
   }
   onWidthChanged: root.cancelTouches()
   onHeightChanged: root.cancelTouches()
@@ -1551,14 +1580,25 @@ Item {
     return keys
   }
 
-  // The background and top edge, shared with the picker nav strip.
-  KeyboardSurface {
-    anchors.fill: parent
-    theme: root.theme
+  // Everything the keyboard draws and takes touches on, laid out from the
+  // bottom: the strip, the keys, their cards, a swipe's trail and the touch
+  // layer, which all share these coordinates. The window is anchored to the
+  // bottom of the screen and the compositor applies a new height a frame or
+  // two after it is asked for, so laid out from the top, the keys jumped
+  // down as the strip came and back as the window caught up. From the
+  // bottom, only the top edge moves.
+  Item {
+    id: board
+    x: 0
+    y: root.height - root.implicitHeight
+    width: root.width
+    height: root.implicitHeight
   }
 
   SuggestionStrip {
     id: strip
+    parent: board
+    keyKind: root.kind("enter")
     visible: root.stripShown
     theme: root.theme
     x: Math.max(root.theme.padding, root.keysLeft)
@@ -1720,6 +1760,7 @@ Item {
   // The path being drawn, so the finger can see where it has been.
   Canvas {
     id: trail
+    parent: board
     anchors.fill: parent
     z: 9
     onPaint: {
@@ -1751,6 +1792,7 @@ Item {
   }
 
   Repeater {
+    parent: board
     model: root.slots
 
     KeyboardKey {
@@ -1782,6 +1824,7 @@ Item {
   // touch layer, which follows it (see selectAt).
   Item {
     id: popupLayer
+    parent: board
     visible: root.popup !== null
     z: 10
     x: root.popup ? root.popup.x : 0
@@ -1829,6 +1872,7 @@ Item {
   // fingers can be down at once, e.g. the next key tapped before the last
   // is released.
   MultiPointTouchArea {
+    parent: board
     anchors.fill: parent
     onPressed: function(points) {
       // While the controls are up, a touch on the keyboard puts them away
