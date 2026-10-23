@@ -1192,6 +1192,15 @@ Item {
     }
   }
 
+  // The modifiers for a key that is not a character, Enter, Tab, an arrow.
+  // A Shift the keyboard latched itself for a capital is for the next
+  // letter and goes with none of these: Enter after a full stop went out as
+  // Shift+Enter, which editors take for another kind of line break.
+  function namedKeyMods() {
+    var m = activeMods(true)
+    return root.autoShifted ? m.filter(function(x) { return x !== "shift" }) : m
+  }
+
   function setMod(name, state) {
     var next = Object.assign({}, mods)
     next[name] = state
@@ -1273,11 +1282,11 @@ Item {
       return
     }
     if (holdable.indexOf(role) !== -1) {
-      service.sendKeys(["down", keysyms[role]].concat(activeMods(true)).join(" "))
+      service.sendKeys(["down", keysyms[role]].concat(namedKeyMods()).join(" "))
       return
     }
     if (role in keysyms) {
-      service.sendKeys(["key", keysyms[role]].concat(activeMods(true)).join(" "))
+      service.sendKeys(["key", keysyms[role]].concat(namedKeyMods()).join(" "))
     } else {
       // A character: typed as itself unless Ctrl, Alt or Super make it a
       // shortcut, which goes by the key (Ctrl+C, not Ctrl+"C"). A real

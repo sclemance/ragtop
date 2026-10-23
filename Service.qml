@@ -1380,10 +1380,15 @@ Item {
     var cmd = space < 0 ? line : line.slice(0, space)
     var arg = space < 0 ? "" : line.slice(space + 1)
     var t = root.typedTail
+    // A named key's modifiers follow it: Shift+Return is a new line still,
+    // and only Ctrl, Alt or Super make it a shortcut, which could do anything.
+    var parts = arg.split(" ")
+    var keysym = parts[0]
+    var shortcut = parts.slice(1).some(function(m) { return m !== "shift" })
     if (cmd === "type") t += arg
-    else if ((cmd === "key" || cmd === "down") && arg === "space") t += " "
-    else if ((cmd === "key" || cmd === "down") && arg === "Return") t += "\n"
-    else if ((cmd === "key" || cmd === "down") && arg === "BackSpace") t = t.slice(0, -1)
+    else if ((cmd === "key" || cmd === "down") && !shortcut && keysym === "space") t += " "
+    else if ((cmd === "key" || cmd === "down") && !shortcut && keysym === "Return") t += "\n"
+    else if ((cmd === "key" || cmd === "down") && !shortcut && keysym === "BackSpace") t = t.slice(0, -1)
     else if (cmd === "key" || cmd === "down") {         // an arrow, Tab, a shortcut: anywhere now
       t = ""
       root.typedFromStart = false
