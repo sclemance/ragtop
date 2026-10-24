@@ -741,6 +741,40 @@ whose shared window stayed mapped between opens. Omarchy dropped that design
 ten days later (#14458) and no release ever carried it, so its fixture and
 the code for it are gone.
 
+## Benchmarks
+
+`bench/bench.py` measures prediction speed and quality per language and per
+word list, on held-out text (a Project Gutenberg novel per language), so a
+change of data or engine is decided by numbers rather than by feel.
+`bench/bench.py fetch` puts its data in `~/.cache/ragtop-bench`, outside the
+repository, since none of it is ours to commit; `compare <lang> small large`
+prints a table. It reports load time and memory, coverage, keystrokes saved,
+correction top-1/top-3, swipe top-1/top-3 on wobbled synthetic paths, and
+latency medians and 95th percentiles for each. Random choices are seeded.
+
+What it has settled so far (2026-10-24):
+
+- **wordfreq's large lists are not worth it.** Ten times the words gave
+  under one point more keystrokes saved, made swipe less accurate (82 → 78%
+  first in English, 70 → 55% in French) and everything about ten times
+  slower, with 115 MB of memory. Ragtop stays on the small lists.
+- **Speed.** Folding and counting accents for the same words on every
+  keystroke was nine tenths of a suggestion's cost; they are worked out once
+  per list (`Predictor.folds`), for list words only, never typed text.
+  Swipe decoding scores candidates on a cheap floor first (frequency, ends,
+  length) and stops before shaping words that cannot make the shortlist,
+  which gives identical answers (checked on 1,000 swipes). The 95th
+  percentile went from 62 to 6 ms a keystroke and from 258 to 72 ms a swipe
+  in English, and from 95 to 6 ms and 429 to 77 ms in French, for about
+  100 ms more at load and 5 MB more memory.
+- **French swipe is the weak spot**: 70% first, against 82% in English.
+
+Hunspell was tried alongside, as an optional enhancement rather than a
+dependency: its validity check answers joins in any language (storeroom yes,
+alot no) at about 4 µs, and its stemmer gives French real word families. The
+English dictionary is too shallow for forms (summed and went are entries of
+their own), so English keeps its rules there.
+
 ## What shaped the design
 
 Five things that came out of building it, worth holding on to.

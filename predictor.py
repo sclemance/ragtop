@@ -24,6 +24,8 @@ then commands on stdin, one per line:
                       as it has been typed, answered with commands or files
   forms <word>        the word's other forms, summed and sums for sum, for a
                       hold on a suggestion to offer
+  join <a> <b>        two words typed one after the other, and whether they
+                      were one word with a space in it: inter active
   swipe <json>        the path a finger drew across the keys, [[x, y], ...],
                       in the same coordinates
   peek <json>         the same for a path still being drawn, for the strip
@@ -34,7 +36,8 @@ and answers "ready <count>" once a single list is read, "ready <lang>
 <count>" or "missing <lang>" for each "lang" (the service offers to fetch a
 missing one), then "suggest <json>" for each "complete": a list of
 words, most likely first, capitalised the way the typed word was, and
-"forms <json>" for each "forms", most common first, "termsuggest <json>"
+"forms <json>" for each "forms", most common first, "join <json>" for each
+"join", {"word", "strong"} or {} when the two make no word, "termsuggest <json>"
 for each "term", [{"text", "note", "kind", "back"}] with kind command,
 dir or file and back the characters of the line it replaces, and
 "swiped <json>" for each "swipe", the words it most likely spelled, and
@@ -47,6 +50,7 @@ being typed may be part of a password.
 """
 
 import bisect
+import functools
 import gzip
 import heapq
 import json
@@ -177,10 +181,17 @@ def cased(word, typed):
 
 def accents(word):
     """How many letters of `word` carry an accent or are a ligature."""
-    return sum(1 for c in word if fold(c) != c)
+    return sum(1 for c in word if fold_letter(c) != c)
 
 
-def spelled_right(words, ranks):
+# A letter at a time, remembered: there are only so many letters, and none of
+# them is anything typed.
+@functools.lru_cache(maxsize=512)
+def fold_letter(c):
+    return fold(c)
+
+
+def spelled_right(words, ranks, folds=None):
     """`words` without the misspellings wordfreq also counts: "ete" and
     "garcon" beside "été" and "garçon", "étre" beside "être". A word goes when
     another with the same letters, as many accents or more, is at least ten
@@ -188,12 +199,19 @@ def spelled_right(words, ranks):
     words without them are the commoner ones, "la" beside "là", "a" beside
     "à", and how far apart a real pair is overlaps with how far a misspelling
     is, so only the accents tell them apart."""
+    # folds: {word: (folded, accent count)} worked out once for a list's
+    # words (Predictor.folds). Asked here for the same words on every
+    # keystroke, working them out each time was nine tenths of what a
+    # suggestion cost.
+    look = folds.get if folds else (lambda w: None)
+    info = {w: look(w) or (fold(w), accents(w)) for w in words}
     best = {}  # folded letters -> [(accent count, rank)]
     for w in words:
-        best.setdefault(fold(w), []).append((accents(w), ranks[w]))
+        f, n = info[w]
+        best.setdefault(f, []).append((n, ranks[w]))
     return [w for w in words
-            if not any(n >= accents(w) and ranks[w] - r >= MISSPELLING_GAP
-                       for n, r in best[fold(w)])]
+            if not any(n >= info[w][1] and ranks[w] - r >= MISSPELLING_GAP
+                       for n, r in best[info[w][0]])]
 
 
 def neighbours(rows):
@@ -219,9 +237,12 @@ class Predictor:
         self.elisions = ELISIONS.get(lang, set())
         self.ranks = {w: r for w, r in ranks.items() if w not in self.elisions}
         self.words = sorted(self.ranks)
+        # Each word's folded letters and accent count, once, here: only the
+        # list's own words, never anything typed, which is not kept.
+        self.folds = {w: (fold(w), accents(w)) for w in self.ranks}
         # Every word under its folded form, sorted, for prefix search, and by
         # it, for corrections.
-        self.folded = sorted((fold(w), w) for w in self.ranks)
+        self.folded = sorted((f, w) for w, (f, _) in self.folds.items())
         self.keys = [f for f, _ in self.folded]
         self.by_fold = {}
         for f, w in self.folded:
@@ -239,7 +260,7 @@ class Predictor:
         TYPED_ACCENT_PENALTY when the typing has an accent the word lacks."""
         if word.startswith(typed):
             return self.ranks[word]
-        against = any(t != w and fold(t) != t for t, w in zip(typed, word))
+        against = any(t != w and fold_letter(t) != t for t, w in zip(typed, word))
         return self.ranks[word] + (TYPED_ACCENT_PENALTY if against else ACCENT_PENALTY)
 
     def completions(self, prefix):
@@ -303,7 +324,7 @@ class Predictor:
                     continue
                 if rank < found.get(w, 1 << 30):
                     found[w] = rank
-        found = {w: found[w] for w in spelled_right(list(found), self.ranks)}
+        found = {w: found[w] for w in spelled_right(list(found), self.ranks, self.folds)}
         best = heapq.nsmallest(SHOWN, found.items(), key=lambda kv: (kv[1], kv[0]))
         return [cased(w, typed) for w, _ in best]
 
@@ -433,7 +454,11 @@ def forms_en(word, ranks):
     if roots:
         root = min(roots, key=lambda r: ranks[r])
         irregular = IRREGULAR["en"].get(root, set())
-        regular = grow_en(root) | comparatives_en(root, ranks)
+        # Not on two letters. The words that short which really take endings,
+        # go, do and be, are all irregular and in the table; the rules on the
+        # rest only ever made another word out of a fragment, ly into lying
+        # and us into uses, used and using.
+        regular = grow_en(root) | comparatives_en(root, ranks) if len(root) >= 3 else set()
         if irregular:
             # The rules run on child too, and wordfreq counts "childs" and
             # "childrens" among its misspellings. Beside an irregular family
@@ -446,6 +471,37 @@ def forms_en(word, ranks):
 
 
 FORMS = {"en": forms_en}
+
+
+# Words wordfreq counts because people write them, that are the two words
+# written wrong: offering one for "a lot" would correct it into a mistake.
+JOIN_WRONG = {"en": {"alot", "aswell", "eachother", "atleast", "everytime", "thankyou",
+                     "nevermind", "ofcourse", "noone", "highschool"}}
+# A piece this rare or rarer, or no word at all, makes a space between the
+# two more likely a slip than meant: inter, wh, al. Ranks are centibels
+# (read_wordlist); 440 is about one word in 25,000.
+JOIN_RARE = 440
+
+
+def join_en(a, b, ranks):
+    """The word a and b make written as one, as {"word", "strong"}, or {}.
+
+    Only an offer, never a correction, because most pairs that make a word
+    are right both ways: every day and everyday, may be and maybe, on to and
+    onto. Strong is when one piece is rare enough that the space was most
+    likely a slip, and the strip leads with it; otherwise it only follows
+    the finished word's forms, so a pair typed on purpose is not nagged."""
+    if not (a.replace("'", "").isalpha() and b.replace("'", "").isalpha()):
+        return {}
+    joined = (a + b).lower()
+    if joined not in ranks or joined in JOIN_WRONG["en"]:
+        return {}
+    pieces = [ranks.get(a.lower()), ranks.get(b.lower())]
+    strong = any(r is None or r >= JOIN_RARE for r in pieces)
+    return {"word": cased(joined, a), "strong": strong}
+
+
+JOIN = {"en": join_en}
 
 
 # ---- Terminals --------------------------------------------------------------
@@ -689,11 +745,14 @@ def mean_distance(a, b):
 
 
 class Swipes:
-    def __init__(self, ranks):
+    def __init__(self, ranks, folds=None):
         self.ranks = ranks
+        # The predictor's, for the same reason it keeps them.
+        self.folds = folds or {w: (fold(w), accents(w)) for w in ranks}
         self.keys = {}
         self.unit = 1.0
         self.ends = {}
+        self.lengths = {}
 
     def set_keys(self, value):
         """{"unit": w, "keys": {"q": [x, y], ...}} from the keyboard."""
@@ -708,15 +767,18 @@ class Swipes:
         # pick between, and only words every letter of which has a key.
         self.ends = {}
         for word in self.ranks:
-            letters = [c for c in fold(word) if c != "'"]
+            letters = [c for c in self.folds[word][0] if c != "'"]
             if len(letters) >= 2 and all(c in self.keys for c in letters):
                 self.ends.setdefault((letters[0], letters[-1]), []).append(word)
+        # Each word's path length on these keys, for decode's cheap first
+        # look at a candidate.
+        self.lengths = {w: path_length(self.ideal(w)) for ws in self.ends.values() for w in ws}
 
     def ideal(self, word):
         """The path through a word's keys, a letter typed twice in a row
         being one stop, as it is for a finger."""
         out = []
-        for c in fold(word):
+        for c in self.folds[word][0]:
             if c == "'":
                 continue
             p = self.keys[c]
@@ -742,23 +804,47 @@ class Swipes:
         # gives hundreds. Measured, a 120-point swipe went from 330 ms to a
         # small part of that.
         closest = {k: min(math.dist(p, q) for q in path) for k, p in self.keys.items()}
-        scored = []
+        # Every term of a word's score is zero or more, and three of them cost
+        # next to nothing: how common it is, how far the path's ends are from
+        # its first and last keys, and how much longer or shorter it is. Those
+        # alone are a floor under its score. Candidates are taken floor first,
+        # and once the floor reaches the worst of the best found so far, no
+        # word left can get in, and the costly part, comparing the path's
+        # shape with every remaining word's, is never done. The answer is the
+        # same as scoring every word; measured, most are never shaped. Kept
+        # three times the words shown, since the misspelling filter after may
+        # drop some.
+        candidates = []
         for a in starts:
             for b in ends:
                 for word in self.ends.get((a, b), ()):
-                    if any(closest[c] > VISIT_SLACK * self.unit for c in fold(word) if c != "'"):
+                    letters = self.folds[word][0]
+                    if any(closest[c] > VISIT_SLACK * self.unit for c in letters if c != "'"):
                         continue
-                    ideal = self.ideal(word)
-                    template = resample(ideal)
-                    location = mean_distance(sampled, template) / self.unit
-                    form = mean_distance(shape, normalised(template))
-                    stretch = abs(travelled - path_length(ideal)) / self.unit
-                    ends_off = (math.dist(path[0], ideal[0]) + math.dist(path[-1], ideal[-1])) / self.unit
-                    score = (LOCATION_WEIGHT * location + SHAPE_WEIGHT * form
-                             + LENGTH_WEIGHT * stretch + ENDS_WEIGHT * ends_off
+                    first = self.keys[next(c for c in letters if c != "'")]
+                    last = self.keys[next(c for c in reversed(letters) if c != "'")]
+                    ends_off = (math.dist(path[0], first) + math.dist(path[-1], last)) / self.unit
+                    stretch = abs(travelled - self.lengths[word]) / self.unit
+                    floor = (LENGTH_WEIGHT * stretch + ENDS_WEIGHT * ends_off
                              + FREQUENCY_WEIGHT * self.ranks[word])
-                    scored.append((score, word))
-        keep = set(spelled_right([w for _, w in scored], self.ranks))
+                    candidates.append((floor, word))
+        candidates.sort()
+        kept = 3 * SHOWN
+        worst = []   # the best scores so far, negated, as a heap of the worst
+        scored = []
+        for floor, word in candidates:
+            if len(worst) >= kept and floor >= -worst[0]:
+                break
+            template = resample(self.ideal(word))
+            location = mean_distance(sampled, template) / self.unit
+            form = mean_distance(shape, normalised(template))
+            score = floor + LOCATION_WEIGHT * location + SHAPE_WEIGHT * form
+            scored.append((score, word))
+            if len(worst) < kept:
+                heapq.heappush(worst, -score)
+            elif score < -worst[0]:
+                heapq.heapreplace(worst, -score)
+        keep = set(spelled_right([w for _, w in scored], self.ranks, self.folds))
         scored = [(score, w) for score, w in scored if w in keep]
         return [w for _, w in heapq.nsmallest(SHOWN, scored)]
 
@@ -783,7 +869,7 @@ class Session:
         if lang not in self.loaded:
             try:
                 p = Predictor(read_wordlist(path), lang)
-                self.loaded[lang] = (p, Swipes(p.ranks))
+                self.loaded[lang] = (p, Swipes(p.ranks, p.folds))
             except FileNotFoundError:
                 self.loaded[lang] = None
         if self.loaded[lang] is None:
@@ -872,6 +958,13 @@ def main():
                 low = rest.lower()
                 words = [cased(w, rest) for w in FORMS[p.lang](low, p.ranks)][:SHOWN]
             print("forms " + json.dumps(words, ensure_ascii=False), flush=True)
+        elif cmd == "join":
+            found = {}
+            p = session.predictor
+            pair = rest.split(" ")
+            if p and p.lang in JOIN and len(pair) == 2 and all(pair):
+                found = JOIN[p.lang](pair[0], pair[1], p.ranks)
+            print("join " + json.dumps(found, ensure_ascii=False), flush=True)
         elif cmd == "complete":
             words = session.predictor.suggest(rest) if session.predictor else []
             print("suggest " + json.dumps(words, ensure_ascii=False), flush=True)

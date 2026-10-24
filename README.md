@@ -678,6 +678,21 @@ there too: hold went for go, going, goes, gone. English only so far.
 swipe it, and wait a second: the strip shows sums and summed, and a tap puts
 one in its place, keeping the space. Typing on lets it go.
 
+**Two words that should have been one are offered joined.** Type or swipe
+*inter active* and pause, and the strip leads with **interactive**; a tap
+takes both words and the space between them back and puts the one word in.
+It only ever offers. Most pairs that make a word are right both ways, every
+day and everyday, may be and maybe, and only the sentence knows which, so
+the joined word leads only when one piece is rare enough that the space was
+probably a slip (*inter*, *wh*). Otherwise it waits at the end of the forms
+the strip was offering anyway, and never brings a strip up by itself.
+Spellings people write but should not, *alot* and *atleast*, are never
+offered. English only so far, and only for two words typed straight one
+after the other; hyphens are not offered at all yet.
+
+**The strip comes up as a swipe starts**, so the guess so far has somewhere
+to show while your finger is still drawing.
+
 **In a terminal, at the shell's prompt, the strip offers the command line
 instead of English**: the commands on your PATH at the start of a command
 (after `sudo`, a `|` or `&&` too), each with what it is for from its manual
@@ -694,6 +709,16 @@ whose quoting differs. Flags after a `-` are not offered yet.
 Held keys, BackSpace and the arrows, are repeated by the keyboard itself at
 Hyprland's repeat speed, so Ragtop knows what each did, and corrections with
 them keep the line rather than losing it.
+
+**Deleting whole words.** Slide left from BackSpace and it selects words back
+from the cursor, one more the further you slide, with a label over the key
+saying which; lift to delete them, slide back to give them back. Held,
+BackSpace takes letters and then, after a couple of words' worth, whole
+words, slowly enough to let go on the right one. Words Ragtop typed go by
+exact BackSpaces; further back it uses the application's own delete-a-word
+(Ctrl+BackSpace, or Ctrl+W in a terminal). And BackSpace into a word you
+finished, typed, swiped or taken from the strip, makes it the word being
+typed again, with its suggestions back.
 
 **Capitals and full stops.** Shift lights up by itself at the start of a
 text field and after a full stop, question or exclamation mark and a space,

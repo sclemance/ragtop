@@ -1240,6 +1240,7 @@ Item {
     // means the moment for its forms has passed.
     if (/^(type|key|down) /.test(command)) {
       var word = command === "key space" ? root.currentWord : ""
+      root.followOn(command)
       root.setFinished(word, " ", false)
       if (root.suggestions.source === "forms") root.setSuggestions("forms", null)
     }
@@ -1297,6 +1298,68 @@ Item {
     // route between a word and its full stop types nothing.
     if (/^(type|key|down) /.test(command)) root.autoSpaced = false
     if (keyboardHelper.running) root.writeKeys(command + "\n")
+    if (/^(key|down|up) BackSpace$/.test(command)) root.wordFromRecord()
+  }
+
+  // ---- Deleting whole words ---------------------------------------------------
+
+  // The words before the cursor, nearest first, each with the spaces after
+  // it, as far as what Ragtop typed tells (typedTail). A word that reaches
+  // back to where the record starts is left out unless the record starts at
+  // the start of the field: it may be the end of a word typed before Ragtop
+  // was watching.
+  function wordsBefore(most) {
+    var t = root.beforeCursor
+    var out = []
+    var end = t.length
+    while (end > 0 && out.length < most) {
+      var i = end
+      while (i > 0 && /\s/.test(t[i - 1])) i--
+      while (i > 0 && !/\s/.test(t[i - 1])) i--
+      if (i === 0 && !root.typedFromStart) break
+      out.push(t.slice(i, end))
+      end = i
+    }
+    return out
+  }
+  // Deletes n words back from the cursor: by BackSpaces for the ones Ragtop
+  // typed, which it knows to the letter and which work in any application,
+  // and by the application's own delete-a-word for any further back, which
+  // it never saw: Ctrl+BackSpace, or Ctrl+W at a terminal, where
+  // Ctrl+BackSpace is only BackSpace.
+  function eraseWords(n) {
+    if (n <= 0 || !keyboardHelper.running) return
+    var known = root.secretField ? [] : root.wordsBefore(n)
+    var out = ""
+    known.forEach(function(w) { for (var i = 0; i < w.length; i++) out += "key BackSpace\n" })
+    for (var k = known.length; k < n; k++)
+      out += root.inTerminal ? "key w ctrl\n" : "key BackSpace ctrl\n"
+    root.writeKeys(out)
+    root.swipedWord = ""
+    root.autoSpaced = false
+    root.joinFirst = null
+    root.setFinished("", "", false)
+    if (["swipe", "forms"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+    root.currentWord = ""
+    root.wordFromRecord()
+  }
+
+  // BackSpace back into a word that was finished, typed, swiped or taken
+  // from the strip, makes it the word being typed again, as the terminal's
+  // line does: the letters just before the cursor in what Ragtop typed
+  // (typedTail), so its suggestions come back and the next BackSpace walks
+  // on through it. Only at the end of what was typed: with text after the
+  // cursor, a suggestion put in place would add a space before it.
+  function wordFromRecord() {
+    if (root.secretField || !root.predicting) return
+    if (root.typedCursor < root.typedTail.length) return
+    var m = /([^\s\d.,!?;:"()\[\]{}<>\/\\|@#$%^&*+=_~`-]+)$/.exec(root.beforeCursor)
+    var word = m ? m[1] : ""
+    // Letters and apostrophes only, the same as trackWord counts a word.
+    for (var i = 0; i < word.length; i++)
+      if (word[i] !== "'" && word[i].toLowerCase() === word[i].toUpperCase()) word = ""
+    if (word !== root.currentWord) root.currentWord = word
   }
   readonly property string closingMarks: ".,!?;:"
 
@@ -1598,7 +1661,8 @@ Item {
     else if (root.suggestions.source === "term") root.takeTerm(index)
     else if (root.suggestions.source === "forms") {
       var item = root.suggestions.items[index]
-      if (item) root.replaceFinished(item.text, index)
+      if (item && item.join) root.joinFinished(item.text, index)
+      else if (item) root.replaceFinished(item.text, index)
     }
   }
   function pageSuggestions(forward) {
@@ -1962,6 +2026,13 @@ Item {
   property bool finishedFormsAsked: false
   function setFinished(word, tail, swiped) {
     if (root.secretField) word = ""
+    // A word finished takes the one it followed (joinFirst) as its pair. A
+    // key that finishes nothing, every letter of the next word among them,
+    // leaves joinFirst to followOn.
+    root.joinPair = word !== "" && root.joinFirst ? { first: root.joinFirst.word,
+                                                      between: root.joinFirst.tail } : null
+    if (word !== "") root.joinFirst = null
+    root.joinOffer = null
     root.finished = word !== "" ? { word: word, tail: tail, swiped: swiped } : null
     root.finishedFormsAsked = false
     if (root.finished && root.predicting) finishedPause.restart()
@@ -1973,6 +2044,11 @@ Item {
     onTriggered: {
       if (!root.finished || !root.predicting) return
       root.finishedFormsAsked = true
+      // Asked first, so its answer is in by the time the forms come.
+      if (root.joinPair && predictorProc.running) {
+        root.joinAsked.push(root.joinPair.first + " " + root.finished.word)
+        predictorProc.write("join " + root.joinPair.first + " " + root.finished.word + "\n")
+      }
       root.askForms(root.finished.word)
     }
   }
@@ -1980,21 +2056,40 @@ Item {
     var f = root.finished
     if (!root.finishedFormsAsked || !f || word !== f.word || !root.predicting) return
     root.finishedFormsAsked = false
-    var items = []
-    // A swipe's runners-up stay first: a wrong word is likelier than a
-    // wrong form of the right one.
+    // The word itself leads, filled as the one typed, so it can still be held
+    // for its forms: without it, a swiped fun that vanished from the strip
+    // left nothing to hold. A tap on it does nothing (replaceFinished).
+    var items = [{ text: f.word, note: "" }]
+    // A swipe's runners-up next: a wrong word is likelier than a wrong form of
+    // the right one.
     if (f.swiped && root.suggestions.source === "swipe")
-      items = root.suggestions.items.filter(function(i) { return i.text !== f.word })
+      items = items.concat(root.suggestions.items.filter(function(i) { return i.text !== f.word }))
     forms.forEach(function(w) {
       if (!items.some(function(i) { return i.text === w })) items.push({ text: w, note: "" })
     })
-    if (items.length > 0)
-      root.setSuggestions("forms", { items: items, prev: false, next: false, cursor: -1 })
+    // The two words as one: first when the space looks like a slip, and
+    // otherwise only at the end of forms that were being offered anyway, so
+    // "may be" typed on purpose never brings up a strip of its own for maybe.
+    var j = root.joinOffer
+    if (j && root.joinPair) {
+      var item = { text: j.word, note: "", join: true }
+      if (j.strong) items.splice(1, 0, item)
+      else if (items.length > 1) items.push(item)
+    }
+    // Only when there is something besides the word: the word alone is no
+    // offer, and a strip of one word that is already typed is noise.
+    if (items.length > 1)
+      root.setSuggestions("forms", { items: items, prev: false, next: false, cursor: 0 })
   }
   // The finished word swapped for `text`, keeping what followed it.
   function replaceFinished(text, index) {
     var f = root.finished
     if (!f || !keyboardHelper.running) return
+    if (text === f.word) {
+      if (index >= 0) root.setSuggestions("forms", { items: root.suggestions.items, prev: false,
+                                                     next: false, cursor: index })
+      return
+    }
     var out = ""
     for (var i = 0; i < f.word.length + f.tail.length; i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + text + f.tail + "\n")
@@ -2003,6 +2098,61 @@ Item {
     root.autoSpaced = true
     if (index >= 0) root.setSuggestions("forms", { items: root.suggestions.items, prev: false,
                                                    next: false, cursor: index })
+  }
+
+  // ---- Two words that were one --------------------------------------------
+
+  // "inter active", "broad way": a space where none was meant, from a thumb
+  // on the space bar or a swipe that split a long word. When a finished word
+  // followed another with nothing but its space between them, the strip's
+  // offer for it (finishedForms) includes the two as one, if that is a word
+  // (predictor.py, join). Only ever offered: most such pairs are right both
+  // ways, every day and everyday, and only the sentence knows which.
+  //
+  // joinFirst is the finished word the one being typed follows directly,
+  // from its first letter until it is finished; joinPair is that word once
+  // the second one is finished; joinOffer is the predictor's answer for them.
+  property var joinFirst: null      // { word, tail }
+  property var joinPair: null       // { first, between }
+  property var joinOffer: null      // { word, strong }
+  property var joinAsked: []
+  // Called for every key sent, before setFinished. A word's first letter
+  // straight after a finished word and its space starts a pair; more letters
+  // keep it; the space that finishes the word hands it on. Anything else, a
+  // BackSpace or a full stop, and the two are not simply side by side.
+  function followOn(command) {
+    var arg = command.indexOf("type ") === 0 ? command.slice(5) : ""
+    var letter = arg.length > 0
+    for (var i = 0; i < arg.length; i++)
+      if (arg[i] !== "'" && arg[i].toLowerCase() === arg[i].toUpperCase()) letter = false
+    if (letter && root.currentWord === "")
+      root.joinFirst = root.finished && root.finished.tail === " " && !root.secretField
+        ? { word: root.finished.word, tail: root.finished.tail } : null
+    else if (!(letter || command === "key space") || root.currentWord === "")
+      root.joinFirst = null
+  }
+  function joinArrived(pair, found) {
+    var f = root.finished
+    if (!f || !root.joinPair || pair !== root.joinPair.first + " " + f.word || !found.word) return
+    root.joinOffer = { word: found.word, strong: !!found.strong }
+  }
+  // The two words, the space between them and what followed, swapped for
+  // the one word and what followed.
+  function joinFinished(text, index) {
+    var f = root.finished, p = root.joinPair
+    if (!f || !p || !keyboardHelper.running) return
+    var out = ""
+    var back = p.first.length + p.between.length + f.word.length + f.tail.length
+    for (var i = 0; i < back; i++) out += "key BackSpace\n"
+    root.writeKeys(out + "type " + text + f.tail + "\n")
+    // A BackSpace now is an ordinary one: undoing the swipe would take the
+    // first word with it.
+    root.swipedWord = ""
+    root.finished = { word: text, tail: f.tail, swiped: false }
+    root.joinPair = null
+    root.joinOffer = null
+    root.autoSpaced = true
+    root.setSuggestions("forms", { items: root.suggestions.items, prev: false, next: false, cursor: index })
   }
 
   // ---- Swipes ------------------------------------------------------------
@@ -2038,6 +2188,12 @@ Item {
   property var peekPath: null
   function swipeDrawn(points) {
     if (!root.swipeActive || !predictorProc.running) return
+    // The strip comes up as the swipe starts, before there is a guess to
+    // put in it, so the guess lands somewhere already there.
+    if (!root.swipeDrawing) {
+      root.stripLingers = true
+      stripLinger.restart()
+    }
     root.swipeDrawing = true
     root.peekPath = points
     if (!root.peekPending) root.sendPeek()
@@ -2089,6 +2245,10 @@ Item {
       return
     }
     root.swipeLead = root.currentWord !== "" ? " " : ""
+    // Straight after a finished word and its space, the two may be one word
+    // the swipe split, or the word before it typed short.
+    root.joinFirst = root.swipeLead === "" && root.finished && root.finished.tail === " "
+      ? { word: root.finished.word, tail: root.finished.tail } : null
     var word = root.swipeLead + root.capitalised(words[0]) + " "
     root.writeKeys("type " + word + "\n")
     root.currentWord = ""
@@ -2112,6 +2272,10 @@ Item {
     root.writeKeys(out + "type " + word + "\n")
     root.swipedWord = word
     root.autoSpaced = true
+    // Still the word after the same one: another of the swipe's guesses
+    // can join it too.
+    var p = root.joinPair
+    root.joinFirst = p ? { word: p.first, tail: p.between } : null
     root.setFinished(text, " ", true)
     root.setSuggestions("swipe", { items: root.suggestions.items, prev: false, next: false, cursor: index })
   }
@@ -2195,6 +2359,11 @@ Item {
           var found
           try { found = JSON.parse(line.slice(12)) } catch (e) { root.termAsked.shift(); return }
           root.termAnswer(found)
+        } else if (line.startsWith("join ")) {
+          var forPair = root.joinAsked.shift()
+          var joined
+          try { joined = JSON.parse(line.slice(5)) } catch (e) { return }
+          if (forPair !== undefined) root.joinArrived(forPair, joined)
         } else if (line.startsWith("forms ")) {
           var forWhat = root.formsAsked.shift()
           var forms
@@ -2223,6 +2392,7 @@ Item {
     onRunningChanged: {
       root.asked = []
       root.formsAsked = []
+      root.joinAsked = []
       root.termAsked = []
       root.peekPending = false
       root.wordsLoaded = ""

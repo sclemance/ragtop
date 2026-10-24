@@ -352,6 +352,16 @@ irregular_forms() {
   assert_lacks "$out" "childs"
 }
 
+# ly and us are in wordfreq, as a fragment and a pronoun, and the rules made
+# lying and using of them. Two-letter words get only their irregular forms.
+no_rules_on_two_letters() {
+  form_words
+  wordlist "$words" 563:ly 420:lying 200:us 300:uses 280:using 290:used 150:go 230:went 240:going
+  forms_of ly us go
+  [[ $(grep -c '^forms \[\]$' <<<"$out") -eq 2 ]] || fail "ly and us should have no forms: $out"
+  assert_contains "$out" 'forms ["went", "going"]'
+}
+
 forms_follow_capitals() {
   form_words
   forms_of Stop
@@ -410,6 +420,45 @@ flags_are_not_guessed() {
 []'
 }
 
+# ---- Two words that were one ---------------------------------------------------
+
+join_words() {
+  wordlist "$words" 480:inter 400:active 490:interactive 300:may 220:be 350:maybe \
+    160:a 340:lot 500:alot 300:well 360:known 330:every 310:day 450:everyday
+}
+
+# join_of <"a b" ...>: one "join" line each.
+join_of() {
+  pre=()
+  for p in "$@"; do pre+=("join $p"); done
+  suggest "$words"
+}
+
+# A rare piece makes the space likely a slip, so the offer leads.
+a_rare_piece_joins_strongly() {
+  join_words
+  join_of "inter active" "Inter active"
+  assert_contains "$out" 'join {"word": "interactive", "strong": true}'
+  assert_contains "$out" 'join {"word": "Interactive", "strong": true}'
+}
+
+# Both right either way, so it is offered only quietly.
+common_pieces_join_weakly() {
+  join_words
+  join_of "may be" "every day"
+  assert_contains "$out" 'join {"word": "maybe", "strong": false}'
+  assert_contains "$out" 'join {"word": "everyday", "strong": false}'
+}
+
+# alot is in wordfreq because people write it, and well known has no
+# one-word form: neither is offered.
+no_join_into_a_mistake() {
+  join_words
+  join_of "a lot" "well known" "inter 2"
+  assert_lacks "$out" 'alot'
+  [[ $(grep -c '^join {}$' <<<"$out") -eq 3 ]] || fail "expected three empty joins: $out"
+}
+
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing
 run_test "predictor: a word typed with one slip is corrected" one_slip_is_corrected
@@ -438,6 +487,10 @@ run_test "predictor: -er and -est are forms only as a pair, so summer is not sum
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root
 run_test "predictor: irregular forms, and no rule-made misspellings beside them" irregular_forms
 run_test "predictor: forms take the word's capitals" forms_follow_capitals
+run_test "predictor: no rule-made forms on two letters, so ly is not lying's" no_rules_on_two_letters
+run_test "predictor: a rare piece joins, and leads the strip" a_rare_piece_joins_strongly
+run_test "predictor: common pieces join only quietly, maybe for may be" common_pieces_join_weakly
+run_test "predictor: no join into a misspelling, or where there is no word" no_join_into_a_mistake
 run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
 run_test "predictor: then files and folders from the terminal's folder" files_after_it
 run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names
