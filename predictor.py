@@ -10,7 +10,7 @@ is rather than converted (see read_wordlist).
 
   predictor.py <words-dir> [<bundled-dir>]
                                        lists at <dir>/<lang>/small_<lang>.msgpack.gz,
-                                       and pairs_<lang>.json.gz beside them, from
+                                       and pairs_<lang>.tsv.gz beside them, from
                                        the first folder that has them: downloads,
                                        then Ragtop's own (words/ in the repository)
   predictor.py <wordlist.msgpack.gz>   one list, as English
@@ -276,8 +276,7 @@ class Predictor:
         self.dictionary = None
         self.stems = None
         # Which words follow which, when a pairs file is installed (use_pairs).
-        self.pairs = {}
-        self.following = {}
+        self.pair_lines = {}
         self.capitals = set()
 
     def use_dictionary(self, dictionary, source):
@@ -371,31 +370,55 @@ class Predictor:
                 yield self.ranks[word] + penalty, word
 
     def use_pairs(self, path):
-        """Which words follow which, from a pairs file (bench/pairs.py):
-        {before: [[word, count], ...]}, each word's commonest followers.
-        Kept as each follower's share of what follows its word, in
-        centibels, the list's own measure, and in order for next()."""
+        """Which words follow which, from a pairs file (bench/pairs.py): a
+        line per word, "word<TAB>follower count follower count ...", each
+        word's commonest followers, START for the start of a sentence, and
+        CAPITALS for the words always written with a capital.
+
+        Kept as the lines themselves, by word, and a line read only when its
+        word comes up (followers), a few dozen numbers at a time. Read whole
+        into a dictionary per word, as it first was, they took forty
+        megabytes and a third of a second at load; as lines, a few
+        megabytes and a few hundredths."""
+        lines = {}
         with gzip.open(path, "rt", encoding="utf-8") as f:
-            raw = json.load(f)
-        self.pairs, self.following = {}, {}
-        caps = raw.pop(CAPITALS, [])
-        self.capitals = {w for w in caps if isinstance(w, str)} if isinstance(caps, list) else set()
-        for before, followers in raw.items():
-            if not isinstance(followers, list):
-                continue
-            kept = [(w, c) for w, c in followers
-                    if isinstance(w, str) and isinstance(c, int) and c > 0 and w in self.ranks]
-            total = sum(c for _, c in kept)
-            if total:
-                self.pairs[before] = {w: round(-100 * math.log10(c / total)) for w, c in kept}
-                self.following[before] = [w for w, _ in kept]
+            for line in f:
+                before, tab, rest = line.rstrip("\n").partition("\t")
+                if tab:
+                    lines[before] = rest
+        caps = lines.pop(CAPITALS, "")
+        self.capitals = set(caps.split())
+        self.pair_lines = lines
+
+    def followers(self, before):
+        """(word, score) for each word known to follow `before`, commonest
+        first, START for the start of a sentence: its share of what follows
+        `before`, in centibels, the list's own measure. Only words of the
+        list, and elisions, which are no words of the list but do follow
+        words (j' at a sentence's start)."""
+        rest = self.pair_lines.get(before) if before else None
+        if not rest:
+            return []
+        parts = rest.split()
+        kept = []
+        for k in range(0, len(parts) - 1, 2):
+            w, c = parts[k], parts[k + 1]
+            if (w in self.ranks or w in self.elisions) and c.isdigit() and int(c) > 0:
+                kept.append((w, int(c)))
+        total = sum(c for _, c in kept)
+        return [(w, round(-100 * math.log10(c / total))) for w, c in kept] if total else []
+
+    def context(self, before):
+        """{word: score} of what follows `before`, a few dozen at most, for
+        ranking completions and swipes by it."""
+        return dict(self.followers(before))
 
     def next(self, before):
         """The words likeliest to come after `before`, START at the start of
         a sentence, before a letter of them is typed. A French elision comes
         with its apostrophe, j', since it is typed with no space after."""
         out = []
-        for w in self.following.get(before, ()):
+        for w, _ in self.followers(before):
             out.append(w + "'" if w in self.elisions else self.written(w))
             if len(out) == SHOWN:
                 break
@@ -413,7 +436,7 @@ class Predictor:
         that follows it by how often it does, any other as its own rank and
         CONTEXT_BACKOFF more. A correction's or accent's penalty carries
         over, so context never makes a slip outrank what was typed."""
-        seen = self.pairs.get(before) if before else None
+        seen = self.context(before)
         if not seen:
             return found
         out = {}
@@ -1137,7 +1160,7 @@ class Swipes:
         # drop some.
         # How common each word is here: by the word before, where the pairs
         # know it, the same measure completions are ranked by.
-        seen = self.predictor.pairs.get(before) if self.predictor and before else None
+        seen = self.predictor.context(before) if self.predictor and before else None
 
         def commonness(word):
             r = self.ranks[word]
@@ -1222,7 +1245,7 @@ class Session:
                     p.use_dictionary(d, path)
                 # Which words follow which, when there are any: optional, as
                 # the dictionary is.
-                pairs = self.find(lang, f"pairs_{lang}.json.gz")
+                pairs = self.find(lang, f"pairs_{lang}.tsv.gz")
                 if pairs:
                     try:
                         p.use_pairs(pairs)

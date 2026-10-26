@@ -18,16 +18,16 @@ From [wordfreq](https://github.com/rspeer/wordfreq) 3.2, by Robyn Speer,
 exactly as wordfreq publishes them, unmodified. wordfreq's data files may be
 redistributed under CC BY-SA 4.0.
 
-## Pairs: `pairs_<lang>.json.gz`
+## Pairs: `pairs_<lang>.tsv.gz`
 
-Which words follow which, for next-word prediction: for each word, its
-commonest followers with how often each followed it. Counted by Ragtop from
+Which words follow which, for next-word prediction: a line of text per word,
+its commonest followers with how often each followed it. Counted by Ragtop from
 the sentences of [Tatoeba](https://tatoeba.org), which are under CC BY 2.0 FR
 (<https://creativecommons.org/licenses/by/2.0/fr/>), some CC0, and kept only
 for words in the language's wordfreq list, so they are released under CC BY-SA
 4.0. Sentences © their Tatoeba contributors.
 
-Made with `bench/pairs.py build <lang> --all --out pairs_<lang>.json.gz` in
+Made with `bench/pairs.py build <lang> --all --out pairs_<lang>.tsv.gz` in
 Ragtop's repository, from Tatoeba's per-language export
 (`<code>_sentences.tsv.bz2`), keeping each word's 32 commonest followers seen
 at least twice, and leaving out names Tatoeba's sentences use far more than
@@ -37,8 +37,8 @@ gives the same file. The exports used:
 
 | language | export date | export SHA-256 | pairs SHA-256 |
 | --- | --- | --- | --- |
-| English (`eng`) | 2026-10-26 | `f634eaaf26623c2a2e170be2dae54b18388479311ae8619d04889df4e5d021f3` | `21b4d94d85c372e652a3de6afef94ea631a2e04a7af0759f54f86ad6c857a098` |
-| French (`fra`) | 2026-10-26 | `3cbc43eab20185907b3ff4eae8aa60d20b9caf5133076c1c1c013d169cd87a99` | `4686dbb9a40ce891a8a43ae7b37bd53e51da38f30da08dbcadaaea30fe3a8053` |
+| English (`eng`) | 2026-10-26 | `f634eaaf26623c2a2e170be2dae54b18388479311ae8619d04889df4e5d021f3` | `d653178af315be3a158f14f91f3d6a4c670c62094ec38f6ed0e2fcf7a1cdd3a1` |
+| French (`fra`) | 2026-10-26 | `3cbc43eab20185907b3ff4eae8aa60d20b9caf5133076c1c1c013d169cd87a99` | `8979b831a321d52fe33422d394eed08f265f50be8f817b03475afeee5b76c352` |
 
 ## wordfreq's sources
 

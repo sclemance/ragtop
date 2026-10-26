@@ -225,13 +225,13 @@ switch() {
 words_root="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/words"
 words_release="https://github.com/sclemance/ragtop/releases/download/data-v1"
 words_table="\
-en 790 English f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247 21b4d94d85c372e652a3de6afef94ea631a2e04a7af0759f54f86ad6c857a098
-fr 525 French 8fbbf619ff2e6ff5b3d99d41e69c105daf5795771ce8ef36529f210d571abe6e 4686dbb9a40ce891a8a43ae7b37bd53e51da38f30da08dbcadaaea30fe3a8053"
+en 740 English f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247 d653178af315be3a158f14f91f3d6a4c670c62094ec38f6ed0e2fcf7a1cdd3a1
+fr 495 French 8fbbf619ff2e6ff5b3d99d41e69c105daf5795771ce8ef36529f210d571abe6e 8979b831a321d52fe33422d394eed08f265f50be8f817b03475afeee5b76c352"
 
 # words_field <lang> <n>: that language's nth field in the table, or nothing.
 words_field() { awk -v l="$1" -v n="$2" '$1 == l { print $n }' <<<"$words_table"; }
 words_file() { echo "$words_root/$1/small_$1.msgpack.gz"; }
-pairs_file() { echo "$words_root/$1/pairs_$1.json.gz"; }
+pairs_file() { echo "$words_root/$1/pairs_$1.tsv.gz"; }
 # Ragtop's own copy, in the repository, which needs no fetching.
 words_bundled() { [[ -f $repo/words/${1:-en}/small_${1:-en}.msgpack.gz ]]; }
 # Installed is both files, fetched or bundled. A list fetched before Ragtop
@@ -275,7 +275,7 @@ words_install() {
   fi
   pairs_sha=$(words_field "$lang" 5)
   if [[ -n $pairs_sha && ! -f $(pairs_file "$lang") ]]; then
-    fetch_checked "$words_release/pairs_$lang.json.gz" "$pairs_sha" "$(pairs_file "$lang")" || return 1
+    fetch_checked "$words_release/pairs_$lang.tsv.gz" "$pairs_sha" "$(pairs_file "$lang")" || return 1
   fi
   cp "$repo/words/NOTICE.md" "$dir/NOTICE.md"
 }

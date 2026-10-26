@@ -510,15 +510,15 @@ no_dictionary_no_change() {
 
 # ---- The next word ------------------------------------------------------------
 
-# pairs_file <file> <json>: a pairs file as bench/pairs.py writes one.
-pairs_file() { printf '%s' "$2" | gzip >"$1"; }
+# pairs_file <file> <line ...>: a pairs file as bench/pairs.py writes one,
+# "word<TAB>follower count ...", a line each.
+pairs_file() { local f=$1; shift; printf '%s\n' "$@" | gzip >"$f"; }
 
 next_words_and_context() {
   local dir="$sandbox/langs"
   mkdir -p "$dir/en"
   wordlist "$dir/en/small_en.msgpack.gz" 160:to 150:the 170:you 200:i 300:going 320:thank 330:tom 400:toast
-  pairs_file "$dir/en/pairs_en.json.gz" \
-    '{"<s>":[["i",50],["the",30]],"thank":[["you",90],["the",1]],"going":[["to",80]],"<capitals>":["i"]}'
+  pairs_file "$dir/en/pairs_en.tsv.gz" $'<s>\ti 50 the 30' $'thank\tyou 90 the 1' $'going\tto 80' $'<capitals>\ti'
   out=$( { echo "lang en"; echo "after"; echo "after thank"; echo "after going"; echo "complete t";
            echo "after -"; echo "complete t"; echo "quit"; } \
     | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
@@ -537,7 +537,7 @@ the_bundled_copy_is_read() {
   local bundled="$sandbox/bundled"
   mkdir -p "$bundled/en"
   wordlist "$bundled/en/small_en.msgpack.gz" 170:you 320:thank
-  pairs_file "$bundled/en/pairs_en.json.gz" '{"thank":[["you",9]]}'
+  pairs_file "$bundled/en/pairs_en.tsv.gz" $'thank\tyou 9'
   out=$( { echo "lang en"; echo "after thank"; echo "quit"; } \
     | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" \
         "$sandbox/nothing-fetched" "$bundled" 2>&1) || true
@@ -552,7 +552,7 @@ a_swipe_follows_the_word_before() {
   local dir="$sandbox/langs"
   mkdir -p "$dir/en"
   wordlist "$dir/en/small_en.msgpack.gz" 127:the 150:to 230:her 300:too 310:me 400:top
-  pairs_file "$dir/en/pairs_en.json.gz" '{"me":[["too",50],["to",10]]}'
+  pairs_file "$dir/en/pairs_en.tsv.gz" $'me\ttoo 50 to 10'
   mapfile -t lines < <(swipes to)
   out=$( { echo "lang en"; echo "${lines[0]}"; echo "${lines[1]}"; echo "after me"; echo "${lines[1]}"; echo "quit"; } \
     | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true

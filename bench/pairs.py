@@ -12,10 +12,12 @@ number, and the other tenth is kept back for testing, so nothing is
 measured on what it was built from. Only words in Ragtop's own frequency
 list are counted, so a pair can never offer a word the list does not have.
 
-The output is a gzipped JSON object, {"<s>": [[word, count], ...], word:
-[[word, count], ...], "<capitals>": [word, ...]}: each word's commonest
-followers, most common first, "<s>" being the start of a sentence, and the
-words that are written with a capital wherever they are, I and I'm. Counts, not probabilities, so the
+The output is gzipped text, a line per word: "word<TAB>follower count
+follower count ...", its commonest followers, most common first, "<s>"
+being the start of a sentence; and a "<capitals><TAB>word word ..." line for
+the words written with a capital wherever they are, I and I'm. Lines, not
+one JSON object, so the predictor reads it a line at a time into flat arrays
+without ever holding it all as Python objects. Counts, not probabilities, so the
 predictor can weigh them against the list itself.
 """
 import argparse
@@ -137,14 +139,15 @@ def build(lang, keep, min_count=2, part="train", out=None):
         top = [[w, c] for w, c in ranked if c >= min_count and w not in skip][:keep]
         if top:
             table[prev] = top
-    # The words written with a capital, under a key no word can be.
-    table[CAPITALS] = sorted(caps)
-    path = out_path = out or f"{CACHE}/pairs/{lang}-{keep}.json.gz"
+    path = out_path = out or f"{CACHE}/pairs/{lang}-{keep}.tsv.gz"
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    data = json.dumps(table, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+    lines = [f"{before}\t" + " ".join(f"{w} {c}" for w, c in table[before]) for before in sorted(table)]
+    # The words written with a capital, under a name no word can be.
+    lines.append(f"{CAPITALS}\t" + " ".join(sorted(caps)))
+    data = ("\n".join(lines) + "\n").encode()
     with open(out_path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0, filename="") as f:
         f.write(data)
-    return path, len(table) - 1, sum(len(v) for k, v in table.items() if k != CAPITALS)
+    return path, len(table), sum(len(v) for v in table.values())
 
 
 def main():
@@ -164,8 +167,11 @@ def main():
         path, words, pairs = build(a.lang, a.keep, part="all" if a.all else "train", out=a.out)
         print(f"{path}: {words:,} words, {pairs:,} pairs, {os.path.getsize(path) / 1024:.0f} KB")
     else:
-        with gzip.open(f"{CACHE}/pairs/{a.lang}-{a.keep}.json.gz", "rt", encoding="utf-8") as f:
-            print(json.load(f).get(a.word.lower(), []))
+        with gzip.open(f"{CACHE}/pairs/{a.lang}-{a.keep}.tsv.gz", "rt", encoding="utf-8") as f:
+            for line in f:
+                before, _, rest = line.rstrip("\n").partition("\t")
+                if before == a.word.lower():
+                    print(rest)
 
 
 if __name__ == "__main__":
@@ -184,7 +190,7 @@ def measure(lang, keep=32, sentences_n=1500, backoff=None, seed=7):
     vocab = P.read_wordlist(f"{CACHE}/words/small_{lang}.msgpack.gz")
     plain = P.Predictor(vocab, lang)
     ctx = P.Predictor(vocab, lang)
-    ctx.use_pairs(f"{CACHE}/pairs/{lang}-{keep}.json.gz")
+    ctx.use_pairs(f"{CACHE}/pairs/{lang}-{keep}.tsv.gz")
     if backoff is not None:
         P.CONTEXT_BACKOFF = backoff
     test = [t for _, t in sentences(lang, "test")]
@@ -202,7 +208,7 @@ def measure(lang, keep=32, sentences_n=1500, backoff=None, seed=7):
             for name, p in (("plain", plain), ("context", ctx)):
                 letters[name] += len(w)
                 b = before if name == "context" else None
-                if b is not None and w in [x.rstrip("'") for x in p.next(b)[:3]]:
+                if b is not None and w in [x.rstrip("'").lower() for x in p.next(b)[:3]]:
                     keys[name] += 1
                     if name == "context":
                         next_hits += 1
@@ -233,7 +239,7 @@ def measure_swipe(lang, keep=32, sentences_n=400, seed=7, wobble=1.0):
     import bench as B
     vocab = P.read_wordlist(f"{CACHE}/words/small_{lang}.msgpack.gz")
     p = P.Predictor(vocab, lang)
-    p.use_pairs(f"{CACHE}/pairs/{lang}-{keep}.json.gz")
+    p.use_pairs(f"{CACHE}/pairs/{lang}-{keep}.tsv.gz")
     rows = B.ROWS["azerty" if lang == "fr" else "qwerty"]
     keys = B.centres(rows)
     s = P.Swipes(p.ranks, p.folds, p)
