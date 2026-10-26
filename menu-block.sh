@@ -3,7 +3,14 @@
 # menu extension file between two marker comments. Both the installer and the
 # in-shell setup use this, so the rows are written in exactly one place.
 #
-# Usage: menu-block.sh add|remove|check
+# Usage: menu-block.sh add|remove|check|refresh|english
+#
+# english prints every row's English label as a catalog, which is what
+# i18n/en/menu.json is, and what the test holds it to.
+#
+# refresh writes the rows again where they are already, and does nothing
+# where they are not: it is what a change of language runs (Service.qml), so
+# it must never put back rows someone took out.
 #
 # check says nothing and succeeds when the block in the file is already the
 # one this version writes. It fails when a row is missing, when an older
@@ -12,13 +19,13 @@ set -euo pipefail
 
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 case "${1:-}" in
-  add|remove|check) ;;
-  *) echo "Usage: $0 add|remove|check" >&2; exit 2 ;;
+  add|remove|check|refresh|english) ;;
+  *) echo "Usage: $0 add|remove|check|refresh|english" >&2; exit 2 ;;
 esac
 
-/usr/bin/python3 - "$1" "$menu_file" <<'EOF'
-import json, os, sys, tempfile, tomllib
-action, path = sys.argv[1:]
+/usr/bin/python3 - "$1" "$menu_file" "$(dirname "$(realpath "$0")")" <<'EOF'
+import json, os, re, sys, tempfile, tomllib
+action, path, repo = sys.argv[1:]
 # Protocol, not prose. This exact line is how the block is found again in the
 # user's menu file, so an installed Ragtop would stop recognising its own rows
 # if it changed: `add` would leave the old block behind and write a second one,
@@ -148,6 +155,35 @@ for name, icon, label in overlays:
         icon=icon, label=label,
         checked=f'"{cmd}" overlay enabled {name}',
         action=f'"{cmd}" overlay toggle {name}')
+# The labels above are English, the source of truth. Written in the language
+# Omarchy is set to (~/.config/omarchy/language) where Ragtop has its rows in
+# it (i18n/<code>/menu.json, Omarchy's own menu-catalog shape, by row id):
+# Omarchy translates only its own rows, so Ragtop's are Ragtop's to write.
+# Themes keep their names. `english` prints the English catalog, for the
+# test that holds every language to its keys.
+def language():
+    config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    try:
+        code = open(os.path.join(config, "omarchy", "language")).read().strip()
+    except OSError:
+        return "en"
+    return code if re.fullmatch(r"[a-z]{2,3}(-[A-Za-z]{2})?", code) else "en"
+
+if action == "english":
+    print(json.dumps({k: {"label": v["label"]} for k, v in rows.items()
+                      if not k.startswith("setup.tablet.theme.")}, ensure_ascii=False, indent=2))
+    sys.exit(0)
+
+lang = language()
+if lang != "en":
+    try:
+        catalog = json.load(open(os.path.join(repo, "i18n", lang, "menu.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        catalog = {}
+    for key, row in rows.items():
+        label = catalog.get(key, {}).get("label") if isinstance(catalog.get(key), dict) else None
+        if isinstance(label, str) and label.strip() and not key.startswith("setup.tablet.theme."):
+            row["label"] = label
 block = [start] + [f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," for k, v in rows.items()] + [end]
 
 text = open(path).read() if os.path.exists(path) else ""
@@ -166,6 +202,11 @@ def block_end(i):
                  f"that ends them ({end.strip()}). Put it back after Ragtop's rows, "
                  f"or delete Ragtop's rows by hand, then run this again.")
 
+
+if action == "refresh":
+    if start not in lines:
+        sys.exit(0)
+    action = "add"
 
 if action == "check":
     if start not in lines:

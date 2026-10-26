@@ -1,0 +1,122 @@
+{
+  "setup.tablet": {
+    "label": "Tablet"
+  },
+  "setup.tablet.mode": {
+    "label": "Tablet Mode"
+  },
+  "setup.tablet.mode.auto": {
+    "label": "Automatic"
+  },
+  "setup.tablet.mode.on": {
+    "label": "Always On"
+  },
+  "setup.tablet.mode.off": {
+    "label": "Always Off"
+  },
+  "setup.tablet.keyboard": {
+    "label": "Keyboard"
+  },
+  "setup.tablet.keyboard.sensor": {
+    "label": "Follow Sensor"
+  },
+  "setup.tablet.keyboard.on": {
+    "label": "Always On"
+  },
+  "setup.tablet.keyboard.off": {
+    "label": "Always Off"
+  },
+  "setup.tablet.keyboard-layout": {
+    "label": "Layout"
+  },
+  "setup.tablet.keyboard-layout.auto": {
+    "label": "Automatic"
+  },
+  "setup.tablet.keyboard-layout.mobile": {
+    "label": "Mobile"
+  },
+  "setup.tablet.keyboard-layout.60": {
+    "label": "60%"
+  },
+  "setup.tablet.keyboard-layout.75": {
+    "label": "75%"
+  },
+  "setup.tablet.keyboard-layout.80": {
+    "label": "80% (TKL)"
+  },
+  "setup.tablet.auto-show": {
+    "label": "Auto Keyboard"
+  },
+  "setup.tablet.input-methods": {
+    "label": "CJK Choices on Keyboard"
+  },
+  "setup.tablet.predictions": {
+    "label": "Word Suggestions (beta)"
+  },
+  "setup.tablet.predictions.off": {
+    "label": "Off"
+  },
+  "setup.tablet.predictions.layout": {
+    "label": "On, in Your Layout's Language"
+  },
+  "setup.tablet.predictions.all": {
+    "label": "English, on Any Layout"
+  },
+  "setup.tablet.assists": {
+    "label": "Capitals and Full Stops"
+  },
+  "setup.tablet.swipe": {
+    "label": "Swipe Typing (beta)"
+  },
+  "setup.tablet.theme": {
+    "label": "Theme"
+  },
+  "setup.tablet.size-adjust": {
+    "label": "Key Size"
+  },
+  "setup.tablet.size-adjust.auto": {
+    "label": "Automatic"
+  },
+  "setup.tablet.size-adjust.smallest": {
+    "label": "Smallest"
+  },
+  "setup.tablet.size-adjust.smaller": {
+    "label": "Smaller"
+  },
+  "setup.tablet.size-adjust.regular": {
+    "label": "Regular"
+  },
+  "setup.tablet.size-adjust.larger": {
+    "label": "Larger"
+  },
+  "setup.tablet.size-adjust.largest": {
+    "label": "Largest"
+  },
+  "setup.tablet.overlays": {
+    "label": "System Overlays"
+  },
+  "setup.tablet.setup": {
+    "label": "Run Setup"
+  },
+  "setup.tablet.diagnostics": {
+    "label": "Diagnostics"
+  },
+  "setup.tablet.overlays.menu": {
+    "label": "Omarchy Menu"
+  },
+  "setup.tablet.overlays.emojis": {
+    "label": "Emoji Picker"
+  },
+  "setup.tablet.overlays.clipboard": {
+    "label": "Clipboard Picker"
+  },
+  "setup.tablet.overlays.polkit": {
+    "label": "Password Prompt"
+  },
+  "setup.tablet.overlays.image-picker": {
+    "label": "Image Picker"
+  },
+  "setup.tablet.overlays.lock": {
+    "label": "Lock Screen"
+  }
+}

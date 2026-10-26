@@ -88,35 +88,35 @@ Item {
   // board has wins, and "keys" when it has none); title; body; and what it
   // does on arriving (enter) and at each beat of the clock (beat).
   readonly property var steps: [
-    { target: ["keys"], title: "A quick tour",
-      body: "A minute's walk around the keyboard: the keys worth knowing, and what holding them does. Tap Next to go on, or Skip tour to stop at any time." },
+    { target: ["keys"], title: "tour.welcome",
+      body: function() { return tour.service.t("tour.welcome.body") } },
 
-    { target: ["handle"], title: "The handle",
+    { target: ["handle"], title: "tour.handle",
       body: function() {
-        return "The bar along the bottom edge lowers the keyboard with a tap, and raises it again with another."
-          + (tour.service.autoShowEnabled ? " The keyboard also comes up by itself when you tap into a text field." : "")
+        return tour.service.t("tour.handle.body")
+          + (tour.service.autoShowEnabled ? " " + tour.service.t("tour.handle.autoShow") : "")
       },
       beat: function(n) { tour.service.tourLowered = n % 4 === 1 || n % 4 === 2 } },
 
-    { target: ["super"], title: "The Omarchy key",
-      body: "Super, the key every Omarchy shortcut starts with. Tap it and then a letter: Super then K lists every shortcut, Super then Space opens the launcher.",
+    { target: ["super"], title: "tour.super",
+      body: function() { return tour.service.t("tour.super.body") },
       beat: function(n) { tour.keyboard.setMod("super", n % 2 ? "latched" : "off") } },
 
-    { target: ["gear"], title: "Ragtop's controls",
-      body: "The gear opens the controls: key size, themes, boards, suggestions, swipe, updates, and this tour again." },
+    { target: ["gear"], title: "tour.gear",
+      body: function() { return tour.service.t("tour.gear.body") } },
 
-    { target: ["menu", "gear"], title: "The Menu key",
+    { target: ["menu", "gear"], title: "tour.menu",
       body: function() {
-        var where = tour.keyboard.demoSlot("menu") ? "This board has a key of its own for it."
-          : tour.keyboard.hasFnKey ? "Hold the gear for it, or tap the gear with Fn on."
-          : "Hold the gear for it: the mark in its corner says so."
-        return "Menu opens the right-click menu where you are typing, in browsers, file managers and most apps: the right click a tablet does not have. A terminal ignores it.\n\n" + where
+        var where = tour.keyboard.demoSlot("menu") ? tour.service.t("tour.menu.ownKey")
+          : tour.keyboard.hasFnKey ? tour.service.t("tour.menu.gearOrFn")
+          : tour.service.t("tour.menu.gear")
+        return tour.service.t("tour.menu.body") + "\n\n" + where
       } },
 
-    { target: ["keys"], top: true, title: "Themes",
+    { target: ["keys"], top: true, title: "tour.themes",
       body: function() {
-        return "A theme is the keys' shape and finish. The colours always follow your Omarchy theme."
-          + "\n\nThis is " + (tour.previewName || "yours") + "."
+        return tour.service.t("tour.themes.body") + "\n\n"
+          + (tour.previewName ? tour.service.t("tour.themes.showing", tour.previewName) : tour.service.t("tour.themes.yours"))
       },
       beat: function(n) {
         var list = tour.shownThemes
@@ -126,62 +126,54 @@ Item {
         else tour.showTheme(list[at])
       } },
 
-    { target: ["keys"], top: true, title: "Boards",
+    { target: ["keys"], top: true, title: "tour.boards",
       body: function() {
-        var names = { "mobile": "Mobile", "60": "60%", "75": "75%", "80": "80%" }
-        return "From a phone's three rows to a full keyboard. Auto picks the widest that fits your screen, and the controls can pick one for good."
-          + "\n\nThis is " + (names[tour.keyboard.form] || tour.keyboard.form) + "."
+        var names = { "mobile": tour.service.t("layout.mobile"), "60": "60%", "75": "75%", "80": "80%" }
+        return tour.service.t("tour.boards.body") + "\n\n"
+          + tour.service.t("tour.themes.showing", names[tour.keyboard.form] || tour.keyboard.form)
       },
       beat: function(n) {
         var boards = ["mobile", "60", "75", "80"]
         tour.service.previewLayout = boards[Math.floor(n / 2) % boards.length]
       } },
 
-    { target: ["popup", "e"], title: "Hold a letter",
-      body: "Hold a letter for its accents and the symbol in its corner, slide onto one, and let go.",
+    { target: ["popup", "e"], title: "tour.letter",
+      body: function() { return tour.service.t("tour.letter.body") },
       enter: function() { tour.keyboard.demoHold("e") },
       beat: function(n) { if (tour.reopen("e")) tour.keyboard.demoChoose(n % 4 - 1) } },
 
-    { target: ["popup", "space"], title: "Hold Space",
+    { target: ["popup", "space"], title: "tour.space",
       body: function() {
-        return tour.keyboard.popup
-          ? "Hold Space for your keyboard layouts and input methods, and slide to the one you want."
-          : "Hold Space for your keyboard layouts and input methods. You have one layout now; Omarchy's keyboard settings add more."
+        return tour.keyboard.popup ? tour.service.t("tour.space.body") : tour.service.t("tour.space.oneLayout")
       },
       enter: function() { tour.keyboard.demoHold("space") },
       beat: function(n) {
         if (tour.reopen("space")) tour.keyboard.demoChoose(n % (tour.keyboard.popup.items.length + 1) - 1)
       } },
 
-    { target: ["shift"], title: "Sticky modifiers",
+    { target: ["shift"], title: "tour.sticky",
       body: function() {
-        var state = { "off": "off", "latched": "on for the next key", "locked": "locked" }
-        return "Tap Shift once for the next key, twice to lock it, and again to let go. Ctrl, Alt and Super work the same way, so a shortcut is one key at a time."
-          + "\n\nShift is " + state[tour.keyboard.mods.shift] + "."
+        return tour.service.t("tour.sticky.body") + "\n\n" + tour.service.t("tour.sticky." + tour.keyboard.mods.shift)
       },
       beat: function(n) { tour.keyboard.setMod("shift", ["off", "latched", "locked"][n % 3]) } },
 
-    { target: ["fn"], title: "Fn",
+    { target: ["fn"], title: "tour.fn",
       body: function() {
-        return tour.keyboard.hasFnKey
-          ? "On the 60% and 75% boards, Fn reaches what the board leaves out: F1 to F12 on the number row, arrows and page keys around J, Delete on Backspace. It is sticky too."
-          : "On the 60% and 75% boards, Fn reaches what the board leaves out: F1 to F12, arrows and page keys, Delete. Your screen is too narrow to show one here."
+        return tour.keyboard.hasFnKey ? tour.service.t("tour.fn.body") : tour.service.t("tour.fn.narrow")
       },
       enter: function() { if (!tour.keyboard.hasFnKey) tour.service.previewLayout = "60" },
       beat: function(n) { tour.keyboard.setMod("fn", n % 2 ? "latched" : "off") } },
 
-    { target: ["altgr"], title: "AltGr",
+    { target: ["altgr"], title: "tour.altgr",
       body: function() {
-        return tour.keyboard.hasAltGr
-          ? "AltGr types the characters a layout keeps on a key's third level, like € and ß. It is sticky too."
-          : "AltGr types the characters a layout keeps on a key's third level, like € and ß. Your layout has none, so there is no AltGr now. Switch to one that has some, and it appears."
+        return tour.keyboard.hasAltGr ? tour.service.t("tour.altgr.body") : tour.service.t("tour.altgr.none")
       },
       beat: function(n) { if (tour.keyboard.hasAltGr) tour.keyboard.setMod("altgr", n % 2 ? "latched" : "off") } },
 
-    { target: ["popup", "strip"], title: "Suggestions",
+    { target: ["popup", "strip"], title: "tour.suggestions",
       body: function() {
-        return "Words appear here as you type: tap one to take it, hold one for its other forms. After a space, it offers the words likely to come next."
-          + (tour.service.predictionsEnabled ? "\n\nYour suggestions are on." : "\n\nYour suggestions are off: turn them on in the controls.")
+        return tour.service.t("tour.suggestions.body") + "\n\n"
+          + (tour.service.predictionsEnabled ? tour.service.t("tour.suggestions.on") : tour.service.t("tour.suggestions.off"))
       },
       // Two turns about: a word being typed, walk, with its forms card; and
       // after This and a space, what comes next.
@@ -200,19 +192,19 @@ Item {
         }
       } },
 
-    { target: ["keys"], title: "Swipe",
+    { target: ["keys"], title: "tour.swipe",
       body: function() {
-        return "Draw a word across the letters without lifting, and let go. It works with suggestions on."
-          + (tour.service.swipeEnabled ? "\n\nYour swipe typing is on." : "\n\nYour swipe typing is off: turn it on in the controls.")
+        return tour.service.t("tour.swipe.body") + "\n\n"
+          + (tour.service.swipeEnabled ? tour.service.t("tour.swipe.on") : tour.service.t("tour.swipe.off"))
       },
       enter: function() { swipeClock.restart() } },
 
-    { target: ["erase", "backspace"], title: "Deleting words",
-      body: "Hold BackSpace, or slide left from it, to delete whole words: the label names them, and the further you slide, the more go. Slide back past where you started for none. BackSpace into a word you finished, and its suggestions come back.",
+    { target: ["erase", "backspace"], title: "tour.erase",
+      body: function() { return tour.service.t("tour.erase.body") },
       beat: function(n) { tour.keyboard.demoErase(["fox ", "brown ", "quick "], n % 4) } },
 
-    { target: ["gear"], title: "That's it",
-      body: "Take the tour again any time from the controls, behind the gear." }
+    { target: ["gear"], title: "tour.done",
+      body: function() { return tour.service.t("tour.done.body") } }
   ]
 
   // A card the keyboard closed, opened again. The keyboard drops every card
@@ -545,7 +537,7 @@ Item {
       Text {
         textFormat: Text.PlainText
         visible: tour.running
-        text: (tour.step + 1) + " of " + tour.steps.length
+        text: tour.service.t("tour.step", tour.step + 1, tour.steps.length)
         color: Color.popups.text
         opacity: 0.6
         font.family: Style.font.family
@@ -555,7 +547,7 @@ Item {
         textFormat: Text.PlainText
         width: parent.width
         wrapMode: Text.Wrap
-        text: tour.running ? tour.current.title : "New here?"
+        text: tour.running ? tour.service.t(tour.current.title) : tour.service.t("tour.offer")
         color: Color.popups.text
         font.family: Style.font.family
         font.pixelSize: Style.font.body
@@ -566,7 +558,7 @@ Item {
         width: parent.width
         wrapMode: Text.Wrap
         text: !tour.running
-          ? "A one-minute tour of the keyboard shows where things are and what holding a key does. It is in the controls, behind the gear, if you would rather later."
+          ? tour.service.t("tour.offer.body")
           : typeof tour.current.body === "function" ? tour.current.body() : tour.current.body
         color: Color.popups.text
         font.family: Style.font.family
@@ -581,7 +573,7 @@ Item {
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
           visible: !tour.running || tour.step < tour.steps.length - 1
-          text: tour.running ? "Skip tour" : "No thanks"
+          text: tour.running ? tour.service.t("tour.skip") : tour.service.t("tour.noThanks")
           foreground: Color.popups.text
           onClicked: tour.running ? tour.service.endTour() : tour.service.declineTour()
         }
@@ -592,15 +584,15 @@ Item {
 
           Button {
             visible: tour.running && tour.step > 0
-            text: "Back"
+            text: tour.service.t("tour.back")
             bordered: true
             foreground: Color.popups.text
             onClicked: tour.go(tour.step - 1)
           }
           Button {
             id: nextButton
-            text: !tour.running ? "Show me"
-              : tour.step < tour.steps.length - 1 ? "Next" : "Done"
+            text: !tour.running ? tour.service.t("tour.showMe")
+              : tour.step < tour.steps.length - 1 ? tour.service.t("tour.next") : tour.service.t("tour.finish")
             bordered: true
             selected: true
             foreground: Color.popups.text

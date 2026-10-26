@@ -307,7 +307,7 @@ new_edited_clone_survives_a_shared_window_change() {
   assert_contains "$(<"$(entry_of menu)")" '// mine'
   assert_contains "$(<"$(helper_of emojis)")" '// mine'
   assert_lacks "$(calls)" "remove"
-  assert_contains "$(calls)" "notify -g 󰌌 Ragtop Your menu clone has edits of its own, so it wasn't resynced."
+  assert_contains "$(calls)" "notify -g 󰌌 Ragtop Your copy of the Omarchy menu has edits of its own, so it wasn't resynced."
 }
 
 # --- What Ragtop's service is told -----------------------------------------
@@ -549,7 +549,7 @@ sync_onto_an_unknown_shape_removes_the_clone() {
   assert_contains "$err" "Couldn't patch tester.menu, so it was removed and Omarchy's own menu stays in use."
   assert_no_path "$(clone_of menu)"
   assert_equal "$(progress_files)" "" "progress markers left behind"
-  assert_contains "$(calls)" "notify -g 󰌌 Ragtop Your menu overlay couldn't be re-patched, so it was removed."
+  assert_contains "$(calls)" "notify -g 󰌌 Ragtop Your copy of the Omarchy menu couldn't be re-patched, so it was removed."
   # The prompt does not use the shared window and is none the worse for it.
   assert_contains "$out" "Re-cloned tester.polkit from the updated built-in."
   clones installed polkit

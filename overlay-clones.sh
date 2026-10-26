@@ -392,6 +392,10 @@ built_in_unchanged() {
 patches_current() { [[ $patch_revision == "$(base_revision)" ]]; }
 in_sync() { built_in_unchanged && patches_current; }
 
+# Its notifications, in the language Omarchy is set to (i18n.sh).
+repo=$(dirname "$self")
+source "$repo/i18n.sh"
+
 notify() {
   command -v omarchy-notification-send >/dev/null &&
     omarchy-notification-send -g 󰌌 "Ragtop" "$1" || true
@@ -463,14 +467,14 @@ sync_one() {
   fi
   if ! clone_is_ours; then
     echo "$changed, but $clone_id has edits besides Ragtop's, so not replacing it." >&2
-    notify "Your $name clone has edits of its own, so it wasn't resynced."
+    notify "$(t clones.edited "$(t "overlay.name.$name")")"
     return 1
   fi
   omarchy plugin remove "$clone_id" --yes >/dev/null || return 1
   # Whatever goes wrong from here, install_one leaves either a patched clone or
   # none, and says which on stderr. Only a patched one has been synced.
   if ! install_one >/dev/null; then
-    notify "Your $name overlay couldn't be re-patched, so it was removed. Restart the shell to go back to Omarchy's own."
+    notify "$(t clones.removed "$(t "overlay.name.$name")")"
     return 1
   fi
   echo "$done_msg"
@@ -580,7 +584,7 @@ case "$command" in
     echo "Run omarchy-restart-shell to load the clones."
     ;;
   sync)
-    (( synced )) && notify "Overlay clones updated. Restart the shell to load them."
+    (( synced )) && notify "$(t clones.updated)"
     ;;
   remove)
     # Only drop the hook once no clones are left for it to keep in step.

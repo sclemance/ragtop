@@ -1477,8 +1477,8 @@ Item {
     if (count === 0) return ""
     var named = words.slice().reverse().join("").trim()
     var more = count - words.length
-    if (named === "") return count === 1 ? "1 word" : count + " words"
-    return more > 0 ? (more === 1 ? "1 word " : more + " words ") + named : named
+    if (named === "") return root.service.tn("erase.words", count)
+    return more > 0 ? root.service.tn("erase.wordsAnd", more, named) : named
   }
   readonly property string eraseLabel: root.erase ? root.eraseLabelFor(root.erase.count, root.erase.words) : ""
   FontMetrics { id: eraseMetrics; font.family: root.theme.fontFamily; font.pixelSize: root.eraseFontSize }

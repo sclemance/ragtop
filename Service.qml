@@ -139,14 +139,14 @@ Item {
   // what it is and the rest take their maker's name, with the connector kept
   // wherever the label would not be unique or there is nothing better.
   function monitorLabel(m) {
-    if (/^(eDP|DSI|LVDS)-/.test(m.name)) return "Built-in"
+    if (/^(eDP|DSI|LVDS)-/.test(m.name)) return root.t("display.builtIn")
     var make = String(m.make || "").trim().split(/\s+/)[0]
     // A maker that is blank, or a hex blob, is worse than the connector.
     if (!make || /^0x/i.test(make)) return m.name
     return make
   }
   readonly property var displayOptions: {
-    var out = [{ value: "auto", label: "Auto-detect" }]
+    var out = [{ value: "auto", label: root.t("display.auto") }]
     var monitors = Hyprland.monitors.values
     var counts = {}
     monitors.forEach(function(m) {
@@ -172,8 +172,8 @@ Item {
   Process { id: displayProc }
 
   readonly property var keyboardLayoutOptions: [
-    { value: "auto", label: "Auto-select" },
-    { value: "mobile", label: "Mobile" },
+    { value: "auto", label: root.t("layout.auto") },
+    { value: "mobile", label: root.t("layout.mobile") },
     { value: "60", label: "60%" },
     { value: "75", label: "75%" },
     { value: "80", label: "80%" }
@@ -474,28 +474,15 @@ Item {
   // that recovers goes unremarked. Two in a row means the first wait of
   // fifteen seconds did not help, and a keyboard that has not typed for
   // fifteen seconds has earned an explanation.
-  readonly property var retryTrouble: ({
-    "keyboard": ["The on-screen keyboard is not typing",
-                 "Ragtop's key sender keeps stopping. Check that python-pywayland "
-                 + "is installed. Setup › Tablet › Diagnostics has the rest."],
-    "autoshow": ["The keyboard is not coming up by itself",
-                 "The watcher that notices text fields keeps stopping. Tap the handle "
-                 + "at the bottom to raise the keyboard by hand."],
-    "switch": ["Tablet mode is not being noticed",
-               "The tablet-mode switch watcher keeps stopping, so folding will not "
-               + "register. Setup › Tablet › Tablet Mode sets it by hand."],
-    "predict": ["Word suggestions have stopped",
-                "Ragtop's word suggester keeps stopping. `ragtop words install` "
-                + "fetches the word list again."]
-  })
+  // Each a title and a body, in the catalog under trouble.<name>.
+  readonly property var retryTrouble: ({ "keyboard": true, "autoshow": true, "switch": true, "predict": true })
   function retryTell(name) {
     var s = root.retryFor(name)
     if (s.told || s.failures < 2 || retryNotifyProc.running) return
-    var words = root.retryTrouble[name]
-    if (!words) return
+    if (!root.retryTrouble[name]) return
     s.told = true
     retryNotifyProc.command = ["omarchy-notification-send", "-g", "󰌌",
-                               words[0], words[1]]
+                               root.t("trouble." + name), root.t("trouble." + name + ".body")]
     retryNotifyProc.running = true
   }
   Process { id: retryNotifyProc }
@@ -516,10 +503,8 @@ Item {
     root.sensorStuckReported = true
     sensorNotifyProc.command = [
       "omarchy-notification-send", "-g", "󰌌",
-      "Rotation is not working",
-      "iio-sensor-proxy is not answering, so the screen will not follow the "
-        + "device. Restarting it usually clears this:\n"
-        + "systemctl restart iio-sensor-proxy"
+      root.t("trouble.rotation"),
+      root.t("trouble.rotation.body", "systemctl restart iio-sensor-proxy")
     ]
     sensorNotifyProc.running = true
   }
@@ -924,16 +909,17 @@ Item {
   function offerSetup(problems) {
     if (problems.length === 0) return
     // Never set up on this machine: open setup rather than describe it.
-    if (problems.indexOf("The installer hasn't been run yet.") !== -1) {
+    // setup-check.sh's word for it, protocol and not prose (LOCALIZATION.md).
+    if (problems.indexOf("not-installed") !== -1) {
       root.openSetup()
       return
     }
     var shown = problems.slice(0, 3)
-    if (problems.length > 3) shown.push("…and " + (problems.length - 3) + " more.")
+    if (problems.length > 3) shown.push(root.tn("setup.more", problems.length - 3))
     setupNotifyProc.command = [
       "omarchy-notification-send", "-g", "󰌌",
-      "Ragtop needs setup",
-      shown.join("\n") + "\nClick to fix it.",
+      root.t("setup.needed"),
+      root.t("setup.needed.body", shown.join("\n")),
       "--exec", "omarchy-shell", "ragtop", "openSetup"
     ]
     setupNotifyProc.running = true
@@ -1319,6 +1305,112 @@ Item {
     if (/^(type|key|down) /.test(command)) root.autoSpaced = false
     if (keyboardHelper.running) root.writeKeys(command + "\n")
     if (/^(key|down|up) BackSpace$/.test(command)) root.wordFromRecord()
+  }
+
+  // ---- Language ------------------------------------------------------------
+
+  // Ragtop speaks the language Omarchy is set to (Setup › Language, or
+  // `omarchy language <code>`), which Omarchy keeps in
+  // ~/.config/omarchy/language; no file, as on Omarchy before 4.5, is
+  // English. Omarchy's own catalogs are for Omarchy, and it has no way for
+  // a plugin to add to them, so Ragtop keeps its own beside it, in the same
+  // form (i18n/<code>/shell.json, and cli.json and menu.json for the
+  // `ragtop` command and the menu rows): flat keys, %1-style placeholders,
+  // {"one", "other"} for plurals, English the fallback for any key a
+  // language lacks. See LOCALIZATION.md.
+  property string language: "en"
+  property var englishStrings: ({})
+  property var languageStrings: ({})
+  function setLanguage(raw) {
+    var code = String(raw || "").trim()
+    if (!/^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(code)) code = "en"
+    if (root.language !== code) root.language = code
+  }
+  FileView {
+    path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/omarchy/language"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.setLanguage(text())
+    onLoadFailed: root.setLanguage("en")
+  }
+  function readCatalog(raw) {
+    try {
+      var parsed = JSON.parse(raw || "{}")
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({})
+    } catch (e) {
+      return ({})
+    }
+  }
+  // Both catalogs are read before anything else goes on, as Omarchy's own
+  // are: a few kilobytes, and a string asked for before they arrived would
+  // show its key. The setup wizard copies some into its lists when it opens.
+  FileView {
+    path: Qt.resolvedUrl("i18n/en/shell.json").toString().replace(/^file:\/\//, "")
+    blockLoading: true
+    printErrors: false
+    onLoaded: root.englishStrings = root.readCatalog(text())
+  }
+  FileView {
+    path: root.language === "en" ? ""
+      : Qt.resolvedUrl("i18n/" + root.language + "/shell.json").toString().replace(/^file:\/\//, "")
+    blockLoading: true
+    printErrors: false
+    onLoaded: root.languageStrings = root.readCatalog(text())
+    onLoadFailed: root.languageStrings = ({})
+  }
+  onLanguageChanged: {
+    if (root.language === "en") root.languageStrings = ({})
+    // The menu rows are written into Omarchy's menu, so they are written
+    // again in the new language.
+    menuLanguageProc.running = true
+  }
+  Process {
+    id: menuLanguageProc
+    command: ["bash", Qt.resolvedUrl("menu-block.sh").toString().replace(/^file:\/\//, ""), "refresh"]
+  }
+
+  // A language's name, in the language Ragtop is speaking (language.<code>),
+  // or the name the CLI's table gives it.
+  function languageName(code, fallback) {
+    var v = root.languageStrings["language." + code] || root.englishStrings["language." + code]
+    return typeof v === "string" && v !== "" ? v : fallback
+  }
+
+  // A string in the current language: its English where the language has
+  // none, and the key itself where neither has it, which a test rules out.
+  // %1, %2 ... are the arguments after the key, so a translation can put
+  // them where its grammar wants them.
+  function t(key) {
+    var value = root.languageStrings[key]
+    if (typeof value !== "string" || value === "") value = root.englishStrings[key]
+    if (typeof value !== "string" || value === "") value = key
+    return root.fill(value, Array.prototype.slice.call(arguments, 1))
+  }
+  // The form of a plural entry ({"one": ..., "other": ...}) for count, by
+  // the language's rule; count is %1.
+  function tn(key, count) {
+    var form = root.pluralForm(count)
+    function pick(entry) {
+      if (!entry || typeof entry !== "object") return ""
+      return entry[form] || entry.other || ""
+    }
+    var value = pick(root.languageStrings[key]) || pick(root.englishStrings[key]) || key
+    return root.fill(value, [count].concat(Array.prototype.slice.call(arguments, 2)))
+  }
+  function fill(text, args) {
+    return text.replace(/%(\d+)/g, function(m, n) {
+      var v = args[Number(n) - 1]
+      return v === undefined ? m : String(v)
+    })
+  }
+  // Which plural form a count takes, for the languages Ragtop speaks:
+  // French and Brazilian Portuguese count 0 and 1 as one, the others only 1.
+  // A language with more forms falls back to "other" until its rule is here.
+  function pluralForm(count) {
+    var n = Math.abs(Number(count))
+    if (root.language === "fr" || root.language === "pt-BR") return n < 2 ? "one" : "other"
+    return n === 1 ? "one" : "other"
   }
 
   // ---- Tracing touches -------------------------------------------------------
@@ -1846,9 +1938,9 @@ Item {
     }
     var info = root.wordLanguages[lang]
     root.setSuggestions("offer", { items: root.wordsFetching
-      ? [{ text: "Fetching " + info.name + " words\u2026", note: "" }]
-      : [{ text: "Add " + info.name + " word suggestions", note: info.size + " KB" },
-         { text: "Not now", note: "" }], prev: false, next: false, cursor: -1 })
+      ? [{ text: root.t("offer.fetching", root.languageName(lang, info.name)), note: "" }]
+      : [{ text: root.t("offer.add", root.languageName(lang, info.name)), note: root.t("offer.size", info.size) },
+         { text: root.t("offer.notNow"), note: "" }], prev: false, next: false, cursor: -1 })
   }
   function answerOffer(index) {
     var lang = root.offerLanguage

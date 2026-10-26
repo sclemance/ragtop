@@ -28,9 +28,9 @@ Item {
   // throws the picker away from the three that work it.
   readonly property var buttons: [
     { name: "prev", keysym: "Left", label: "", icon: "left", kind: "special", units: 1.6, hold: true, pad: 0 },
-    { name: "select", keysym: "Return", label: "Select", icon: "", kind: "accent", units: 3, hold: false, pad: 0 },
+    { name: "select", keysym: "Return", label: "picker.select", icon: "", kind: "accent", units: 3, hold: false, pad: 0 },
     { name: "next", keysym: "Right", label: "", icon: "right", kind: "special", units: 1.6, hold: true, pad: 0 },
-    { name: "cancel", keysym: "Escape", label: "Cancel", icon: "", kind: "special", units: 3, hold: false, pad: 1.2 }
+    { name: "cancel", keysym: "Escape", label: "picker.cancel", icon: "", kind: "special", units: 3, hold: false, pad: 1.2 }
   ]
 
   // Sized like the keyboard's keys, so the strip is the keyboard's bottom
@@ -82,7 +82,8 @@ Item {
       KeyboardKey {
         anchors.fill: parent
         theme: root.theme
-        label: slot.modelData.button.label
+        // A catalog key for the two that carry words (Select, Cancel).
+        label: slot.modelData.button.label !== "" ? root.service.t(slot.modelData.button.label) : ""
         kind: slot.modelData.button.kind
         labelKind: slot.modelData.button.icon !== "" ? "drawn" : "word"
         icon: slot.modelData.button.icon

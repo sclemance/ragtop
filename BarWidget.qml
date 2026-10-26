@@ -132,9 +132,10 @@ BarWidget {
     BarIconButton {
       id: keyboardButton
       bar: root.bar
-      tooltipText: root.keyboardMode === "on" ? "Keyboard: always on"
-        : root.keyboardMode === "off" ? "Keyboard: off"
-        : "Keyboard: on in tablet mode, follows the switch"
+      tooltipText: !root.service ? ""
+        : root.keyboardMode === "on" ? root.service.t("bar.keyboard.on")
+        : root.keyboardMode === "off" ? root.service.t("bar.keyboard.off")
+        : root.service.t("bar.keyboard.sensor")
       active: root.keyboardMode !== "sensor"
       activeColor: Color.accent
       iconComponent: Component {
@@ -176,11 +177,12 @@ BarWidget {
       id: rotationButton
       visible: !(root.accelAbsent && root.probesSettled)
       bar: root.bar
-      tooltipText: root.sensorStuck ? "Screen rotation: the sensor has stopped answering"
-        : !root.rotationAvailable ? "Screen rotation: needs iio-sensor-proxy to follow the device"
-        : root.rotationMode === "locked" ? "Screen rotation: locked, turn it by hand from the controls"
-        : root.rotationMode === "unlocked" ? "Screen rotation: unlocked, always follows the sensor"
-        : "Screen rotation: automatic, follows tablet mode"
+      tooltipText: !root.service ? ""
+        : root.sensorStuck ? root.service.t("bar.rotation.stuck")
+        : !root.rotationAvailable ? root.service.t("bar.rotation.none")
+        : root.rotationMode === "locked" ? root.service.t("bar.rotation.locked")
+        : root.rotationMode === "unlocked" ? root.service.t("bar.rotation.unlocked")
+        : root.service.t("bar.rotation.auto")
       // Urgent only for the fault. The accent for a mode other than the
       // default, which is what it means on the keyboard button too.
       active: root.sensorStuck || root.rotationMode !== "auto"
