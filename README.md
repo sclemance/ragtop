@@ -693,6 +693,27 @@ after the other; hyphens are not offered at all yet.
 **The strip comes up as a swipe starts**, so the guess so far has somewhere
 to show while your finger is still drawing.
 
+**A spelling dictionary, if you install one, makes suggestions know more.**
+Nothing needs one, and nothing changes without one. With one, a joined word
+is checked against it rather than against the short frequency list, so
+*store room* offers **storeroom** and *sluggish ly* **sluggishly**, while
+*alot* is never offered; and languages Ragtop has no rules for get word
+forms from it: hold *mangeais* for *manger, mange, mangé, mangent*. English
+keeps its own rules for forms, which its dictionary does less well. They are
+the Hunspell dictionaries LibreOffice and Firefox spell-check with:
+
+```
+sudo pacman -S hunspell-en_us hunspell-fr-comprehensive
+```
+
+Ragtop finds one for the language you are typing in, your locale's region
+first (en_CA before en_US), in `/usr/share/hunspell`, or in
+`~/.local/share/hunspell` if you would rather not install system-wide.
+Diagnostics says which is in use. It needs nothing from the network: the
+dictionary is a package you installed, and the index of word forms Ragtop
+builds from it, from the word list's own words and nothing you type, is kept
+in `~/.cache/ragtop/stems`.
+
 **In a terminal, at the shell's prompt, the strip offers the command line
 instead of English**: the commands on your PATH at the start of a command
 (after `sudo`, a `|` or `&&` too), each with what it is for from its manual

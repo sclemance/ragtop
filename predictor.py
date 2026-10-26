@@ -37,7 +37,9 @@ and answers "ready <count>" once a single list is read, "ready <lang>
 missing one), then "suggest <json>" for each "complete": a list of
 words, most likely first, capitalised the way the typed word was, and
 "forms <json>" for each "forms", most common first, "join <json>" for each
-"join", {"word", "strong"} or {} when the two make no word, "termsuggest <json>"
+"join", {"word", "strong"} or {} when the two make no word, "dictionary
+<lang> <name>" after each "ready <lang>", naming the spelling dictionary in
+use, or - for none, "termsuggest <json>"
 for each "term", [{"text", "note", "kind", "back"}] with kind command,
 dir or file and back the characters of the line it replaces, and
 "swiped <json>" for each "swipe", the words it most likely spelled, and
@@ -50,7 +52,11 @@ being typed may be part of a password.
 """
 
 import bisect
+import ctypes
+import ctypes.util
 import functools
+import glob
+import hashlib
 import gzip
 import heapq
 import json
@@ -60,6 +66,7 @@ import shlex
 import struct
 import subprocess
 import sys
+import threading
 import unicodedata
 
 SHOWN = 8
@@ -248,6 +255,49 @@ class Predictor:
         for f, w in self.folded:
             self.by_fold.setdefault(f, []).append(w)
         self.near = neighbours(QWERTY)
+        # A spelling dictionary, when one is installed (Session.use), and
+        # the stem index built from it in the background.
+        self.dictionary = None
+        self.stems = None
+
+    def use_dictionary(self, dictionary, source):
+        """Takes a dictionary for joins at once, and, for a language with no
+        rules of its own for forms, builds its stem index in the background,
+        with a dictionary of its own, since a Hunspell handle is not to be
+        shared between threads. Forms are offered once it is done."""
+        self.dictionary = dictionary
+        if self.lang in FORMS:
+            return
+
+        path = stem_cache_path(dictionary, source, len(self.ranks))
+
+        def build():
+            # Read back when it was built before; otherwise built with a
+            # dictionary of this thread's own, closed when done.
+            index = load_stem_index(path)
+            if index is None:
+                mine = open_dictionary(self.lang)
+                if not mine:
+                    return
+                try:
+                    index = stem_index(sorted(self.ranks), mine, path)
+                finally:
+                    mine.close()
+            self.stems = index
+        threading.Thread(target=build, daemon=True).start()
+
+    def stem_forms(self, word):
+        """A word's forms by its stems: every word of the list with a stem it
+        has, commonest first. Possessives only for a word that is one."""
+        index = self.stems
+        if index is None or self.dictionary is None:
+            return []
+        family = set()
+        for s in set(self.dictionary.stems(word)) or {word}:
+            family.update(index.get(s, ()))
+        family.discard(word)
+        return sorted((w for w in family if "'" not in w or "'" in word),
+                      key=lambda w: (self.ranks[w], w))
 
     def set_rows(self, rows):
         if (isinstance(rows, list) and all(isinstance(r, list) for r in rows)
@@ -483,25 +533,210 @@ JOIN_WRONG = {"en": {"alot", "aswell", "eachother", "atleast", "everytime", "tha
 JOIN_RARE = 440
 
 
-def join_en(a, b, ranks):
+def join_words(a, b, ranks, lang, dictionary=None):
     """The word a and b make written as one, as {"word", "strong"}, or {}.
 
     Only an offer, never a correction, because most pairs that make a word
     are right both ways: every day and everyday, may be and maybe, on to and
-    onto. Strong is when one piece is rare enough that the space was most
-    likely a slip, and the strip leads with it; otherwise it only follows
-    the finished word's forms, so a pair typed on purpose is not nagged."""
+    onto. Strong is when one piece is rare enough, or no word at all, that
+    the space was most likely a slip, and the strip leads with it; otherwise
+    it only follows the finished word's forms, so a pair typed on purpose is
+    not nagged.
+
+    With a spelling dictionary installed (Dictionary), it decides what is a
+    word: storeroom and sluggishly, which the frequency list is too short to
+    have, and not alot, which the list has because people write it. Without
+    one, the list decides, with JOIN_WRONG for what it has wrong, and only
+    for English, the one language whose list has been checked for that."""
     if not (a.replace("'", "").isalpha() and b.replace("'", "").isalpha()):
         return {}
     joined = (a + b).lower()
-    if joined not in ranks or joined in JOIN_WRONG["en"]:
+    if dictionary:
+        if dictionary.spell(joined):
+            word = cased(joined, a)
+        elif dictionary.spell(joined[:1].upper() + joined[1:]):
+            word = joined[:1].upper() + joined[1:]   # a name: Broadway
+        else:
+            return {}
+    elif lang in JOIN_WRONG and joined in ranks and joined not in JOIN_WRONG[lang]:
+        word = cased(joined, a)
+    else:
         return {}
-    pieces = [ranks.get(a.lower()), ranks.get(b.lower())]
-    strong = any(r is None or r >= JOIN_RARE for r in pieces)
-    return {"word": cased(joined, a), "strong": strong}
+
+    def rare(piece):
+        r = ranks.get(piece.lower())
+        if r is None or r >= JOIN_RARE:
+            return True
+        return bool(dictionary) and not dictionary.known(piece)
+    return {"word": word, "strong": rare(a) or rare(b)}
 
 
-JOIN = {"en": join_en}
+# ---- Spelling dictionaries (optional) --------------------------------------
+#
+# Hunspell's, the ones LibreOffice and Firefox spell-check with, used when
+# one is installed for the language and never needed: without one, nothing
+# here changes what the keyboard does. They answer what the frequency lists
+# cannot, whether something is a word at all and which words share a stem,
+# for any language that has one, rather than rules written for each.
+#
+#   sudo pacman -S hunspell-en_us hunspell-fr-comprehensive
+#
+# Looked for in $DICPATH, then ~/.local/share/hunspell, /usr/share/hunspell
+# and /usr/share/myspell/dicts, as <lang>_<REGION>.dic with its .aff, the
+# region of the locale first (en_CA on a Canadian English system), then the
+# language's home one (fr_FR, de_DE), then any of the language's, a plain one
+# before a -large, then <lang>.dic.
+
+DICTIONARY_DIRS = ["~/.local/share/hunspell", "/usr/share/hunspell", "/usr/share/myspell/dicts"]
+_hunspell = None
+
+
+def hunspell_library():
+    """libhunspell through ctypes, or None where it is not installed."""
+    global _hunspell
+    if _hunspell is not None:
+        return _hunspell or None
+    _hunspell = False
+    names = [ctypes.util.find_library("hunspell"), "libhunspell-1.7.so.0", "libhunspell.so"]
+    for name in filter(None, names):
+        try:
+            lib = ctypes.CDLL(name)
+        except OSError:
+            continue
+        words = ctypes.POINTER(ctypes.c_char_p)
+        lib.Hunspell_create.restype = ctypes.c_void_p
+        lib.Hunspell_create.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        lib.Hunspell_spell.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.Hunspell_stem.argtypes = [ctypes.c_void_p, ctypes.POINTER(words), ctypes.c_char_p]
+        lib.Hunspell_free_list.argtypes = [ctypes.c_void_p, ctypes.POINTER(words), ctypes.c_int]
+        lib.Hunspell_destroy.argtypes = [ctypes.c_void_p]
+        _hunspell = lib
+        break
+    return _hunspell or None
+
+
+def find_dictionary(lang):
+    """(aff, dic) paths of an installed dictionary for `lang`, or None."""
+    # RAGTOP_DICTIONARY_DIRS, set, is the whole search, and empty means none:
+    # the tests' way to choose a dictionary of their own, or none at all.
+    only = os.environ.get("RAGTOP_DICTIONARY_DIRS")
+    dirs = ([d for d in only.split(":") if d] if only is not None
+            else [d for d in os.environ.get("DICPATH", "").split(":") if d] + DICTIONARY_DIRS)
+    region = os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
+    region = region.split(".")[0] if region.startswith(lang + "_") else ""
+    for d in map(os.path.expanduser, dirs):
+        # The locale's own region first; then the language's home one, fr_FR
+        # rather than fr_BE, which alphabetical order would have taken; then
+        # a plain one before a -large or other variant of it.
+        home = f"{lang}_{lang.upper()}"
+        found = sorted(glob.glob(os.path.join(d, f"{lang}_*.dic")))
+        found.sort(key=lambda f: (os.path.basename(f)[:-4] != region,
+                                  not os.path.basename(f).startswith(home),
+                                  "-" in os.path.basename(f)))
+        found += glob.glob(os.path.join(d, f"{lang}.dic"))
+        for dic in found:
+            aff = dic[:-4] + ".aff"
+            if os.path.exists(aff):
+                return aff, dic
+    return None
+
+
+class Dictionary:
+    """One Hunspell dictionary. Not to be shared between threads, which
+    Hunspell does not allow; each thread opens its own."""
+
+    def __init__(self, aff, dic):
+        self.lib = hunspell_library()
+        self.path = dic
+        self.name = os.path.basename(dic)[:-4]
+        self.encoding = "utf-8"
+        with open(aff, "rb") as f:
+            for line in f:
+                if line.startswith(b"SET "):
+                    self.encoding = line[4:].strip().decode("ascii", "replace")
+                    break
+        try:
+            "".encode(self.encoding)
+        except LookupError:
+            self.encoding = "utf-8"
+        self.handle = self.lib.Hunspell_create(aff.encode(), dic.encode())
+        if not self.handle:
+            raise OSError("hunspell could not open " + dic)
+
+    def close(self):
+        """Hunspell's memory back: ten megabytes or so for a large language."""
+        if self.handle:
+            self.lib.Hunspell_destroy(self.handle)
+            self.handle = None
+
+    def _bytes(self, word):
+        return word.encode(self.encoding, "replace")
+
+    def spell(self, word):
+        return bool(self.lib.Hunspell_spell(self.handle, self._bytes(word)))
+
+    def known(self, word):
+        """A word as typed or as a name: paris counts, since Paris is one."""
+        return self.spell(word) or self.spell(word[:1].upper() + word[1:])
+
+    def stems(self, word):
+        out = ctypes.POINTER(ctypes.c_char_p)()
+        n = self.lib.Hunspell_stem(self.handle, ctypes.byref(out), self._bytes(word))
+        found = [out[i].decode(self.encoding, "replace") for i in range(n)]
+        self.lib.Hunspell_free_list(self.handle, ctypes.byref(out), n)
+        return found
+
+
+def open_dictionary(lang):
+    if not hunspell_library():
+        return None
+    paths = find_dictionary(lang)
+    if not paths:
+        return None
+    try:
+        return Dictionary(*paths)
+    except (OSError, UnicodeError):
+        return None
+
+
+# Where stem indexes are kept between runs: built from a list's words and a
+# dictionary, never from anything typed, and rebuilt when either changes.
+STEMS_CACHE = os.path.expanduser("~/.cache/ragtop/stems")
+
+
+def stem_cache_path(dictionary, source, count):
+    st = os.stat(dictionary.path)
+    key = hashlib.sha1(f"{source}|{count}|{dictionary.path}|{st.st_size}|{st.st_mtime}"
+                       .encode()).hexdigest()[:16]
+    return os.path.join(STEMS_CACHE, f"{dictionary.name}-{key}.json")
+
+
+def stem_index(words, dictionary, path):
+    """{stem: [words of the list with that stem]}, saved to `path`. A second
+    or two to build for a list of thirty thousand words, so it is built
+    once and read back after (load_stem_index)."""
+    index = {}
+    for w in words:
+        for s in set(dictionary.stems(w)) or {w}:
+            index.setdefault(s, []).append(w)
+    try:
+        os.makedirs(STEMS_CACHE, exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(index, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+    return index
+
+
+def load_stem_index(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            index = json.load(f)
+        return index if isinstance(index, dict) else None
+    except (OSError, ValueError):
+        return None
 
 
 # ---- Terminals --------------------------------------------------------------
@@ -878,6 +1113,9 @@ class Session:
         if lang not in self.loaded:
             try:
                 p = Predictor(read_wordlist(path), lang)
+                d = open_dictionary(lang)
+                if d:
+                    p.use_dictionary(d, path)
                 self.loaded[lang] = (p, Swipes(p.ranks, p.folds))
             except FileNotFoundError:
                 self.loaded[lang] = None
@@ -922,6 +1160,9 @@ def main():
             except (OSError, ValueError, EOFError):
                 ok = False
             print(f"ready {rest} {len(session.predictor.words)}" if ok else f"missing {rest}", flush=True)
+            if ok:
+                d = session.predictor.dictionary
+                print(f"dictionary {rest} {d.name if d else '-'}", flush=True)
         elif cmd == "keys":
             try:
                 session.keys = json.loads(rest)
@@ -963,16 +1204,20 @@ def main():
         elif cmd == "forms":
             words = []
             p = session.predictor
-            if p and p.lang in FORMS and rest:
+            if p and rest:
                 low = rest.lower()
-                words = [cased(w, rest) for w in FORMS[p.lang](low, p.ranks)][:SHOWN]
+                if p.lang in FORMS:
+                    found = FORMS[p.lang](low, p.ranks)
+                else:
+                    found = p.stem_forms(low)
+                words = [cased(w, rest) for w in found][:SHOWN]
             print("forms " + json.dumps(words, ensure_ascii=False), flush=True)
         elif cmd == "join":
             found = {}
             p = session.predictor
             pair = rest.split(" ")
-            if p and p.lang in JOIN and len(pair) == 2 and all(pair):
-                found = JOIN[p.lang](pair[0], pair[1], p.ranks)
+            if p and len(pair) == 2 and all(pair):
+                found = join_words(pair[0], pair[1], p.ranks, p.lang, p.dictionary)
             print("join " + json.dumps(found, ensure_ascii=False), flush=True)
         elif cmd == "complete":
             words = session.predictor.suggest(rest) if session.predictor else []

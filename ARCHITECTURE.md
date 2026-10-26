@@ -782,11 +782,20 @@ What it has settled so far (2026-10-24):
   floor in decode prune less. What remains in French is mostly words the
   path cannot tell apart, commencé and commence, which needs context.
 
-Hunspell was tried alongside, as an optional enhancement rather than a
-dependency: its validity check answers joins in any language (storeroom yes,
-alot no) at about 4 µs, and its stemmer gives French real word families. The
-English dictionary is too shallow for forms (summed and went are entries of
-their own), so English keeps its rules there.
+Hunspell is used when a dictionary is installed, never required
+(predictor.py, Spelling dictionaries), through libhunspell by ctypes. Its
+validity check answers joins in any language (storeroom yes, alot no) at
+about 4 µs; its stemmer gives languages without rules of their own their
+word forms, from a stem index of the list's words built in a background
+thread with a Hunspell handle of its own (handles are not thread-safe),
+closed when done, and cached in `~/.cache/ragtop/stems` keyed on the list
+and dictionary. Costs measured: 5 MB and 14 ms to open English's, 11 MB and
+39 ms for French's, 1.5 s once to build French's index and 17 ms to read it
+back. The English dictionary is too shallow for forms (summed and went are
+entries of their own), so English keeps its rules. Completions are not
+filtered by it: it rejects lower-case names and newer words the list rightly
+has. `RAGTOP_DICTIONARY_DIRS` replaces the search path, empty for none,
+which the tests use.
 
 ## What shaped the design
 

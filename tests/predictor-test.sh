@@ -38,7 +38,10 @@ PY
 pre=()
 suggest() {
   local list=$1; shift
-  out=$(printf '%s\n' "${pre[@]}" "${@/#/complete }" | sandboxed /usr/bin/python3 "$repo/predictor.py" "$list" 2>&1) || true
+  # No spelling dictionary unless a test names one (dicts): one installed on
+  # the machine would otherwise change what every other test gets.
+  out=$(printf '%s\n' "${pre[@]}" "${@/#/complete }" \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS="${dicts-}" /usr/bin/python3 "$repo/predictor.py" "$list" 2>&1) || true
 }
 
 words="$sandbox/en.msgpack.gz"
@@ -459,6 +462,52 @@ no_join_into_a_mistake() {
   [[ $(grep -c '^join {}$' <<<"$out") -eq 3 ]] || fail "expected three empty joins: $out"
 }
 
+# ---- Spelling dictionaries (optional) -------------------------------------------
+
+# A dictionary of a few words, in Hunspell's own format: sluggish takes -ly,
+# manger takes three endings, and alot is not in it.
+make_dictionary() {
+  dicts="$sandbox/dicts"
+  mkdir -p "$dicts"
+  printf 'SET UTF-8\n\nSFX Y Y 1\nSFX Y 0 ly .\n\nSFX A Y 3\nSFX A er e er\nSFX A er eais er\nSFX A er ez er\n' >"$dicts/$1.aff"
+  printf '5\nstoreroom\nsluggish/Y\nstore\nroom\nmanger/A\n' >"$dicts/$1.dic"
+}
+
+# With a dictionary, it says what joins: storeroom and sluggishly, which the
+# list lacks, and never alot, which the list has.
+a_dictionary_decides_joins() {
+  wordlist "$words" 300:store 300:room 575:sluggish 563:ly 160:a 340:lot 507:alot
+  make_dictionary en_US
+  join_of "store room" "sluggish ly" "a lot"
+  assert_contains "$out" 'join {"word": "storeroom", "strong": false}'
+  assert_contains "$out" 'join {"word": "sluggishly", "strong": true}'
+  [[ $(grep -c '^join {}$' <<<"$out") -eq 1 ]] || fail "a lot should not join: $out"
+}
+
+# A language with no rules for forms gets them from the dictionary's stems,
+# once its index is built, in the background.
+forms_from_stems() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/fr"
+  wordlist "$dir/fr/small_fr.msgpack.gz" 300:manger 320:mange 350:mangeais 360:mangez 200:room
+  make_dictionary fr_FR
+  out=$( { echo "lang fr"; sleep 2; echo "forms mangeais"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS="$dicts" /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  assert_contains "$out" "dictionary fr fr_FR"
+  assert_contains "$out" 'forms ["manger", "mange", "mangez"]'
+}
+
+# None installed is the usual case, and changes nothing.
+no_dictionary_no_change() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/fr"
+  wordlist "$dir/fr/small_fr.msgpack.gz" 300:manger 320:mange 350:mangeais
+  out=$( { echo "lang fr"; echo "forms mangeais"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  assert_contains "$out" "dictionary fr -"
+  assert_contains "$out" 'forms []'
+}
+
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing
 run_test "predictor: a word typed with one slip is corrected" one_slip_is_corrected
@@ -491,6 +540,9 @@ run_test "predictor: no rule-made forms on two letters, so ly is not lying's" no
 run_test "predictor: a rare piece joins, and leads the strip" a_rare_piece_joins_strongly
 run_test "predictor: common pieces join only quietly, maybe for may be" common_pieces_join_weakly
 run_test "predictor: no join into a misspelling, or where there is no word" no_join_into_a_mistake
+run_test "predictor: with a dictionary, it decides what joins" a_dictionary_decides_joins
+run_test "predictor: forms from a dictionary's stems, for a language without rules" forms_from_stems
+run_test "predictor: no dictionary, no change" no_dictionary_no_change
 run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
 run_test "predictor: then files and folders from the terminal's folder" files_after_it
 run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names

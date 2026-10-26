@@ -687,7 +687,7 @@ row() { printf '%-13s %s\n' "$1" "$2"; }
 # One flat string field out of the service's health JSON.
 health=""
 health_field() {
-  printf '%s' "$health" | sed -n "s/.*\"$1\":\"\([a-z:0-9]*\)\".*/\1/p"
+  printf '%s' "$health" | sed -n "s/.*\"$1\":\"\([A-Za-z_.:0-9-]*\)\".*/\1/p"
 }
 # The same, for a field whose value is a bare number rather than a string.
 health_number() {
@@ -853,6 +853,9 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   predictions=$(health_field predictions)
   if [[ -n $predictions ]]; then
     row "Word suggestions" "$(predictions_mode), $predictions, lists: $(words languages | awk '$3 == "installed" { printf "%s%s", sep, $1; sep = " " }')"
+    # Optional, so "none" is not a fault: a dictionary only widens joins and
+    # gives forms to languages without rules of their own.
+    row "Spelling dictionary" "$(health_field dictionary)"
   fi
 
   if [[ -z $health ]]; then

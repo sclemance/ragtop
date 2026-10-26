@@ -1732,6 +1732,10 @@ Item {
   onWordLanguageChanged: root.sendLanguage()
   // The language whose list the predictor has open, "" until it says.
   property string wordsLoaded: ""
+  // The spelling dictionary the predictor found for the language in use,
+  // en_US or fr_FR, or "" for none. Optional: it widens joins and gives
+  // forms to languages with no rules of their own (predictor.py).
+  property string dictionaryName: ""
   readonly property bool wordsReady: root.wordLanguage !== "" && root.wordsLoaded === root.wordLanguage
   function sendLanguage() {
     if (predictorProc.running && root.wordLanguage !== "")
@@ -2351,6 +2355,9 @@ Item {
           root.wordsLoaded = line.split(" ")[1]
           root.sendRows()
           if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
+        } else if (line.startsWith("dictionary ")) {
+          var parts = line.split(" ")
+          root.dictionaryName = parts[2] && parts[2] !== "-" ? parts[2] : ""
         } else if (line.startsWith("missing ")) {
           root.wordsLoaded = ""
           // The CLI may know better by now: a list removed by hand.
@@ -3317,6 +3324,7 @@ Item {
         inputMethod: !root.inputMethodsEnabled ? "off"
           : root.imeEngine ? root.imeEngine.name : "layout",
         words: root.wordLanguage,
+        dictionary: root.dictionaryName || "none",
         assists: !root.assistsEnabled ? "off" : root.inTerminal ? "terminal" : root.assistsActive ? "on" : "idle",
         field: !root.fieldInfo ? "unknown" : root.fieldInfo.password ? "password"
           : root.fieldInfo.terminal ? "terminal" : root.fieldInfo.noCapitals ? "nocapitals" : "plain",
