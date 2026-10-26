@@ -836,7 +836,14 @@ Item {
     if (!root.touching || (root.stripWanted && root.stripSlot > 0)) root.stripShown = root.stripWanted
   }
   onStripWantedChanged: root.syncStrip()
-  onTouchingChanged: root.syncStrip()
+  onTouchingChanged: {
+    root.lastTouchAt = Date.now()
+    root.syncStrip()
+    root.syncReserved()
+  }
+  onReservedHeightChanged: if (root.service.touchTrace)
+    root.service.traceTouch({ t: Date.now(), ev: "room", id: -1, x: 0, y: 0,
+                              what: "space reserved: " + Math.round(root.reservedHeight) + " px" })
   readonly property real stripFraction: 0.5
   //
   // Its room is kept above the keys whenever a strip could appear, shown or
@@ -851,6 +858,38 @@ Item {
   readonly property real keysTop: root.topPadding + root.stripSlot
   // How much of the keyboard is there to see, from the bottom.
   readonly property real visibleHeight: root.implicitHeight - (root.stripShown ? 0 : root.stripSlot)
+  // What the keyboard reserves on screen, which the windows above make room
+  // for. It follows visibleHeight, but only while no finger is down: making
+  // room resizes every window above, the compositor holds the keyboard's
+  // frames while they redraw, and a strip coming up as a swipe started
+  // left the key and the trail undrawn for most of a second, so the swipe
+  // seemed to start further along. The strip may still show at once, over
+  // the bottom of the window above until the finger lifts.
+  //
+  // Room is given back only once the fingers have rested a moment
+  // (giveBackAfter), not as soon as the strip empties: a strip that went
+  // between a hyphen and the swipe after it resized the windows as the
+  // swipe began, and the swipe was read from partway along. Taking more
+  // room is not held back, since it only ever follows a strip that is
+  // already showing.
+  property real reservedHeight: 0
+  readonly property int giveBackAfter: 1000
+  property real lastTouchAt: 0
+  function syncReserved() {
+    if (root.touching || root.reservedHeight === root.visibleHeight) return
+    var rested = Date.now() - root.lastTouchAt
+    if (root.visibleHeight > root.reservedHeight || rested >= root.giveBackAfter)
+      root.reservedHeight = root.visibleHeight
+    else
+      giveBack.restart()
+  }
+  Timer {
+    id: giveBack
+    interval: root.giveBackAfter
+    onTriggered: root.syncReserved()
+  }
+  onVisibleHeightChanged: root.syncReserved()
+  Component.onCompleted: root.reservedHeight = root.visibleHeight
 
   // Keys that hold a width of their own on the top row, whatever else is
   // sharing it. The gear keeps one place and one size on every
@@ -1314,7 +1353,6 @@ Item {
       var command = ["key", keysyms[role]].concat(namedKeyMods()).join(" ")
       service.sendKeys(command)
       root.repeating = command
-      root.repeats = 0
       keyRepeat.interval = root.service.repeatDelay
       keyRepeat.restart()
       return
@@ -1351,24 +1389,11 @@ Item {
 
   // The key held down, as sent, repeated after Hyprland's delay at its rate.
   property string repeating: ""
-  // How many times the held key has repeated, for BackSpace's change of pace.
-  property int repeats: 0
-  // A held BackSpace takes letters first, and after about two words' worth
-  // takes whole words, slowly enough to let go on the right one, as a phone
-  // does: clearing a sentence letter by letter is what made holding it slow.
-  readonly property int lettersBeforeWords: 10
-  readonly property int wordEvery: 280
   Timer {
     id: keyRepeat
     repeat: true
     onTriggered: {
       if (root.repeating === "") { stop(); return }
-      root.repeats++
-      if (/^key BackSpace$/.test(root.repeating) && root.repeats > root.lettersBeforeWords) {
-        root.service.eraseWords(1)
-        interval = root.wordEvery
-        return
-      }
       root.service.sendKeys(root.repeating)
       interval = root.service.repeatInterval
     }
@@ -1376,41 +1401,92 @@ Item {
 
   // ---- Swiping words away ---------------------------------------------------
 
-  // A finger on BackSpace that slides left selects whole words back from the
-  // cursor, one more for every stretch of the slide, as on a phone, and
-  // deletes them when it lifts; sliding back right gives them back, and all
-  // the way back deletes none. The key's own BackSpace, sent as the finger
-  // came down, has been and gone. A label over the key says which words.
-  // { pointId, x, count, words }, or null.
+  // BackSpace is a tap, a hold or a slide, and the last two are the same
+  // thing: choosing whole words to delete, named in a label over the key.
+  // A tap deletes a letter, when the finger lifts, as every character key
+  // answers on the way up, so a hold has room to be one. Held still, the
+  // label comes up naming the nearest word (eraseHold); slid left, it names
+  // one more for every stretch, held or not; slid back right past where the
+  // finger landed, it names none, and lifting deletes nothing. Lifting with
+  // words named deletes them. Holding never repeats: the arrows do, and a
+  // sentence goes faster as its words.
+  // { pointId, x, count, started, words }, or null.
   property var erase: null
   readonly property real eraseStart: root.unit * 0.5
   readonly property real eraseStep: root.unit * 0.6
-  // The most it will select, and show.
-  readonly property int eraseMost: 12
+  // Back past where the finger landed by this much is none.
+  readonly property real eraseCancel: root.unit * 0.4
+  // The most it will select. The label's width is the usual limit
+  // (eraseFits); this only bounds the asking.
+  readonly property int eraseMost: 40
+  Timer {
+    id: eraseHold
+    interval: 420
+    onTriggered: {
+      var e = root.erase
+      if (e && !e.started) root.setErase(e, 1, true)
+    }
+  }
+  function setErase(e, count, started) {
+    var words = count > 0 ? root.service.wordsBefore(count) : []
+    // No further than the label can show.
+    while (count > Math.max(1, e.count) && !root.eraseFits(root.eraseLabelFor(count, words))) {
+      count--
+      words = words.slice(0, count)
+    }
+    if (count === e.count && started === e.started) return
+    root.erase = { pointId: e.pointId, x: e.x, y: e.y, count: count, started: started, words: words }
+    // ragtop touch-trace: how many it could name, never which.
+    if (root.service.touchTrace && count > 0)
+      root.service.traceTouch({ t: Date.now(), ev: "words", id: e.pointId, x: 0, y: 0,
+                                what: "delete " + count + ", named " + words.length
+                                  + (words.length < count ? " (" + root.service.recordState() + ")" : "") })
+  }
+  // A tap on BackSpace: one, with whatever modifiers are on, Ctrl+BackSpace
+  // being the application's own delete-a-word.
+  function tapBackSpace() {
+    root.service.sendKeys(["key", "BackSpace"].concat(root.namedKeyMods()).join(" "))
+    root.afterKey()
+  }
   function eraseMoved(p) {
     var e = root.erase
     var dx = e.x - p.x
-    var count = dx < root.eraseStart ? 0
-      : Math.min(root.eraseMost, 1 + Math.floor((dx - root.eraseStart) / root.eraseStep))
-    if (count > 0 && root.repeating !== "") {
-      // Selecting, not repeating.
-      keyRepeat.stop()
-      root.repeating = ""
-    }
-    if (count === e.count && (e.started || count === 0)) return
-    root.erase = { pointId: e.pointId, x: e.x, count: count, started: e.started || count > 0,
-                   words: count > 0 ? root.service.wordsBefore(count) : [] }
+    // A finger on BackSpace that sets off anywhere means words: nothing
+    // starts a swipe from BackSpace, so the list comes up as soon as it
+    // moves, held or not, without waiting for the hold or a slide left.
+    // A third of a key, past the wobble of a tap, which must stay a letter.
+    var moving = Math.hypot(dx, p.y - (e.y === undefined ? p.y : e.y)) > root.unit / 3
+    var count
+    if (dx >= root.eraseStart)
+      count = Math.min(root.eraseMost, 1 + Math.floor((dx - root.eraseStart) / root.eraseStep))
+    else if (e.started || moving)
+      count = dx <= -root.eraseCancel ? 0 : 1
+    else
+      count = 0
+    var started = e.started || count > 0
+    if (started && !e.started) eraseHold.stop()
+    if (count === e.count && started === e.started) return
+    root.setErase(e, count, started)
   }
-  // What the label says: the words themselves, as far as Ragtop typed them,
-  // and a count for any it cannot name.
-  readonly property string eraseLabel: {
-    var e = root.erase
-    if (!e || e.count === 0) return ""
-    var named = e.words.slice().reverse().join("").trim()
-    var more = e.count - e.words.length
-    if (named === "") return e.count === 1 ? "1 word" : e.count + " words"
-    if (named.length > 28) named = "\u2026" + named.slice(-27)
+  // What the label says: every word it will delete, as far as Ragtop typed
+  // them, and a count for any it cannot name. Never cut short: what goes
+  // must be seen going, so a selection that would not fit across the
+  // keyboard stops growing instead (setErase), and the rest is a second
+  // hold away.
+  function eraseLabelFor(count, words) {
+    if (count === 0) return ""
+    var named = words.slice().reverse().join("").trim()
+    var more = count - words.length
+    if (named === "") return count === 1 ? "1 word" : count + " words"
     return more > 0 ? (more === 1 ? "1 word " : more + " words ") + named : named
+  }
+  readonly property string eraseLabel: root.erase ? root.eraseLabelFor(root.erase.count, root.erase.words) : ""
+  FontMetrics { id: eraseMetrics; font.family: root.theme.fontFamily; font.pixelSize: root.eraseFontSize }
+  readonly property int eraseFontSize: Math.round(root.keyHeight * 0.4)
+  // Whether a label fits across the keyboard, over the card it is drawn on.
+  function eraseFits(text) {
+    var w = eraseMetrics.advanceWidth("\u232b " + text) + 2 * root.theme.padding + 2 * root.theme.gap
+    return w <= root.width - 2 * root.theme.padding
   }
 
   // A hold in progress: the finger that started it and the key under it,
@@ -1465,6 +1541,7 @@ Item {
   // somewhere else now too.
   function cancelTouches() {
     root.erase = null
+    eraseHold.stop()
     if (root.swipe !== null) {
       root.swipe = null
       trail.requestPaint()
@@ -1588,10 +1665,10 @@ Item {
 
   // Which cell the finger is on. Sliding well below the popup takes
   // nothing, the way letting go somewhere else cancels on a phone.
-  function selectAt(x, y) {
-    var p = root.popup
-    if (!p) return
-    var index = -1
+  // Whether (x, y) is on the open card, as far as choosing from it goes.
+  // One test for choosing (selectAt) and for leaving it for a swipe
+  // (cardToSwipe), so the two can never disagree about where the card is.
+  function onCard(p, x, y) {
     // Nothing is chosen until the finger is on the card, for either kind.
     // Resting on the key it came down on is not a choice: that is the slow
     // tap choosePopup types the plain key for. Characters get a little
@@ -1606,13 +1683,60 @@ Item {
     // the card's end, and that must stay no choice at all rather than be
     // rounded to the nearest cell.
     if (within && p.beside && (x < p.x || x > p.x + p.items.length * p.cellWidth)) within = false
-    if (within) {
+    return within
+  }
+
+  function selectAt(x, y) {
+    var p = root.popup
+    if (!p) return
+    var index = -1
+    if (root.onCard(p, x, y)) {
       index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
     }
     if (index === p.index) return
     var next = Object.assign({}, p)
     next.index = index
     root.popup = next
+  }
+
+  // A hold that opened a letter's card and then sets off across the keys was
+  // a swipe that paused before it started, to find the next letter: the card
+  // closes and the finger draws from where it landed. Only away from the
+  // card, a key or more from that place and onto another letter, so a finger
+  // reaching up to the card, or drifting on its key, still chooses from it.
+  function cardToSwipe(point) {
+    var p = root.popup
+    var w = root.swipe
+    if (!p || p.kind !== "chars" || !w || w.pointId !== point.pointId || w.swiping) return false
+    if (root.onCard(p, point.x, point.y)) return false
+    var start = w.points[0]
+    if (root.headingFor(p, start, point)) return false
+    if (Math.hypot(point.x - start[0], point.y - start[1]) < root.unit) return false
+    var over = root.keyAt(point.x, point.y)
+    if (over === null || over === w.key || !root.isLetterKey(over)) return false
+    root.popup = null
+    root.popupTravelled = false
+    root.endHold()
+    w.points.push([point.x, point.y])
+    w.swiping = true
+    trail.requestPaint()
+    root.service.swipeDrawn(w.points.slice())
+    return true
+  }
+
+  // Whether a finger is on its way to the card: rising, and on a line from
+  // where it landed that reaches the card's row within the card's ends, give
+  // or take half a key. The straight way to a far cell, ę at the end of e's
+  // card, slants up across the letters beside the key before it reaches the
+  // card's row, and those letters must not make it a swipe. A card beside
+  // its key needs none of this: the way to it runs over the card itself.
+  function headingFor(p, start, point) {
+    if (p.beside) return false
+    var rise = start[1] - point.y
+    if (rise < root.unit * 0.15) return false
+    var cardY = p.y + p.cellHeight / 2
+    var x = start[0] + (point.x - start[0]) * (start[1] - cardY) / rise
+    return x >= p.x - root.unit / 2 && x <= p.x + p.items.length * p.cellWidth + root.unit / 2
   }
 
   function choosePopup() {
@@ -1819,6 +1943,9 @@ Item {
     if (Math.hypot(p.x - last[0], p.y - last[1]) < root.unit * 0.1) return w.swiping
     w.points.push([p.x, p.y])
     if (!w.swiping) {
+      // Most of a key from where it landed, and onto another letter. A full
+      // key was tried, for a thumb's drift, and made every swipe feel late
+      // to start: drift now cancels nothing anyway (moved).
       var gone = Math.hypot(p.x - w.points[0][0], p.y - w.points[0][1]) > root.unit * 0.75
       var over = root.keyAt(p.x, p.y)
       if (!gone || over === null || over === w.key || !root.isLetterKey(over)) return false
@@ -1895,6 +2022,7 @@ Item {
   function demoRect(name) {
     var r = name === "strip" ? (root.stripShown ? strip : null)
       : name === "popup" ? (root.popup ? popupLayer : null)
+      : name === "erase" ? (erasePreview.visible ? erasePreview : null)
       // The keys, and the strip's room wherever there is one, shown or not,
       // so a strip arriving does not change what is lit.
       : name === "keys" ? { x: root.keysLeft, y: root.stripSlot > 0 ? root.topPadding : root.keysTop,
@@ -1954,7 +2082,16 @@ Item {
     }
     if (stops.length < 2 || progress <= 0) {
       if (root.swipe !== null) { root.swipe = null; trail.requestPaint() }
+      if (root.demoPoint in root.held) root.held = ({})
       return
+    }
+    // The key the finger came down on stays down for the whole swipe, as it
+    // does under a real one.
+    var first = root.demoSlot(word[0])
+    if (first && root.held[root.demoPoint] !== first.key) {
+      var held = {}
+      held[root.demoPoint] = first.key
+      root.held = held
     }
     var steps = 24
     var points = []
@@ -1994,10 +2131,26 @@ Item {
     trail.requestPaint()
   }
 
+  // A slide left from BackSpace, as far as `count` words, nearest first in
+  // `words`: BackSpace down and the label over it naming them. 0 lifts it.
+  function demoErase(words, count) {
+    var s = root.demoSlot("backspace")
+    if (!s || count <= 0) {
+      root.erase = null
+      if (root.demoPoint in root.held) root.held = ({})
+      return
+    }
+    var held = {}
+    held[root.demoPoint] = s.key
+    root.held = held
+    root.erase = { pointId: root.demoPoint, x: 0, count: count, started: true, words: words.slice(0, count) }
+  }
+
   // Everything the tour showed, gone: cards, trail, modifiers.
   function demoClear() {
     root.cancelTouches()
     if (root.swipe !== null) { root.swipe = null; trail.requestPaint() }
+    if (root.demoPoint in root.held) root.held = ({})
     var next = Object.assign({}, root.mods)
     for (var m in next) next[m] = "off"
     root.mods = next
@@ -2125,7 +2278,7 @@ Item {
       text: "\u232b " + root.eraseLabel
       color: root.theme.accent
       font.family: root.theme.fontFamily
-      font.pixelSize: Math.round(erasePreview.height * 0.4)
+      font.pixelSize: root.eraseFontSize
     }
   }
 
@@ -2137,6 +2290,8 @@ Item {
     parent: board
     anchors.fill: parent
     onPressed: function(points) {
+      // ragtop touch-trace: each finger as it lands, and what came of it.
+      if (root.service.touchTrace) points.forEach(function(p) { root.traceTouch("down", p, root.touchOutcome(p)) })
       // While the controls are up, a touch on the keyboard puts them away
       // rather than typing. That is the tap-outside-to-dismiss, done from the
       // surface the finger is already on instead of a sheet over everything,
@@ -2184,17 +2339,61 @@ Item {
         if (role === "space" || root.isCharacter(eff) || deep)
           root.startHold(p, key)
         if (role !== "space") root.swipeStart(p, key)
-        if (role === "backspace" && root.erase === null)
-          root.erase = { pointId: p.pointId, x: p.x, count: 0, started: false, words: [] }
-        if (root.liftKeys.indexOf(role) === -1 && !deep
+        if (role === "backspace" && root.erase === null) {
+          root.erase = { pointId: p.pointId, x: p.x, y: p.y, count: 0, started: false, words: [] }
+          eraseHold.restart()
+        }
+        if (root.liftKeys.indexOf(role) === -1 && !deep && role !== "backspace"
             && (role === "space" || !root.isCharacter(eff))) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
     }
     onUpdated: function(points) { points.forEach(root.moved) }
-    onReleased: function(points) { root.lift(points) }
-    onCanceled: function(points) { root.lift(points) }
+    onReleased: function(points) {
+      if (root.service.touchTrace) points.forEach(function(p) { root.traceTouch("up", p, root.liftOutcome(p)) })
+      root.lift(points)
+    }
+    onCanceled: function(points) {
+      if (root.service.touchTrace) points.forEach(function(p) { root.traceTouch("cancel", p, "") })
+      root.lift(points)
+    }
+  }
+
+  // ---- Tracing touches (ragtop touch-trace) ---------------------------------
+
+  // What a finger landing will come to, by the same tests onPressed makes,
+  // asked before it makes them. Named by kind of key, never by the
+  // character, so a trace never holds what was typed.
+  function touchOutcome(p) {
+    if (root.service.toolsOpen) return "closes the controls"
+    if (root.popup !== null) return "ignored: a card is open"
+    if (root.stripShown && root.stripTouch === null && p.y < root.keysTop - root.theme.gap / 2)
+      return "strip"
+    var key = root.keyAt(p.x, p.y)
+    if (key === null) return "ignored: no key near"
+    var role = root.roleOf(root.effectiveKey(key))
+    return root.isCharacter(root.effectiveKey(key)) ? "character" : role
+  }
+  // What a finger lifting will come to, by the same tests lift makes.
+  function liftOutcome(p) {
+    if (root.erase !== null && p.pointId === root.erase.pointId)
+      return !root.erase.started ? "BackSpace"
+        : root.erase.count > 0 ? "deletes words" : "nothing: word delete undone"
+    if (root.stripTouch !== null && p.pointId === root.stripTouch.pointId) return "strip"
+    if (root.swipe !== null && p.pointId === root.swipe.pointId && root.swipe.swiping)
+      return "swipe, sent to be read"
+    if (root.popup !== null && p.pointId === root.popup.pointId)
+      return root.popup.index >= 0 ? "card: chosen" : (root.popupTravelled ? "nothing: card left" : "card: the key itself")
+    if (p.pointId === root.pendingPoint) return "tap"
+    if (p.pointId in root.held) return "key released"
+    return "nothing: no key under it"
+  }
+  function traceTouch(kind, p, what) {
+    // Where, as a share of the keyboard's width and of the screen's height,
+    // which is what the touchscreen's own report can be laid against.
+    root.service.traceTouch({ t: Date.now(), ev: kind, id: p.pointId,
+                              x: p.x / Math.max(1, root.width), y: board.y + p.y, what: what })
   }
 
   function moved(point) {
@@ -2208,6 +2407,7 @@ Item {
     }
     if (root.swipeMoved(point)) return
     if (root.popup !== null && point.pointId === root.popup.pointId) {
+      if (root.cardToSwipe(point)) return
       if (root.travelled(point)) root.popupTravelled = true
       // A cell chosen for the finger stays chosen until the finger goes
       // somewhere: it is resting on the key below the card, which selectAt
@@ -2216,10 +2416,14 @@ Item {
       root.selectAt(point.x, point.y)
       return
     }
-    // A finger that wanders off the key it came down on was never holding
-    // it: the key still types when it lifts, as it always has.
-    if (point.pointId !== root.pendingPoint) return
-    if (root.travelled(point)) holdTimer.stop()
+    // A finger held on a key means one of two things, its card or a swipe,
+    // and a key that repeats (BackSpace, the arrows) is no letter and never
+    // gets here. So drifting decides nothing: a finger that reaches another
+    // letter is a swipe (swipeMoved, or cardToSwipe once the card is up),
+    // and one that has not by the time the hold is up gets its card,
+    // however much it wandered on the way. It used to be that drifting
+    // four tenths of a key cancelled the card, which a thumb resting on a
+    // key for ? did without meaning to, and the card never came.
   }
 
   function lift(points) {
@@ -2229,13 +2433,11 @@ Item {
       if (root.erase !== null && p.pointId === root.erase.pointId) {
         var e = root.erase
         root.erase = null
-        if (e.started) {
-          // Whatever it selected goes, and BackSpace's own release, which
-          // would stop a repeat that is already stopped, has nothing to do.
-          root.service.eraseWords(e.count)
-          delete next[p.pointId]
-          return
-        }
+        eraseHold.stop()
+        if (e.started) root.service.eraseWords(e.count)
+        else root.tapBackSpace()
+        delete next[p.pointId]
+        return
       }
       if (root.stripTouch !== null && p.pointId === root.stripTouch.pointId) {
         root.stripLifted(p)

@@ -285,7 +285,7 @@ Ragtop types. It does not keep or send what you type.
 | --- | --- |
 | **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol, or through fcitx5 while a Chinese, Japanese or Korean engine is on. It keeps no history and writes no log. |
 | **Word suggestions and swipe** | Off unless you turn them on. With either on, Ragtop's own process holds the word being typed, in memory, to look it up in the word list, and forgets it at the next space. Nothing is written down, learned or sent. |
-| **Network** | Only when you ask, never by itself, and two things. **Add** on a language's offer in the strip, or `ragtop words install`: that language's word list from wordfreq, 125 to 135 KB, from one fixed release on GitHub, checked against a fixed SHA-256 before it is kept. **Check for updates** on the controls panel, or `ragtop update check`: Ragtop's own `manifest.json` from its repository on GitHub, a couple of kilobytes, to read the version an update would install. Nothing else in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
+| **Network** | Only when you ask, never by itself, and two things. **Add** on a language's offer in the strip, or `ragtop words install`: that language's word list and pairs, about half a megabyte, from Ragtop's own `data-v1` release on GitHub, each checked against a fixed SHA-256 before it is kept. English's are in Ragtop itself and are never fetched. **Check for updates** on the controls panel, or `ragtop update check`: Ragtop's own `manifest.json` from its repository on GitHub, a couple of kilobytes, to read the version an update would install. Nothing else in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
 | **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
 | **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
 | **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
@@ -727,17 +727,18 @@ completes one, it says nothing until the next Enter. A terminal you switch
 to is taken to be at an empty prompt. Bash, zsh and fish; not nushell,
 whose quoting differs. Flags after a `-` are not offered yet.
 
-Held keys, BackSpace and the arrows, are repeated by the keyboard itself at
-Hyprland's repeat speed, so Ragtop knows what each did, and corrections with
-them keep the line rather than losing it.
+Held arrows are repeated by the keyboard itself at Hyprland's repeat speed,
+so Ragtop knows what each did, and corrections with them keep the line rather
+than losing it. BackSpace held deletes words instead (below).
 
-**Deleting whole words.** Slide left from BackSpace and it selects words back
-from the cursor, one more the further you slide, with a label over the key
-saying which; lift to delete them, slide back to give them back. Held,
-BackSpace takes letters and then, after a couple of words' worth, whole
-words, slowly enough to let go on the right one. Words Ragtop typed go by
-exact BackSpaces; further back it uses the application's own delete-a-word
-(Ctrl+BackSpace, or Ctrl+W in a terminal). And BackSpace into a word you
+**Deleting whole words.** Hold BackSpace and a label over it names the word
+before the cursor; slide left and it names more, one for every stretch;
+slide back past where you started and it names none. Lift to delete what it
+names. Sliding left works straight away, without the hold. A tap deletes one
+letter, when your finger lifts. Words Ragtop typed go by exact BackSpaces,
+and the label can name them; further back it uses the application's own
+delete-a-word (Ctrl+BackSpace, or Ctrl+W in a terminal) and counts them
+instead. And BackSpace into a word you
 finished, typed, swiped or taken from the strip, makes it the word being
 typed again, with its suggestions back.
 
@@ -780,13 +781,31 @@ Shift before a swipe capitalises the word. A swipe after letters you
 tapped puts a space between, since a one-letter word like "a" can only be
 tapped: tap a, swipe test, and you get "a test". The space a swipe or a
 suggestion adds after its word moves past punctuation typed straight after
-it, so a comma then is "test, " rather than "test ,". A space you typed
-yourself is never moved.
+it, so a comma then is "test, " rather than "test ,". A hyphen typed then
+takes the space's place and joins the next word on, "super-speed", unless
+the next thing typed is a space, which makes it a dash between words,
+"super - speed". A space you typed yourself is never moved.
 
 Both use [wordfreq](https://github.com/rspeer/wordfreq)'s list of about
 29,000 English words, ranked by how common they are, and both are off for
 Omarchy's password prompt and while a Chinese, Japanese or Korean engine is
 on. Neither learns from your typing.
+
+**The next word.** After a space the strip offers the words likeliest to
+come next: *thank* and then *you*, *going* and then *to*. A tap types the
+word and its space. While a word is being typed, its completions are ranked by
+the word before it, so after *going* a *t* offers *to* first rather than
+*the*. Words always written with a capital come with it, *I* and *Paris*,
+and at the start of a sentence every word does. After a swipe its other
+guesses keep the strip instead, so a wrong swipe stays one tap from mended.
+
+It is counting, not AI: which words follow which, counted from the sentences
+of [Tatoeba](https://tatoeba.org), each word's 32 commonest followers, and the
+plain word frequencies for anything else. Measured on sentences it was not
+built from, it saves about 36% of keystrokes in English and French where
+completions alone save 24%, and about 30% even on a nineteenth-century novel.
+English's counts come with Ragtop; another language's come with its word
+list. Nothing is learned from what you type.
 
 ### Keybindings
 
@@ -1226,20 +1245,12 @@ reaches them through [Fn](#which-board).
   reach, since the leftovers go on the nearest letter's card, two to a card,
   but a row of digits you can turn on, the way a phone keyboard offers one,
   is the honest fix.
-- **The next word.** Suggestions complete the word being typed and correct
-  a slip in it, and say nothing after a space. Guessing the next word needs
-  counts of which words follow which (bigrams), which wordfreq does not have.
-  The way keyboards did this before AI is a pruned bigram list per language,
-  about the eight likeliest followers of each word, a megabyte or two,
-  downloaded like the word lists and checked the same way, with the plain
-  word frequencies to fall back on for a pair never seen. It would rank
-  completions by the word before as well (*of*, *if* and *or* depend almost
-  entirely on it), which helps swipe too. Lookups cost microseconds, so
-  nothing on the battery. What is missing is a source: Google Books Ngrams,
-  the Leipzig corpora and a count of Wikipedia are candidates, each with its
-  own licence and tone. Learning pairs from your own typing would mean keeping
-  what you type, so that could only be opt-in, kept on the machine, and never
-  fed from a password field or a terminal.
+- **Better next words.** The pairs come from Tatoeba alone, which is
+  conversation, and help less on other writing (30% of keystrokes saved on a
+  novel against 36%). A mix with modern prose, weighed by what the benchmark
+  says, would close some of that. Learning pairs from your own typing would
+  mean keeping what you type, so that could only be opt-in, kept on the
+  machine, and never fed from a password field or a terminal.
 - **More languages** for suggestions and swipe. wordfreq has lists for 42,
   and each is added once its accents, apostrophes and capitals have been made
   to work: Spanish and Portuguese next, then German, whose nouns wordfreq
@@ -1446,12 +1457,15 @@ itself, is Ragtop's own business and can change in a patch.
   protocol (MIT). Its Python bindings are generated on your machine on first run.
 - Clones of Omarchy's overlays are made on your machine from Omarchy's
   MIT-licensed source.
-- Word suggestions and swipe read [wordfreq](https://github.com/rspeer/wordfreq)'s
-  English word list by Robyn Speer (CC-BY-SA 4.0), downloaded on your machine
-  when you turn them on and never part of Ragtop. It includes data from the
-  SUBTLEX word lists by Marc Brysbaert et al., which are freely available. The
+- Word suggestions, swipe and next words read language data that is not
+  under Ragtop's MIT licence but CC BY-SA 4.0: [wordfreq](https://github.com/rspeer/wordfreq)'s
+  word lists by Robyn Speer, unmodified, which include data from the SUBTLEX
+  word lists by Marc Brysbaert et al., freely available; and Ragtop's counts
+  of which words follow which, from the sentences of
+  [Tatoeba](https://tatoeba.org) (CC BY 2.0 FR). English's are in
+  `words/en`; the others are published with Ragtop's `data-v1` release. The
   full credits are in [words/NOTICE.md](words/NOTICE.md), and a copy is kept
-  beside the list.
+  beside every download.
 - The swipe decoder follows SHARK2 (Kristensson and Zhai, 2004), as
   FlorisBoard's glide typing does.
 - Ragtop itself is released under the [MIT License](LICENSE).

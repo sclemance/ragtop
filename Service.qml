@@ -1293,12 +1293,73 @@ Item {
       root.autoSpaced = true
       return
     }
+    // A hyphen straight after a space Ragtop put in itself joins: it takes
+    // that space's place and leaves none after, so the next word, typed or
+    // swiped, is joined on. A swiped super, then -, then speed is
+    // super-speed, not super -speed. A space tapped straight after it says
+    // it was a dash between words after all, and puts the space back:
+    // super - speed.
+    if (command === "type -" && root.autoSpaced && keyboardHelper.running) {
+      root.trackWord(command)
+      root.writeKeys("key BackSpace\ntype -\n")
+      root.autoSpaced = false
+      root.hyphenJoined = true
+      return
+    }
+    if (command === "key space" && root.hyphenJoined && keyboardHelper.running
+        && /\S-$/.test(root.beforeCursor)) {
+      root.trackWord(command)
+      root.writeKeys("key BackSpace\ntype  - \n")
+      root.autoSpaced = true
+      return
+    }
     root.trackWord(command)
     // Only something typed counts. A release, a held modifier or a change of
     // route between a word and its full stop types nothing.
     if (/^(type|key|down) /.test(command)) root.autoSpaced = false
     if (keyboardHelper.running) root.writeKeys(command + "\n")
     if (/^(key|down|up) BackSpace$/.test(command)) root.wordFromRecord()
+  }
+
+  // ---- Tracing touches -------------------------------------------------------
+
+  // `ragtop touch-trace on` keeps the keyboard's last minute of touches in
+  // memory, for laying against what the touchscreen itself reported
+  // (bench/touch-trace.py): a tap the screen saw and Ragtop never acted on is
+  // a fault to find, one the screen never saw is the panel's. Off unless
+  // asked for, never written anywhere by Ragtop, gone when turned off or the
+  // shell restarts, and never a character: a key is kept as its kind
+  // (Keyboard.qml, touchOutcome). Not while a secret field has focus.
+  property bool touchTrace: false
+  property var touchLog: []
+  readonly property int touchTraceFor: 60000
+  onTouchTraceChanged: if (!root.touchTrace) root.touchLog = []
+  // A heartbeat on the shell's thread while tracing: a touch arrives on the
+  // same thread, so if the thread was busy, the press is handled late, where
+  // the finger has moved to by then. A gap over 100 ms is logged as a stall.
+  property real beatAt: 0
+  Timer {
+    interval: 20
+    repeat: true
+    running: root.touchTrace
+    onRunningChanged: root.beatAt = Date.now()
+    onTriggered: {
+      var now = Date.now()
+      var gap = now - root.beatAt
+      root.beatAt = now
+      if (gap > 100)
+        root.traceTouch({ t: now - gap, ev: "stall", id: -1, x: 0, y: 0, what: "Ragtop was busy for " + gap + " ms" })
+    }
+  }
+  function traceTouch(entry) {
+    if (!root.touchTrace || root.secretField) return
+    // Screen height, for the touch's place on it: the keyboard sits on the
+    // handle at the bottom of its screen.
+    var screenH = overlayWindow.height
+    entry.y = screenH > 0 ? (overlayWindow.keysBottom - keyboard.height + entry.y) / screenH : -1
+    var keep = root.touchLog.filter(function(e) { return entry.t - e.t < root.touchTraceFor })
+    keep.push(entry)
+    root.touchLog = keep
   }
 
   // ---- Deleting whole words ---------------------------------------------------
@@ -1322,6 +1383,17 @@ Item {
     }
     return out
   }
+  // What the typed record is like, for touch-trace, never what it holds:
+  // why a word to delete could not be named.
+  function recordState() {
+    if (root.secretField) return "secret field"
+    if (!root.predicting && root.typedTail === "") return "nothing kept here"
+    if (root.typedTail === "") return root.typedFromStart ? "empty field" : "nothing typed since the record was lost"
+    var words = root.beforeCursor.split(/\s+/).filter(function(w) { return w !== "" }).length
+    return words + " words before the cursor, " + (root.typedFromStart ? "from the field's start" : "not from the field's start")
+      + (root.typedCursor < root.typedTail.length ? ", cursor moved back" : "")
+  }
+
   // Deletes n words back from the cursor: by BackSpaces for the ones Ragtop
   // typed, which it knows to the letter and which work in any application,
   // and by the application's own delete-a-word for any further back, which
@@ -1386,10 +1458,18 @@ Item {
   // Every key Ragtop sends goes through here, so it knows when it last
   // typed (see finishWord) and what (typedTail).
   property real lastKeysAt: 0
+  // Whether the last thing typed was a hyphen that took the place of a space
+  // Ragtop added (sendKeys), which a space typed next turns back into a dash
+  // between words. Anything else typed lets it go.
+  property bool hyphenJoined: false
   function writeKeys(text) {
+    root.hyphenJoined = false
     root.lastKeysAt = Date.now()
     text.split("\n").forEach(root.noteTyped)
     keyboardHelper.write(text)
+    // Once whoever typed this has settled what the word is (currentWord,
+    // finished), the word before the next one may have changed.
+    Qt.callLater(root.updateContext)
   }
 
   // ---- Typing assists ------------------------------------------------------
@@ -1496,6 +1576,7 @@ Item {
     root.typedFromStart = true
     root.sentenceStart = true
     root.freshFieldAt = Date.now()
+    Qt.callLater(root.updateContext)
   }
   property real freshFieldAt: 0
 
@@ -1632,9 +1713,10 @@ Item {
   }
   // Whether the strip has a place on the keyboard. Only while it has
   // something in it, since an empty band is screen given up for nothing, and
-  // for a few seconds after (stripLingers), so that while someone is typing
-  // it stays, and the windows above move once when typing starts and once
-  // when it stops rather than at every word.
+  // for a moment after (stripLingers), so that the gap between two words
+  // does not move the windows above. A second: four felt like the keyboard
+  // had forgotten to give the room back, and with next words in it after
+  // every space the strip is rarely empty mid-sentence anyway.
   readonly property bool suggestionsSource: root.imeComposing || root.predicting || root.swipeActive
     || root.offerLanguage !== "" || root.terminalSuggesting || root.tourActive
   readonly property bool suggestionsShown: root.suggestionsSource
@@ -1648,7 +1730,7 @@ Item {
       stripLinger.restart()
     }
   }
-  Timer { id: stripLinger; interval: 4000; onTriggered: root.stripLingers = false }
+  Timer { id: stripLinger; interval: 1000; onTriggered: root.stripLingers = false }
   // Whether a strip could appear at all, for the keyboard to choose a board
   // that has room for it either way.
   readonly property bool stripPossible: root.predictionsEnabled
@@ -1658,6 +1740,7 @@ Item {
     else if (root.suggestions.source === "predict") root.takeWord(index)
     else if (root.suggestions.source === "swipe") root.swapSwiped(index)
     else if (root.suggestions.source === "offer") root.answerOffer(index)
+    else if (root.suggestions.source === "next") root.takeNext(index)
     else if (root.suggestions.source === "term") root.takeTerm(index)
     else if (root.suggestions.source === "forms") {
       var item = root.suggestions.items[index]
@@ -1814,6 +1897,79 @@ Item {
   onPredictingChanged: {
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
+    root.sentContext = null
+    Qt.callLater(root.updateContext)
+  }
+
+  // ---- The next word ---------------------------------------------------------
+
+  // Which words follow which (predictor.py, Pairs; words/NOTICE.md): after a
+  // space the strip offers the likeliest next words, as a phone does, and
+  // while a word is typed its completions are ranked by the word before it.
+  //
+  // The word before is read off what Ragtop typed (typedTail), so it holds
+  // whichever way the word got there, tapped, swiped or taken from the strip:
+  // "" at the start of a sentence or a field, "-" where it is not known (the
+  // record lost, a password field), else the word. Sent to the predictor
+  // whenever it changes ("after"), and its answer is the next words.
+  property var sentContext: null
+  property var nextWords: []
+  function contextNow() {
+    if (!root.predicting || root.secretField) return "-"
+    var t = root.beforeCursor
+    if (root.currentWord !== "" && t.slice(-root.currentWord.length) === root.currentWord)
+      t = t.slice(0, t.length - root.currentWord.length)
+    if (t.trim() === "") return root.typedFromStart ? "" : "-"
+    if (/([.!?]["')\]]*|\n)\s*$/.test(t)) return ""
+    var m = /(\S+)\s+$/.exec(t)
+    if (!m) return "-"
+    // A comma or a quote around a word does not change what came before:
+    // the pairs were counted across them too.
+    var w = m[1].replace(/^["'(\[]+/, "").replace(/[,;:"')\]]+$/, "")
+    for (var i = 0; i < w.length; i++)
+      if (w[i] !== "'" && w[i].toLowerCase() === w[i].toUpperCase()) return "-"
+    return w === "" ? "-" : w.toLowerCase()
+  }
+  function updateContext() {
+    if (!predictorProc.running) return
+    var c = root.contextNow()
+    if (c === root.sentContext) return
+    root.sentContext = c
+    predictorProc.write(c === "" ? "after\n" : "after " + c + "\n")
+  }
+  // The predictor's answer to "after": shown while no word is being typed
+  // and nothing else holds the strip. A swipe's other guesses keep it, so a
+  // wrong swipe is still one tap from mended.
+  function nextArrived(words) {
+    root.nextWords = words
+    var mine = ["", "predict", "next"].indexOf(root.suggestions.source) !== -1
+    if (!root.predicting || root.currentWord !== "" || !mine || words.length === 0) {
+      if (root.suggestions.source === "next" && (words.length === 0 || root.currentWord !== ""))
+        root.setSuggestions("next", null)
+      return
+    }
+    var cap = root.capitalNext
+    root.setSuggestions("next", { items: words.map(function(w) {
+      return { text: cap ? w.charAt(0).toUpperCase() + w.slice(1) : w, note: "" }
+    }), prev: false, next: false, cursor: -1 })
+  }
+  // A next word taken: typed with its space, or, for an elision, j', with
+  // none, and then it is the start of the word being typed.
+  function takeNext(index) {
+    var item = root.suggestions.items[index]
+    if (!item || !keyboardHelper.running) return
+    if (item.join) { root.joinFinished(item.text, index); return }
+    var elision = item.text.slice(-1) === "'"
+    root.setSuggestions("next", null)
+    root.writeKeys("type " + item.text + (elision ? "" : " ") + "\n")
+    if (elision) {
+      root.currentWord = item.text
+      root.setFinished("", "", false)
+    } else {
+      root.currentWord = ""
+      root.autoSpaced = true
+      root.setFinished(item.text, " ", false)
+    }
   }
 
   // The word being typed, as far as the keys sent say. Only a guess: a tap
@@ -1853,6 +2009,13 @@ Item {
     if (!root.predicting) return
     if (root.currentWord === "") {
       root.setSuggestions("predict", null)
+      // A word begun and taken back: the next words for where the cursor
+      // is are the ones already asked for, unless the place has changed,
+      // which updateContext will say.
+      Qt.callLater(function() {
+        if (root.currentWord === "" && root.sentContext === root.contextNow())
+          root.nextArrived(root.nextWords)
+      })
     } else if (predictorProc.running) {
       root.asked.push(root.currentWord)
       predictorProc.write("complete " + root.currentWord + "\n")
@@ -2060,6 +2223,17 @@ Item {
     var f = root.finished
     if (!root.finishedFormsAsked || !f || word !== f.word || !root.predicting) return
     root.finishedFormsAsked = false
+    // Next words already showing keep the strip: the finished word's forms
+    // are a hold on it or a BackSpace into it away. Only a strong join, a
+    // space that was likely a slip, goes in front of them.
+    if (root.suggestions.source === "next") {
+      var jn = root.joinOffer
+      if (jn && jn.strong && root.joinPair)
+        root.setSuggestions("next", { items: [{ text: jn.word, note: "", join: true }]
+                                        .concat(root.suggestions.items.filter(function(i) { return !i.join })),
+                                      prev: false, next: false, cursor: -1 })
+      return
+    }
     // The word itself leads, filled as the one typed, so it can still be held
     // for its forms: without it, a swiped fun that vanished from the strip
     // left nothing to hold. A tap on it does nothing (replaceFinished).
@@ -2156,7 +2330,10 @@ Item {
     root.joinPair = null
     root.joinOffer = null
     root.autoSpaced = true
-    root.setSuggestions("forms", { items: root.suggestions.items, prev: false, next: false, cursor: index })
+    // From the next-word strip, the strip is the joined word's next words,
+    // which updateContext asks for; from the forms, it marks the one taken.
+    if (root.suggestions.source === "next") root.setSuggestions("next", null)
+    else root.setSuggestions("forms", { items: root.suggestions.items, prev: false, next: false, cursor: index })
   }
 
   // ---- Swipes ------------------------------------------------------------
@@ -2242,6 +2419,10 @@ Item {
     return root.swipeShifted ? word.charAt(0).toUpperCase() + word.slice(1) : word
   }
   function typeSwiped(words) {
+    // touch-trace: whether the swipe came to a word, never which.
+    if (root.touchTrace)
+      root.traceTouch({ t: Date.now(), ev: "read", id: -1, x: 0, y: 0,
+                        what: words.length > 0 ? "swipe read as a word" : "nothing: no word fits the swipe" })
     if (!root.swipeActive || !keyboardHelper.running) return
     if (words.length === 0) {
       // Nothing it could spell: the guesses shown while drawing go too.
@@ -2347,13 +2528,18 @@ Item {
   Process {
     id: predictorProc
     command: ["/usr/bin/python3", Qt.resolvedUrl("predictor.py").toString().replace(/^file:\/\//, ""),
-              root.wordsRoot]
+              root.wordsRoot,
+              // Ragtop's own copy (words/en), read where nothing was fetched.
+              Qt.resolvedUrl("words").toString().replace(/^file:\/\//, "")]
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
         if (line.startsWith("ready ")) {
           root.wordsLoaded = line.split(" ")[1]
           root.sendRows()
+          // A new list: tell it the word before, and get its next words.
+          root.sentContext = null
+          Qt.callLater(root.updateContext)
           if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
         } else if (line.startsWith("dictionary ")) {
           var parts = line.split(" ")
@@ -2366,6 +2552,10 @@ Item {
           var found
           try { found = JSON.parse(line.slice(12)) } catch (e) { root.termAsked.shift(); return }
           root.termAnswer(found)
+        } else if (line.startsWith("next ")) {
+          var upcoming
+          try { upcoming = JSON.parse(line.slice(5)) } catch (e) { return }
+          root.nextArrived(upcoming)
         } else if (line.startsWith("join ")) {
           var forPair = root.joinAsked.shift()
           var joined
@@ -2400,6 +2590,7 @@ Item {
       root.asked = []
       root.formsAsked = []
       root.joinAsked = []
+      root.sentContext = null
       root.termAsked = []
       root.peekPending = false
       root.wordsLoaded = ""
@@ -3022,7 +3213,9 @@ Item {
     // not: the surface keeps one height and only the reservation changes,
     // so the keys never move (Keyboard.qml, stripSlot).
     exclusionMode: ExclusionMode.Normal
-    exclusiveZone: root.oskVisible ? keyboard.visibleHeight : 0
+    // What the keyboard has settled on reserving, which changes only between
+    // touches (Keyboard.qml, reservedHeight).
+    exclusiveZone: root.oskVisible ? keyboard.reservedHeight : 0
     anchors { bottom: true; left: true; right: true }
     implicitHeight: keyboard.implicitHeight
     color: "transparent"
@@ -3291,6 +3484,19 @@ Item {
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
     function openSetup(): string { root.openSetup(); return "ok" }
     function startTour(): string { root.startTour(); return root.tourActive ? "ok" : "no keyboard" }
+    // ragtop touch-trace: see traceTouch.
+    function touchTraceOn(): string { root.touchTrace = true; return "on" }
+    function touchTraceOff(): string { root.touchTrace = false; return "off" }
+    // The touches, and where the keyboard's visible top is as a share of the
+    // screen, so a touch the screen reported above it is not counted as one
+    // the keyboard missed; and how the screen is turned, since the
+    // touchscreen's own report is not.
+    function touchTraceLog(): string {
+      var h = overlayWindow.height
+      return JSON.stringify({ touches: root.touchLog,
+                              keyboardTop: h > 0 ? (overlayWindow.keysBottom - keyboard.visibleHeight) / h : 0,
+                              orientation: root.appliedOrientation || "normal" })
+    }
     // The things worth binding a key to, and every one of them takes no
     // argument, so nothing on this socket can be handed a value to act on.
     function toggleControls(): string {

@@ -180,17 +180,24 @@ Item {
 
     { target: ["popup", "strip"], title: "Suggestions",
       body: function() {
-        return "Words appear here as you type. Tap one to take it, hold one for its other forms. Nothing leaves this device."
+        return "Words appear here as you type: tap one to take it, hold one for its other forms. After a space, it offers the words likely to come next."
           + (tour.service.predictionsEnabled ? "\n\nYour suggestions are on." : "\n\nYour suggestions are off: turn them on in the controls.")
       },
-      enter: function() {
-        tour.service.setSuggestions("tour", { items: [{ text: "walk" }, { text: "walking" }, { text: "walked" },
-                                                      { text: "walks" }, { text: "walker" }] })
-      },
+      // Two turns about: a word being typed, walk, with its forms card; and
+      // after This and a space, what comes next.
       beat: function(n) {
-        if (n % 4 === 2) tour.keyboard.demoForms(0, ["walks", "walked", "walking", "walker"])
-        else if (n % 4 === 0) tour.keyboard.cancelTouches()
-        else if (n % 4 === 3) tour.keyboard.demoChoose(1)
+        var step = n % 8
+        if (step === 0) {
+          tour.keyboard.cancelTouches()
+          tour.service.setSuggestions("tour", { items: [{ text: "walk" }, { text: "walking" }, { text: "walked" },
+                                                        { text: "walks" }, { text: "walker" }] })
+        } else if (step === 2) tour.keyboard.demoForms(0, ["walks", "walked", "walking", "walker"])
+        else if (step === 3) tour.keyboard.demoChoose(1)
+        else if (step === 4) {
+          tour.keyboard.cancelTouches()
+          tour.service.setSuggestions("tour", { items: [{ text: "is" }, { text: "was" }, { text: "will" },
+                                                        { text: "can" }, { text: "has" }] })
+        }
       } },
 
     { target: ["keys"], title: "Swipe",
@@ -199,6 +206,10 @@ Item {
           + (tour.service.swipeEnabled ? "\n\nYour swipe typing is on." : "\n\nYour swipe typing is off: turn it on in the controls.")
       },
       enter: function() { swipeClock.restart() } },
+
+    { target: ["erase", "backspace"], title: "Deleting words",
+      body: "Hold BackSpace, or slide left from it, to delete whole words: the label names them, and the further you slide, the more go. Slide back past where you started for none. BackSpace into a word you finished, and its suggestions come back.",
+      beat: function(n) { tour.keyboard.demoErase(["fox ", "brown ", "quick "], n % 4) } },
 
     { target: ["gear"], title: "That's it",
       body: "Take the tour again any time from the controls, behind the gear." }
@@ -299,7 +310,7 @@ Item {
       found = tour.keyboard.demoRect(names[i])
     }
     // A card is lit with what it came from: its key, or the strip.
-    if (found && names[0] === "popup" && names.length > 1) {
+    if (found && (names[0] === "popup" || names[0] === "erase") && names.length > 1) {
       var key = tour.keyboard.demoRect(names[1])
       if (key) {
         var x = Math.min(found.x, key.x), y = Math.min(found.y, key.y)

@@ -8,7 +8,11 @@ carries its licence, CC-BY-SA 4.0, with it, and its author asks that it not
 be turned into a plain list that drops the attribution, so it is read as it
 is rather than converted (see read_wordlist).
 
-  predictor.py <words-dir>             lists at <dir>/<lang>/small_<lang>.msgpack.gz
+  predictor.py <words-dir> [<bundled-dir>]
+                                       lists at <dir>/<lang>/small_<lang>.msgpack.gz,
+                                       and pairs_<lang>.json.gz beside them, from
+                                       the first folder that has them: downloads,
+                                       then Ragtop's own (words/ in the repository)
   predictor.py <wordlist.msgpack.gz>   one list, as English
 
 then commands on stdin, one per line:
@@ -22,6 +26,10 @@ then commands on stdin, one per line:
                       {"unit": key width, "keys": {"q": [x, y], ...}}
   term <json>         for a terminal: {"cwd", "line"}, the command line as far
                       as it has been typed, answered with commands or files
+  after [<word> | -]   the word before the next one, alone for the start of a
+                      sentence, - for not known: answered with the words
+                      likeliest to come next, and used by every "complete"
+                      until the next "after"
   forms <word>        the word's other forms, summed and sums for sum, for a
                       hold on a suggestion to offer
   join <a> <b>        two words typed one after the other, and whether they
@@ -70,6 +78,14 @@ import threading
 import unicodedata
 
 SHOWN = 8
+# The next word, from which words follow which (Pairs): a word seen after
+# the one before ranks by how often it follows it, and any other by how
+# common it is at all, as if this much rarer, in centibels. Tuned with
+# bench/bench.py.
+CONTEXT_BACKOFF = 40
+# What stands for the start of a sentence among the words before.
+START = "<s>"
+CAPITALS = "<capitals>"
 # A correction is a word one edit away from what was typed, typed wrong.
 # It ranks as if it were this much rarer, in wordfreq's centibels: a factor
 # of ten, so a common word typed with one slip still comes before a rare
@@ -259,6 +275,10 @@ class Predictor:
         # the stem index built from it in the background.
         self.dictionary = None
         self.stems = None
+        # Which words follow which, when a pairs file is installed (use_pairs).
+        self.pairs = {}
+        self.following = {}
+        self.capitals = set()
 
     def use_dictionary(self, dictionary, source):
         """Takes a dictionary for joins at once, and, for a language with no
@@ -350,12 +370,65 @@ class Predictor:
             for word in self.by_fold.get(key, ()):
                 yield self.ranks[word] + penalty, word
 
-    def suggest(self, typed):
+    def use_pairs(self, path):
+        """Which words follow which, from a pairs file (bench/pairs.py):
+        {before: [[word, count], ...]}, each word's commonest followers.
+        Kept as each follower's share of what follows its word, in
+        centibels, the list's own measure, and in order for next()."""
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            raw = json.load(f)
+        self.pairs, self.following = {}, {}
+        caps = raw.pop(CAPITALS, [])
+        self.capitals = {w for w in caps if isinstance(w, str)} if isinstance(caps, list) else set()
+        for before, followers in raw.items():
+            if not isinstance(followers, list):
+                continue
+            kept = [(w, c) for w, c in followers
+                    if isinstance(w, str) and isinstance(c, int) and c > 0 and w in self.ranks]
+            total = sum(c for _, c in kept)
+            if total:
+                self.pairs[before] = {w: round(-100 * math.log10(c / total)) for w, c in kept}
+                self.following[before] = [w for w, _ in kept]
+
+    def next(self, before):
+        """The words likeliest to come after `before`, START at the start of
+        a sentence, before a letter of them is typed. A French elision comes
+        with its apostrophe, j', since it is typed with no space after."""
+        out = []
+        for w in self.following.get(before, ()):
+            out.append(w + "'" if w in self.elisions else self.written(w))
+            if len(out) == SHOWN:
+                break
+        return out
+
+    def written(self, word, typed=""):
+        """`word` as it is written: with its capital where the pairs say it
+        always has one, I and Paris, unless the typing asked for more."""
+        if word in self.capitals and not typed[:1].isupper():
+            return word[:1].upper() + word[1:]
+        return cased(word, typed) if typed else word
+
+    def in_context(self, found, before):
+        """`found`, {word: rank}, ranked by the word before as well: a word
+        that follows it by how often it does, any other as its own rank and
+        CONTEXT_BACKOFF more. A correction's or accent's penalty carries
+        over, so context never makes a slip outrank what was typed."""
+        seen = self.pairs.get(before) if before else None
+        if not seen:
+            return found
+        out = {}
+        for w, r in found.items():
+            penalty = r - self.ranks[w]
+            ctx = seen.get(w)
+            out[w] = min(self.ranks[w] + CONTEXT_BACKOFF, ctx if ctx is not None else 1 << 30) + penalty
+        return out
+
+    def suggest(self, typed, before=None):
         # After an elision and its apostrophe, l'ét, the rest is a word of
         # its own: completed alone, and offered with the elision in front.
         head, apostrophe, tail = typed.rpartition("'")
         if apostrophe and head.lower() in self.elisions and not any(self.completions(typed.lower())):
-            return [head + "'" + w for w in self.suggest(tail)] if tail else []
+            return [head + "'" + w for w in self.suggest(tail, head.lower())] if tail else []
         word = typed.lower()
         if not word:
             return []
@@ -375,8 +448,9 @@ class Predictor:
                 if rank < found.get(w, 1 << 30):
                     found[w] = rank
         found = {w: found[w] for w in spelled_right(list(found), self.ranks, self.folds)}
+        found = self.in_context(found, before)
         best = heapq.nsmallest(SHOWN, found.items(), key=lambda kv: (kv[1], kv[0]))
-        return [cased(w, typed) for w, _ in best]
+        return [self.written(w, typed) for w, _ in best]
 
 
 # ---- Word forms -----------------------------------------------------------
@@ -989,8 +1063,11 @@ def mean_distance(a, b):
 
 
 class Swipes:
-    def __init__(self, ranks, folds=None):
+    def __init__(self, ranks, folds=None, predictor=None):
         self.ranks = ranks
+        # For the word before (Predictor.pairs): a swipe after "going" that
+        # could be to, too or top is to, as a completion would be.
+        self.predictor = predictor
         # The predictor's, for the same reason it keeps them.
         self.folds = folds or {w: (fold(w), accents(w)) for w in ranks}
         self.keys = {}
@@ -1033,7 +1110,7 @@ class Swipes:
     def near(self, point, slack):
         return [c for c, p in self.keys.items() if math.dist(p, point) <= slack * self.unit]
 
-    def decode(self, path):
+    def decode(self, path, before=None):
         if not self.keys or len(path) < 2:
             return []
         path = [(float(x), float(y)) for x, y in path]
@@ -1058,6 +1135,17 @@ class Swipes:
         # same as scoring every word; measured, most are never shaped. Kept
         # three times the words shown, since the misspelling filter after may
         # drop some.
+        # How common each word is here: by the word before, where the pairs
+        # know it, the same measure completions are ranked by.
+        seen = self.predictor.pairs.get(before) if self.predictor and before else None
+
+        def commonness(word):
+            r = self.ranks[word]
+            if not seen:
+                return r
+            ctx = seen.get(word)
+            return min(r + CONTEXT_BACKOFF, ctx) if ctx is not None else r + CONTEXT_BACKOFF
+
         candidates = []
         for a in starts:
             for b in ends:
@@ -1070,7 +1158,7 @@ class Swipes:
                     ends_off = (math.dist(path[0], first) + math.dist(path[-1], last)) / self.unit
                     stretch = abs(travelled - self.lengths[word]) / self.unit
                     floor = (LENGTH_WEIGHT * stretch + ENDS_WEIGHT * ends_off
-                             + FREQUENCY_WEIGHT * self.ranks[word])
+                             + FREQUENCY_WEIGHT * commonness(word))
                     candidates.append((floor, word))
         candidates.sort()
         kept = 3 * SHOWN
@@ -1103,11 +1191,27 @@ class Session:
     """The language in use, its predictor and its swipe decoder, and the
     layout's rows and keys, which carry over when the language changes."""
 
-    def __init__(self, source):
+    def __init__(self, source, bundled=None):
         self.source = source
+        # Ragtop's own copy of a language's files, in the repository
+        # (words/en): read where no download of them is.
+        self.bundled = bundled
         self.loaded = {}      # lang -> (Predictor, Swipes), or None when missing
         self.predictor = self.swipes = None
         self.rows = self.keys = None
+        # The word before the one being typed, from "after": START at the
+        # start of a sentence, None when it is not known. Held for the next
+        # "complete", never written anywhere.
+        self.before = None
+
+    def find(self, lang, name):
+        """A language's file, downloaded or else bundled, or None."""
+        for root in (self.source, self.bundled):
+            if root and os.path.isdir(root):
+                path = os.path.join(root, lang, name)
+                if os.path.exists(path):
+                    return path
+        return None
 
     def use(self, lang, path):
         if lang not in self.loaded:
@@ -1116,7 +1220,15 @@ class Session:
                 d = open_dictionary(lang)
                 if d:
                     p.use_dictionary(d, path)
-                self.loaded[lang] = (p, Swipes(p.ranks, p.folds))
+                # Which words follow which, when there are any: optional, as
+                # the dictionary is.
+                pairs = self.find(lang, f"pairs_{lang}.json.gz")
+                if pairs:
+                    try:
+                        p.use_pairs(pairs)
+                    except (OSError, ValueError, EOFError):
+                        pass
+                self.loaded[lang] = (p, Swipes(p.ranks, p.folds, p))
             except FileNotFoundError:
                 self.loaded[lang] = None
         if self.loaded[lang] is None:
@@ -1131,13 +1243,16 @@ class Session:
 
 
 def main():
-    if len(sys.argv) != 2:
-        sys.exit("usage: predictor.py <words-dir | wordlist.msgpack.gz>")
+    if len(sys.argv) not in (2, 3):
+        sys.exit("usage: predictor.py <words-dir | wordlist.msgpack.gz> [bundled-dir]")
     source = sys.argv[1]
-    session = Session(source)
+    session = Session(source, sys.argv[2] if len(sys.argv) == 3 else None)
     terminal = Terminal()
-    if not os.path.isdir(source):
-        # One list, the way this began: English, read now.
+    one_list = os.path.isfile(source) or source.endswith(".msgpack.gz")
+    if one_list:
+        # One list, the way this began: English, read now. A folder that is
+        # not there yet is still a folder: a machine that has downloaded
+        # nothing, and reads English from Ragtop's own copy.
         try:
             if session.use("en", source):
                 print(f"ready {len(session.predictor.words)}", flush=True)
@@ -1150,13 +1265,14 @@ def main():
         cmd, _, rest = line.rstrip("\n").partition(" ")
         if cmd == "quit":
             break
-        if cmd == "lang" and os.path.isdir(source) and valid_lang(rest):
+        if cmd == "lang" and not one_list and valid_lang(rest):
             # Dropped from what is loaded and tried again when it was missing,
             # so a list fetched since is found.
             if session.loaded.get(rest, 0) is None:
                 del session.loaded[rest]
             try:
-                ok = session.use(rest, os.path.join(source, rest, f"small_{rest}.msgpack.gz"))
+                found = session.find(rest, f"small_{rest}.msgpack.gz")
+                ok = session.use(rest, found or os.path.join(source, rest, f"small_{rest}.msgpack.gz"))
             except (OSError, ValueError, EOFError):
                 ok = False
             print(f"ready {rest} {len(session.predictor.words)}" if ok else f"missing {rest}", flush=True)
@@ -1174,7 +1290,7 @@ def main():
             words = []
             if session.swipes:
                 try:
-                    words = session.swipes.decode(json.loads(rest))
+                    words = session.swipes.decode(json.loads(rest), session.before)
                 except (ValueError, TypeError):
                     pass
             reply = "swiped" if cmd == "swipe" else "peeked"
@@ -1219,8 +1335,20 @@ def main():
             if p and len(pair) == 2 and all(pair):
                 found = join_words(pair[0], pair[1], p.ranks, p.lang, p.dictionary)
             print("join " + json.dumps(found, ensure_ascii=False), flush=True)
+        elif cmd == "after":
+            # The word just finished, "after" alone at a sentence's start,
+            # "after -" when what came before is not known.
+            session.before = None if rest == "-" else (rest.lower() if rest else START)
+            # j'ai: the word is ai, as the pairs were counted.
+            if session.before and "'" in session.before and session.predictor:
+                head, _, tail = session.before.partition("'")
+                if head in session.predictor.elisions and tail:
+                    session.before = tail
+            p = session.predictor
+            found = p.next(session.before) if p and session.before else []
+            print("next " + json.dumps(found, ensure_ascii=False), flush=True)
         elif cmd == "complete":
-            words = session.predictor.suggest(rest) if session.predictor else []
+            words = session.predictor.suggest(rest, session.before) if session.predictor else []
             print("suggest " + json.dumps(words, ensure_ascii=False), flush=True)
 
 

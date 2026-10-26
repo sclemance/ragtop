@@ -15,6 +15,7 @@
 #        ragtop words (languages | status | install [lang] | decline <lang> | remove [lang])
 #        ragtop update (check | run)       what an update would bring; Omarchy's updater
 #        ragtop tour (done | declined | reset)   whether the first-run tour is offered again
+#        ragtop touch-trace (on | off | show | compare)   find touches that did nothing
 #        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop keyboard-layout (get | is <name> | set <name>)
 #        ragtop display (get | is <name> | set <name>)
@@ -209,28 +210,58 @@ switch() {
   esac
 }
 
-# Word suggestions read wordfreq's lists, which are CC-BY-SA rather than MIT
-# and so are not in the repository. Each is fetched when it is first wanted,
-# from one fixed release, checked against a fixed hash, and kept exactly as
-# published with its notice beside it (words/NOTICE.md).
+# Each language Ragtop predicts in has two files: wordfreq's word list,
+# unmodified, and Ragtop's pairs, which words follow which, counted from
+# Tatoeba (bench/pairs.py). Both are CC BY-SA 4.0 rather than MIT (see
+# words/NOTICE.md). English's are in the repository, in words/en, so it needs
+# nothing fetched. The others are assets of Ragtop's own data-v1 release on
+# GitHub, fetched when first wanted, each checked against a fixed hash, and
+# kept with the notice beside them.
 #
-# The languages Ragtop offers, one line each: code, size in KB, name, and
-# the list's SHA-256. Only languages made to work, accents and apostrophes
-# and all, are here, and this table is the one list of them: the service
-# reads it through `words languages`.
+# The languages Ragtop offers, one line each: code, size in KB of what is
+# fetched, name, the list's SHA-256 and the pairs'. Only languages made to
+# work, accents and apostrophes and all, are here, and this table is the one
+# list of them: the service reads it through `words languages`.
 words_root="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/words"
-words_release="https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data"
+words_release="https://github.com/sclemance/ragtop/releases/download/data-v1"
 words_table="\
-en 125 English f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247
-fr 135 French 8fbbf619ff2e6ff5b3d99d41e69c105daf5795771ce8ef36529f210d571abe6e"
+en 790 English f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247 21b4d94d85c372e652a3de6afef94ea631a2e04a7af0759f54f86ad6c857a098
+fr 525 French 8fbbf619ff2e6ff5b3d99d41e69c105daf5795771ce8ef36529f210d571abe6e 4686dbb9a40ce891a8a43ae7b37bd53e51da38f30da08dbcadaaea30fe3a8053"
 
 # words_field <lang> <n>: that language's nth field in the table, or nothing.
 words_field() { awk -v l="$1" -v n="$2" '$1 == l { print $n }' <<<"$words_table"; }
 words_file() { echo "$words_root/$1/small_$1.msgpack.gz"; }
-words_installed() { [[ -f $(words_file "${1:-en}") ]]; }
+pairs_file() { echo "$words_root/$1/pairs_$1.json.gz"; }
+# Ragtop's own copy, in the repository, which needs no fetching.
+words_bundled() { [[ -f $repo/words/${1:-en}/small_${1:-en}.msgpack.gz ]]; }
+# Installed is both files, fetched or bundled. A list fetched before Ragtop
+# had pairs counts as not yet, so the strip offers the language again and the
+# tap fetches only what is missing.
+words_installed() {
+  local lang="${1:-en}"
+  words_bundled "$lang" && return 0
+  [[ -f $(words_file "$lang") && ( -z $(words_field "$lang" 5) || -f $(pairs_file "$lang") ) ]]
+}
+
+# fetch_checked <url> <sha256> <destination>: kept only when it matches.
+fetch_checked() {
+  local tmp
+  tmp=$(mktemp "$(dirname "$3")/.download.XXXXXX")
+  if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 60 -o "$tmp" "$1"; then
+    rm -f "$tmp"
+    echo "Could not download $(basename "$3") from GitHub." >&2
+    return 1
+  fi
+  if [[ $(sha256sum "$tmp" | cut -d' ' -f1) != "$2" ]]; then
+    rm -f "$tmp"
+    echo "The downloaded $(basename "$3") is not the one expected, so it was not kept." >&2
+    return 1
+  fi
+  mv -f "$tmp" "$3"
+}
 
 words_install() {
-  local lang="${1:-en}" sha dir tmp
+  local lang="${1:-en}" sha pairs_sha dir
   sha=$(words_field "$lang" 4)
   if [[ -z $sha ]]; then
     echo "Ragtop has no word list for \"$lang\"." >&2
@@ -239,19 +270,14 @@ words_install() {
   words_installed "$lang" && return 0
   dir="$words_root/$lang"
   mkdir -p "$dir"
-  tmp=$(mktemp "$dir/.download.XXXXXX")
-  if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 60 -o "$tmp" "$words_release/small_$lang.msgpack.gz"; then
-    rm -f "$tmp"
-    echo "Could not download the word list from GitHub." >&2
-    return 1
+  if [[ ! -f $(words_file "$lang") ]]; then
+    fetch_checked "$words_release/small_$lang.msgpack.gz" "$sha" "$(words_file "$lang")" || return 1
   fi
-  if [[ $(sha256sum "$tmp" | cut -d' ' -f1) != "$sha" ]]; then
-    rm -f "$tmp"
-    echo "The downloaded word list is not the one expected, so it was not kept." >&2
-    return 1
+  pairs_sha=$(words_field "$lang" 5)
+  if [[ -n $pairs_sha && ! -f $(pairs_file "$lang") ]]; then
+    fetch_checked "$words_release/pairs_$lang.json.gz" "$pairs_sha" "$(pairs_file "$lang")" || return 1
   fi
   cp "$repo/words/NOTICE.md" "$dir/NOTICE.md"
-  mv -f "$tmp" "$(words_file "$lang")"
 }
 
 # words declined: the languages whose offer was answered "Not now", which
@@ -270,7 +296,13 @@ words() {
       done <<<"$words_table" ;;
     status)
       while read -r code _ name _; do
-        echo "$name: $(words_installed "$code" && echo "installed, $(words_file "$code")" || echo "not installed")"
+        if [[ -f $(words_file "$code") ]] && words_installed "$code"; then
+          echo "$name: installed, $(dirname "$(words_file "$code")")"
+        elif words_bundled "$code"; then
+          echo "$name: bundled with Ragtop, $repo/words/$code"
+        else
+          echo "$name: not installed"
+        fi
       done <<<"$words_table" ;;
     install)
       if words_install "$lang"; then
@@ -670,6 +702,75 @@ print(label)
 EOF
 }
 
+# touch-trace: for a tap that seems not to register. `on` has the keyboard
+# keep its last minute of touches in memory, by kind of key, never the
+# character; `compare` lays them against what the touchscreen itself
+# reported, recorded meanwhile by `sudo bench/touch-trace.py`, and lists
+# every finger the screen saw that Ragtop did nothing with, and why where it
+# knows. A tap the screen never reported is the panel's; one it reported and
+# Ragtop dropped is a fault to fix.
+touch_trace() {
+  case "${1:-}" in
+    on) omarchy-shell ragtop touchTraceOn >/dev/null && echo "Tracing touches. Run 'sudo $repo/bench/touch-trace.py' in a terminal too, type, and when a tap is missed run: ragtop touch-trace compare" ;;
+    off) omarchy-shell ragtop touchTraceOff >/dev/null && echo "Stopped, and the trace is cleared." ;;
+    show) omarchy-shell ragtop touchTraceLog | jq -r '.touches[] | "\(.t)  \(.ev)  finger \(.id)  at \(.x*100|floor)%,\(.y*100|floor)%  \(.what)"' ;;
+    compare)
+      local trace
+      trace=$(omarchy-shell ragtop touchTraceLog) || { echo "The shell did not answer." >&2; return 1; }
+      /usr/bin/python3 - "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ragtop-touch-kernel.log" "$trace" <<'EOF'
+import json, os, sys, time
+trace = json.loads(sys.argv[2])
+mine, top, turned = trace["touches"], trace["keyboardTop"], trace["orientation"] != "normal"
+kernel = []
+if os.path.exists(sys.argv[1]):
+    for line in open(sys.argv[1]):
+        try:
+            kernel.append(json.loads(line))
+        except ValueError:
+            pass
+if not mine:
+    sys.exit("Ragtop has no touches traced. Turn it on with: ragtop touch-trace on")
+since = mine[0]["t"] - 1000
+kernel = [k for k in kernel if k["t"] >= since and k["ev"] == "down"]
+if turned:
+    print("The screen is turned, and the touchscreen reports in its own unturned terms, so every")
+    print("touch it saw is counted, the keyboard's or not. Hold it upright for a cleaner comparison.")
+else:
+    # Only the touches that landed on the keyboard, a little above its top for a
+    # finger at the edge of the first row.
+    kernel = [k for k in kernel if k["y"] >= top - 0.02]
+downs = [m for m in mine if m["ev"] == "down"]
+now = time.time() * 1000
+def ago(t): return f"{(now - t) / 1000:5.1f}s ago"
+print(f"Last {(now - since) / 1000:.0f}s: the screen reported {len(kernel)} touches, Ragtop received {len(downs)}.")
+if not kernel:
+    print("No touchscreen record for that time: run 'sudo bench/touch-trace.py' alongside.")
+# Each finger the screen reported, and the first finger Ragtop got after it,
+# within a second: late is a press handled where the finger had moved to.
+missed = []
+for k in kernel:
+    after = [m for m in downs if -50 <= m["t"] - k["t"] <= 1000]
+    if not after:
+        missed.append(k)
+        print(f"  {ago(k['t'])}  screen saw a finger at {k['x']*100:.0f}%,{k['y']*100:.0f}% of the panel; Ragtop got nothing")
+    elif after[0]["t"] - k["t"] > 100:
+        print(f"  {ago(k['t'])}  screen saw a finger; Ragtop got it {after[0]['t'] - k['t']} ms late")
+for m in mine:
+    if m["ev"] in ("stall", "room"):
+        print(f"  {ago(m['t'])}  {m['what']}")
+ignored = [m for m in mine if m["what"].startswith("ignored") or m["what"].startswith("nothing")
+           or m["what"] == "closes the controls"]
+for m in ignored:
+    where = f" at {m['x']*100:.0f}%,{m['y']*100:.0f}% of the screen" if m["ev"] in ("down", "up") else ""
+    print(f"  {ago(m['t'])}  {m['ev']}{where}: {m['what']}")
+if kernel and not missed and not ignored and not any(m["ev"] == "stall" for m in mine):
+    print("Every touch the screen reported reached Ragtop and did something.")
+EOF
+      ;;
+    *) usage ;;
+  esac
+}
+
 # What the issue forms ask for by hand, gathered in one place.
 #
 # This is meant to be pasted into a public issue, so it carries no paths
@@ -932,6 +1033,7 @@ case "${1:-} ${2:-}" in
   # turned down, so it is offered once. Reset offers it again.
   "tour done"|"tour declined") put tour "$2" ;;
   "tour reset") put tour "" ;;
+  "touch-trace "*) touch_trace "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;

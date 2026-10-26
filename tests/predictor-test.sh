@@ -508,6 +508,58 @@ no_dictionary_no_change() {
   assert_contains "$out" 'forms []'
 }
 
+# ---- The next word ------------------------------------------------------------
+
+# pairs_file <file> <json>: a pairs file as bench/pairs.py writes one.
+pairs_file() { printf '%s' "$2" | gzip >"$1"; }
+
+next_words_and_context() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/en"
+  wordlist "$dir/en/small_en.msgpack.gz" 160:to 150:the 170:you 200:i 300:going 320:thank 330:tom 400:toast
+  pairs_file "$dir/en/pairs_en.json.gz" \
+    '{"<s>":[["i",50],["the",30]],"thank":[["you",90],["the",1]],"going":[["to",80]],"<capitals>":["i"]}'
+  out=$( { echo "lang en"; echo "after"; echo "after thank"; echo "after going"; echo "complete t";
+           echo "after -"; echo "complete t"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  # At a sentence's start, with I written as it always is.
+  assert_contains "$out" 'next ["I", "the"]'
+  assert_contains "$out" 'next ["you", "the"]'
+  # After going, to leads what t could be; with no word before, the does.
+  assert_contains "$out" 'suggest ["to", "the"'
+  assert_contains "$out" 'next []'
+  [[ $(grep -c '^suggest \["the", "to"' <<<"$out") -eq 1 ]] || fail "without context the should lead: $out"
+}
+
+# English is in the repository: a machine that has fetched nothing still
+# has it, pairs and all.
+the_bundled_copy_is_read() {
+  local bundled="$sandbox/bundled"
+  mkdir -p "$bundled/en"
+  wordlist "$bundled/en/small_en.msgpack.gz" 170:you 320:thank
+  pairs_file "$bundled/en/pairs_en.json.gz" '{"thank":[["you",9]]}'
+  out=$( { echo "lang en"; echo "after thank"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" \
+        "$sandbox/nothing-fetched" "$bundled" 2>&1) || true
+  assert_contains "$out" "ready en 2"
+  assert_contains "$out" 'next ["you"]'
+}
+
+# The word before steers a swipe, as it does a completion, where the path
+# cannot: to and too are the same stops, and too is what follows me. A clear
+# path still wins over it (world is not word after hello, its l not drawn).
+a_swipe_follows_the_word_before() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/en"
+  wordlist "$dir/en/small_en.msgpack.gz" 127:the 150:to 230:her 300:too 310:me 400:top
+  pairs_file "$dir/en/pairs_en.json.gz" '{"me":[["too",50],["to",10]]}'
+  mapfile -t lines < <(swipes to)
+  out=$( { echo "lang en"; echo "${lines[0]}"; echo "${lines[1]}"; echo "after me"; echo "${lines[1]}"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" \
+    "to too " "the swipe alone, then after me"
+}
+
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing
 run_test "predictor: a word typed with one slip is corrected" one_slip_is_corrected
@@ -543,6 +595,9 @@ run_test "predictor: no join into a misspelling, or where there is no word" no_j
 run_test "predictor: with a dictionary, it decides what joins" a_dictionary_decides_joins
 run_test "predictor: forms from a dictionary's stems, for a language without rules" forms_from_stems
 run_test "predictor: no dictionary, no change" no_dictionary_no_change
+run_test "predictor: next words, and completions ranked by the word before" next_words_and_context
+run_test "predictor: the bundled copy is read when nothing was fetched" the_bundled_copy_is_read
+run_test "predictor: the word before steers a swipe" a_swipe_follows_the_word_before
 run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
 run_test "predictor: then files and folders from the terminal's folder" files_after_it
 run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names

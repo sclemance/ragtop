@@ -782,6 +782,36 @@ What it has settled so far (2026-10-24):
   floor in decode prune less. What remains in French is mostly words the
   path cannot tell apart, commencé and commence, which needs context.
 
+**The next word** is a bigram model with backoff, no AI: `bench/pairs.py`
+counts which words follow which in Tatoeba's sentences (nine tenths for
+measuring, all for release), keeps each word's 32 commonest followers seen
+twice or more, leaves out names Tatoeba overuses (capitalised mid-sentence
+80% of the time and ten times commoner there than in wordfreq: Tom, Mary),
+and lists the words always written with a capital (I, Paris), all read from
+the data rather than written per language. The predictor holds the word
+before ("after"), answers next words, and ranks completions by the share of
+that word's followers each one is, in centibels, or by its own frequency 40
+centibels worse (CONTEXT_BACKOFF; 0 to 100 measured within 0.2%). Measured on
+held-out sentences: keystrokes saved 24 → 37% English, 24 → 36% French; on a
+nineteenth-century novel 23 → 30% and 21 → 27%. The service reads the word
+before off the typed record (contextNow), so tapped, swiped and taken words
+all count. Swipe decoding takes the word before too (Swipes.decode,
+before): its frequency term is the same context-aware commonness, so the
+floor that prunes candidates stays exact. Measured with every word of
+held-out sentences swiped in order (bench/pairs.py, measure_swipe): right
+first 94.8 → 95.8% English and 93.1 → 93.8% French at typical wobble, 89.4 →
+91.6% and 87.6 → 89.9% sloppy, about a fifth fewer wrong swipes; mostly words
+the path cannot tell apart, to and too. A heavier frequency weight did worse
+with context or without (1/300, 1/220), so it stays 1/400.
+
+Data layout: `words/en/` is in the repository (wordfreq's list, unmodified,
+and the English pairs, about 0.8 MB together) so English needs nothing
+fetched; other languages are assets of the `data-v1` release, pinned by hash
+in the CLI's `words_table`. The predictor reads a language's files from the
+downloads folder first, then `words/`. Pairs builds are reproducible (sorted
+keys, gzip with no timestamp); words/NOTICE.md records the Tatoeba export
+each was built from.
+
 Hunspell is used when a dictionary is installed, never required
 (predictor.py, Spelling dictionaries), through libhunspell by ctypes. Its
 validity check answers joins in any language (storeroom yes, alot no) at
@@ -796,6 +826,22 @@ entries of their own), so English keeps its rules. Completions are not
 filtered by it: it rejects lower-case names and newer words the list rightly
 has. `RAGTOP_DICTIONARY_DIRS` replaces the search path, empty for none,
 which the tests use.
+
+## Tracing touches
+
+`ragtop touch-trace on` keeps the keyboard's last minute of touches in
+memory: when, where, what each came to (a kind of key, never the
+character), stalls of the shell's thread over 100 ms, and every change in
+reserved space. `sudo bench/touch-trace.py` records what the touchscreen
+itself reports, from the kernel, and `ragtop touch-trace compare` lays the
+two together. It settled two things (2026-10-26). Touches reach Ragtop
+within a couple of milliseconds; a "missed" press was the keyboard's frames
+being held while the windows above resized, which a strip appearing or
+going mid-swipe caused. So the reserved space (Keyboard.qml, reservedHeight)
+changes only between touches, and is given back only after a second with
+none. And a held finger means a card or a swipe and nothing else, so drift
+cancels nothing, and a card left across the letters hands over to a swipe
+unless the finger is heading for the card (cardToSwipe, headingFor).
 
 ## What shaped the design
 
