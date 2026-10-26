@@ -24,7 +24,8 @@ What it measures, each on text the word lists were not built from:
   correction  one letter swapped for a key beside it: is the word in the
               first three, and how long it took
   swipe       a path through the word's keys, wobbled the way a finger is,
-              decoded: first, first three, and how long
+              decoded: first, first three, and how long, for words as often
+              as they are written and, as "rare", for distinct words evenly
 
 Random choices are seeded, so two runs of one list agree, and two lists are
 measured on the same words.
@@ -91,16 +92,17 @@ def centres(rows):
     return {c: (STAGGER[r] + i + 0.5, r + 0.5) for r, row in enumerate(rows) for i, c in enumerate(row)}
 
 
-def finger_path(word, keys, rng):
+def finger_path(word, keys, rng, wobble=1.0):
     """A swipe through the word's keys: each key aimed at and missed a little,
-    the line between them drawn every tenth of a key and never quite still."""
+    the line between them drawn every tenth of a key and never quite still.
+    wobble scales how far off: 0.7 a careful finger, 1.4 a hurried one."""
     stops = []
     for c in P.fold(word):
         if c == "'":
             continue
         p = keys[c]
         if not stops or stops[-1][0] != c:
-            stops.append((c, (p[0] + rng.gauss(0, 0.22), p[1] + rng.gauss(0, 0.18))))
+            stops.append((c, (p[0] + rng.gauss(0, 0.22 * wobble), p[1] + rng.gauss(0, 0.18 * wobble))))
     out = []
     for (_, a), (_, b) in zip(stops, stops[1:]):
         n = max(2, int(math.dist(a, b) / 0.1))
@@ -187,20 +189,38 @@ def run(lang, path, rows_name, samples):
     result["correction"] = {"top1": round(hits1 / max(1, tried), 4),
                             "top3": round(hits3 / max(1, tried), 4), **spread(lat)}
 
-    # Swipes, over words the decoder could spell on this board.
-    pool = sorted(w for w in set(known) if len(P.fold(w).replace("'", "")) >= 3
-                  and all(c in keys for c in P.fold(w) if c != "'"))
-    hits1 = hits3 = 0
-    lat = []
-    chosen = rng.sample(pool, min(samples["swipe"], len(pool)))
-    for w in chosen:
-        found, ms = timed(swipes.decode, finger_path(w, keys, rng))
-        found = [x.lower() for x in found]
-        hits1 += bool(found) and found[0] == w
-        hits3 += w in found[:TOP]
-        lat.append(ms)
-    result["swipe"] = {"top1": round(hits1 / max(1, len(chosen)), 4),
-                       "top3": round(hits3 / max(1, len(chosen)), 4), **spread(lat)}
+    # Swipes, over words the decoder could spell on this board, two ways.
+    # As written: positions in the running text, so the words come up as
+    # often as people write them, which is what a swipe meets. Rare words:
+    # distinct words picked evenly, which is mostly words seldom written and
+    # says how the decoder copes when frequency cannot help. The first is
+    # the one to judge by; judged by the second alone, frequency looked like
+    # it was hurting, and weighing it less would have made everyday swipes
+    # worse.
+    def decodable(w):
+        f = P.fold(w).replace("'", "")
+        return len(f) >= 2 and all(c in keys for c in f)
+
+    def swipe_on(words):
+        hits1 = hits3 = 0
+        lat = []
+        for w in words:
+            found, ms = timed(swipes.decode, finger_path(w, keys, rng))
+            found = [x.lower() for x in found]
+            hits1 += bool(found) and found[0] == w
+            hits3 += w in found[:TOP]
+            lat.append(ms)
+        return {"top1": round(hits1 / max(1, len(words)), 4),
+                "top3": round(hits3 / max(1, len(words)), 4), **spread(lat)}
+
+    written = []
+    while len(written) < samples["swipe"]:
+        w = text[rng.randrange(len(text))]
+        if w in pred.ranks and decodable(w):
+            written.append(w)
+    result["swipe"] = swipe_on(written)
+    pool = sorted(w for w in set(known) if decodable(w) and len(P.fold(w)) >= 3)
+    result["swipe_rare"] = swipe_on(rng.sample(pool, min(samples["swipe"], len(pool))))
     return result
 
 
@@ -219,7 +239,8 @@ def table(results):
             ("fix top3", lambda r: f"{r['correction']['top3']:.1%}"),
             ("fix p95", lambda r: f"{r['correction']['p95_ms']} ms"),
             ("swipe 1/3", lambda r: f"{r['swipe']['top1']:.0%}/{r['swipe']['top3']:.0%}"),
-            ("swipe p95", lambda r: f"{r['swipe']['p95_ms']} ms")]
+            ("rare 1/3", lambda r: f"{r['swipe_rare']['top1']:.0%}/{r['swipe_rare']['top3']:.0%}"),
+            ("swipe p95", lambda r: f"{max(r['swipe']['p95_ms'], r['swipe_rare']['p95_ms'])} ms")]
     cells = [[name for name, _ in cols]] + [[f(r) for _, f in cols] for r in results]
     widths = [max(len(row[i]) for row in cells) for i in range(len(cols))]
     for row in cells:

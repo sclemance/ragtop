@@ -767,7 +767,20 @@ What it has settled so far (2026-10-24):
   percentile went from 62 to 6 ms a keystroke and from 258 to 72 ms a swipe
   in English, and from 95 to 6 ms and 429 to 77 ms in French, for about
   100 ms more at load and 5 MB more memory.
-- **French swipe is the weak spot**: 70% first, against 82% in English.
+- **Swipe is judged on words as they are written.** Picking distinct words
+  evenly, the first measure, made French look like 70% right first and
+  English 82%, but that is mostly rare words; as written, it was 88% and
+  94%. Read the other way, weighing frequency less looked like a win. Both
+  are reported now, the written one first.
+- **Swipe weights were tuned** (2026-10-26) on held-out words, both
+  languages, three amounts of wobble: shape 1 → 1.5, frequency 1/300 →
+  1/400, length 0.15 → 0.1, ends 0.5 → 0.75. French as written 88 → 91%
+  first (99% in the first three), rare words 69 → 76%; English 94 → 96%,
+  rare 76 → 83%. The tuner wanted shape at 3; that was left alone because
+  the paths are simulated and smoother than a finger. The 95th percentile
+  of a swipe rose to about 95 ms, since a lighter frequency term makes the
+  floor in decode prune less. What remains in French is mostly words the
+  path cannot tell apart, commencé and commence, which needs context.
 
 Hunspell was tried alongside, as an optional enhancement rather than a
 dependency: its validity check answers joins in any language (storeroom yes,

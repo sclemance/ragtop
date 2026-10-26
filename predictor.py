@@ -690,19 +690,28 @@ END_SLACK = 1.4
 VISIT_SLACK = 1.1
 # Weights, in key widths, against the frequency prior, which is in
 # centibels: 100 centibels, a factor of ten in how common a word is, weigh
-# as much as the path being a third of a key further off on average.
+# as much as the path being a quarter of a key further off on average.
+#
+# Tuned with bench/bench.py on held-out words, French and English together,
+# at three amounts of wobble, as words come up in writing and as rare words
+# (2026-10-26), from 1, 1, 1/300, 0.15 and 0.5: French went from 87 to 91%
+# right first, English from 94 to 95%, and rare words most, 65 to 75% and
+# 79 to 86%. A step towards what the tuner liked best rather than all the
+# way: it wanted shape trusted three times as much, and the paths it was
+# tuned on are simulated, smoother than a real finger, so the heavier bet
+# would be on the simulation. Real swipes are what should settle the rest.
 LOCATION_WEIGHT = 1.0
-SHAPE_WEIGHT = 1.0
-FREQUENCY_WEIGHT = 1 / 300
+SHAPE_WEIGHT = 1.5
+FREQUENCY_WEIGHT = 1 / 400
 # How far the finger travelled, against how far the word's keys are apart,
 # in key widths. Without it a common short word whose path lies along a
 # longer one's wins it: "the" for "there", "so" for "stop", since the two
 # comparisons above resample both to the same number of points.
-LENGTH_WEIGHT = 0.15
+LENGTH_WEIGHT = 0.1
 # Where the finger landed and lifted, against the first and last keys. The
 # ends are the surest part of a swipe, and the part the comparisons above
 # weigh least: "her" for "here" ends one key short.
-ENDS_WEIGHT = 0.5
+ENDS_WEIGHT = 0.75
 
 
 def resample(points, n=SAMPLES):
