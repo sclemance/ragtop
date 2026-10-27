@@ -65,6 +65,18 @@
   "setup.tablet.assists": {
     "label": "Großschreibung und Punkte"
   },
+  "setup.tablet.typing-memory": {
+    "label": "Tippgedächtnis"
+  },
+  "setup.tablet.typing-memory.full": {
+    "label": "Vollständig"
+  },
+  "setup.tablet.typing-memory.word": {
+    "label": "Nur das aktuelle Wort"
+  },
+  "setup.tablet.typing-memory.none": {
+    "label": "Nichts"
+  },
   "setup.tablet.swipe": {
     "label": "Wischtippen (Beta)"
   },

@@ -1302,94 +1302,105 @@ def main():
             # The file, never what was typed: nothing has been typed yet.
             sys.exit(f"can't read the word list: {e}")
     for line in sys.stdin:
-        cmd, _, rest = line.rstrip("\n").partition(" ")
-        if cmd == "quit":
+        if not handle(session, terminal, source, one_list, line):
             break
-        if cmd == "lang" and not one_list and valid_lang(rest):
-            # Dropped from what is loaded and tried again when it was missing,
-            # so a list fetched since is found.
-            if session.loaded.get(rest, 0) is None:
-                del session.loaded[rest]
-            try:
-                found = session.find(rest, f"small_{rest}.msgpack.gz")
-                ok = session.use(rest, found or os.path.join(source, rest, f"small_{rest}.msgpack.gz"))
-            except (OSError, ValueError, EOFError):
-                ok = False
-            print(f"ready {rest} {len(session.predictor.words)}" if ok else f"missing {rest}", flush=True)
-            if ok:
-                d = session.predictor.dictionary
-                print(f"dictionary {rest} {d.name if d else '-'}", flush=True)
-        elif cmd == "keys":
-            try:
-                session.keys = json.loads(rest)
-                if session.swipes:
-                    session.swipes.set_keys(session.keys)
-            except (ValueError, TypeError, IndexError):
-                pass
-        elif cmd in ("swipe", "peek"):
-            words = []
+        # What was asked about is held for this request only: the request's
+        # own names went with handle(), and this one goes now, rather than
+        # staying reachable until the next line comes in.
+        del line
+
+
+def handle(session, terminal, source, one_list, line):
+    """One request, answered on stdout. False for quit."""
+    cmd, _, rest = line.rstrip("\n").partition(" ")
+    if cmd == "quit":
+        return False
+    if cmd == "lang" and not one_list and valid_lang(rest):
+        # Dropped from what is loaded and tried again when it was missing,
+        # so a list fetched since is found.
+        if session.loaded.get(rest, 0) is None:
+            del session.loaded[rest]
+        try:
+            found = session.find(rest, f"small_{rest}.msgpack.gz")
+            ok = session.use(rest, found or os.path.join(source, rest, f"small_{rest}.msgpack.gz"))
+        except (OSError, ValueError, EOFError):
+            ok = False
+        print(f"ready {rest} {len(session.predictor.words)}" if ok else f"missing {rest}", flush=True)
+        if ok:
+            d = session.predictor.dictionary
+            print(f"dictionary {rest} {d.name if d else '-'}", flush=True)
+    elif cmd == "keys":
+        try:
+            session.keys = json.loads(rest)
             if session.swipes:
-                try:
-                    words = session.swipes.decode(json.loads(rest), session.before)
-                except (ValueError, TypeError):
-                    pass
-            reply = "swiped" if cmd == "swipe" else "peeked"
-            print(f"{reply} " + json.dumps(words, ensure_ascii=False), flush=True)
-        elif cmd == "rows":
+                session.swipes.set_keys(session.keys)
+        except (ValueError, TypeError, IndexError):
+            pass
+    elif cmd in ("swipe", "peek"):
+        words = []
+        if session.swipes:
             try:
-                session.rows = json.loads(rest)
-                if session.predictor:
-                    session.predictor.set_rows(session.rows)
-            except ValueError:
+                words = session.swipes.decode(json.loads(rest), session.before)
+            except (ValueError, TypeError):
                 pass
-        elif cmd == "term":
-            found = []
-            try:
-                req = json.loads(rest)
-                cwd, line = req["cwd"], req["line"]
-                # Nushell quotes and escapes otherwise: nothing rather than
-                # words it would read wrongly.
-                if req.get("shell") == "nu":
-                    raise ValueError("nushell")
-                terminal.set_shell(req.get("shell", "bash"))
-                if isinstance(cwd, str) and isinstance(line, str) and os.path.isabs(cwd):
-                    found = terminal.suggest(cwd, line)
-            except (ValueError, KeyError, TypeError):
-                pass
-            print("termsuggest " + json.dumps(found, ensure_ascii=False), flush=True)
-        elif cmd == "forms":
-            words = []
-            p = session.predictor
-            if p and rest:
-                low = rest.lower()
-                if p.lang in FORMS:
-                    found = FORMS[p.lang](low, p.ranks)
-                else:
-                    found = p.stem_forms(low)
-                words = [cased(w, rest) for w in found][:SHOWN]
-            print("forms " + json.dumps(words, ensure_ascii=False), flush=True)
-        elif cmd == "join":
-            found = {}
-            p = session.predictor
-            pair = rest.split(" ")
-            if p and len(pair) == 2 and all(pair):
-                found = join_words(pair[0], pair[1], p.ranks, p.lang, p.dictionary)
-            print("join " + json.dumps(found, ensure_ascii=False), flush=True)
-        elif cmd == "after":
-            # The word just finished, "after" alone at a sentence's start,
-            # "after -" when what came before is not known.
-            session.before = None if rest == "-" else (rest.lower() if rest else START)
-            # j'ai: the word is ai, as the pairs were counted.
-            if session.before and "'" in session.before and session.predictor:
-                head, _, tail = session.before.partition("'")
-                if head in session.predictor.elisions and tail:
-                    session.before = tail
-            p = session.predictor
-            found = p.next(session.before) if p and session.before else []
-            print("next " + json.dumps(found, ensure_ascii=False), flush=True)
-        elif cmd == "complete":
-            words = session.predictor.suggest(rest, session.before) if session.predictor else []
-            print("suggest " + json.dumps(words, ensure_ascii=False), flush=True)
+        reply = "swiped" if cmd == "swipe" else "peeked"
+        print(f"{reply} " + json.dumps(words, ensure_ascii=False), flush=True)
+    elif cmd == "rows":
+        try:
+            session.rows = json.loads(rest)
+            if session.predictor:
+                session.predictor.set_rows(session.rows)
+        except ValueError:
+            pass
+    elif cmd == "term":
+        found = []
+        try:
+            req = json.loads(rest)
+            cwd, line = req["cwd"], req["line"]
+            # Nushell quotes and escapes otherwise: nothing rather than
+            # words it would read wrongly.
+            if req.get("shell") == "nu":
+                raise ValueError("nushell")
+            terminal.set_shell(req.get("shell", "bash"))
+            if isinstance(cwd, str) and isinstance(line, str) and os.path.isabs(cwd):
+                found = terminal.suggest(cwd, line)
+        except (ValueError, KeyError, TypeError):
+            pass
+        print("termsuggest " + json.dumps(found, ensure_ascii=False), flush=True)
+    elif cmd == "forms":
+        words = []
+        p = session.predictor
+        if p and rest:
+            low = rest.lower()
+            if p.lang in FORMS:
+                found = FORMS[p.lang](low, p.ranks)
+            else:
+                found = p.stem_forms(low)
+            words = [cased(w, rest) for w in found][:SHOWN]
+        print("forms " + json.dumps(words, ensure_ascii=False), flush=True)
+    elif cmd == "join":
+        found = {}
+        p = session.predictor
+        pair = rest.split(" ")
+        if p and len(pair) == 2 and all(pair):
+            found = join_words(pair[0], pair[1], p.ranks, p.lang, p.dictionary)
+        print("join " + json.dumps(found, ensure_ascii=False), flush=True)
+    elif cmd == "after":
+        # The word just finished, "after" alone at a sentence's start,
+        # "after -" when what came before is not known.
+        session.before = None if rest == "-" else (rest.lower() if rest else START)
+        # j'ai: the word is ai, as the pairs were counted.
+        if session.before and "'" in session.before and session.predictor:
+            head, _, tail = session.before.partition("'")
+            if head in session.predictor.elisions and tail:
+                session.before = tail
+        p = session.predictor
+        found = p.next(session.before) if p and session.before else []
+        print("next " + json.dumps(found, ensure_ascii=False), flush=True)
+    elif cmd == "complete":
+        words = session.predictor.suggest(rest, session.before) if session.predictor else []
+        print("suggest " + json.dumps(words, ensure_ascii=False), flush=True)
+    return True
 
 
 if __name__ == "__main__":

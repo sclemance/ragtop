@@ -117,6 +117,16 @@ rows = {
     "setup.tablet.assists": dict(icon="\U000f030c", label="Capitals and Full Stops",
         checked=f'"{cmd}" assists enabled',
         action=f'"{cmd}" assists toggle'),
+    # How much of what is typed is kept while a field has focus. Full is
+    # what deleting words by name and next words read; none keeps nothing,
+    # and so suggests nothing.
+    "setup.tablet.typing-memory": dict(icon="\U000f033e", label="Typing Memory"),
+    "setup.tablet.typing-memory.full": dict(icon="\U000f030c", label="Full",
+        checked=f'"{cmd}" typing-memory is full', action=f'"{cmd}" typing-memory set full'),
+    "setup.tablet.typing-memory.word": dict(icon="\U000f030c", label="Current Word Only",
+        checked=f'"{cmd}" typing-memory is word', action=f'"{cmd}" typing-memory set word'),
+    "setup.tablet.typing-memory.none": dict(icon="\U000f0322", label="Nothing",
+        checked=f'"{cmd}" typing-memory is none', action=f'"{cmd}" typing-memory set none'),
     # Only offered once suggestions are on, which it needs.
     "setup.tablet.swipe": dict(icon="\U000f030c", label="Swipe Typing (beta)",
         when=f'"{cmd}" predictions enabled',

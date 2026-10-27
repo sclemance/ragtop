@@ -1,0 +1,193 @@
+import QtQuick
+import Quickshell
+import "typed-record.js" as Record
+
+// Service.qml's typing memory, its own members copied in by extract.py, and
+// everything else they touch stood in for below: what each typing-memory
+// setting keeps while keys are typed, and when it is all let go. A field
+// taking focus (fieldShown), a hide (fieldHidden) and the bridge's report on
+// which field has focus (fieldReported) are the bridge's three lines.
+ShellRoot {
+  id: root
+
+  Harness { id: t }
+
+  // ---- Stand-ins -----------------------------------------------------------
+  property var settings: ({})
+  property bool passwordOpen: false
+  property bool predictionsEnabled: true
+  property bool wordsReady: true
+  property bool imeComposing: false
+  property bool atPrompt: false
+  property bool capitalNext: false
+  property var suggestions: ({ source: "", items: [] })
+  function setSuggestions(source, value) {
+    if (value) root.suggestions = Object.assign({ source: source }, value)
+    else if (root.suggestions.source === source) root.suggestions = { source: "", items: [] }
+  }
+  QtObject { id: keyboardHelper; property bool running: true; function write(s) {} }
+  QtObject { id: predictorProc; property bool running: true; property var sent: []
+             function write(s) { sent.push(s) } }
+  QtObject { id: finishedPause; function restart() {} function stop() {} }
+
+  // ---- Service.qml's own ----------------------------------------------------
+  // SERVICE MEMBERS
+
+  // ---- The test ----------------------------------------------------------------
+  // A command as the keyboard sends it: followed for the word, then sent
+  // and kept for the record, the order sendKeys and writeKeys go in.
+  function press(command) {
+    if (/^(type|key|down) /.test(command))
+      root.setFinished(command === "key space" ? root.currentWord : "", " ", false)
+    root.trackWord(command)
+    root.noteTyped(command)
+  }
+  function typeWord(word) { word.split("").forEach(function(c) { root.press("type " + c) }) }
+  function letters(text) {
+    return text.split("").filter(function(c) { return c.toLowerCase() !== c.toUpperCase() }).join("")
+  }
+  // Everything held that could be text someone typed, together.
+  function held() {
+    var f = root.finished ? root.finished.word : ""
+    var j = root.joinFirst ? root.joinFirst.word : ""
+    return root.typedTail + "|" + root.currentWord + "|" + root.swipedWord + "|" + f + "|" + j
+      + "|" + root.asked.filter(function(a) { return a !== undefined }).join(",")
+      + "|" + root.pendingTyped.join(",")
+  }
+  readonly property var plain: ({ id: "aaaa", password: false, terminal: false, noCapitals: false })
+  readonly property var other: ({ id: "bbbb", password: false, terminal: false, noCapitals: false })
+  readonly property var secret: ({ id: "cccc", password: true, terminal: false, noCapitals: true })
+  function focus(field) {
+    root.fieldShown()
+    root.fieldReported(field)
+  }
+  function mode(m) { root.settings = { "typing-memory": m } }
+
+  Component.onCompleted: t.run([
+    [0, function() {
+      root.mode("full")
+      root.focus(root.plain)
+      root.typeWord("hello")
+      root.press("key space")
+      root.typeWord("wor")
+      t.equal(root.typedTail, "hello wor", "full keeps the text typed into the field")
+      t.equal(root.currentWord, "wor", "full follows the word being typed")
+    }],
+    [0, function() {
+      root.mode("word")
+      root.focus(root.plain)
+      root.typeWord("hello")
+      t.equal(root.currentWord, "hello", "word follows the word being typed")
+      root.press("key space")
+      t.equal(root.letters(root.held()), "", "word holds no letter once the word is finished")
+    }],
+    [0, function() {
+      root.mode("none")
+      root.focus(root.plain)
+      root.typeWord("hello")
+      t.equal(root.letters(root.held()), "", "none holds no letter while a word is typed")
+      t.equal(root.currentWord, "", "none does not follow the word being typed")
+      root.press("key space")
+      root.typeWord("world")
+      t.equal(root.letters(root.held()), "", "none holds no letter after more is typed")
+    }],
+    [0, function() {
+      root.mode("full")
+      root.focus(root.secret)
+      root.typeWord("hunter")
+      t.equal(root.letters(root.held()), "", "a password field keeps nothing, even in full")
+    }],
+    [0, function() {
+      // A field takes focus and keys come before the bridge says which: not
+      // kept, and the record is unknown after them.
+      root.mode("full")
+      root.fieldShown()
+      root.typeWord("abc")
+      t.equal(root.letters(root.held()), "", "nothing is kept before the field is known")
+      root.fieldReported(root.plain)
+      root.typeWord("de")
+      t.equal(root.typedTail, "de", "once known, typing is kept again")
+      t.ok(!root.typedFromStart, "and the record no longer claims the field's start")
+    }],
+    [0, function() {
+      // A hide, then keys, then the report: the same field takes them.
+      root.mode("full")
+      root.focus(root.plain)
+      root.typeWord("ab")
+      root.fieldHidden()
+      root.typeWord("cd")
+      t.equal(root.typedTail, "ab", "after a hide, keys are held apart from the record")
+      root.fieldReported(root.plain)
+      t.equal(root.typedTail, "abcd", "the same field reported: they join the record")
+      t.equal(root.pendingTyped.length, 0, "and nothing is held apart any more")
+    }],
+    [0, function() {
+      // A hide, keys, and another field: the old field's record and the keys go.
+      root.mode("full")
+      root.focus(root.plain)
+      root.typeWord("ab")
+      var generation = root.fieldGeneration
+      root.fieldHidden()
+      root.typeWord("cd")
+      root.fieldReported(root.other)
+      t.equal(root.letters(root.held()), "", "another field reported after a hide: nothing of either is kept")
+      t.ok(root.fieldGeneration > generation, "and a swipe still being read belongs to the old field")
+    }],
+    [0, function() {
+      root.mode("full")
+      root.focus(root.plain)
+      root.typeWord("ab")
+      root.fieldHidden()
+      root.typeWord("cd")
+      root.fieldReported(null)
+      t.equal(root.letters(root.held()), "", "no field focused after a hide: nothing is kept")
+    }],
+    [0, function() {
+      root.mode("full")
+      root.focus(root.plain)
+      root.typeWord("ab")
+      root.fieldHidden()
+      root.typeWord("cd")
+    }],
+    [1200, function() {
+      t.equal(root.letters(root.held()), "", "a hide never answered: everything is let go after a second")
+      t.ok(!root.fieldPending, "and nothing is in question any more")
+    }],
+    [0, function() {
+      // A word still waiting on the suggester when memory is turned down.
+      root.mode("full")
+      root.focus(root.plain)
+      root.typeWord("hel")
+      root.asked = ["hel"]
+      root.mode("none")
+      t.equal(root.asked[0], undefined, "a word waiting on an answer is let go when memory is turned down")
+      t.equal(root.letters(root.held()), "", "and nothing else is held")
+    }],
+    [0, function() {
+      // Next words are for the field they were asked in.
+      root.mode("full")
+      root.focus(root.plain)
+      root.nextArrived(["the"])
+      t.equal(root.nextWords.length, 1, "next words are kept for the field")
+      root.fieldReported(root.other)
+      t.equal(root.nextWords.length, 0, "and let go when another field has focus")
+      root.mode("none")
+      root.focus(root.plain)
+      root.nextArrived(["the"])
+      t.equal(root.nextWords.length, 0, "none keeps no next words")
+    }],
+    [0, function() {
+      root.mode("full")
+      root.focus(root.plain)
+      root.typeWord("hello")
+      root.press("key space")
+      t.ok(root.finished !== null, "full keeps the word just finished, for its forms and joins")
+      root.mode("word")
+      root.focus(root.plain)
+      root.typeWord("hello")
+      root.press("key space")
+      t.equal(root.finished, null, "word does not keep a finished word")
+      t.equal(root.wordsBefore(3).length, 0, "nor name words before the cursor")
+    }],
+  ])
+}

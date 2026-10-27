@@ -65,6 +65,18 @@
   "setup.tablet.assists": {
     "label": "Capitals and Full Stops"
   },
+  "setup.tablet.typing-memory": {
+    "label": "Typing Memory"
+  },
+  "setup.tablet.typing-memory.full": {
+    "label": "Full"
+  },
+  "setup.tablet.typing-memory.word": {
+    "label": "Current Word Only"
+  },
+  "setup.tablet.typing-memory.none": {
+    "label": "Nothing"
+  },
   "setup.tablet.swipe": {
     "label": "Swipe Typing (beta)"
   },

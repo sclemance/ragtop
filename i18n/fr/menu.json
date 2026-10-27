@@ -65,6 +65,18 @@
   "setup.tablet.assists": {
     "label": "Majuscules et points"
   },
+  "setup.tablet.typing-memory": {
+    "label": "Mémoire de saisie"
+  },
+  "setup.tablet.typing-memory.full": {
+    "label": "Complète"
+  },
+  "setup.tablet.typing-memory.word": {
+    "label": "Mot en cours seulement"
+  },
+  "setup.tablet.typing-memory.none": {
+    "label": "Rien"
+  },
   "setup.tablet.swipe": {
     "label": "Saisie gestuelle (bêta)"
   },

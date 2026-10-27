@@ -65,6 +65,18 @@
   "setup.tablet.assists": {
     "label": "Maiuscole e punti"
   },
+  "setup.tablet.typing-memory": {
+    "label": "Memoria di scrittura"
+  },
+  "setup.tablet.typing-memory.full": {
+    "label": "Completa"
+  },
+  "setup.tablet.typing-memory.word": {
+    "label": "Solo la parola attuale"
+  },
+  "setup.tablet.typing-memory.none": {
+    "label": "Niente"
+  },
   "setup.tablet.swipe": {
     "label": "Scrittura a scorrimento (beta)"
   },

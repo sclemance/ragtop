@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import "typed-record.js" as Record
 
 // Singleton: the shell creates one of these per session, whereas the
 // bar widget is created once per monitor. Owning the daemons here means there
@@ -853,6 +854,7 @@ Item {
     stdout: SplitParser {
       onRead: function(line) {
         if (line === "hide") {
+          root.fieldHidden()
           // Not another keyboard: Ragtop's own keys cause one too, and so
           // does focus settling into a field, which comes with a show.
           if (Date.now() - root.lastKeysAt > root.ownHideWithin
@@ -860,8 +862,7 @@ Item {
           return
         }
         if (line === "show") {
-          root.currentWord = ""
-          root.freshField()
+          root.fieldShown()
           root.autoShows++
           if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
           return
@@ -871,7 +872,7 @@ Item {
         var value
         try { value = JSON.parse(line.slice(space + 1)) } catch (e) { return }
         if (kind === "engine") root.imeEngine = value
-        else if (kind === "field") root.fieldInfo = value
+        else if (kind === "field") root.fieldReported(value)
         else if (kind === "engines") root.imeEngines = Array.isArray(value) ? value : []
         else if (kind === "candidates") root.setSuggestions("fcitx", value)
       }
@@ -1462,6 +1463,7 @@ Item {
   // the start of the field: it may be the end of a word typed before Ragtop
   // was watching.
   function wordsBefore(most) {
+    if (!root.keepContext) return []
     var t = root.beforeCursor
     var out = []
     var end = t.length
@@ -1479,6 +1481,8 @@ Item {
   // why a word to delete could not be named.
   function recordState() {
     if (root.secretField) return "secret field"
+    if (!root.keepAnything) return root.fieldKnown ? "nothing kept here" : "which field has focus is not known yet"
+    if (!root.keepContext) return "typing memory: " + root.typingMemory
     if (!root.predicting && root.typedTail === "") return "nothing kept here"
     if (root.typedTail === "") return root.typedFromStart ? "empty field" : "nothing typed since the record was lost"
     var words = root.beforeCursor.split(/\s+/).filter(function(w) { return w !== "" }).length
@@ -1591,75 +1595,36 @@ Item {
   // Whether typedTail reaches back to the start of the field, so that all of
   // it deleted is the start of the field again rather than unknown.
   property bool typedFromStart: false
-  readonly property int typedKept: 400
   property bool sentenceStart: false
-  function isWordChar(c) { return c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9") }
+  function isWordChar(c) { return Record.isWordChar(c) }
   function endsWordThenSpace() {
     var t = root.beforeCursor
     return t.length >= 2 && t[t.length - 1] === " " && root.isWordChar(t[t.length - 2])
   }
-  // One command as sent, for typedTail and sentenceStart. Everything that
-  // cannot be followed, ↑ ↓, Tab, a shortcut, leaves it unknown, and unknown
-  // never capitalises or suggests.
+  // One command as sent, for typedTail and sentenceStart, kept as the
+  // typing-memory setting allows (typed-record.js). Everything that cannot
+  // be followed, ↑ ↓, Tab, a shortcut, leaves it unknown, and unknown never
+  // capitalises or suggests. Nothing at all is kept in a password field, or
+  // while which field has focus is not yet known: what was typed there is
+  // not known either, so the record is unknown after it.
   function noteTyped(line) {
     if (line === "") return
-    if (root.secretField) return     // kept nowhere: see secretField
-    var space = line.indexOf(" ")
-    var cmd = space < 0 ? line : line.slice(0, space)
-    var arg = space < 0 ? "" : line.slice(space + 1)
-    var t = root.typedTail
-    var c = Math.min(root.typedCursor, t.length)
-    // A named key's modifiers follow it: Shift+Return is a new line still,
-    // and only Ctrl, Alt or Super make it a shortcut, which could do anything.
-    var parts = arg.split(" ")
-    var keysym = parts[0]
-    var shortcut = parts.slice(1).some(function(m) { return m !== "shift" })
-    var named = (cmd === "key" || cmd === "down") && !shortcut
-    var lineStart = t.lastIndexOf("\n", c - 1) + 1
-    var unknown = false
-    function insert(text) {
-      t = t.slice(0, c) + text + t.slice(c)
-      c += text.length
+    if (!root.keepAnything) {
+      if (/^(type|key|down) /.test(line)) root.dropTyped(false)
+      return
     }
-    if (cmd === "type") insert(arg)
-    else if (named && keysym === "space") insert(" ")
-    else if (named && keysym === "Return") {
-      // At a shell's prompt Enter runs the line, all of it, and the next
-      // starts empty; anywhere else it breaks the line at the cursor.
-      if (root.atPrompt) { t = "\n"; c = 1 } else insert("\n")
-    } else if (named && keysym === "BackSpace") {
-      if (c > 0) { t = t.slice(0, c - 1) + t.slice(c); c-- }
-      else unknown = !root.typedFromStart
-    } else if (named && keysym === "Delete") {
-      if (c < t.length) t = t.slice(0, c) + t.slice(c + 1)
-    } else if (named && keysym === "Left") {
-      if (c > 0) c--
-      else unknown = !root.typedFromStart
-    } else if (named && keysym === "Right") {
-      if (c < t.length) c++
-    } else if (named && keysym === "Home") {
-      if (lineStart === 0 && !root.typedFromStart) unknown = true
-      else c = lineStart
-    } else if (named && keysym === "End") {
-      var next = t.indexOf("\n", c)
-      c = next < 0 ? t.length : next
-    } else if (cmd === "key" || cmd === "down") unknown = true   // ↑ ↓, Tab, a shortcut
-    else return                                                  // up, hold, release, route
-    if (unknown) {
-      t = ""
-      c = 0
-      root.typedFromStart = false
+    if (root.fieldPending) {
+      root.pendingTyped.push(line)
+      return
     }
-    if (t.length > root.typedKept) {
-      var cut = t.length - root.typedKept
-      t = t.slice(cut)
-      c = Math.max(0, c - cut)
-      root.typedFromStart = false
-    }
-    root.typedTail = t
-    root.typedCursor = c
-    var before = t.slice(0, c)
-    root.sentenceStart = before === "" ? root.typedFromStart : /([.!?] |\n)$/.test(before)
+    var next = Record.note({ tail: root.typedTail, cursor: root.typedCursor,
+                             fromStart: root.typedFromStart },
+                           line, root.typingMemory, root.atPrompt)
+    if (next === null) return
+    root.typedTail = next.tail
+    root.typedCursor = next.cursor
+    root.typedFromStart = next.fromStart
+    root.sentenceStart = next.sentenceStart
   }
   // A field just focused is the start of something, and another keyboard
   // having typed is anywhere at all.
@@ -1972,12 +1937,113 @@ Item {
   // What kind of field has focus, from fcitx5 through the bridge:
   // { password, terminal, noCapitals }, or null when there is no telling.
   property var fieldInfo: null
+  // A field reported by its input context's id: a different one than the
+  // last, with no "show" between, is focus that moved without fcitx5 asking
+  // for the keyboard (a click from one field into another of the same kind),
+  // and what was kept for the old field is let go. None focused is null,
+  // which keeps nothing.
+  // A field took focus, and which is not known until the bridge has asked
+  // fcitx5: nothing is kept until it says.
+  function fieldShown() {
+    root.fieldInfo = null
+    root.fieldPending = false
+    root.pendingTyped = []
+    fieldPendingLimit.stop()
+    root.currentWord = ""
+    root.freshField()
+  }
+  // Focus may have left the field, or this is Ragtop's own key: the
+  // bridge's next report says which, and until it does what is typed is
+  // held apart (fieldPending).
+  function fieldHidden() {
+    root.fieldPending = true
+    root.pendingTyped = []
+    fieldPendingLimit.restart()
+  }
+  function fieldReported(value) {
+    var was = root.fieldInfo
+    var held = root.fieldPending ? root.pendingTyped : []
+    root.fieldPending = false
+    root.pendingTyped = []
+    fieldPendingLimit.stop()
+    root.fieldInfo = value
+    if (value && was && value.id !== was.id) root.forgetField(false)
+    // The same field still: what was typed while it was in question is its.
+    else if (value && held.length > 0) held.forEach(root.noteTyped)
+  }
+  // After a hide, until the bridge's report: whether focus is still in the
+  // field is not known, so what is typed is held here, not in the record,
+  // and goes into it only once the report says the field is the same one.
+  property bool fieldPending: false
+  property var pendingTyped: []
+  // A report that never comes is a field that cannot be vouched for.
+  Timer {
+    id: fieldPendingLimit
+    interval: 1000
+    onTriggered: {
+      root.fieldPending = false
+      root.pendingTyped = []
+      root.forgetField(false)
+    }
+  }
   // A password or sensitive field, in an application or in Omarchy's prompt.
   // Nothing typed into one is kept: not the field's text, not the word, not a
   // swipe, and nothing is suggested or capitalised there. What was held when
   // it took focus is let go, and the helper forgets which characters it had
   // to look up once it is left.
   readonly property bool secretField: root.passwordOpen || (!!root.fieldInfo && root.fieldInfo.password)
+
+  // How much of what is typed Ragtop may keep while a field has focus
+  // (Setup › Tablet › Typing Memory, typed-record.js): "full", the text
+  // before the cursor, for deleting words by name, BackSpace back into a
+  // word and choosing the next word by the one before; "word", only the word
+  // being typed, for its suggestions and swipe; "none", no typed text at
+  // all, and no suggestions or swipe, which need the word.
+  //
+  // Whatever the setting, nothing is kept in a password or sensitive field
+  // (secretField), which is the application's own say, or while which field
+  // has focus is not known: from a field taking focus until fcitx5 has said
+  // what it is, and while the bridge that asks is not running.
+  readonly property string typingMemory: ["word", "none"].indexOf(root.settings["typing-memory"]) !== -1
+    ? root.settings["typing-memory"] : "full"
+  readonly property bool fieldKnown: !!root.fieldInfo
+  readonly property bool keepAnything: root.fieldKnown && !root.secretField
+  readonly property bool keepWord: root.keepAnything && root.typingMemory !== "none"
+  readonly property bool keepContext: root.keepAnything && root.typingMemory === "full"
+  onKeepAnythingChanged: if (!root.keepAnything) root.forgetField(root.typedFromStart)
+  onTypingMemoryChanged: root.forgetField(false)
+  // Everything kept about what was typed, let go: the record, the word, what
+  // a swipe or the strip typed, and the words still waiting on an answer,
+  // whose answers then match nothing and are dropped. fromStart: whether
+  // what comes next is still the start of the field. A swipe still being
+  // decoded belongs to the field it was drawn in (fieldGeneration).
+  function forgetField(fromStart) {
+    root.fieldGeneration++
+    root.dropTyped(fromStart)
+    // Each answer still takes its place in the queue, and finds undefined.
+    var gone = function() { return undefined }
+    root.asked = root.asked.map(gone)
+    root.formsAsked = root.formsAsked.map(gone)
+    root.joinAsked = root.joinAsked.map(gone)
+    root.termAsked = root.termAsked.map(gone)
+    root.nextWords = []
+    root.sentContext = null
+    Qt.callLater(root.updateContext)
+    if (["predict", "swipe", "forms", "term", "next"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+  }
+  function dropTyped(fromStart) {
+    root.typedTail = ""
+    root.typedCursor = 0
+    root.typedFromStart = fromStart
+    root.sentenceStart = fromStart
+    root.currentWord = ""
+    root.swipedWord = ""
+    root.autoSpaced = false
+    root.hyphenJoined = false
+    root.joinFirst = null
+    root.setFinished("", "", false)
+  }
   onSecretFieldChanged: {
     root.fieldGeneration++
     root.typedTail = ""
@@ -1992,7 +2058,7 @@ Item {
     if (!root.secretField && keyboardHelper.running) keyboardHelper.write("forget\n")
   }
   readonly property bool predicting: root.predictionsEnabled && root.wordsReady
-    && !root.imeComposing && !root.secretField && !root.atPrompt
+    && !root.imeComposing && !root.secretField && !root.atPrompt && root.keepWord
   onPredictingChanged: {
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
@@ -2034,12 +2100,17 @@ Item {
     var c = root.contextNow()
     if (c === root.sentContext) return
     root.sentContext = c
+    root.nextAsked.push(root.fieldGeneration)
     predictorProc.write(c === "" ? "after\n" : "after " + c + "\n")
   }
   // The predictor's answer to "after": shown while no word is being typed
   // and nothing else holds the strip. A swipe's other guesses keep it, so a
   // wrong swipe is still one tap from mended.
+  // The field each "after" was sent for, oldest first: next words worked
+  // out for a field that has lost focus since are not shown in the next.
+  property var nextAsked: []
   function nextArrived(words) {
+    if (!root.keepWord) words = []
     root.nextWords = words
     var mine = ["", "predict", "next"].indexOf(root.suggestions.source) !== -1
     if (!root.predicting || root.currentWord !== "" || !mine || words.length === 0) {
@@ -2077,7 +2148,9 @@ Item {
   property string currentWord: ""
   property real backSpaceDownAt: 0
   function trackWord(command) {
-    if (root.secretField) {
+    // Followed only for suggestions, which need typing memory to allow the
+    // word, and never in a password field (predicting says both).
+    if (!root.predicting) {
       root.currentWord = ""
       return
     }
@@ -2181,9 +2254,10 @@ Item {
   readonly property bool atPrompt: root.inTerminal && root.termForeground !== ""
     && root.termForeground === root.termShell
   readonly property bool terminalSuggesting: root.predictionsEnabled && root.atPrompt
-    && !root.secretField && !root.imeComposing
+    && !root.secretField && !root.imeComposing && root.keepContext
   // The command line as Ragtop typed it, or null when it does not know it.
   readonly property var termLine: {
+    if (!root.keepContext) return null
     var t = root.beforeCursor
     var nl = t.lastIndexOf("\n")
     return nl >= 0 ? t.slice(nl + 1) : root.typedFromStart ? t : null
@@ -2294,7 +2368,8 @@ Item {
   readonly property int formsAfter: 1000
   property bool finishedFormsAsked: false
   function setFinished(word, tail, swiped) {
-    if (root.secretField) word = ""
+    // A finished word outlives its space, so only full typing memory keeps it.
+    if (root.secretField || !root.keepContext) word = ""
     // A word finished takes the one it followed (joinFirst) as its pair. A
     // key that finishes nothing, every letter of the next word among them,
     // leaves joinFirst to followOn.
@@ -2669,8 +2744,9 @@ Item {
           root.termAnswer(found)
         } else if (line.startsWith("next ")) {
           var upcoming
+          var forField = root.nextAsked.shift()
           try { upcoming = JSON.parse(line.slice(5)) } catch (e) { return }
-          root.nextArrived(upcoming)
+          if (forField === root.fieldGeneration) root.nextArrived(upcoming)
         } else if (line.startsWith("join ")) {
           var forPair = root.joinAsked.shift()
           var joined
@@ -2704,6 +2780,7 @@ Item {
     }
     onRunningChanged: {
       root.swipesAsked = []
+      root.nextAsked = []
       root.asked = []
       root.formsAsked = []
       root.joinAsked = []

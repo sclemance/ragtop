@@ -279,12 +279,16 @@ generated files in `~/.local/state/ragtop` and its settings in
 
 ## Privacy and security
 
-Ragtop types. It does not keep or send what you type.
+Ragtop types. It sends nothing you type anywhere and writes none of it down,
+and it keeps in memory only as much as **Typing Memory** allows, for only as
+long as the field has focus.
 
 | | |
 | --- | --- |
-| **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol, or through fcitx5 while a Chinese, Japanese or Korean engine is on. It keeps no history and writes no log. |
-| **Word suggestions and swipe** | Off unless you turn them on. With either on, Ragtop's own process holds the word being typed, in memory, to look it up in the word list, and forgets it at the next space. Nothing is written down, learned or sent. |
+| **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol, or through fcitx5 while a Chinese, Japanese or Korean engine is on. It writes no log. The key sender remembers which characters it had to look up in your layout, not in what order or how often, and forgets them when a password field is left. |
+| **Typing memory** | **Setup › Tablet › Typing Memory**, or `ragtop typing-memory set`. **Full**, the default, keeps the text Ragtop typed into the field that has focus, up to 400 characters, so that deleting words can name them, BackSpace back into a word brings its suggestions back, and the next word is chosen by the one before. **Current Word Only** keeps the word being typed and lets it go once it is finished; a swiped word is held until the next key, so that another of the swipe's guesses can take its place. Suggestions and swipe still work, those three do not. **Nothing** keeps no typed characters at all, so there are no suggestions and no swipe either. In every mode, capitals, double-space full stops and hyphen joins still work. In Current Word Only and Nothing, what came before the word is kept only as the last three kinds of thing typed: a word, the end of a sentence (. ! ?), other punctuation (, ; :), a hyphen, a space, a new line, or any other mark. Never a letter, never which word, and never which mark within a kind. |
+| **When it is let go** | In every mode, when focus leaves the field, whether for another field, another window or none, and when a field takes focus, until fcitx5 has said which field it is. Ragtop asks fcitx5 which field has focus after every change it hears of, by the field's own id, so two fields that look alike are still two. Nothing is kept while it cannot tell. |
+| **Word suggestions and swipe** | Off unless you turn them on. The suggester is a separate Ragtop process. It is asked about the word being typed and, in Full, the word before it. It holds that word before until the next one replaces it or the field is left, and nothing else of what you typed once it has answered. Nothing is learned from what you type: its word lists are the bundled or downloaded ones, never your own writing. |
 | **Network** | Only when you ask, never by itself, and two things. **Add** on a language's offer in the strip, or `ragtop words install`: that language's word list and pairs, about half a megabyte, from Ragtop's own `data-v1` release on GitHub, each checked against a fixed SHA-256 before it is kept. English's are in Ragtop itself and are never fetched. **Check for updates** on the controls panel, or `ragtop update check`: Ragtop's own `manifest.json` from its repository on GitHub, a couple of kilobytes, to read the version an update would install. Nothing else in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
 | **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
 | **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
@@ -297,20 +301,34 @@ What it cannot do anything about is the room. Keys light up when tapped, the
 way they do on every on-screen keyboard, so a password typed on a tablet is
 readable over a shoulder.
 
-**Password fields keep nothing.** An application tells the input method
-which of its fields hold passwords, and fcitx5 passes that on: browsers do,
-KeePassXC does, and so do most GTK and Qt applications. In such a field, and
-in Omarchy's own password prompt, Ragtop keeps nothing typed, not even for a
-moment: no word in progress, no record of the text for capitals, no swipe,
-and nothing is suggested, capitalised or sent to the word suggester. What it
-held is let go as the field takes focus, and the key sender forgets which
-characters it had to look up once the field is left. The lock screen's
-keyboard is a separate one that never holds anything at all.
+**Password and sensitive fields keep nothing.** An application tells the
+input method which of its fields hold passwords, or anything else it marks
+sensitive, and fcitx5 passes that on: browsers do, KeePassXC does, and so do
+most GTK and Qt applications. In such a field, and in Omarchy's own password
+prompt, Ragtop keeps nothing typed, whatever Typing Memory says: no word in
+progress, no record of the text for capitals, no swipe, and nothing is
+suggested, capitalised or sent to the word suggester. That is the
+application's own say, and Ragtop never overrides it. The lock screen's
+keyboard is a separate one: it puts what you tap straight into the lock
+screen's own password field and sends no keys.
 
-What Ragtop cannot know about is a field that does not say it is a password,
-so suggestions are still off by default. If an application of yours has a
-password field that shows suggestions, that application is not saying so;
-`ragtop predictions disable` is the way round it.
+What Ragtop cannot know about is a field that does not say it is a password
+or sensitive. GTK, for one, has a "private" hint that asks an input method
+not to learn from a field, and does not pass it on under Wayland, so an
+application that set it looks like any other field. If an application of
+yours has a password field that shows suggestions, that application is not
+saying so; `ragtop typing-memory set none` is the way round it.
+
+**What memory can and cannot promise.** What Ragtop lets go it stops holding
+on to; it cannot scrub the bytes, which the shell's JavaScript and Python
+leave to their own memory management. Between a key being tapped and the
+application receiving it, and while words are showing in the strip, they pass
+through the Omarchy shell, the key sender and the suggester in every mode, as
+they must for any on-screen keyboard. Anything that runs inside the Omarchy
+shell, which every Omarchy plugin does, shares its memory; and swap, or a
+crash report of the shell, can copy whatever is in memory at that moment to
+disk. Typing Memory decides how much is there to copy, not whether a program
+you have installed can watch you type.
 
 ## Using it
 
