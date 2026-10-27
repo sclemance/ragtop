@@ -86,6 +86,11 @@ or unfortunate there? Recorded in the table below before a language ships.
 | --- | --- | --- |
 | English | — | no known problem (dictionaries, Green's Dictionary of Slang) |
 | French | not yet | catalogs drafted 2026-10-26, awaiting a native speaker's review of them and of the name |
+| German | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Spanish (Mexico) | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Italian | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Portuguese (Portugal) | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Portuguese (Brazil) | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
 
 ## Rule 1: prose and protocol are different things
 

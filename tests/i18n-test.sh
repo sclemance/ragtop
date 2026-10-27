@@ -29,9 +29,14 @@ def load(code, name):
         problems.append(f"{code}/{name}: not JSON: {e}")
         return {}
 
-def tokens(value):
-    texts = value.values() if isinstance(value, dict) else [value]
-    return [sorted(set(re.findall(r"%\d+", t))) for t in texts if isinstance(t, str)]
+def tokens(text):
+    return sorted(set(re.findall(r"%\d+", text))) if isinstance(text, str) else None
+
+# The plural forms each language's pluralForm() can ask for; every language
+# Ragtop has so far picks between one and other.
+FORMS = {}
+def forms(code):
+    return FORMS.get(code, ("one", "other"))
 
 if what == "used":
     # Literal keys in the code: t("key" in QML, t key in the scripts, the
@@ -78,11 +83,20 @@ elif what == "parity":
                     a, b = a.get("label", ""), b.get("label", "") if isinstance(b, dict) else ""
                 if isinstance(a, dict) != isinstance(b, dict):
                     problems.append(f"{code}/{name}: {k} is plural in one and not the other")
-                elif isinstance(b, dict) and "other" not in b:
-                    problems.append(f"{code}/{name}: {k} has no other form")
-                elif tokens(a)[-1:] != tokens(b)[-1:]:
-                    problems.append(f"{code}/{name}: {k} has placeholders {tokens(b)[-1:]}, English {tokens(a)[-1:]}")
-                elif not (b if isinstance(b, str) else b.get("other")):
+                elif isinstance(b, dict):
+                    # Every form the language asks for, each with English's
+                    # placeholders: a form may leave out the count ("un mot")
+                    # but never lose or invent anything else.
+                    want = tokens(a.get("other"))
+                    for form in forms(code):
+                        got = tokens(b.get(form))
+                        if not b.get(form):
+                            problems.append(f"{code}/{name}: {k} has no {form} form")
+                        elif got != want and not (form != "other" and set(want) - set(got) == {"%1"} and set(got) < set(want)):
+                            problems.append(f"{code}/{name}: {k}.{form} has placeholders {got}, English {want}")
+                elif tokens(a) != tokens(b):
+                    problems.append(f"{code}/{name}: {k} has placeholders {tokens(b)}, English {tokens(a)}")
+                elif not b:
                     problems.append(f"{code}/{name}: {k} is empty")
 print("\n".join(problems))
 sys.exit(1 if problems else 0)

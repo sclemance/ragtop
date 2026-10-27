@@ -1,0 +1,122 @@
+{
+  "setup.tablet": {
+    "label": "Tableta"
+  },
+  "setup.tablet.mode": {
+    "label": "Modo tableta"
+  },
+  "setup.tablet.mode.auto": {
+    "label": "Automático"
+  },
+  "setup.tablet.mode.on": {
+    "label": "Siempre activo"
+  },
+  "setup.tablet.mode.off": {
+    "label": "Siempre inactivo"
+  },
+  "setup.tablet.keyboard": {
+    "label": "Teclado"
+  },
+  "setup.tablet.keyboard.sensor": {
+    "label": "Seguir al sensor"
+  },
+  "setup.tablet.keyboard.on": {
+    "label": "Siempre activo"
+  },
+  "setup.tablet.keyboard.off": {
+    "label": "Siempre inactivo"
+  },
+  "setup.tablet.keyboard-layout": {
+    "label": "Formato"
+  },
+  "setup.tablet.keyboard-layout.auto": {
+    "label": "Automático"
+  },
+  "setup.tablet.keyboard-layout.mobile": {
+    "label": "Móvil"
+  },
+  "setup.tablet.keyboard-layout.60": {
+    "label": "60%"
+  },
+  "setup.tablet.keyboard-layout.75": {
+    "label": "75%"
+  },
+  "setup.tablet.keyboard-layout.80": {
+    "label": "80% (TKL)"
+  },
+  "setup.tablet.auto-show": {
+    "label": "Teclado automático"
+  },
+  "setup.tablet.input-methods": {
+    "label": "Opciones CJK en el teclado"
+  },
+  "setup.tablet.predictions": {
+    "label": "Sugerencias (beta)"
+  },
+  "setup.tablet.predictions.off": {
+    "label": "Desactivadas"
+  },
+  "setup.tablet.predictions.layout": {
+    "label": "En el idioma de la distribución"
+  },
+  "setup.tablet.predictions.all": {
+    "label": "En inglés, cualquier distribución"
+  },
+  "setup.tablet.assists": {
+    "label": "Mayúsculas y puntos"
+  },
+  "setup.tablet.swipe": {
+    "label": "Escritura deslizando (beta)"
+  },
+  "setup.tablet.theme": {
+    "label": "Tema"
+  },
+  "setup.tablet.size-adjust": {
+    "label": "Tamaño de teclas"
+  },
+  "setup.tablet.size-adjust.auto": {
+    "label": "Automático"
+  },
+  "setup.tablet.size-adjust.smallest": {
+    "label": "Mínimo"
+  },
+  "setup.tablet.size-adjust.smaller": {
+    "label": "Pequeño"
+  },
+  "setup.tablet.size-adjust.regular": {
+    "label": "Normal"
+  },
+  "setup.tablet.size-adjust.larger": {
+    "label": "Grande"
+  },
+  "setup.tablet.size-adjust.largest": {
+    "label": "Máximo"
+  },
+  "setup.tablet.overlays": {
+    "label": "Ventanas del sistema"
+  },
+  "setup.tablet.setup": {
+    "label": "Ejecutar configuración"
+  },
+  "setup.tablet.diagnostics": {
+    "label": "Diagnóstico"
+  },
+  "setup.tablet.overlays.menu": {
+    "label": "Menú de Omarchy"
+  },
+  "setup.tablet.overlays.emojis": {
+    "label": "Selector de emojis"
+  },
+  "setup.tablet.overlays.clipboard": {
+    "label": "Portapapeles"
+  },
+  "setup.tablet.overlays.polkit": {
+    "label": "Contraseña"
+  },
+  "setup.tablet.overlays.image-picker": {
+    "label": "Selector de imágenes"
+  },
+  "setup.tablet.overlays.lock": {
+    "label": "Pantalla de bloqueo"
+  }
+}
