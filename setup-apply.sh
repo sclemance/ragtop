@@ -35,6 +35,12 @@ menu_ok=true
 mkdir -p "$state"
 printf 'overlays=%s\n' "$chosen" >"$state/install.conf"
 
+# Which are there now, to know afterwards whether anything changed.
+before=""
+for o in $overlays; do
+  "$here/overlay-clones.sh" installed "$o" && before="$before $o"
+done
+
 [[ -n $add ]] && "$here/overlay-clones.sh" install $add
 [[ -n $drop ]] && "$here/overlay-clones.sh" remove $drop
 
@@ -70,6 +76,16 @@ else
   notify "Ragtop" "$(t setup.done)"
 fi
 
-# Copies are only picked up when the shell starts.
-[[ -n $add || -n $drop ]] && omarchy-restart-shell
+# Copies are only picked up when the shell starts, so it restarts when one
+# came or went, and only then: after a clone that failed, the shell is
+# already back on the built-in (overlay-clones.sh, forget_clone), and a
+# restart is one more thing to go wrong.
+#
+# omarchy-restart-shell gives the old shell five seconds to exit, and one
+# still loading the plugins it was just handed can take longer. The new one
+# then finds the old one there and quits, which leaves no shell at all. Once
+# more, with the old one gone by then, is enough.
+if [[ ${on# } != "${before# }" ]]; then
+  omarchy-restart-shell || { sleep 2; omarchy-restart-shell; }
+fi
 ((${#problems[@]} == 0))

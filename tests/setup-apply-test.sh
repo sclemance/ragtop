@@ -9,7 +9,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 # apply <add> <drop> <chosen>: setup-apply.sh from a copy of the repository
 # whose menu and overlay scripts are stand-ins. An overlay is installed when
 # $sandbox/clones/<id> exists; installing makes it, removing refuses for one
-# marked edited and deletes the rest. MENU_FAILS=1 fails the menu rows.
+# marked edited and deletes the rest, and FAILS names overlays whose install
+# fails. MENU_FAILS=1 fails the menu rows.
 apply() {
   make_sandbox "$old_omarchy"
   local copy="$sandbox/ragtop"
@@ -22,7 +23,7 @@ apply() {
 cmd=\$1; shift
 for o in "\$@"; do
   case \$cmd in
-    install) touch "$sandbox/clones/\$o" ;;
+    install) [[ " ${FAILS:-} " == *" \$o "* ]] && exit 1; touch "$sandbox/clones/\$o" ;;
     remove) [[ -e "$sandbox/clones/\$o.edited" ]] && exit 1; rm -f "$sandbox/clones/\$o" ;;
     installed) [[ -e "$sandbox/clones/\$o" ]] || exit 1 ;;
   esac
@@ -32,7 +33,7 @@ STUB
   for o in ${PRESENT:-}; do touch "$sandbox/clones/$o"; done
   for o in ${EDITED:-}; do touch "$sandbox/clones/$o.edited"; done
   rc=0
-  sandboxed MENU_FAILS="${MENU_FAILS:-}" bash "$copy/setup-apply.sh" "$@" >"$sandbox/out" 2>"$sandbox/err" || rc=$?
+  sandboxed MENU_FAILS="${MENU_FAILS:-}" STUB_RESTART_FAILS="${RESTART_FAILS:-}" bash "$copy/setup-apply.sh" "$@" >"$sandbox/out" 2>"$sandbox/err" || rc=$?
   out=$(<"$sandbox/out") err=$(<"$sandbox/err")
 }
 
@@ -57,7 +58,29 @@ a_failed_menu_is_reported() {
   assert_contains "$(calls)" "Ragtop's settings could not be added to Omarchy's menu." "notification"
 }
 
+a_failed_copy_does_not_restart() {
+  FAILS="menu" apply "menu" "" "menu"
+  assert_rc 1
+  assert_contains "$(calls)" "notify" "notification"
+  assert_lacks "$(calls)" "restart-shell" "a restart"
+}
+
+a_copy_restarts_once() {
+  apply "menu" "" "menu"
+  assert_rc 0
+  assert_equal "$(grep -c restart-shell "$sandbox/calls.log")" 1 "restarts"
+}
+
+a_restart_that_lost_the_race_is_tried_again() {
+  RESTART_FAILS=1 apply "menu" "" "menu"
+  assert_rc 0
+  assert_equal "$(grep -c restart-shell "$sandbox/calls.log")" 2 "restarts"
+}
+
 run_test "setup: a setup that did everything says it is done" everything_done_says_so
+run_test "setup: an overlay that could not be copied leaves the shell running" a_failed_copy_does_not_restart
+run_test "setup: an overlay copied restarts the shell once" a_copy_restarts_once
+run_test "setup: a restart that lost the race with the old shell is tried once more" a_restart_that_lost_the_race_is_tried_again
 run_test "setup: a copy that could not be removed is reported, not called done" a_kept_copy_is_reported
 run_test "setup: menu rows that could not be added are reported" a_failed_menu_is_reported
 finish

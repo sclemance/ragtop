@@ -401,6 +401,87 @@ notify() {
     omarchy-notification-send -g 󰌌 "Ragtop" "$1" || true
 }
 
+# Omarchy's plugin commands ask the running shell to rescan and enable, and
+# give it two seconds to answer. A shell busy reloading a plugin can take
+# longer, and both a clone and the settings rows written just before one set
+# it reloading. A clone whose answer comes late is deleted again by Omarchy,
+# with the settings it had already changed left behind (forget_clone). Ten
+# seconds is for that, and only for these commands.
+plugin() { OMARCHY_SHELL_IPC_TIMEOUT="${OMARCHY_SHELL_IPC_TIMEOUT:-10s}" omarchy plugin "$@"; }
+
+# A clone that failed after the shell was told to use it is deleted by
+# Omarchy's clone command, but what that told the shell is not undone: the
+# bar keeps a place for a clone that is gone and the built-in stays switched
+# off, so there is neither. This puts back what Omarchy itself puts back when
+# a clone goes (PluginRegistry.qml, restoreCloneSource): the built-in where
+# the clone was, and switched on again if the clone had switched it off. Only
+# for a clone that is not there. The shell watches the file and follows it.
+forget_clone() {
+  [[ -e $clone_dir || -L $clone_dir ]] && return 0
+  /usr/bin/python3 - "$HOME/.config/omarchy/shell.json" "$clone_id" "omarchy.$name" <<'EOF'
+import json, os, sys, tempfile
+path, clone, source = sys.argv[1:]
+try:
+    config = json.load(open(path))
+except (OSError, ValueError):
+    sys.exit(0)
+if not isinstance(config, dict):
+    sys.exit(0)
+
+def entry_id(entry):
+    return entry.get("id") if isinstance(entry, dict) else entry
+
+changed = False
+bar = config.get("bar")
+layout = bar.get("layout") if isinstance(bar, dict) else None
+if isinstance(layout, dict):
+    sections = [s for s in ("left", "center", "right") if isinstance(layout.get(s), list)]
+    if any(entry_id(e) == clone for s in sections for e in layout[s]):
+        # The clone's place, with whatever else its entry said, goes back to
+        # the built-in, and any other place the built-in had goes.
+        for s in sections:
+            layout[s] = [e for e in layout[s] if entry_id(e) != source]
+        placed = False
+        for s in sections:
+            kept = []
+            for e in layout[s]:
+                if entry_id(e) != clone:
+                    kept.append(e)
+                elif not placed:
+                    kept.append(dict(e, id=source) if isinstance(e, dict) else {"id": source})
+                    placed = True
+            layout[s] = kept
+        changed = True
+plugins = config.get("plugins")
+if isinstance(plugins, list) and any(isinstance(p, dict) and p.get("id") == clone for p in plugins):
+    config["plugins"] = [p for p in plugins if not (isinstance(p, dict) and p.get("id") == clone)]
+    changed = True
+restores = config.get("cloneSourceRestores")
+if isinstance(restores, list) and clone in restores:
+    disabled = config.get("disabledPlugins")
+    if isinstance(disabled, list):
+        disabled = [d for d in disabled if d != source]
+        if disabled:
+            config["disabledPlugins"] = disabled
+        else:
+            del config["disabledPlugins"]
+    restores = [r for r in restores if r != clone]
+    if restores:
+        config["cloneSourceRestores"] = restores
+    else:
+        del config["cloneSourceRestores"]
+    changed = True
+
+if changed:
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".shell.json.")
+    with os.fdopen(fd, "w") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.chmod(tmp, os.stat(path).st_mode & 0o777)
+    os.replace(tmp, path)
+EOF
+}
+
 install_hook() {
   mkdir -p "$(dirname "$hook_file")"
   printf '#!/bin/bash\n# Keeps Ragtop'"'"'s overlay clones in step with Omarchy updates.\n"%s" sync\n' "$self" >"$hook_file"
@@ -420,15 +501,22 @@ install_one() {
       return 1
     fi
     # Ours, cloned but never patched, by a run that was cut short. Start over.
-    omarchy plugin remove "$clone_id" --yes >/dev/null || return 1
+    plugin remove "$clone_id" --yes >/dev/null || return 1
   fi
   if is_patched; then
     echo "$clone_id is already patched."
     return
   fi
   : >"$progress_file" || return 1
-  if ! omarchy plugin clone "omarchy.$name" >/dev/null; then
-    echo "Couldn't clone omarchy.$name." >&2
+  if ! plugin clone "omarchy.$name" >/dev/null; then
+    # Omarchy takes away what it made, but not what it told the shell.
+    if [[ ! -e $clone_dir && ! -L $clone_dir ]]; then
+      forget_clone
+      rm -f "$progress_file"
+      echo "Couldn't clone omarchy.$name, so Omarchy's own $name stays in use." >&2
+    else
+      echo "Couldn't clone omarchy.$name." >&2
+    fi
     return 1
   fi
   if ! write_base || ! patch_clone; then
@@ -437,7 +525,7 @@ install_one() {
     # password prompt and the lock screen a stale copy is the worst thing to
     # leave running, so take it away and let the built-in stand.
     echo "Couldn't patch $clone_id, so it was removed and Omarchy's own $name stays in use." >&2
-    omarchy plugin remove "$clone_id" --yes >/dev/null && rm -f "$progress_file"
+    plugin remove "$clone_id" --yes >/dev/null && rm -f "$progress_file"
     return 1
   fi
   rm -f "$progress_file"
@@ -470,7 +558,7 @@ sync_one() {
     notify "$(t clones.edited "$(t "overlay.name.$name")")"
     return 1
   fi
-  omarchy plugin remove "$clone_id" --yes >/dev/null || return 1
+  plugin remove "$clone_id" --yes >/dev/null || return 1
   # Whatever goes wrong from here, install_one leaves either a patched clone or
   # none, and says which on stderr. Only a patched one has been synced.
   if ! install_one >/dev/null; then
@@ -488,7 +576,7 @@ remove_one() {
     echo "$clone_id has edits besides Ragtop's. Remove it yourself with: omarchy plugin remove $clone_id" >&2
     return 1
   else
-    omarchy plugin remove "$clone_id" --yes >/dev/null || return 1
+    plugin remove "$clone_id" --yes >/dev/null || return 1
     rm -f "$progress_file"
     echo "Removed $clone_id."
   fi

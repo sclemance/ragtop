@@ -140,7 +140,8 @@ old_failed_clone_and_interrupted_run_recover() {
   make_sandbox "$old_omarchy"
   clones STUB_FAIL_CLONE=menu install menu
   assert_rc 1
-  assert_contains "$err" "Couldn't clone omarchy.menu."
+  assert_contains "$err" "Couldn't clone omarchy.menu, so Omarchy's own menu stays in use."
+  assert_equal "$(progress_files)" "" "progress markers left behind"
   assert_no_path "$(clone_of menu)"
   # A run cut short between cloning and patching leaves a marker and a bare
   # clone. Both sync and install finish the job rather than refuse it.
@@ -719,11 +720,49 @@ updating_to_rc_moves_every_clone_over() {
   assert_equal "$(progress_files)" "" "progress markers left behind"
 }
 
+# A clone that told the shell to use it and then lost the shell's answer:
+# Omarchy deletes the clone and leaves the settings, and Ragtop puts back
+# the built-in it was standing in for, keeping everything else as it was.
+shell_json() { echo "$sandbox/home/.config/omarchy/shell.json"; }
+old_lost_reply_puts_the_built_in_back() {
+  make_sandbox "$old_omarchy"
+  cat >"$(shell_json)" <<'JSON'
+{
+  "bar": { "layout": { "left": [{ "id": "omarchy.menu", "size": 2 }, { "id": "omarchy.workspaces" }], "center": [], "right": [] } },
+  "plugins": [{ "id": "someone.else" }],
+  "disabledPlugins": ["omarchy.weather"]
+}
+JSON
+  local before
+  before=$(jq -S . "$(shell_json)")
+  clones STUB_LOSE_REPLY=menu install menu
+  assert_rc 1
+  assert_contains "$err" "Couldn't clone omarchy.menu, so Omarchy's own menu stays in use."
+  assert_no_path "$(clone_of menu)"
+  assert_equal "$(progress_files)" "" "progress markers left behind"
+  assert_equal "$(jq -S . "$(shell_json)")" "$before" "shell.json"
+
+  clones STUB_LOSE_REPLY=emojis install emojis
+  assert_rc 1
+  assert_equal "$(jq -S . "$(shell_json)")" "$before" "shell.json after an overlay in plugins[]"
+}
+
+old_clone_waits_longer_for_the_shell() {
+  make_sandbox "$old_omarchy"
+  echo '{}' >"$(shell_json)"
+  clones install menu
+  assert_rc 0
+  assert_contains "$(<"$sandbox/calls.log")" "ipc-timeout 10s"
+  # And a clone that worked is left as the shell set it up.
+  assert_equal "$(jq -c .cloneSourceRestores "$(shell_json)")" '["tester.menu"]' "cloneSourceRestores"
+}
+
 run_test "4.5.0-rc1: install patches all six, and status, installed and sync agree" rc_install_patches_every_overlay
 run_test "4.5.0-rc1: sync re-clones what uses the shared OverlayWindow when Omarchy changes it" rc_sync_follows_the_shared_window
 run_test "4.5.0-rc1: a clone with edits of its own is kept when the shared OverlayWindow changes" rc_edited_clone_survives
 run_test "7cc6a55 to 4.5.0-rc1: sync moves every clone over to the new window" updating_to_rc_moves_every_clone_over
 run_test "7cc6a55: remove takes the clones away, and the hook with the last" new_remove_takes_clones_and_hook_away
+
 
 run_test "4.0.4: install patches all six, and status, installed and the hook agree" old_install_patches_every_overlay
 run_test "4.0.4: the patch is the per-open one, and only the entry file changes" old_patch_is_the_event_driven_one
@@ -734,5 +773,7 @@ run_test "4.0.4: a clone Ragtop did not make is left alone" old_somebody_elses_c
 run_test "4.0.4: sync re-clones what the built-in moved on from" old_sync_follows_the_built_in
 run_test "4.0.4: a patch that does not apply leaves no clone behind" old_failed_patch_leaves_no_clone
 run_test "4.0.4: a failed clone and an interrupted run both recover" old_failed_clone_and_interrupted_run_recover
+run_test "4.0.4: a clone that lost the shell's answer puts the built-in back" old_lost_reply_puts_the_built_in_back
+run_test "4.0.4: a clone gives the shell ten seconds to answer" old_clone_waits_longer_for_the_shell
 
 finish
