@@ -869,6 +869,14 @@ LEADS_TO_COMMAND = {"|", "||", "&&", ";", "sudo", "doas", "time", "exec", "nohup
 SHELL_SPECIAL = set(" \t'\"\\$`&()|;<>*?[]#~!{}")
 
 
+def typeable(name):
+    """Whether a name can be offered at all. A control character, a newline
+    above all, would end the helper's line in the middle of the name, and
+    typed into a terminal it presses Enter, so a name with one is never
+    offered: it was not typed, and the shell has ways to reach it."""
+    return not any(ord(c) < 32 or 127 <= ord(c) < 160 for c in name)
+
+
 def shell_escaped(name):
     return "".join("\\" + c if c in SHELL_SPECIAL else c for c in name)
 
@@ -918,7 +926,7 @@ class Terminal:
             try:
                 for n in os.listdir(d):
                     p = os.path.join(d, n)
-                    if os.access(p, os.X_OK) and not os.path.isdir(p):
+                    if typeable(n) and os.access(p, os.X_OK) and not os.path.isdir(p):
                         names.add(n)
             except OSError:
                 pass
@@ -986,10 +994,19 @@ class Terminal:
             entries = os.listdir(where)
         except OSError:
             return []
-        typed_head = token[:len(token) - len(shell_escaped(base))] if base else token
+        if not base or token.endswith(shell_escaped(base)):
+            # The folder part as typed, quotes and all, ahead of the name.
+            typed_head = token[:len(token) - len(shell_escaped(base))]
+        else:
+            # The name was quoted, "re" or 'my d'oc: the token is rewritten
+            # whole, escaped, keeping a leading ~ for the shell to expand.
+            plain_head = plain[:len(plain) - len(base)]
+            home = "~" if plain_head.startswith("~") else ""
+            typed_head = home + shell_escaped(plain_head[len(home):])
         out = []
         for name in entries:
-            if not name.startswith(base) or (name.startswith(".") and not base.startswith(".")):
+            if not name.startswith(base) or (name.startswith(".") and not base.startswith(".")) \
+                    or not typeable(name):
                 continue
             is_dir = os.path.isdir(os.path.join(where, name))
             if folders_only and not is_dir:

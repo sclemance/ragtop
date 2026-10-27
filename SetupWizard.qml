@@ -38,10 +38,10 @@ Item {
   // Each package, what it's for, and whether it's here. Ragtop runs without
   // any of them. It just does less, and the wording says exactly what less.
   property var deps: [
-    { pkg: "iio-sensor-proxy", need: root.service.t("setup.need.sensor"), ok: false },
-    { pkg: "python-pywayland", need: root.service.t("setup.need.pywayland"), ok: false },
-    { pkg: "python-gobject", need: root.service.t("setup.need.gobject"), ok: false },
-    { pkg: "git", need: root.service.t("setup.need.git"), ok: false }
+    { pkg: "iio-sensor-proxy", need: "setup.need.sensor", ok: false },
+    { pkg: "python-pywayland", need: "setup.need.pywayland", ok: false },
+    { pkg: "python-gobject", need: "setup.need.gobject", ok: false },
+    { pkg: "git", need: "setup.need.git", ok: false }
   ]
   readonly property var missingDeps: deps.filter(function(d) { return !d.ok })
   property bool checkingDeps: false
@@ -124,12 +124,12 @@ Item {
   // ---- Omarchy's overlays -----------------------------------------------
 
   property var overlays: [
-    { id: "menu", label: root.service.t("setup.overlayName.menu"), detail: root.service.t("setup.overlay.menu"), on: false },
-    { id: "emojis", label: root.service.t("setup.overlayName.emojis"), detail: root.service.t("setup.overlay.emojis"), on: false },
-    { id: "clipboard", label: root.service.t("setup.overlayName.clipboard"), detail: root.service.t("setup.overlay.clipboard"), on: false },
-    { id: "polkit", label: root.service.t("setup.overlayName.polkit"), detail: root.service.t("setup.overlay.polkit"), on: false },
-    { id: "image-picker", label: root.service.t("setup.overlayName.image-picker"), detail: root.service.t("setup.overlay.image-picker"), on: false },
-    { id: "lock", label: root.service.t("setup.overlayName.lock"), detail: root.service.t("setup.overlay.lock"), on: false }
+    { id: "menu", label: "setup.overlayName.menu", detail: "setup.overlay.menu", on: false },
+    { id: "emojis", label: "setup.overlayName.emojis", detail: "setup.overlay.emojis", on: false },
+    { id: "clipboard", label: "setup.overlayName.clipboard", detail: "setup.overlay.clipboard", on: false },
+    { id: "polkit", label: "setup.overlayName.polkit", detail: "setup.overlay.polkit", on: false },
+    { id: "image-picker", label: "setup.overlayName.image-picker", detail: "setup.overlay.image-picker", on: false },
+    { id: "lock", label: "setup.overlayName.lock", detail: "setup.overlay.lock", on: false }
   ]
   readonly property var chosenOverlays: overlays.filter(function(o) { return o.on })
   readonly property bool allOverlays: chosenOverlays.length === overlays.length
@@ -426,7 +426,7 @@ Item {
             width: parent.width - Style.space(28)
             spacing: 0
             Body { width: parent.width; text: modelData.pkg }
-            Note { width: parent.width; text: modelData.need }
+            Note { width: parent.width; text: root.service.t(modelData.need) }
           }
         }
       }
@@ -581,8 +581,8 @@ Item {
         Toggle {
           required property var modelData
           width: parent.width
-          label: modelData.label
-          description: modelData.detail
+          label: root.service.t(modelData.label)
+          description: root.service.t(modelData.detail)
           checked: modelData.on
           foreground: Color.popups.text
           onClicked: root.setOverlay(modelData.id, !modelData.on)
@@ -602,10 +602,10 @@ Item {
         // A line each, whole sentences with the overlays' names put in.
         text: "• " + root.service.t("setup.finish.menu") + "\n"
           + (root.overlaysToAdd.length > 0
-             ? "• " + root.service.t("setup.finish.add", root.overlaysToAdd.map(function(o) { return o.label }).join(", ")) + "\n"
+             ? "• " + root.service.t("setup.finish.add", root.overlaysToAdd.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
              : "")
           + (root.overlaysToDrop.length > 0
-             ? "• " + root.service.t("setup.finish.drop", root.overlaysToDrop.map(function(o) { return o.label }).join(", ")) + "\n"
+             ? "• " + root.service.t("setup.finish.drop", root.overlaysToDrop.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
              : "")
           + "• " + (root.overlaysChange ? root.service.t("setup.finish.restart") : root.service.t("setup.finish.leave"))
       }

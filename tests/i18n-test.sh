@@ -53,6 +53,8 @@ if what == "used":
             keys += re.findall(r'title: "(tour\.[\w.-]+)"', text)
             keys += re.findall(r'"(setup\.step\.[\w-]+)"', text)
             keys += re.findall(r'label: "(picker\.[\w-]+)"', text)
+            # The setup wizard's lists hold keys, translated where shown.
+            keys += re.findall(r'(?:need|label|detail): "(setup\.[\w.-]+)"', text)
             for k in keys:
                 # A key put together at run time, "trouble." + name: its full
                 # forms are English's own, which parity holds languages to.
@@ -60,7 +62,7 @@ if what == "used":
                     continue
                 if k not in shell:
                     problems.append(f"{f}: {k} is not in en/shell.json")
-        elif f in ("ragtop", "install.sh", "overlay-clones.sh", "setup-check.sh"):
+        elif f in ("ragtop", "install.sh", "overlay-clones.sh", "setup-check.sh", "setup-apply.sh"):
             for k in re.findall(r'(?:\$\(|\btell |^\s*|\|\| )t "?([a-zA-Z][\w.-]*[\w])"?(?=[ "\n)])', text, re.M):
                 if k not in cli:
                     problems.append(f"{f}: {k} is not in en/cli.json")

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Ragtop's own words for its scripts, sourced by `ragtop`, install.sh,
-# overlay-clones.sh and setup-check.sh, which set $repo first.
+# overlay-clones.sh, setup-check.sh and setup-apply.sh, which set $repo first.
 #
 # In the language Omarchy is set to (Setup › Language,
 # kept in ~/.config/omarchy/language), from i18n/<code>/cli.json, the form

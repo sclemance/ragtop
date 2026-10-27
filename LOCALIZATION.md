@@ -59,11 +59,12 @@ Omarchy decided in October 2026: **"Omarchy in 50 languages"**
 ## For translators
 
 Copy `i18n/en/` to `i18n/<code>/` and translate the values, not the keys.
-Keep every `%1`, `%2`; move them where your grammar wants. Keep `[y/N]` in
-the installer's two questions exactly: the answer is read as y. Keep
-"Ragtop" as it is (below). Keep menu labels short, about 15 characters,
-before the ✓ pushes them off the row. Then run `tests/i18n-test.sh`, which
-says what is missing, extra or mismatched.
+Keep every `%1`, `%2`; move them where your grammar wants. The one
+exception: a plural's `one` form may spell out its count ("un mot" for "%1
+mot"). Keep `[y/N]` in the installer's two questions exactly: the answer is
+read as y. Keep "Ragtop" as it is (below). Keep menu labels short, about 15
+characters, before the ✓ pushes them off the row. Then run
+`tests/i18n-test.sh`, which says what is missing, extra or mismatched.
 
 ## The name stays Ragtop
 
@@ -173,12 +174,12 @@ longer than English.
 
 ## If you want to help
 
-The useful contribution today is not a Ragtop translation, since there is
-nothing
-to plug it into. It is upstream: [omarchy#7284](https://github.com/omacom/omarchy/issues/7284)
-is where the decision will be made, and a language pack for
-[omarchy-language](https://github.com/sbelcl/omarchy-language) is what reaches
-a user's desktop this week.
+Review a language. The catalogs in `i18n/` are drafts until someone who
+speaks the language has read them, and the name check above is part of that
+reading. Or add one: copy `i18n/en/`, as under "For translators", and run
+`tests/i18n-test.sh`.
 
-When a layer does land, Ragtop's domain will be its plugin id,
-`sclemance.ragtop`.
+Ragtop follows Omarchy's language setting (`~/.config/omarchy/language`),
+so a language Omarchy offers is one Ragtop can speak once its catalogs are
+here. Ragtop's own catalogs stay in this repository, under its plugin id,
+`sclemance.ragtop`, rather than in Omarchy's.

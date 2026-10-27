@@ -1664,6 +1664,7 @@ Item {
   // A field just focused is the start of something, and another keyboard
   // having typed is anywhere at all.
   function freshField() {
+    root.fieldGeneration++
     root.typedTail = ""
     root.typedFromStart = true
     root.sentenceStart = true
@@ -1671,6 +1672,8 @@ Item {
     Qt.callLater(root.updateContext)
   }
   property real freshFieldAt: 0
+  // Counts fields: a reply asked for in one is not typed into the next.
+  property int fieldGeneration: 0
 
   // Which application has focus, by class, for inTerminal.
   property string activeClass: ""
@@ -1930,6 +1933,9 @@ Item {
   }
   onOfferLanguageChanged: root.showOffer()
   onWordsFetchingChanged: root.showOffer()
+  // Its words are translated when it is built, so it is built again once a
+  // new language's catalog has arrived, not when the language changes.
+  onLanguageStringsChanged: if (root.offerLanguage !== "") root.showOffer()
   function showOffer() {
     var lang = root.offerLanguage
     if (lang === "") {
@@ -1973,6 +1979,7 @@ Item {
   // to look up once it is left.
   readonly property bool secretField: root.passwordOpen || (!!root.fieldInfo && root.fieldInfo.password)
   onSecretFieldChanged: {
+    root.fieldGeneration++
     root.typedTail = ""
     root.typedFromStart = false
     root.sentenceStart = false
@@ -2265,6 +2272,9 @@ Item {
   function takeTerm(index) {
     var item = root.suggestions.items[index]
     if (!item || !keyboardHelper.running || root.termLine === null) return
+    // A control character would end the helper's line mid-name; the
+    // predictor never offers one, and this holds even if it did.
+    if (/[\x00-\x1f\x7f-\x9f]/.test(item.text)) return
     var out = ""
     for (var i = 0; i < (item.back | 0); i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + item.text + (item.kind === "dir" ? "" : " ") + "\n")
@@ -2502,7 +2512,7 @@ Item {
     root.swipeDrawing = false
     root.peekPath = null
     if (!root.swipeActive || !predictorProc.running) return
-    root.swipeShifted = shifted
+    root.swipesAsked.push({ field: root.fieldGeneration, shifted: shifted })
     predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
       return [Math.round(p[0]), Math.round(p[1])]
     })) + "\n")
@@ -2510,12 +2520,25 @@ Item {
   function capitalised(word) {
     return root.swipeShifted ? word.charAt(0).toUpperCase() + word.slice(1) : word
   }
-  function typeSwiped(words) {
+  // Each swipe sent, oldest first, with the field it was drawn in and
+  // whether Shift was on: the answers come back in the order asked.
+  property var swipesAsked: []
+  function typeSwiped(words, ask) {
     // touch-trace: whether the swipe came to a word, never which.
     if (root.touchTrace)
       root.traceTouch({ t: Date.now(), ev: "read", id: -1, x: 0, y: 0,
                         what: words.length > 0 ? "swipe read as a word" : "nothing: no word fits the swipe" })
     if (!root.swipeActive || !keyboardHelper.running) return
+    // Drawn in a field that has since lost focus: the word was for there.
+    if (ask.field !== root.fieldGeneration) {
+      if (root.suggestions.source === "swipe" && root.swipedWord === "") root.setSuggestions("swipe", null)
+      return
+    }
+    root.swipeShifted = ask.shifted
+    // Open question (R008, 2026-10-27): a key tapped while this answer was
+    // on its way still gets the word typed after it, a space between. Kept
+    // on purpose for now, since dropping it would lose words when swiping
+    // and tapping fast; to be reviewed.
     if (words.length === 0) {
       // Nothing it could spell: the guesses shown while drawing go too.
       if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
@@ -2666,8 +2689,9 @@ Item {
           root.peeked(guess)
         } else if (line.startsWith("swiped ")) {
           var found
+          var forSwipe = root.swipesAsked.shift()
           try { found = JSON.parse(line.slice(7)) } catch (e) { return }
-          root.typeSwiped(found)
+          if (forSwipe !== undefined) root.typeSwiped(found, forSwipe)
         } else if (line.startsWith("suggest ")) {
           var forWord = root.asked.shift()
           if (!root.predicting || forWord !== root.currentWord) return
@@ -2679,6 +2703,7 @@ Item {
       }
     }
     onRunningChanged: {
+      root.swipesAsked = []
       root.asked = []
       root.formsAsked = []
       root.joinAsked = []

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stands in for omarchy-restart-shell in the tests, so nothing under test can
+# restart the real shell. Records that it was asked to.
+[[ -z ${STUB_LOG:-} ]] || echo "restart-shell" >>"$STUB_LOG"

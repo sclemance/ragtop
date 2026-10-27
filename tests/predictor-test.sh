@@ -411,6 +411,27 @@ escaped_names() {
 []'
 }
 
+# A quoted name, closed or partly so, is completed as one escaped word: no
+# quote is left open, and the folder part and a leading ~ still work.
+quoted_names() {
+  term 'cat "RE"' "cat 'my d'o" 'cat "src"/ma' 'cat src/"ma"' "cd 'my docs'/"
+  assert_equal "$out" '["README.md"]
+["my\\ docs/"]
+["\"src\"/main.py"]
+["src/main.py"]
+[]'
+}
+
+# A name with a newline would split the helper's line and, typed, press
+# Enter; one with any control character is not offered.
+control_characters_are_not_offered() {
+  local cwd="$sandbox/home/project"
+  mkdir -p "$cwd"
+  touch "$cwd/prefix"$'\n'"quit"$'\n'"suffix" "$cwd/pre"$'\t'"tab" "$cwd/prelude"
+  term "cat pre"
+  assert_equal "$out" '["prelude"]'
+}
+
 cd_offers_folders() {
   term "cd " "cd s"
   assert_equal "$out" '["my\\ docs/","src/"]
@@ -601,6 +622,8 @@ run_test "predictor: the word before steers a swipe" a_swipe_follows_the_word_be
 run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
 run_test "predictor: then files and folders from the terminal's folder" files_after_it
 run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names
+run_test "predictor: a quoted name is completed as one escaped word" quoted_names
+run_test "predictor: a name with a newline or other control character is never offered" control_characters_are_not_offered
 run_test "predictor: after cd, folders only" cd_offers_folders
 run_test "predictor: flags are not guessed" flags_are_not_guessed
 finish
