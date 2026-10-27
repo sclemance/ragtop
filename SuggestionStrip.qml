@@ -29,6 +29,9 @@ Item {
   // Shown when there is nothing to choose: which input method is on, since
   // nothing else on the keyboard is as near the text being written.
   property string idleText: ""
+  // How tall the strip's words are drawn for. A strip taller than this is a
+  // bigger target, not bigger writing (Keyboard.qml, stripFraction).
+  property real textHeight: height
 
   readonly property int prevCell: -2
   readonly property int nextCell: -3
@@ -48,9 +51,9 @@ Item {
   readonly property bool canScrollRight: overflows && scroll < maxScroll - 0.5
   readonly property real listLeft: spanLeft + (overflows ? chevronWidth : 0)
   readonly property real listWidth: spanWidth - (overflows ? 2 * chevronWidth : 0)
-  readonly property int textSize: Math.max(12, Math.round(height * 0.6))
+  readonly property int textSize: Math.max(12, Math.round(textHeight * 0.6))
   readonly property int noteSize: Math.max(9, Math.round(textSize * 0.55))
-  readonly property real pad: Math.round(height * 0.45)
+  readonly property real pad: Math.round(textHeight * 0.45)
 
   FontMetrics { id: textMetrics; font.family: strip.theme.fontFamily; font.pixelSize: strip.textSize }
   FontMetrics { id: noteMetrics; font.family: strip.theme.fontFamily; font.pixelSize: strip.noteSize }

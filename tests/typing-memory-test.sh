@@ -9,7 +9,7 @@ make_sandbox "$old_omarchy"
 harness="$sandbox/memory"
 mkdir -p "$harness"
 cp "$tests_dir/qml/Harness.qml" "$repo/typed-record.js" "$harness/"
-if ! /usr/bin/python3 "$tests_dir/qml/memory/extract.py" "$repo/Service.qml" \
+if ! /usr/bin/python3 "$tests_dir/qml/extract.py" "$repo/Service.qml" \
     "$tests_dir/qml/memory/shell.qml.in" "$harness/shell.qml"; then
   echo "not ok - typing memory: Service.qml's members could be found"
   failed=1

@@ -113,7 +113,7 @@ Item {
         return tour.service.t("tour.menu.body") + "\n\n" + where
       } },
 
-    { target: ["keys"], top: true, title: "tour.themes",
+    { target: ["keys"], top: true, title: "tour.themes", preview: "tour.preview.themes",
       body: function() {
         return tour.service.t("tour.themes.body") + "\n\n"
           + (tour.previewName ? tour.service.t("tour.themes.showing", tour.previewName) : tour.service.t("tour.themes.yours"))
@@ -121,32 +121,35 @@ Item {
       beat: function(n) {
         var list = tour.shownThemes
         if (list.length === 0) return
-        var at = Math.floor(n / 2) % (list.length + 1)
+        var at = Math.floor(n / tour.beatsEach) % (list.length + 1)
         if (at === list.length) { tour.service.previewSettings = ({}); tour.previewName = "" }
         else tour.showTheme(list[at])
       } },
 
-    { target: ["keys"], top: true, title: "tour.boards",
+    { target: ["keys"], top: true, title: "tour.boards", preview: "tour.preview.boards",
       body: function() {
         var names = { "mobile": tour.service.t("layout.mobile"), "60": "60%", "75": "75%", "80": "80%" }
         return tour.service.t("tour.boards.body") + "\n\n"
           + tour.service.t("tour.themes.showing", names[tour.keyboard.form] || tour.keyboard.form)
       },
       beat: function(n) {
-        var boards = ["mobile", "60", "75", "80"]
-        tour.service.previewLayout = boards[Math.floor(n / 2) % boards.length]
+        var boards = tour.shownBoards
+        tour.service.previewLayout = boards[Math.floor(n / tour.beatsEach) % boards.length]
       } },
 
     { target: ["popup", "e"], title: "tour.letter",
       body: function() { return tour.service.t("tour.letter.body") },
-      enter: function() { tour.keyboard.demoHold("e") },
+      enter: function() { tour.pressLater("e", tour.firstUp) },
       beat: function(n) { if (tour.reopen("e")) tour.keyboard.demoChoose(n % 4 - 1) } },
 
-    { target: ["popup", "space"], title: "tour.space",
+    // Lit a little wider than the bar, so its whole edge and its going down
+    // can be seen. What it says goes by the layouts there are, not by
+    // whether the card is open: it is not, yet, while the bar is shown up.
+    { target: ["popup", "space"], widen: 12, title: "tour.space",
       body: function() {
-        return tour.keyboard.popup ? tour.service.t("tour.space.body") : tour.service.t("tour.space.oneLayout")
+        return tour.keyboard.choiceList.length > 1 ? tour.service.t("tour.space.body") : tour.service.t("tour.space.oneLayout")
       },
-      enter: function() { tour.keyboard.demoHold("space") },
+      enter: function() { tour.pressLater("space", tour.firstUp) },
       beat: function(n) {
         if (tour.reopen("space")) tour.keyboard.demoChoose(n % (tour.keyboard.popup.items.length + 1) - 1)
       } },
@@ -207,16 +210,84 @@ Item {
       body: function() { return tour.service.t("tour.done.body") } }
   ]
 
+  // The boards the Boards step shows, each one that this screen would draw
+  // as itself: a board too wide gives way to the next one down, and showing
+  // it would only show that one twice and count down to no change at all.
+  readonly property var shownBoards: {
+    var ladder = tour.keyboard.formLadder
+    var out = []
+    ;["mobile", "60", "75", "80"].forEach(function(b) {
+      for (var i = ladder.indexOf(b); i < ladder.length; i++)
+        if (tour.keyboard.formFits(ladder[i], false)) {
+          if (out.indexOf(ladder[i]) === -1) out.push(ladder[i])
+          return
+        }
+    })
+    return out
+  }
+
+  // The steps that change the keyboard by themselves say so, and how long
+  // until the next change, with a bar that fills to it. It is drawn from
+  // the beat clock itself (beatPhase, restarted with each beat), so it
+  // and the change cannot drift apart, and only while there is another
+  // preview to come: none while the themes are still being read.
+  readonly property int beatEvery: 1400
+  readonly property int beatsEach: 2
+  property real beatPhase: 0
+  NumberAnimation on beatPhase { id: beatFill; from: 0; to: 1; duration: tour.beatEvery; running: false }
+  readonly property bool previewComing: tour.running && !!tour.current.preview
+    && (tour.current.preview === "tour.preview.themes" ? tour.shownThemes.length > 0 : tour.shownBoards.length > 1)
+  readonly property real previewLeft: ((tour.tick % tour.beatsEach) + tour.beatPhase) / tour.beatsEach
+
   // A card the keyboard closed, opened again. The keyboard drops every card
   // when it changes size (Keyboard.qml, cancelTouches), which it does when
-  // the step before showed another board. True when there is one open.
+  // the step before showed another board. True when there is one open; a
+  // card not yet open is pressed for as a first one is (pressLater).
   function reopen(name) {
-    return tour.keyboard.popup !== null || tour.keyboard.demoHold(name)
+    if (tour.keyboard.popup !== null) return true
+    if (tour.pressing === "") tour.pressLater(name, tour.upFor)
+    return false
+  }
+
+  // A key held as a finger would hold it, seen whole: up for a moment under
+  // the spotlight, then down, then its card once the hold has been long
+  // enough. Arriving at a key already down hid the press, which is the part
+  // being shown. The first time in a step it stays up until the spotlight
+  // has also come to rest on it (firstUp). Leaving the step stops it (reset),
+  // so a step left mid-press never presses a key in the next one.
+  readonly property int upFor: 400
+  readonly property int firstUp: 220 + tour.upFor
+  readonly property int downFor: 350
+  property string pressing: ""
+  property bool pressDown: false
+  function pressLater(name, up) {
+    tour.keyboard.cancelTouches()
+    tour.pressing = name
+    tour.pressDown = false
+    pressClock.interval = up
+    pressClock.restart()
+  }
+  Timer {
+    id: pressClock
+    onTriggered: {
+      if (!tour.running || tour.pressing === "") return
+      if (!tour.pressDown) {
+        tour.pressDown = true
+        if (tour.keyboard.demoPress(tour.pressing)) {
+          pressClock.interval = tour.downFor
+          pressClock.restart()
+          return
+        }
+      } else tour.keyboard.demoHold(tour.pressing)
+      tour.pressing = ""
+    }
   }
 
   // Back to the keyboard as it was before each step does its own thing.
   function reset() {
     swipeClock.stop()
+    pressClock.stop()
+    tour.pressing = ""
     tour.keyboard.demoClear()
     tour.service.tourLowered = false
     tour.service.previewSettings = ({})
@@ -236,7 +307,12 @@ Item {
     Qt.callLater(function() {
       if (!tour.running || tour.current !== s) return
       if (s.enter) s.enter()
-      if (s.beat) s.beat(0)
+      // The beats counted from here, not from wherever the last step's were.
+      if (s.beat) {
+        s.beat(0)
+        beatClock.restart()
+        beatFill.restart()
+      }
     })
   }
 
@@ -250,12 +326,14 @@ Item {
   }
 
   Timer {
-    interval: 1400
+    id: beatClock
+    interval: tour.beatEvery
     repeat: true
     running: tour.running && !!tour.current.beat
     onTriggered: {
       tour.tick++
       tour.current.beat(tour.tick)
+      beatFill.restart()
     }
   }
 
@@ -313,8 +391,9 @@ Item {
     if (!found) found = tour.keyboard.demoRect("keys")
     if (!found) return { x: 0, y: tour.height, width: tour.width, height: 0 }
     var pad = Style.space(6)
-    return { x: found.x - pad, y: tour.keyboardTop + found.y - pad,
-             width: found.width + 2 * pad, height: found.height + 2 * pad }
+    var padX = pad + (tour.current.widen ? Style.space(tour.current.widen) : 0)
+    return { x: found.x - padX, y: tour.keyboardTop + found.y - pad,
+             width: found.width + 2 * padX, height: found.height + 2 * pad }
   }
 
   // The hole, eased from one target to the next.
@@ -563,6 +642,56 @@ Item {
         color: Color.popups.text
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
+      }
+
+      // Kept for the whole of a step that previews, there or not, so the
+      // buttons below do not move when it comes.
+      Column {
+        visible: tour.running && !!tour.current.preview
+        width: parent.width
+        spacing: Style.space(6)
+        opacity: tour.previewComing ? 1 : 0
+
+        Text {
+          textFormat: Text.PlainText
+          width: parent.width
+          wrapMode: Text.Wrap
+          text: tour.current.preview ? tour.service.t(tour.current.preview) : ""
+          color: Color.popups.text
+          opacity: 0.6
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+        Row {
+          width: parent.width
+          spacing: Style.space(8)
+          Text {
+            id: nextLabel
+            textFormat: Text.PlainText
+            text: tour.service.t("tour.preview.next")
+            color: Color.popups.text
+            opacity: 0.6
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+          }
+          Item {
+            anchors.verticalCenter: nextLabel.verticalCenter
+            width: parent.width - nextLabel.width - parent.spacing
+            height: Math.max(2, Style.space(4))
+            Rectangle {
+              anchors.fill: parent
+              radius: height / 2
+              color: Color.popups.text
+              opacity: 0.2
+            }
+            Rectangle {
+              width: parent.width * Math.max(0, Math.min(1, tour.previewLeft))
+              height: parent.height
+              radius: height / 2
+              color: Color.accent
+            }
+          }
+        }
       }
 
       Item {

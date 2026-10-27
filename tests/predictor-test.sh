@@ -539,13 +539,16 @@ next_words_and_context() {
   local dir="$sandbox/langs"
   mkdir -p "$dir/en"
   wordlist "$dir/en/small_en.msgpack.gz" 160:to 150:the 170:you 200:i 300:going 320:thank 330:tom 400:toast
-  pairs_file "$dir/en/pairs_en.tsv.gz" $'<s>\ti 50 the 30' $'thank\tyou 90 the 1' $'going\tto 80' $'<capitals>\ti'
+  pairs_file "$dir/en/pairs_en.tsv.gz" $'<s>\ti 50 the 30' $'thank\tyou 90 the 1' $'going\tto 80 i 5' $'<capitals>\ti'
   out=$( { echo "lang en"; echo "after"; echo "after thank"; echo "after going"; echo "complete t";
            echo "after -"; echo "complete t"; echo "quit"; } \
     | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
-  # At a sentence's start, with I written as it always is.
-  assert_contains "$out" 'next ["I", "the"]'
+  # At a sentence's start there is no word to go on, so nothing is guessed,
+  # though the pairs know what sentences start with.
+  [[ $(grep '^next ' <<<"$out" | head -1) == 'next []' ]] || fail "a sentence's start offered words: $out"
   assert_contains "$out" 'next ["you", "the"]'
+  # With I written as it always is.
+  assert_contains "$out" 'next ["to", "I"]'
   # After going, to leads what t could be; with no word before, the does.
   assert_contains "$out" 'suggest ["to", "the"'
   assert_contains "$out" 'next []'

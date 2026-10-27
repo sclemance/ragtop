@@ -1760,6 +1760,9 @@ Item {
   readonly property var noSuggestions: ({ source: "", items: [], prev: false, next: false, cursor: -1 })
   property var suggestions: root.noSuggestions
   function setSuggestions(source, value) {
+    // The tour's strip is the tour's: whatever the field behind it would
+    // offer stays out until it ends, so its steps start on an empty strip.
+    if (root.tourActive && source !== "tour") return
     // Nothing from a source clears only what that source put there. The
     // bridge says "no candidates" after every key on a plain layout, and
     // without this it wiped the word suggestions a moment after each one
@@ -2100,15 +2103,23 @@ Item {
     var c = root.contextNow()
     if (c === root.sentContext) return
     root.sentContext = c
-    root.nextAsked.push(root.fieldGeneration)
+    root.nextAsked.push({ field: root.fieldGeneration, word: c !== "" && c !== "-" })
     predictorProc.write(c === "" ? "after\n" : "after " + c + "\n")
   }
   // The predictor's answer to "after": shown while no word is being typed
   // and nothing else holds the strip. A swipe's other guesses keep it, so a
   // wrong swipe is still one tap from mended.
-  // The field each "after" was sent for, oldest first: next words worked
-  // out for a field that has lost focus since are not shown in the next.
+  // What each "after" was sent for, oldest first: { field, word }. Next
+  // words worked out for a field that has lost focus since are not shown in
+  // the next, and none are shown for no word at all, a field just focused or
+  // a sentence just begun: they would be what sentences in general start
+  // with, a guess about nothing typed (predictor.py says the same, and this
+  // holds for an answer from one that did not).
   property var nextAsked: []
+  function nextReplied(words) {
+    var asked = root.nextAsked.shift()
+    if (asked && asked.field === root.fieldGeneration) root.nextArrived(asked.word ? words : [])
+  }
   function nextArrived(words) {
     if (!root.keepWord) words = []
     root.nextWords = words
@@ -2744,9 +2755,8 @@ Item {
           root.termAnswer(found)
         } else if (line.startsWith("next ")) {
           var upcoming
-          var forField = root.nextAsked.shift()
-          try { upcoming = JSON.parse(line.slice(5)) } catch (e) { return }
-          if (forField === root.fieldGeneration) root.nextArrived(upcoming)
+          try { upcoming = JSON.parse(line.slice(5)) } catch (e) { root.nextAsked.shift(); return }
+          root.nextReplied(upcoming)
         } else if (line.startsWith("join ")) {
           var forPair = root.joinAsked.shift()
           var joined
@@ -2848,7 +2858,9 @@ Item {
     root.toolsOpen = false
     root.tourAnswered = true
     root.setOskVisible(true)
-    if (root.oskVisible) root.tourActive = true
+    if (!root.oskVisible) return
+    root.suggestions = root.noSuggestions
+    root.tourActive = true
   }
   // finished: written as taken, so it is not offered again. Skip counts.
   function endTour(finished) {

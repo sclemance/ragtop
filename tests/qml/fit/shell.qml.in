@@ -1,0 +1,80 @@
+import QtQuick
+import Quickshell
+
+// Keyboard.qml's sizing, its own members copied in by extract.py, and the
+// service, theme and screen width they read stood in for below: which board
+// the height budget leaves room for, and when the suggestion strip may be a
+// whole row tall rather than half of one.
+ShellRoot {
+  id: root
+
+  Harness { id: t }
+
+  // ---- Stand-ins -----------------------------------------------------------
+  property real width: 1600
+  property var service: QtObject {
+    property bool stripPossible: true
+    property string keyboardLayout: ""
+    property var keyLabels: null
+  }
+  property var theme: QtObject {
+    property real keyScale: 1
+    property real padding: 6
+    property real gap: 4
+  }
+  readonly property var layoutRows: [["q","w","e","r","t","y","u","i","o","p"],
+                                     ["a","s","d","f","g","h","j","k","l"],
+                                     ["z","x","c","v","b","n","m"]]
+
+  // ---- Keyboard.qml's own --------------------------------------------------
+  // FROM SOURCE: rowUnits unit keyHeightUncapped keyHeight topRowFraction formLadder
+  // FROM SOURCE: formUnitsOf rowHeightsOf formHeightOf minKeyWidth maxHeight wanted form
+  // FROM SOURCE: formFits formUnits topPadding stripCompact stripFraction stripSlot stripHeight
+
+  // ---- The test ------------------------------------------------------------
+  // With these stand-ins a key is 60 tall. The 80% board is 403 with a half
+  // strip counted and 433 with a whole one; the 60% is 362 and 392.
+  Component.onCompleted: t.run([
+    [0, function() {
+      root.maxHeight = 500
+      t.equal(root.form, "80", "a screen with room takes the widest board")
+      t.equal(root.stripFraction, 1, "and the strip a whole row, which still fits half the screen")
+      t.equal(root.stripHeight, root.keyHeight, "as tall as a key")
+    }],
+    [0, function() {
+      root.maxHeight = 420
+      t.equal(root.form, "80", "a board that fits only with a half strip is still chosen")
+      t.equal(root.stripFraction, 0.5, "and keeps the half strip rather than lose its place")
+      t.equal(root.stripHeight, Math.round(root.keyHeight / 2), "half a key tall")
+    }],
+    [0, function() {
+      root.maxHeight = 433
+      t.equal(root.stripFraction, 0.5, "exactly half the screen with a whole strip: kept at half")
+      root.maxHeight = 434
+      t.equal(root.stripFraction, 1, "a pixel more: a whole row")
+    }],
+    [0, function() {
+      root.maxHeight = 380
+      t.equal(root.form, "60", "a shorter screen steps down a board")
+      t.equal(root.stripFraction, 0.5, "and the strip stays half where the whole would not fit")
+      root.maxHeight = 393
+      t.equal(root.form, "60", "the same board a little higher")
+      t.equal(root.stripFraction, 1, "the 60% with room for a whole strip gets one")
+    }],
+    [0, function() {
+      root.maxHeight = 300
+      root.service.keyboardLayout = "80"
+      t.equal(root.form, "80", "a board asked for by name is taken at its word on height")
+      t.equal(root.stripFraction, 0.5, "and over the budget it keeps the half strip")
+      root.service.keyboardLayout = ""
+    }],
+    [0, function() {
+      root.maxHeight = 0
+      t.equal(root.stripFraction, 0.5, "no height budget known: the half strip")
+      root.maxHeight = 500
+      root.service.stripPossible = false
+      t.equal(root.stripSlot, 0, "no strip possible: no room kept for one")
+      root.service.stripPossible = true
+    }],
+  ])
+}

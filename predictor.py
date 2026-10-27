@@ -336,8 +336,11 @@ class Predictor:
         """(rank, word) for every word starting with `prefix`, accents or
         not."""
         key = fold(prefix)
-        start = bisect.bisect_left(self.keys, key)
-        for f, word in self.folded[start:]:
+        # By index: a slice would copy every word after the prefix's first
+        # to read the few that start with it.
+        folded = self.folded
+        for i in range(bisect.bisect_left(self.keys, key), len(folded)):
+            f, word = folded[i]
             if not f.startswith(key):
                 break
             yield self.rank(word, prefix), word
@@ -1395,7 +1398,12 @@ def handle(session, terminal, source, one_list, line):
             if head in session.predictor.elisions and tail:
                 session.before = tail
         p = session.predictor
-        found = p.next(session.before) if p and session.before else []
+        # Nothing at a sentence's start: with no word before, what comes next
+        # is only what sentences in general start with, "I the he she you",
+        # a guess about nobody in particular. An empty strip is better than
+        # one filled for the sake of it. START still ranks completions.
+        grounded = session.before not in (None, START)
+        found = p.next(session.before) if p and grounded else []
         print("next " + json.dumps(found, ensure_ascii=False), flush=True)
     elif cmd == "complete":
         words = session.predictor.suggest(rest, session.before) if session.predictor else []

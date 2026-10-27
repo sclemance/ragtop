@@ -31,7 +31,16 @@ ShellRoot {
   QtObject { id: finishedPause; function restart() {} function stop() {} }
 
   // ---- Service.qml's own ----------------------------------------------------
-  // SERVICE MEMBERS
+  // FROM SOURCE: fieldInfo fieldShown fieldHidden fieldReported fieldPending pendingTyped fieldPendingLimit
+  // FROM SOURCE: secretField onSecretFieldChanged
+  // FROM SOURCE: typingMemory fieldKnown keepAnything keepWord keepContext
+  // FROM SOURCE: onKeepAnythingChanged onTypingMemoryChanged forgetField dropTyped
+  // FROM SOURCE: typedTail typedCursor beforeCursor typedFromStart sentenceStart
+  // FROM SOURCE: isWordChar noteTyped freshField freshFieldAt fieldGeneration
+  // FROM SOURCE: predicting onPredictingChanged trackWord currentWord swipedWord autoSpaced hyphenJoined
+  // FROM SOURCE: finished finishedFormsAsked setFinished joinFirst joinPair joinOffer
+  // FROM SOURCE: asked formsAsked joinAsked termAsked nextAsked nextWords nextReplied nextArrived
+  // FROM SOURCE: sentContext contextNow updateContext wordsBefore backSpaceDownAt
 
   // ---- The test ----------------------------------------------------------------
   // A command as the keyboard sends it: followed for the word, then sent
@@ -175,6 +184,30 @@ ShellRoot {
       root.focus(root.plain)
       root.nextArrived(["the"])
       t.equal(root.nextWords.length, 0, "none keeps no next words")
+    }],
+    [0, function() {
+      // No word before, no next words: not on focus, not at a sentence's
+      // start, and not from an answer still on its way when one was asked.
+      root.mode("full")
+      root.focus(root.plain)
+      root.nextAsked = []
+      predictorProc.sent = []
+      root.sentContext = null
+      root.updateContext()
+      t.equal(predictorProc.sent.join(), "after\n", "a field just focused asks with no word before")
+      root.nextReplied(["I", "the", "he"])
+      t.equal(root.nextWords.length, 0, "and shows nothing for it, whatever the answer")
+      root.typeWord("thank")
+      root.press("key space")
+      root.updateContext()
+      root.nextReplied(["you"])
+      t.equal(root.nextWords.join(), "you", "a word before: its next words are shown")
+      root.typeWord("ok")
+      root.press("type .")
+      root.press("key space")
+      root.updateContext()
+      root.nextReplied(["I", "the"])
+      t.equal(root.nextWords.length, 0, "a sentence just begun shows none either")
     }],
     [0, function() {
       root.mode("full")

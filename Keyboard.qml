@@ -770,7 +770,9 @@ Item {
     rows.forEach(function(f) { h += Math.round(root.keyHeightUncapped * f) })
     // Counted whenever a strip could appear, shown or not: a board chosen by
     // height that changed with the strip would swap boards mid-sentence.
-    var strip = root.service.stripPossible ? Math.round(root.keyHeightUncapped * root.stripFraction) + root.theme.gap : 0
+    // At its compact height always: the board is chosen first, and only then
+    // is the strip given more room if there is some (stripFraction).
+    var strip = root.service.stripPossible ? Math.round(root.keyHeightUncapped * root.stripCompact) + root.theme.gap : 0
     // (The same room stripSlot keeps, measured by the uncapped height.)
     return root.topPadding + strip + h + (rows.length - 1) * root.theme.gap + root.theme.padding
   }
@@ -818,7 +820,8 @@ Item {
 
   // The suggestion strip, between the top edge and the first row, while
   // there is something to fill it (Service.qml, suggestionsShown). Half a
-  // row: it is read and tapped, not typed on, and it is screen given up.
+  // row, or a whole one where there is room (stripFraction): it is read and
+  // tapped, not typed on, and it is screen given up.
   //
   // It goes only while no finger is down, and comes whenever it is wanted.
   // Its room above the keys is kept either way (stripSlot), so appearing
@@ -844,7 +847,16 @@ Item {
   onReservedHeightChanged: if (root.service.touchTrace)
     root.service.traceTouch({ t: Date.now(), ev: "room", id: -1, x: 0, y: 0,
                               what: "space reserved: " + Math.round(root.reservedHeight) + " px" })
-  readonly property real stripFraction: 0.5
+  // Half a row where the screen is short of room, and a full row, a bigger
+  // target, where the board the screen would choose fits within the height
+  // budget (maxHeight, half the screen) even with a full row of strip. The
+  // board is chosen with the compact strip counted, so a taller strip never
+  // costs a layout, and nothing here changes while typing: the form, the
+  // uncapped height and the budget are all that it asks about.
+  readonly property real stripCompact: 0.5
+  readonly property real stripFraction: root.maxHeight > 0 && root.formHeightOf(root.form)
+      + Math.round(root.keyHeightUncapped * (1 - root.stripCompact)) < root.maxHeight
+    ? 1 : root.stripCompact
   //
   // Its room is kept above the keys whenever a strip could appear, shown or
   // not, so the keyboard's surface never changes height as it comes and goes:
@@ -1818,25 +1830,42 @@ Item {
     y: root.topPadding
     width: Math.min(root.width - root.theme.padding, root.keysRight) - x
     height: root.stripHeight
-    items: root.service.suggestions.items
-    cursor: root.service.suggestions.cursor
-    hasPrev: root.service.suggestions.prev
-    hasNext: root.service.suggestions.next
+    textHeight: Math.round(root.keyHeight * root.stripCompact)
+    items: root.stripModel.items
+    cursor: root.stripModel.cursor
+    hasPrev: root.stripModel.prev
+    hasNext: root.stripModel.next
     idleText: root.service.imeEngine ? root.engineName(root.service.imeEngine) : ""
   }
 
-  // A finger on the strip: { pointId, x, scroll, cell, scrolled }, or null.
-  // It scrolls once it has travelled, and chooses what it landed on if it
-  // lifts without having.
+  // A finger on the strip: { pointId, x, scroll, cell, scrolled, shown,
+  // field }, or null. It scrolls once it has travelled, and chooses what it
+  // landed on if it lifts without having.
+  //
+  // What the strip showed when the finger came down (shown) stays drawn
+  // until it lifts: suggestions arrive whenever the suggester answers, and
+  // one that came mid-tap used to put a different word under the finger,
+  // which the lift then took. If they have changed underneath by the lift,
+  // or another field has taken focus, the tap takes nothing (stripStill)
+  // rather than a word that was never there to be seen.
   property var stripTouch: null
+  readonly property var stripModel: root.stripTouch !== null ? root.stripTouch.shown : root.service.suggestions
+  function stripStill(t) {
+    var now = root.service.suggestions, then = t.shown
+    if (root.service.fieldGeneration !== t.field) return false
+    return now === then || (now.source === then.source && now.cursor === then.cursor
+      && now.prev === then.prev && now.next === then.next
+      && JSON.stringify(now.items) === JSON.stringify(then.items))
+  }
 
   function stripPressed(p) {
     var x = p.x - strip.x
     root.stripTouch = { pointId: p.pointId, x: p.x, scroll: strip.scroll,
-                        cell: strip.cellAt(x), scrolled: false }
+                        cell: strip.cellAt(x), scrolled: false,
+                        shown: root.service.suggestions, field: root.service.fieldGeneration }
     strip.pressedIndex = root.stripTouch.cell
     // A hold on a word offers its other forms (formsHold).
-    if (root.stripTouch.cell >= 0 && root.service.suggestions.source !== "offer") formsHold.restart()
+    if (root.stripTouch.cell >= 0 && root.stripTouch.shown.source !== "offer") formsHold.restart()
   }
 
   // ---- A word's other forms ------------------------------------------------
@@ -1849,8 +1878,8 @@ Item {
   property string formsWord: ""
   function askForms() {
     var t = root.stripTouch
-    if (!t || t.scrolled || t.cell < 0) return
-    var item = root.service.suggestions.items[t.cell]
+    if (!t || t.scrolled || t.cell < 0 || !root.stripStill(t)) return
+    var item = t.shown.items[t.cell]
     if (!item) return
     root.formsWord = item.text
     root.service.askForms(item.text)
@@ -2033,6 +2062,17 @@ Item {
     return { x: r.x, y: board.y + r.y, width: r.width, height: r.height }
   }
 
+  // That key down under a finger, and nothing more yet: the moment before a
+  // hold opens its card. False when this board has no such key.
+  function demoPress(name) {
+    root.cancelTouches()
+    var s = root.demoSlot(name)
+    if (!s) return false
+    var held = {}
+    held[root.demoPoint] = s.key
+    root.held = held
+    return true
+  }
   // The card a hold on that key opens, false when it has none.
   function demoHold(name) {
     root.cancelTouches()
@@ -2165,6 +2205,7 @@ Item {
     if (t.scrolled || t.cell === -1) return
     if (t.cell === strip.scrollLeftCell) strip.scrollBy(-1)
     else if (t.cell === strip.scrollRightCell) strip.scrollBy(1)
+    else if (!root.stripStill(t)) return
     else if (t.cell === strip.prevCell) root.service.pageSuggestions(false)
     else if (t.cell === strip.nextCell) root.service.pageSuggestions(true)
     else root.service.chooseSuggestion(t.cell)
