@@ -54,14 +54,6 @@ for d in theme_dirs:
         theme_labels[slug] = label if isinstance(label, str) and label.strip() else slug
 themes = sorted(theme_labels.items(), key=lambda row: (row[0] != "omarchy", row[0]))
 
-overlays = [
-    ("menu", "\U000f035c", "Omarchy Menu"),
-    ("emojis", "\U000f0785", "Emoji Picker"),
-    ("clipboard", "\U000f014c", "Clipboard Picker"),
-    ("polkit", "\U000f033e", "Password Prompt"),
-    ("image-picker", "\U000f056c", "Image Picker"),
-    ("lock", "\U000f0ddb", "Lock Screen"),
-]
 rows = {
     "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "ragtop"],
                         when=f'[[ -x "{cmd}" ]]'),
@@ -152,7 +144,11 @@ rows = {
        for name, label in (("smallest", "Smallest"), ("smaller", "Smaller"),
                            ("regular", "Regular"), ("larger", "Larger"),
                            ("largest", "Largest"))},
-    "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
+    # Each overlay turned on or off restarts the shell, so they are chosen
+    # together in the shell's own window and applied once (SetupWizard.qml,
+    # overlaysOnly), not toggled one restart at a time from here.
+    "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays",
+        action=f'"{cmd}" overlays'),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),
     # One tap puts everything a report needs on the clipboard, so nobody has
@@ -160,11 +156,6 @@ rows = {
     "setup.tablet.diagnostics": dict(icon="\U000f085e", label="Diagnostics",
         action=f'"{cmd}" diagnostics copy'),
 }
-for name, icon, label in overlays:
-    rows[f"setup.tablet.overlays.{name}"] = dict(
-        icon=icon, label=label,
-        checked=f'"{cmd}" overlay enabled {name}',
-        action=f'"{cmd}" overlay toggle {name}')
 # The labels above are English, the source of truth. Written in the language
 # Omarchy is set to (~/.config/omarchy/language) where Ragtop has its rows in
 # it (i18n/<code>/menu.json, Omarchy's own menu-catalog shape, by row id):

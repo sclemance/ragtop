@@ -866,7 +866,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Auto Keyboard | Whether the keyboard comes up by itself on a text field |
 | Theme | The keyboard's whole look, from a theme file |
 | Key Size | Automatic, or Smallest, Smaller, Regular, Larger, Largest against whatever size the theme asks for, and the labels scale with the keys |
-| System Overlays | Touch typing in each of Omarchy's overlays, one at a time |
+| System Overlays | Touch typing in Omarchy's overlays, chosen together and applied at once |
 | Run Setup | Opens setup in the shell |
 | Diagnostics | Copies everything a bug report needs to the clipboard |
 
@@ -954,12 +954,16 @@ with touch: see [The menu's Apps list](#the-menus-apps-list).
 Replacing part of Omarchy is your call, so each clone is off until you turn it
 on. The installer offers all of them once, with the trade-off below and No as
 the default answer. Afterwards, in the Omarchy menu, go to
-**Setup › Tablet › System Overlays** and
-tap an overlay to turn it on or off (✓ means on). The shell restarts to load
-the change. From a terminal, the same thing is:
+**Setup › Tablet › System Overlays**. It opens a window with the overlays
+that are on already ticked. Tick and untick as many as you like: nothing
+changes until you press Apply, which makes every change at once and restarts
+the shell once to load them. Cancel leaves everything as it was. From a
+terminal:
 
 ```bash
-./ragtop overlay toggle menu        # or: enable, disable; menu, emojis, clipboard,
+./ragtop overlays                   # the same window
+./ragtop overlay toggle menu        # one at a time, restarting each time; or
+                                    # enable, disable; menu, emojis, clipboard,
                                     # polkit, image-picker, lock
 ./ragtop overlay status             # which are on, and in sync with Omarchy?
 ./ragtop overlay sync               # re-clone any that Omarchy or Ragtop moved on from

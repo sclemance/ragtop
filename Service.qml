@@ -3613,7 +3613,21 @@ Item {
   // by `ragtop setup`, by the setup notification, and by itself the first
   // time Ragtop runs on a machine the installer has never been run on.
   property bool setupOpen: false
-  function openSetup() { root.setupOpen = true }
+  function openSetup() { root.openSetupAs(false) }
+  // The same window on its overlays page alone (SetupWizard, overlaysOnly).
+  property bool setupOverlaysOnly: false
+  function openOverlays() { root.openSetupAs(true) }
+  // Open in the other way it is closed first and made again, a moment later,
+  // rather than changing its pages under whoever is on one.
+  function openSetupAs(overlaysOnly) {
+    if (root.setupOpen && root.setupOverlaysOnly !== overlaysOnly) {
+      root.setupOpen = false
+      Qt.callLater(function() { root.openSetupAs(overlaysOnly) })
+      return
+    }
+    root.setupOverlaysOnly = overlaysOnly
+    root.setupOpen = true
+  }
 
   // Run something in Omarchy's floating terminal with setup out of the way,
   // and bring setup back when it finishes. Setup cannot simply sit there: it
@@ -3654,6 +3668,7 @@ Item {
       active: root.setupOpen
       sourceComponent: SetupWizard {
         service: root
+        overlaysOnly: root.setupOverlaysOnly
         onFinished: root.setupOpen = false
       }
     }
@@ -3677,6 +3692,7 @@ Item {
     function toggleKeyboard(): string { root.toggleOsk(); return "ok" }
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
     function openSetup(): string { root.openSetup(); return "ok" }
+    function openOverlays(): string { root.openOverlays(); return "ok" }
     function startTour(): string { root.startTour(); return root.tourActive ? "ok" : "no keyboard" }
     // ragtop touch-trace: see traceTouch.
     function touchTraceOn(): string { root.touchTrace = true; return "on" }

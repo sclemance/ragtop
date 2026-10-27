@@ -112,23 +112,5 @@
   },
   "setup.tablet.diagnostics": {
     "label": "Diagnostics"
-  },
-  "setup.tablet.overlays.menu": {
-    "label": "Omarchy Menu"
-  },
-  "setup.tablet.overlays.emojis": {
-    "label": "Emoji Picker"
-  },
-  "setup.tablet.overlays.clipboard": {
-    "label": "Clipboard Picker"
-  },
-  "setup.tablet.overlays.polkit": {
-    "label": "Password Prompt"
-  },
-  "setup.tablet.overlays.image-picker": {
-    "label": "Image Picker"
-  },
-  "setup.tablet.overlays.lock": {
-    "label": "Lock Screen"
   }
 }

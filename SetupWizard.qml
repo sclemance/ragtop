@@ -26,8 +26,15 @@ Item {
   required property var service
   signal finished()
 
+  // Setup › Tablet › System Overlays opens this on the overlays alone: what
+  // is on now, ticked; as many changes as you like, none of them made yet;
+  // and one Apply for all of them, since each one made restarts the shell.
+  // Closing it without applying changes nothing.
+  property bool overlaysOnly: false
+
   property int step: 0
-  readonly property var steps: ["setup.step.welcome", "setup.step.deps", "setup.step.switch", "setup.step.overlays", "setup.step.finish"]
+  readonly property var steps: root.overlaysOnly ? ["setup.step.overlays"]
+    : ["setup.step.welcome", "setup.step.deps", "setup.step.switch", "setup.step.overlays", "setup.step.finish"]
 
   function script(name) {
     return Qt.resolvedUrl(name).toString().replace(/^file:\/\//, "")
@@ -134,8 +141,11 @@ Item {
   readonly property var chosenOverlays: overlays.filter(function(o) { return o.on })
   readonly property bool allOverlays: chosenOverlays.length === overlays.length
   // What is on the machine now, so setup can be run again to change it
-  // rather than only to establish it.
+  // rather than only to establish it. Until it has been read, every toggle
+  // shows off, and applying then would take every overlay away: nothing is
+  // applied before it has (overlaysRead).
   property var installedOverlays: []
+  property bool overlaysRead: false
 
   Process {
     id: overlayStatusProc
@@ -146,6 +156,7 @@ Item {
           .filter(function(l) { return l.indexOf(": installed") !== -1 })
           .map(function(l) { return l.slice(0, l.indexOf(":")) })
         root.installedOverlays = on
+        root.overlaysRead = true
         root.overlays = root.overlays.map(function(o) {
           return { id: o.id, label: o.label, detail: o.detail, on: on.indexOf(o.id) !== -1 }
         })
@@ -190,7 +201,13 @@ Item {
   // So the work goes to `systemd-run --user`, which outlives the shell
   // entirely, and it reports for itself when it is done rather than relying
   // on a window that may no longer exist.
+  // Whether Apply has anything to do. The full setup always does: it writes
+  // the menu rows and the record even with no overlay changing.
+  readonly property bool canApply: root.overlaysRead && !root.applying
+    && (!root.overlaysOnly || root.overlaysChange)
+
   function apply() {
+    if (!root.canApply) return
     root.applying = true
     root.applyError = ""
     var ids = function(list) { return list.map(function(o) { return o.id }).join(" ") }
@@ -262,7 +279,7 @@ Item {
           // image named in an img tag.
           textFormat: Text.PlainText
           id: title
-          text: root.service.t("setup.title")
+          text: root.overlaysOnly ? root.service.t("setup.overlays.title") : root.service.t("setup.title")
           color: Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.title
@@ -275,6 +292,7 @@ Item {
           textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.verticalCenter: title.verticalCenter
+          visible: !root.overlaysOnly
           text: root.service.t("setup.stepOf", root.step + 1, root.steps.length, root.service.t(root.steps[root.step]))
           color: Color.popups.text
           opacity: 0.6
@@ -310,7 +328,8 @@ Item {
         spacing: Style.space(8)
 
         Button {
-          text: root.step === 0 ? root.service.t("setup.notNow") : root.service.t("setup.back")
+          text: root.overlaysOnly ? root.service.t("setup.cancel")
+            : root.step === 0 ? root.service.t("setup.notNow") : root.service.t("setup.back")
           bordered: true
           foreground: Color.popups.text
           onClicked: {
@@ -319,13 +338,16 @@ Item {
           }
         }
         Button {
-          text: root.step === root.steps.length - 1
+          readonly property bool last: root.step === root.steps.length - 1
+          text: last
             ? (root.applying ? root.service.t("setup.applying") : root.service.t("setup.apply")) : root.service.t("setup.next")
           bordered: true
-          foreground: root.step === root.steps.length - 1 ? Color.accent : Color.popups.text
+          enabled: !last || root.canApply
+          opacity: enabled ? 1 : 0.5
+          foreground: last ? Color.accent : Color.popups.text
           onClicked: {
-            if (root.step < root.steps.length - 1) root.step = root.step + 1
-            else if (!root.applying) root.apply()
+            if (!last) root.step = root.step + 1
+            else root.apply()
           }
         }
       }
@@ -588,6 +610,30 @@ Item {
           onClicked: root.setOverlay(modelData.id, !modelData.on)
         }
       }
+
+      // On its own, this is also the last page: what Apply will do, before
+      // anything is done.
+      PanelSeparator { visible: root.overlaysOnly; width: parent.width; foreground: Color.popups.text }
+      Note {
+        visible: root.overlaysOnly
+        width: parent.width
+        text: !root.overlaysRead ? root.service.t("setup.overlays.reading")
+          : !root.overlaysChange ? root.service.t("setup.overlays.unchanged")
+          : root.service.t("setup.overlays.will") + "\n"
+            + (root.overlaysToAdd.length > 0
+               ? "• " + root.service.t("setup.finish.add", root.overlaysToAdd.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
+               : "")
+            + (root.overlaysToDrop.length > 0
+               ? "• " + root.service.t("setup.finish.drop", root.overlaysToDrop.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
+               : "")
+            + "• " + root.service.t("setup.finish.restart")
+      }
+      Body {
+        width: parent.width
+        visible: root.overlaysOnly && root.applyError !== ""
+        color: Color.urgent
+        text: root.applyError
+      }
     }
   }
 
@@ -624,9 +670,10 @@ Item {
   }
 
   Component.onCompleted: {
+    overlayStatusProc.running = true
+    if (root.overlaysOnly) return
     root.checkDeps()
     switchStatusProc.running = true
     ruleTextProc.running = true
-    overlayStatusProc.running = true
   }
 }

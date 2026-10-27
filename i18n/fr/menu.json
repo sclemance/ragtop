@@ -112,23 +112,5 @@
   },
   "setup.tablet.diagnostics": {
     "label": "Diagnostic"
-  },
-  "setup.tablet.overlays.menu": {
-    "label": "Menu Omarchy"
-  },
-  "setup.tablet.overlays.emojis": {
-    "label": "Sélecteur d'émojis"
-  },
-  "setup.tablet.overlays.clipboard": {
-    "label": "Presse-papiers"
-  },
-  "setup.tablet.overlays.polkit": {
-    "label": "Mot de passe"
-  },
-  "setup.tablet.overlays.image-picker": {
-    "label": "Sélecteur d'images"
-  },
-  "setup.tablet.overlays.lock": {
-    "label": "Écran de verrouillage"
   }
 }

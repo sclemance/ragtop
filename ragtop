@@ -25,6 +25,7 @@
 #        ragtop rotation (get | is <mode> | set <mode>)
 #        ragtop theme (list | apply <theme> | show <theme>)
 #        ragtop setup                       open setup in the shell
+#        ragtop overlays                    choose overlays in the shell, applied together
 #        ragtop diagnostics [copy]          what a bug report needs
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
@@ -131,8 +132,9 @@ notify() {
 }
 
 set_overlay() {
-  local overlay="$1" on="$2"
+  local overlay="$1" on="$2" was=0
   label "$overlay" >/dev/null   # a known overlay, or a usage error
+  "$clones" installed "$overlay" && was=1
   if (( on )); then
     "$clones" install "$overlay" >/dev/null
     record
@@ -144,8 +146,13 @@ set_overlay() {
     record
     notify "$(t "overlay.off.$overlay")"
   fi
-  # Omarchy only picks clones up, or drops them, when the shell starts.
-  omarchy-restart-shell >/dev/null 2>&1 &
+  # Omarchy only picks clones up, or drops them, when the shell starts, so it
+  # restarts when one came or went, and once more if the first lost the race
+  # with the old shell (setup-apply.sh says why).
+  local now=0
+  "$clones" installed "$overlay" && now=1
+  (( now != was )) || return 0
+  ( omarchy-restart-shell || { sleep 2; omarchy-restart-shell; } ) >/dev/null 2>&1 &
 }
 
 # get <key> <default>
@@ -1067,6 +1074,7 @@ case "${1:-} ${2:-}" in
     fi
     ;;
   "setup "*|"setup") omarchy-shell ragtop openSetup >/dev/null ;;
+  "overlays "*|"overlays") omarchy-shell ragtop openOverlays >/dev/null ;;
   "diagnostics copy")
     if command -v wl-copy >/dev/null; then
       diagnostics | wl-copy
