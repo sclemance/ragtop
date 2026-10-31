@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.48.0 — Unreleased
+## 0.48.0 — 2026-10-31
 
 - Overlay focus follows Keyboard availability, including Always On in laptop mode.
 - Locale-independent clone tracking recognizes existing approved copies without discarding edit protection.
