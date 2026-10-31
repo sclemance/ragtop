@@ -1675,6 +1675,10 @@ Item {
   property real freshFieldAt: 0
   // Counts fields: a reply asked for in one is not typed into the next.
   property int fieldGeneration: 0
+  onFieldGenerationChanged: {
+    root.cancelCompletions()
+    root.clearTerminalRequests()
+  }
 
   // Which application has focus, by class, for inTerminal.
   property string activeClass: ""
@@ -1911,7 +1915,10 @@ Item {
     var lang = root.languageOfLayout(root.keyLabels.code || "", root.keyLabels.variant || "")
     return lang in root.wordLanguages ? lang : ""
   }
-  onWordLanguageChanged: root.sendLanguage()
+  onWordLanguageChanged: {
+    root.cancelCompletions()
+    root.sendLanguage()
+  }
   // The language whose list the predictor has open, "" until it says.
   property string wordsLoaded: ""
   // The spelling dictionary the predictor found for the language in use,
@@ -2072,7 +2079,6 @@ Item {
     root.asked = root.asked.map(gone)
     root.formsAsked = root.formsAsked.map(gone)
     root.joinAsked = root.joinAsked.map(gone)
-    root.termAsked = root.termAsked.map(gone)
     root.nextWords = []
     root.sentContext = null
     Qt.callLater(root.updateContext)
@@ -2107,6 +2113,7 @@ Item {
   readonly property bool predicting: root.predictionsEnabled && root.wordsReady
     && !root.imeComposing && !root.secretField && !root.atPrompt && root.keepWord
   onPredictingChanged: {
+    root.cancelCompletions()
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
     root.sentContext = null
@@ -2235,6 +2242,7 @@ Item {
   onCurrentWordChanged: {
     if (!root.predicting) return
     if (root.currentWord === "") {
+      root.pendingCompletion = null
       root.setSuggestions("predict", null)
       // A word begun and taken back: the next words for where the cursor
       // is are the ones already asked for, unless the place has changed,
@@ -2244,15 +2252,45 @@ Item {
           root.nextArrived(root.nextWords)
       })
     } else if (predictorProc.running) {
-      root.asked.push(root.currentWord)
-      predictorProc.write("complete " + root.currentWord + "\n")
+      root.queueCompletion()
     }
   }
-  // The words asked about, oldest first, which the answers come back in the
-  // order of. An answer for a word that has since changed is dropped: fast
-  // typing otherwise had one arrive after a space, offering words for what
-  // was no longer being typed, and taking one deleted nothing.
+  // At most one request in flight and the latest pending prefix. The
+  // placeholder survives cancellation until its reply, but retains no text.
   property var asked: []
+  property var pendingCompletion: null
+  function cancelCompletions() {
+    root.pendingCompletion = null
+    root.asked = root.asked.map(function() { return undefined })
+  }
+  function completionCurrent(ask) {
+    return !!ask && root.predicting && ask.field === root.fieldGeneration
+      && ask.language === root.wordLanguage && ask.word === root.currentWord
+      && ask.context === root.contextNow()
+  }
+  function queueCompletion() {
+    root.pendingCompletion = root.predicting && root.currentWord !== ""
+      ? { field: root.fieldGeneration, language: root.wordLanguage,
+          word: root.currentWord, context: root.contextNow() } : null
+    Qt.callLater(root.flushCompletion)
+  }
+  function flushCompletion() {
+    if (!predictorProc.running || root.asked.length > 0) return
+    var ask = root.pendingCompletion
+    root.pendingCompletion = null
+    if (!root.completionCurrent(ask)) return
+    // Context commands must stay before the completion that uses them.
+    root.updateContext()
+    root.asked = [ask]
+    predictorProc.write("complete " + ask.word + "\n")
+  }
+  function completionAnswer(words) {
+    var ask = root.asked.shift()
+    if (root.completionCurrent(ask) && Array.isArray(words))
+      root.setSuggestions("predict", { items: words.map(function(w) { return { text: w, note: "" } }),
+                                      prev: false, next: false, cursor: -1 })
+    Qt.callLater(root.flushCompletion)
+  }
 
   // Swaps the word typed so far for the one chosen, and a space after it,
   // the way a phone keyboard does.
@@ -2376,25 +2414,124 @@ Item {
   // Set on every window focus, two terminals of one class included, which a
   // change of class would miss (the activewindow handler).
   property bool termJustFocused: false
-  property var termAsked: []
+  // Keep command metadata warm across focus changes and keyboard hiding.
+  // Only visible, known prompts may send requests or display their replies.
+  readonly property bool terminalAllowed: root.keyboardAvailable && root.predictionsEnabled
+    && root.typingMemory === "full" && !root.secretField
+  readonly property bool wantTerminal: root.terminalAllowed && root.oskVisible && root.terminalSuggesting
+  property bool terminalStarted: false
+  property bool terminalReady: false
+  property int terminalSequence: 0
+  property var termPending: null
+  property var termInFlight: null
+  property var termLatest: null
+  function clearTerminalRequests() {
+    root.termPending = null
+    // Retain only the protocol barrier, not the old field's command/path.
+    // Dropping it would allow a new request behind every focus change.
+    if (root.termInFlight) root.termInFlight = { id: root.termInFlight.id }
+    root.termLatest = null
+    if (terminalProc.running && root.terminalReady)
+      terminalProc.write('{"reset":true}\n')
+    root.setSuggestions("term", null)
+  }
+  function cancelTerminal() {
+    terminalRestart.stop()
+    root.clearTerminalRequests()
+    root.termInFlight = null
+    root.terminalStarted = false
+    root.terminalReady = false
+  }
+  onTerminalAllowedChanged: {
+    if (!root.terminalAllowed) root.cancelTerminal()
+    else Qt.callLater(root.askTerm)
+  }
+  onWantTerminalChanged: {
+    if (!root.wantTerminal) root.clearTerminalRequests()
+    else Qt.callLater(root.askTerm)
+  }
+  function terminalCurrent(ask) {
+    return !!ask && root.wantTerminal && ask.field === root.fieldGeneration
+      && ask.line === root.termLine && ask.cwd === root.termCwd && ask.shell === root.termShell
+  }
   function askTerm() {
+    root.termLatest = null
     var line = root.termLine
-    if (!root.terminalSuggesting || line === null || root.termCwd === "" || !predictorProc.running) {
-      root.setSuggestions("term", null)
+    if (!root.wantTerminal || line === null || root.termCwd === "" || line === "") {
+      root.clearTerminalRequests()
       return
     }
-    root.termAsked.push(line)
-    predictorProc.write("term " + JSON.stringify({ cwd: root.termCwd, line: line, shell: root.termShell }) + "\n")
+    root.termPending = { id: ++root.terminalSequence, field: root.fieldGeneration,
+                         cwd: root.termCwd, line: line, shell: root.termShell }
+    root.terminalStarted = true
+    Qt.callLater(root.flushTerminal)
+  }
+  function flushTerminal() {
+    if (!terminalProc.running || !root.terminalReady || root.termInFlight) return
+    var ask = root.termPending
+    root.termPending = null
+    if (!root.terminalCurrent(ask)) return
+    root.termInFlight = ask
+    terminalProc.write(JSON.stringify(ask) + "\n")
   }
   onTermLineChanged: {
     root.askTerm()
     // An Enter may have run cd.
     if (root.termLine === "") root.readTermPlace()
   }
-  function termAnswer(found) {
-    var forLine = root.termAsked.shift()
-    if (!root.terminalSuggesting || forLine !== root.termLine) return
-    root.setSuggestions("term", { items: found, prev: false, next: false, cursor: -1 })
+  onTermCwdChanged: root.askTerm()
+  onTermShellChanged: root.askTerm()
+  function termAnswer(reply) {
+    if (!reply || !Array.isArray(reply.items)) return
+    var ask = reply.update ? root.termLatest : root.termInFlight
+    if (!ask || reply.id !== ask.id) return
+    if (!reply.update) {
+      root.termInFlight = null
+      root.termLatest = root.terminalCurrent(ask) && !root.termPending ? ask : null
+      Qt.callLater(root.flushTerminal)
+    }
+    if (!root.terminalCurrent(ask) || root.termPending) return
+    root.setSuggestions("term", { items: reply.items, prev: false, next: false, cursor: -1 })
+  }
+  Process {
+    id: terminalProc
+    command: ["/usr/bin/python3", Qt.resolvedUrl("terminal-helper.py").toString().replace(/^file:\/\//, "")]
+    running: root.terminalAllowed && root.terminalStarted
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        try {
+          var reply = JSON.parse(line)
+          if (reply.ready === true) {
+            terminalRestart.stop()
+            root.terminalReady = true
+            root.flushTerminal()
+          } else root.termAnswer(reply)
+        } catch (e) {}
+      }
+    }
+    onRunningChanged: {
+      root.termInFlight = null
+      root.termLatest = null
+      if (!running) {
+        root.terminalReady = false
+        root.setSuggestions("term", null)
+      }
+    }
+    onExited: {
+      if (root.terminalAllowed && root.terminalStarted && !terminalProc.running)
+        terminalRestart.restart()
+    }
+  }
+  Timer {
+    id: terminalRestart
+    interval: 5000
+    onTriggered: {
+      // A late exit/retry must never stop a replacement that is already up.
+      if (!root.terminalAllowed || !root.terminalStarted || terminalProc.running) return
+      root.terminalStarted = false
+      root.askTerm()
+    }
   }
   // A suggestion in place of the word being typed: a command or file with a
   // space after it, a folder without, to go on into.
@@ -2831,10 +2968,6 @@ Item {
           root.wordsLoaded = ""
           // The CLI may know better by now: a list removed by hand.
           root.readWordLanguages()
-        } else if (line.startsWith("termsuggest ")) {
-          var found
-          try { found = JSON.parse(line.slice(12)) } catch (e) { root.termAsked.shift(); return }
-          root.termAnswer(found)
         } else if (line.startsWith("next ")) {
           var upcoming
           try { upcoming = JSON.parse(line.slice(5)) } catch (e) { root.nextAsked.shift(); return }
@@ -2861,12 +2994,9 @@ Item {
           try { found = JSON.parse(line.slice(7)) } catch (e) { return }
           if (forSwipe !== undefined) root.typeSwiped(found, forSwipe)
         } else if (line.startsWith("suggest ")) {
-          var forWord = root.asked.shift()
-          if (!root.predicting || forWord !== root.currentWord) return
-          var words
-          try { words = JSON.parse(line.slice(8)) } catch (e) { return }
-          root.setSuggestions("predict", { items: words.map(function(w) { return { text: w, note: "" } }),
-                                           prev: false, next: false, cursor: -1 })
+          var words = null
+          try { words = JSON.parse(line.slice(8)) } catch (e) {}
+          root.completionAnswer(words)
         }
       }
     }
@@ -2875,10 +3005,10 @@ Item {
       root.sentSwipeGeometry = ""
       root.nextAsked = []
       root.asked = []
+      root.pendingCompletion = null
       root.formsAsked = []
       root.joinAsked = []
       root.sentContext = null
-      root.termAsked = []
       root.peekPending = false
       root.wordsLoaded = ""
       if (running) {

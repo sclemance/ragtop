@@ -49,7 +49,8 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `SetupWizard.qml` | First-run setup, in the shell rather than the terminal. |
 | `keyboard-helper.py` | Types characters. A Wayland virtual keyboard. |
 | `fcitx-osk-bridge.py` | Ragtop's side of fcitx5: "an app wants text input", which input method is on, and its choices. |
-| `predictor.py` | Word suggestions and swipe decoding, against wordfreq's English list. |
+| `predictor.py` | Word suggestions and swipe decoding, against installed word lists. |
+| `terminal-helper.py` | Terminal completions, isolated from word and swipe requests. |
 | `words/NOTICE.md` | The word list's credits and licence, copied beside it on download. |
 | `tablet-switch.py` | Watches the fold switch. |
 | `find-tablet-switch.py` | Finds which device that is. |
@@ -494,7 +495,7 @@ tests check the parsing on the report's real shape instead (Brave's login
 form, tried by hand: password, then nocapitals for the e-mail field).
 
 **Terminals.** At a shell's prompt the strip offers commands, then files
-(`predictor.py`, `Terminal`: PATH plus the shell's built-ins, notes from
+(`terminal-helper.py`, reusing `predictor.py`'s `Terminal`: PATH plus the shell's built-ins, notes from
 `apropos -l`, files from the folder `omarchy-cmd-terminal-cwd` gives, the
 line split as the shell splits it, and each suggestion carrying how many
 characters it replaces). "At the prompt" is the kernel's answer, not a
@@ -886,3 +887,36 @@ checked first, every time.
 window, how long a hung D-Bus call takes to recover. Several assumptions in
 this file were wrong the first time and were only settled by running the
 thing and reading the numbers.
+
+### Completion scheduling
+
+Ordinary word completion and terminal completion each allow one request in
+flight and one latest pending request. Intermediate prefixes are replaced
+before computation. Word replies are checked against field, language, word
+and preceding context; context commands remain ordered before completions.
+
+Terminal completion runs in a separate, lazy process, first started when the
+visible keyboard needs suggestions at a known, non-sensitive terminal prompt
+with full typing memory. The worker announces readiness before Service sends a request.
+Its JSON replies echo an opaque request id. Command names arrive before manual
+descriptions, which are read asynchronously with a five-second timeout and an
+8 MiB output bound. A later description update is accepted only for the current
+request. PATH and directory scans can delay terminal results but cannot occupy
+the word/swipe predictor.
+
+Field changes, unknown focus, leaving the prompt and keyboard hiding clear
+pending and retained request text, but preserve the worker's command index and
+manual descriptions. An outstanding request keeps only its id until acknowledged,
+so focus churn cannot queue additional lookups behind it. A reset message drops
+the worker's pending description update without discarding command metadata.
+An already executing filesystem lookup finishes before the worker reads that reset;
+its obsolete reply cannot display. No new typed-text persistence or diagnostics
+are introduced.
+
+Disabling suggestions, reducing typing memory below Full, entering a secret field
+or making the keyboard unavailable stops the worker and discards its cache. Its
+metadata subprocess is reaped on EOF or SIGTERM. A crash retries for a visible,
+eligible prompt; otherwise the next eligible request starts it again. A delayed
+retry never stops a worker that is already running. The legacy predictor `term`
+command remains for direct protocol clients and parser regression tests; Service
+uses only the isolated worker. Empty prompts produce no suggestions in either path.
