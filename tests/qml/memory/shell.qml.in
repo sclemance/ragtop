@@ -29,6 +29,7 @@ ShellRoot {
   QtObject { id: predictorProc; property bool running: true; property var sent: []
              function write(s) { sent.push(s) } }
   QtObject { id: finishedPause; function restart() {} function stop() {} }
+  function cancelTerminal() {}
 
   // ---- Service.qml's own ----------------------------------------------------
   // FROM SOURCE: fieldInfo fieldShown fieldHidden fieldReported fieldPending pendingTyped fieldPendingLimit
@@ -39,7 +40,7 @@ ShellRoot {
   // FROM SOURCE: isWordChar noteTyped freshField freshFieldAt fieldGeneration
   // FROM SOURCE: predicting onPredictingChanged trackWord currentWord swipedWord autoSpaced hyphenJoined
   // FROM SOURCE: finished finishedFormsAsked setFinished joinFirst joinPair joinOffer
-  // FROM SOURCE: asked formsAsked joinAsked termAsked nextAsked nextWords nextReplied nextArrived
+  // FROM SOURCE: asked pendingCompletion cancelCompletions onFieldGenerationChanged formsAsked joinAsked nextAsked nextWords nextReplied nextArrived
   // FROM SOURCE: sentContext contextNow updateContext wordsBefore backSpaceDownAt
 
   // ---- The test ----------------------------------------------------------------

@@ -918,10 +918,11 @@ def shell_tokens(line):
 
 
 class Terminal:
-    def __init__(self):
+    def __init__(self, load_notes=True):
         self.commands = None    # name -> rank, read the first time it is needed
         self.notes = {}
         self.shell = "bash"
+        self.load_notes = load_notes
 
     def set_shell(self, shell):
         shell = shell if shell in BUILTINS else "bash"
@@ -931,16 +932,18 @@ class Terminal:
 
     def load(self):
         names = set(BUILTINS[self.shell])
-        for d in os.environ.get("PATH", "").split(":"):
+        for d in dict.fromkeys(os.environ.get("PATH", "").split(":")):
             try:
-                for n in os.listdir(d):
-                    p = os.path.join(d, n)
-                    if typeable(n) and os.access(p, os.X_OK) and not os.path.isdir(p):
-                        names.add(n)
+                with os.scandir(d) as entries:
+                    for entry in entries:
+                        if typeable(entry.name) and not entry.is_dir() and os.access(entry.path, os.X_OK):
+                            names.add(entry.name)
             except OSError:
                 pass
         common = {n: i for i, n in enumerate(COMMON_COMMANDS)}
         self.commands = {n: common.get(n, len(COMMON_COMMANDS) + len(n)) for n in names}
+        if not self.load_notes:
+            return
         # What each is for, from the manuals' one-line descriptions. Sections
         # 1 and 8, commands, and the first found where there are several.
         try:
@@ -948,10 +951,13 @@ class Terminal:
                                  text=True, timeout=5).stdout
         except (OSError, subprocess.SubprocessError):
             out = ""
+        self.read_notes(out)
+
+    def read_notes(self, out):
         for line in out.splitlines():
             name, _, rest = line.partition(" ")
             _, dash, note = rest.partition(" - ")
-            if dash and name in self.commands:
+            if dash and self.commands and name in self.commands:
                 self.notes.setdefault(name, note.strip())
 
     def suggest(self, cwd, line):

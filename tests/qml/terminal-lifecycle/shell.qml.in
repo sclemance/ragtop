@@ -1,0 +1,63 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+ShellRoot {
+  id: root
+  Harness { id: t }
+  property bool keyboardAvailable: true
+  property bool oskVisible: true
+  property bool terminalSuggesting: true
+  property int fieldGeneration: 0
+  property string termLine: ""
+  property string termCwd: "/tmp"
+  property string termShell: "bash"
+  property var displayed: null
+  function readTermPlace() {}
+  function setSuggestions(source, value) { displayed = value }
+  function cancelCompletions() {}
+  // FROM SOURCE: wantTerminal terminalStarted terminalReady terminalSequence termPending termInFlight termLatest cancelTerminal terminalCurrent askTerm flushTerminal termAnswer
+  // FROM SOURCE: onTermLineChanged onTermCwdChanged onTermShellChanged onWantTerminalChanged onFieldGenerationChanged terminalProc terminalRestart
+  Component.onCompleted: t.run([
+    [0, function() {
+      t.equal(terminalProc.running, false, "worker is lazy while terminal is empty")
+      termLine = "ech"
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "first terminal query starts worker")
+      t.ok(displayed && displayed.items.some(function(i) { return i.text === "echo" }), "real worker returns builtin completion")
+      terminalSuggesting = false
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "privacy/feature gate stops worker")
+      t.equal(termPending, null, "stopping clears pending line")
+      t.equal(termLatest, null, "stopping clears retained request")
+      t.equal(displayed, null, "stopping clears suggestions")
+      terminalSuggesting = true
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "worker restarts after gate reopens")
+      t.ok(displayed && displayed.items.length > 0, "fresh worker returns current completion")
+      fieldGeneration++
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "field change stops worker")
+      t.equal(displayed, null, "field change drops display")
+      termLine = "pw"
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "new field can request completion")
+      terminalRestart.interval = 30
+      terminalProc.signal(9)
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "crashed worker restarts")
+      t.ok(displayed && displayed.items.some(function(i) { return i.text === "pwd" }), "restart restores current request")
+      oskVisible = false
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "hidden keyboard stops worker")
+      terminalRestart.interval = 1; terminalRestart.start()
+    }],
+    [100, function() { t.equal(terminalProc.running, false, "retry cannot reopen disabled worker") }]
+  ])
+}

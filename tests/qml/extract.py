@@ -6,7 +6,7 @@ The template names what it wants on a line of its own,
   // FROM SOURCE: name name ...
 (as many such lines as it likes), and the members go where that first line
 was. A member is a line indented two spaces that declares one of the names
-(a property, a function, an on-handler, or a Timer/NumberAnimation by its id), with every
+(a property, a function, an on-handler, or a Timer/NumberAnimation/Process by its id), with every
 line after it indented further, and the closing brace back at two spaces."""
 import re
 import sys
@@ -23,7 +23,7 @@ def members(lines, names):
         m = DECLARES.match(line)
         if m:
             name = next(g for g in m.groups() if g)
-        elif line in ("  Timer {", "  NumberAnimation {") and i + 1 < len(lines):
+        elif line in ("  Timer {", "  NumberAnimation {", "  Process {") and i + 1 < len(lines):
             t = re.match(r"^    id: (\w+)$", lines[i + 1])
             name = t.group(1) if t else None
         if name not in names:

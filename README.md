@@ -753,6 +753,10 @@ completes one, it says nothing until the next Enter. A terminal you switch
 to is taken to be at an empty prompt. Bash, zsh and fish; not nushell,
 whose quoting differs. Flags after a `-` are not offered yet.
 
+Command names can appear before their manual descriptions finish loading.
+Terminal lookups run separately from word prediction and swipe decoding, so
+a slow directory or manual lookup does not hold those up.
+
 Held arrows are repeated by the keyboard itself at Hyprland's repeat speed,
 so Ragtop knows what each did, and corrections with them keep the line rather
 than losing it. BackSpace held deletes words instead (below).
