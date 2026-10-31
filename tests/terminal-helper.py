@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 REPO = Path(sys.argv.pop())
 
@@ -95,6 +96,43 @@ class WorkerTest(unittest.TestCase):
         self.proc.stdin.close(); self.proc.stdin = None
         self.assertEqual(self.proc.wait(timeout=3), 0)
         self.assertEqual(self.proc.stderr.read(), b'')
+
+    def test_empty_prompt_and_reset_preserve_command_cache(self):
+        self.send(1, '')
+        self.assertEqual(self.read()['items'], [])
+        self.send(2, 'gi')
+        self.assertEqual(self.read()['items'][0]['text'], 'git')
+        self.notes_pid()
+        (self.bin / 'git').unlink()
+        self.proc.stdin.write(b'{"reset":true}\n')
+        self.proc.stdin.flush()
+        self.send(3, 'gi')
+        # Still offered after removal from PATH: the existing index was reused.
+        self.assertEqual(self.read()['items'][0]['text'], 'git')
+        (self.root / 'release').touch()
+        update = self.read()
+        self.assertEqual(update['id'], 3)
+        self.assertEqual(update['items'][0]['note'], 'version control')
+
+    def test_reset_clears_request_without_discarding_metadata(self):
+        sys.path.insert(0, str(REPO))
+        spec = importlib.util.spec_from_file_location('terminal_worker', REPO / 'terminal-helper.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        worker = module.Worker()
+        commands, notes = {'git': 1}, {'git': 'version control'}
+        worker.terminal.commands = commands
+        worker.terminal.notes = notes
+        worker.latest = (1, [{'text': 'git', 'back': 2}])
+        try:
+            with patch.object(module, 'reply') as reply:
+                worker.request(b'{"reset":true}')
+                reply.assert_not_called()
+            self.assertIsNone(worker.latest)
+            self.assertIs(worker.terminal.commands, commands)
+            self.assertIs(worker.terminal.notes, notes)
+        finally:
+            worker.selector.close()
 
     def test_eof_and_termination_reap_metadata_child(self):
         self.send(1, 'gi'); self.read()

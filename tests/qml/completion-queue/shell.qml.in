@@ -15,7 +15,12 @@ ShellRoot {
   QtObject { id: predictorProc; property bool running: true; property var sent: []
     function write(line) { sent.push(line) } }
   QtObject { id: terminalProc; property bool running: true; property var sent: []
-    function write(line) { sent.push(JSON.parse(line)) } }
+    property int resets: 0
+    function write(line) {
+      var message = JSON.parse(line)
+      if (message.reset) resets++
+      else sent.push(message)
+    } }
   QtObject { id: terminalRestart; function stop() {} }
   property bool terminalReady: true
   property bool wantTerminal: true
@@ -23,7 +28,7 @@ ShellRoot {
   property string termCwd: "/tmp"
   property string termShell: "bash"
   // FROM SOURCE: asked pendingCompletion cancelCompletions completionCurrent queueCompletion flushCompletion completionAnswer
-  // FROM SOURCE: terminalStarted terminalSequence termPending termInFlight termLatest cancelTerminal terminalCurrent askTerm flushTerminal termAnswer
+  // FROM SOURCE: terminalStarted terminalSequence termPending termInFlight termLatest clearTerminalRequests cancelTerminal terminalCurrent askTerm flushTerminal termAnswer
   // FROM SOURCE: onFieldGenerationChanged
   function answer(id, text, update) { termAnswer({id: id, items: [{text: text}], update: update}) }
   Component.onCompleted: t.run([
@@ -74,11 +79,21 @@ ShellRoot {
       flushTerminal(); var old = termInFlight.id
       fieldGeneration++
       t.equal(termPending, null, "field change clears terminal pending line")
-      t.equal(termInFlight, null, "field change clears terminal in-flight line")
+      t.equal(JSON.stringify(termInFlight), JSON.stringify({id: old}), "field change keeps only in-flight id")
       t.equal(termLatest, null, "field change clears description request")
-      t.equal(terminalStarted, false, "field change stops terminal helper")
+      t.equal(terminalStarted, true, "field change keeps terminal helper warm")
+      var count = terminalProc.sent.length
+      termLine = "ech"; askTerm(); flushTerminal()
+      fieldGeneration++; termLine = "pw"; askTerm(); flushTerminal()
+      t.equal(terminalProc.sent.length, count, "focus churn cannot queue work behind stale lookup")
       answer(old, "secret", false)
       t.equal(displayed, null, "cancelled terminal answer rejected")
+      flushTerminal()
+      t.equal(terminalProc.sent.length, count + 1, "latest field lookup follows stale acknowledgment")
+      t.equal(terminalProc.sent[count].line, "pw", "only latest field line sent")
+      answer(old, "stale notes", true)
+      t.equal(displayed, null, "old field notes cannot replace new lookup")
+      answer(termInFlight.id, "pwd", false); displayed = null
       terminalReady = true; askTerm(); flushTerminal(); termShell = "fish"
       answer(termInFlight.id, "old shell", false)
       t.equal(displayed, null, "shell mismatch rejected")
@@ -87,6 +102,8 @@ ShellRoot {
       t.equal(displayed, null, "directory mismatch rejected")
       wantTerminal = false; cancelTerminal(); askTerm()
       t.equal(termPending, null, "disabled feature retains no pending text")
+      t.equal(termInFlight, null, "shutdown drops protocol barrier")
+      t.ok(terminalProc.resets > 0, "field cancellation clears worker's pending metadata update")
     }]
   ])
 }

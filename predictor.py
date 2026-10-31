@@ -1369,6 +1369,8 @@ def handle(session, terminal, source, one_list, line):
         except ValueError:
             pass
     elif cmd == "term":
+        # Retained for direct protocol clients and parser regression tests.
+        # Service uses terminal-helper.py so this work cannot delay typing.
         found = []
         try:
             req = json.loads(rest)

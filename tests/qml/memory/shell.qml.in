@@ -29,7 +29,7 @@ ShellRoot {
   QtObject { id: predictorProc; property bool running: true; property var sent: []
              function write(s) { sent.push(s) } }
   QtObject { id: finishedPause; function restart() {} function stop() {} }
-  function cancelTerminal() {}
+  function clearTerminalRequests() {}
 
   // ---- Service.qml's own ----------------------------------------------------
   // FROM SOURCE: fieldInfo fieldShown fieldHidden fieldReported fieldPending pendingTyped fieldPendingLimit

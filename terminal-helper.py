@@ -73,6 +73,10 @@ class Worker:
         items = []
         try:
             req = json.loads(raw)
+            if not isinstance(req, dict):
+                raise ValueError()
+            if req.get('reset') is True:
+                return  # Drop request-specific notes; keep command metadata.
             request_id = req['id']
             if type(request_id) is not int:
                 raise ValueError()

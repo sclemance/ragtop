@@ -1677,7 +1677,7 @@ Item {
   property int fieldGeneration: 0
   onFieldGenerationChanged: {
     root.cancelCompletions()
-    root.cancelTerminal()
+    root.clearTerminalRequests()
   }
 
   // Which application has focus, by class, for inTerminal.
@@ -2414,24 +2414,40 @@ Item {
   // Set on every window focus, two terminals of one class included, which a
   // change of class would miss (the activewindow handler).
   property bool termJustFocused: false
-  readonly property bool wantTerminal: root.keyboardAvailable && root.oskVisible && root.terminalSuggesting
+  // Keep command metadata warm across focus changes and keyboard hiding.
+  // Only visible, known prompts may send requests or display their replies.
+  readonly property bool terminalAllowed: root.keyboardAvailable && root.predictionsEnabled
+    && root.typingMemory === "full" && !root.secretField
+  readonly property bool wantTerminal: root.terminalAllowed && root.oskVisible && root.terminalSuggesting
   property bool terminalStarted: false
   property bool terminalReady: false
   property int terminalSequence: 0
   property var termPending: null
   property var termInFlight: null
   property var termLatest: null
-  function cancelTerminal() {
-    terminalRestart.stop()
+  function clearTerminalRequests() {
     root.termPending = null
-    root.termInFlight = null
+    // Retain only the protocol barrier, not the old field's command/path.
+    // Dropping it would allow a new request behind every focus change.
+    if (root.termInFlight) root.termInFlight = { id: root.termInFlight.id }
     root.termLatest = null
-    root.terminalStarted = false
-    root.terminalReady = false
+    if (terminalProc.running && root.terminalReady)
+      terminalProc.write('{"reset":true}\n')
     root.setSuggestions("term", null)
   }
+  function cancelTerminal() {
+    terminalRestart.stop()
+    root.clearTerminalRequests()
+    root.termInFlight = null
+    root.terminalStarted = false
+    root.terminalReady = false
+  }
+  onTerminalAllowedChanged: {
+    if (!root.terminalAllowed) root.cancelTerminal()
+    else Qt.callLater(root.askTerm)
+  }
   onWantTerminalChanged: {
-    if (!root.wantTerminal) root.cancelTerminal()
+    if (!root.wantTerminal) root.clearTerminalRequests()
     else Qt.callLater(root.askTerm)
   }
   function terminalCurrent(ask) {
@@ -2442,8 +2458,7 @@ Item {
     root.termLatest = null
     var line = root.termLine
     if (!root.wantTerminal || line === null || root.termCwd === "" || line === "") {
-      root.termPending = null
-      root.setSuggestions("term", null)
+      root.clearTerminalRequests()
       return
     }
     root.termPending = { id: ++root.terminalSequence, field: root.fieldGeneration,
@@ -2481,7 +2496,7 @@ Item {
   Process {
     id: terminalProc
     command: ["/usr/bin/python3", Qt.resolvedUrl("terminal-helper.py").toString().replace(/^file:\/\//, "")]
-    running: root.wantTerminal && root.terminalStarted
+    running: root.terminalAllowed && root.terminalStarted
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
@@ -2504,14 +2519,16 @@ Item {
       }
     }
     onExited: {
-      if (root.wantTerminal && root.terminalStarted) terminalRestart.restart()
+      if (root.terminalAllowed && root.terminalStarted && !terminalProc.running)
+        terminalRestart.restart()
     }
   }
   Timer {
     id: terminalRestart
     interval: 5000
     onTriggered: {
-      if (!root.wantTerminal || !root.terminalStarted) return
+      // A late exit/retry must never stop a replacement that is already up.
+      if (!root.terminalAllowed || !root.terminalStarted || terminalProc.running) return
       root.terminalStarted = false
       root.askTerm()
     }

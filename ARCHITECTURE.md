@@ -895,17 +895,28 @@ flight and one latest pending request. Intermediate prefixes are replaced
 before computation. Word replies are checked against field, language, word
 and preceding context; context commands remain ordered before completions.
 
-Terminal completion runs in a separate, lazy process while the keyboard is
-visible and full typing memory permits suggestions at a known, non-sensitive
-terminal prompt. The worker announces readiness before Service sends a request.
+Terminal completion runs in a separate, lazy process, first started when the
+visible keyboard needs suggestions at a known, non-sensitive terminal prompt
+with full typing memory. The worker announces readiness before Service sends a request.
 Its JSON replies echo an opaque request id. Command names arrive before manual
 descriptions, which are read asynchronously with a five-second timeout and an
 8 MiB output bound. A later description update is accepted only for the current
 request. PATH and directory scans can delay terminal results but cannot occupy
 the word/swipe predictor.
 
-Field/privacy changes clear pending and retained request text and stop the
-terminal worker. Its metadata subprocess is reaped on EOF or SIGTERM. No new
-typed-text persistence or diagnostics are introduced; only command metadata
-is cached in worker memory. Hidden or disabled terminal suggestions stop the
-worker; a crash retries while the feature remains eligible.
+Field changes, unknown focus, leaving the prompt and keyboard hiding clear
+pending and retained request text, but preserve the worker's command index and
+manual descriptions. An outstanding request keeps only its id until acknowledged,
+so focus churn cannot queue additional lookups behind it. A reset message drops
+the worker's pending description update without discarding command metadata.
+An already executing filesystem lookup finishes before the worker reads that reset;
+its obsolete reply cannot display. No new typed-text persistence or diagnostics
+are introduced.
+
+Disabling suggestions, reducing typing memory below Full, entering a secret field
+or making the keyboard unavailable stops the worker and discards its cache. Its
+metadata subprocess is reaped on EOF or SIGTERM. A crash retries for a visible,
+eligible prompt; otherwise the next eligible request starts it again. A delayed
+retry never stops a worker that is already running. The legacy predictor `term`
+command remains for direct protocol clients and parser regression tests; Service
+uses only the isolated worker. Empty prompts produce no suggestions in either path.
