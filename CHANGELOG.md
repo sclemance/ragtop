@@ -15,6 +15,9 @@
 - Add Mechanical backlight and keycap options, Focus and Chiclet styling; retire standalone Slab, Glow and Pudding Shine Through themes.
 - Use Omarchy styling and palette for the lock keyboard; improve its password-entry layout and Always On visibility.
 - Align lock-screen long-press choices, selection and cancellation with desktop behaviour; bound popup width, restore punctuation holds, and avoid splitting supplementary Unicode characters on Backspace.
+- Swipe no longer rebuilds its word paths when the keyboard reports the same key positions again, such as on returning from the symbols page.
+- Terminal command and file suggestions run in a separate helper, so a slow folder or manual-page lookup cannot hold up word suggestions or a swipe. Command descriptions arrive after the names.
+- Mechanical keycaps build only the surface for the material in use; they look exactly the same.
 - Make layout changes reliable when switching back before displayed labels update.
 - Add Omarchy to prediction/swipe vocabulary; improve tour timing and suggestion-strip presentation.
 - Refresh marketplace artwork and search description.
