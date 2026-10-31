@@ -2422,6 +2422,7 @@ Item {
   property var termInFlight: null
   property var termLatest: null
   function cancelTerminal() {
+    terminalRestart.stop()
     root.termPending = null
     root.termInFlight = null
     root.termLatest = null
@@ -2487,6 +2488,7 @@ Item {
         try {
           var reply = JSON.parse(line)
           if (reply.ready === true) {
+            terminalRestart.stop()
             root.terminalReady = true
             root.flushTerminal()
           } else root.termAnswer(reply)

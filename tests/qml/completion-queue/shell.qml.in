@@ -16,6 +16,7 @@ ShellRoot {
     function write(line) { sent.push(line) } }
   QtObject { id: terminalProc; property bool running: true; property var sent: []
     function write(line) { sent.push(JSON.parse(line)) } }
+  QtObject { id: terminalRestart; function stop() {} }
   property bool terminalReady: true
   property bool wantTerminal: true
   property string termLine: "g"

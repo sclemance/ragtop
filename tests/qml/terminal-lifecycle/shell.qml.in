@@ -37,10 +37,12 @@ ShellRoot {
     [700, function() {
       t.equal(terminalProc.running, true, "worker restarts after gate reopens")
       t.ok(displayed && displayed.items.length > 0, "fresh worker returns current completion")
+      terminalRestart.start()
       fieldGeneration++
     }],
     [100, function() {
       t.equal(terminalProc.running, false, "field change stops worker")
+      t.equal(terminalRestart.running, false, "field change cancels old retry timer")
       t.equal(displayed, null, "field change drops display")
       termLine = "pw"
     }],
