@@ -9,4 +9,7 @@ Item {
   property string labelKind: "char"
   property string kind: "normal"
   property bool pressed: false
+  readonly property real depth: Math.min(theme.keyDepth, height * theme.maxDepthFraction)
+  readonly property real faceHeight: height - depth
+  readonly property real faceY: pressed ? depth * theme.pressSink : 0
 }

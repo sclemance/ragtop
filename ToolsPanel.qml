@@ -30,13 +30,14 @@ Item {
   required property var service
 
   signal dismissed()
+  readonly property var languageInfo: panel.service.wordLanguages[panel.service.wordLanguage] || ({})
 
   implicitWidth: card.implicitWidth
   implicitHeight: card.implicitHeight
 
   readonly property string themeName: {
     var name = panel.service.currentTheme
-    return name.charAt(0).toUpperCase() + name.slice(1)
+    return name.split("-").map(function(word) { return word.charAt(0).toUpperCase() + word.slice(1) }).join(" ")
   }
 
   // A note that outlived the code it explained, because the trap has not gone
@@ -205,6 +206,92 @@ Item {
 
         PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
 
+        Toggle {
+          visible: panel.service.currentTheme !== "mechanical" && panel.service.look.backlight === "accent"
+          width: parent.width
+          label: panel.service.t("tools.backlight.animation")
+          description: panel.service.t("tools.backlight.animation.description")
+          checked: panel.service.look.animateBacklight
+          foreground: Color.popups.text
+          accent: Color.accent
+          onClicked: panel.service.toggleSetting("backlight-animation")
+        }
+
+        Column {
+          visible: panel.service.currentTheme === "mechanical"
+          width: parent.width
+          spacing: Style.space(8)
+
+          Toggle {
+            width: parent.width
+            label: panel.service.t("tools.mechanical.backlight")
+            checked: panel.service.look.backlight === "accent"
+            foreground: Color.popups.text
+            accent: Color.accent
+            onClicked: panel.service.toggleSetting("mechanical-backlight")
+          }
+
+          PanelSectionHeader {
+            text: panel.service.t("tools.mechanical.material")
+            foreground: Color.popups.text
+          }
+
+          Flow {
+            width: parent.width
+            spacing: Style.spacing.md
+            Repeater {
+              model: ["plain", "pudding", "frosted", "translucent"]
+              delegate: Button {
+                required property string modelData
+                width: (parent.width - Style.spacing.md) / 2
+                text: panel.service.t("tools.mechanical." + modelData)
+                selected: panel.service.look.keycapMaterial === (modelData === "plain" ? "solid" : modelData)
+                bordered: true
+                foreground: Color.popups.text
+                background: Color.popups.background
+                accent: Color.accent
+                onClicked: panel.service.setMechanicalMaterial(modelData)
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            text: panel.service.t("tools.mechanical." + (panel.service.look.keycapMaterial === "solid"
+              ? "plain" : panel.service.look.keycapMaterial) + ".description")
+            color: Color.popups.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          Toggle {
+            width: parent.width
+            enabled: panel.service.look.backlight === "accent"
+              && ["solid", "pudding"].indexOf(panel.service.look.keycapMaterial) !== -1
+            opacity: enabled ? 1 : 0.5
+            label: panel.service.t("tools.mechanical.shine")
+            description: panel.service.t("tools.mechanical.shine.description")
+            checked: enabled && panel.service.look.shineThrough
+            foreground: Color.popups.text
+            accent: Color.accent
+            onClicked: panel.service.toggleSetting("mechanical-shine-through")
+          }
+
+          Toggle {
+            width: parent.width
+            enabled: panel.service.look.backlight === "accent"
+            opacity: enabled ? 1 : 0.5
+            label: panel.service.t("tools.mechanical.effects")
+            description: panel.service.t("tools.backlight.animation.description")
+            checked: enabled && panel.service.look.animateBacklight
+            foreground: Color.popups.text
+            accent: Color.accent
+            onClicked: panel.service.toggleSetting("backlight-animation")
+          }
+        }
+
         // Screen rotation, named rather than implied. Automatic follows the
         // machine: it turns in tablet mode and holds still in laptop mode.
         // Three exclusive states, which is what a ButtonGroup is for.
@@ -317,7 +404,34 @@ Item {
           background: Color.popups.background
           accent: Color.accent
           focusable: false
+          enabled: panel.service.displaySaving === ""
           onChanged: function(name) { panel.service.setDisplay(name) }
+        }
+        Text {
+          width: parent.width
+          visible: panel.service.displayPreview !== ""
+          text: panel.service.t("tools.display.revertIn", panel.service.displaySeconds)
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+        Row {
+          visible: panel.service.displayPreview !== ""
+          enabled: panel.service.displaySaving === ""
+          spacing: Style.spacing.controlGap
+          Button {
+            text: panel.service.t("tools.display.keep")
+            foreground: Color.popups.text
+            bordered: true
+            onClicked: panel.service.keepDisplay()
+          }
+          Button {
+            text: panel.service.t("tools.display.revert")
+            foreground: Color.popups.text
+            bordered: true
+            onClicked: panel.service.revertDisplay()
+          }
         }
 
         // Which board the keyboard draws. Here as well as in the menu because
@@ -482,6 +596,32 @@ Item {
           onClicked: panel.service.toggleAutoShow()
         }
 
+        PanelSectionHeader {
+          text: panel.service.t("tools.memory")
+          foreground: Color.popups.text
+        }
+        ButtonGroup {
+          options: [
+            { value: "full", label: panel.service.t("tools.memory.full") },
+            { value: "word", label: panel.service.t("tools.memory.word") },
+            { value: "none", label: panel.service.t("tools.memory.none") }
+          ]
+          value: panel.service.typingMemory
+          foreground: Color.popups.text
+          background: Color.popups.background
+          accent: Color.accent
+          focusable: false
+          onChanged: function(value) { panel.service.queuePreference(["typing-memory", "set", value]) }
+        }
+        Text {
+          width: parent.width
+          text: panel.service.t("tools.memory.help")
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+
         // Word suggestions and swipe, here because whether you want them
         // changes with what you are writing. Swipe needs suggestions, so it
         // waits on them, kept as it was set.
@@ -489,7 +629,9 @@ Item {
           width: parent.width
           label: panel.service.predictionsMode === "all" ? panel.service.t("tools.predictions.all")
             : panel.service.t("tools.predictions.layout")
-          checked: panel.service.predictionsEnabled
+          enabled: panel.service.typingMemory !== "none"
+          opacity: enabled ? 1 : 0.4
+          checked: enabled && panel.service.predictionsEnabled
           foreground: Color.popups.text
           accent: Color.accent
           onClicked: panel.service.toggleSetting("predictions")
@@ -505,14 +647,42 @@ Item {
         Toggle {
           width: parent.width
           label: panel.service.t("tools.swipe")
-          enabled: panel.service.predictionsEnabled
+          enabled: panel.service.predictionsEnabled && panel.service.typingMemory !== "none"
           opacity: enabled ? 1 : 0.4
-          checked: panel.service.swipeEnabled && panel.service.predictionsEnabled
+          checked: enabled && panel.service.swipeEnabled
           foreground: Color.popups.text
           accent: Color.accent
           onClicked: panel.service.toggleSetting("swipe")
         }
 
+        Button {
+          visible: panel.service.wordLanguage !== "" && !panel.languageInfo.installed
+          enabled: !panel.service.wordsFetching
+          text: panel.service.wordsFetching
+            ? panel.service.t("offer.fetching", panel.service.languageName(panel.service.wordLanguage, panel.languageInfo.name || ""))
+            : panel.service.t("offer.add", panel.service.languageName(panel.service.wordLanguage, panel.languageInfo.name || ""))
+          foreground: Color.popups.text
+          bordered: true
+          onClicked: panel.service.installWordLanguage(panel.service.wordLanguage)
+        }
+        Text {
+          width: parent.width
+          visible: panel.service.wordLanguage !== "" && !panel.languageInfo.installed
+          text: panel.service.t("offer.size", panel.languageInfo.size || "")
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+        Text {
+          width: parent.width
+          visible: panel.service.preferenceFailed
+          text: panel.service.t("tools.saveFailed")
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
         Item {
           width: parent.width
           height: settingsButton.implicitHeight

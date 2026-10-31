@@ -20,7 +20,7 @@ import qs.Ui
 // controls from then on. The offer is a card and nothing else: it takes
 // touches only on itself, so the keyboard under it still types.
 //
-// English only, like the rest of Ragtop's words.
+// Copy follows the shell language; demonstration words are illustrative.
 Item {
   id: tour
 
@@ -184,8 +184,8 @@ Item {
         var step = n % 8
         if (step === 0) {
           tour.keyboard.cancelTouches()
-          tour.service.setSuggestions("tour", { items: [{ text: "walk" }, { text: "walking" }, { text: "walked" },
-                                                        { text: "walks" }, { text: "walker" }] })
+          if (n === 0) tour.startStripDemo()
+          else tour.showStripWords()
         } else if (step === 2) tour.keyboard.demoForms(0, ["walks", "walked", "walking", "walker"])
         else if (step === 3) tour.keyboard.demoChoose(1)
         else if (step === 4) {
@@ -284,9 +284,44 @@ Item {
   }
 
   // Back to the keyboard as it was before each step does its own thing.
+  function showStripWords() {
+    tour.service.setSuggestions("tour", { items: [{ text: "walk" }, { text: "walking" }, { text: "walked" },
+                                                  { text: "walks" }, { text: "walker" }] })
+  }
+  function startStripDemo() {
+    tour.stopStripDemo()
+    tour.service.setSuggestions("tour", null)
+    tour.keyboard.demoStripProgress = 0
+    stripClock.restart()
+  }
+  function stopStripDemo() {
+    stripClock.stop()
+    stripEntrance.stop()
+    tour.keyboard.demoStripProgress = 1
+  }
+  Timer {
+    id: stripClock
+    interval: 350
+    onTriggered: {
+      if (!tour.running || tour.current.title !== "tour.suggestions") return
+      tour.showStripWords()
+      stripEntrance.restart()
+    }
+  }
+  NumberAnimation {
+    id: stripEntrance
+    target: tour.keyboard
+    property: "demoStripProgress"
+    from: 0
+    to: 1
+    duration: 180
+    easing.type: Easing.OutCubic
+  }
+
   function reset() {
     swipeClock.stop()
     pressClock.stop()
+    tour.stopStripDemo()
     tour.pressing = ""
     tour.keyboard.demoClear()
     tour.service.tourLowered = false

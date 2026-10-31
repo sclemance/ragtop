@@ -86,6 +86,10 @@ CONTEXT_BACKOFF = 40
 # What stands for the start of a sentence among the words before.
 START = "<s>"
 CAPITALS = "<capitals>"
+# Product names missing from general-language corpora. A modest frequency
+# makes them available for typing/swiping without crowding out common words.
+# These are vocabulary, not invented next-word pairs or learned user text.
+EXTRA_WORDS = {"omarchy": 500}
 # A correction is a word one edit away from what was typed, typed wrong.
 # It ranks as if it were this much rarer, in wordfreq's centibels: a factor
 # of ten, so a common word typed with one slip still comes before a rare
@@ -259,6 +263,8 @@ class Predictor:
         self.lang = lang
         self.elisions = ELISIONS.get(lang, set())
         self.ranks = {w: r for w, r in ranks.items() if w not in self.elisions}
+        for word, rank in EXTRA_WORDS.items():
+            self.ranks.setdefault(word, rank)
         self.words = sorted(self.ranks)
         # Each word's folded letters and accent count, once, here: only the
         # list's own words, never anything typed, which is not kept.
@@ -277,7 +283,7 @@ class Predictor:
         self.stems = None
         # Which words follow which, when a pairs file is installed (use_pairs).
         self.pair_lines = {}
-        self.capitals = set()
+        self.capitals = set(EXTRA_WORDS)
 
     def use_dictionary(self, dictionary, source):
         """Takes a dictionary for joins at once, and, for a language with no
@@ -390,7 +396,7 @@ class Predictor:
                 if tab:
                     lines[before] = rest
         caps = lines.pop(CAPITALS, "")
-        self.capitals = set(caps.split())
+        self.capitals = set(caps.split()) | set(EXTRA_WORDS)
         self.pair_lines = lines
 
     def followers(self, before):
@@ -1344,6 +1350,7 @@ def handle(session, terminal, source, one_list, line):
         if session.swipes:
             try:
                 words = session.swipes.decode(json.loads(rest), session.before)
+                words = [session.predictor.written(w) for w in words]
             except (ValueError, TypeError):
                 pass
         reply = "swiped" if cmd == "swipe" else "peeked"

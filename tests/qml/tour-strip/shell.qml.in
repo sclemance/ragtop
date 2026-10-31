@@ -1,0 +1,63 @@
+import QtQuick
+import Quickshell
+
+ShellRoot {
+  id: tour
+  Harness { id: t }
+  property bool running: true
+  property var current: ({title:"tour.suggestions"})
+  property var service: QtObject {
+    property var items: []
+    property bool tourLowered: false
+    property var previewSettings: ({})
+    property string previewLayout: ""
+    function setSuggestions(source, value) { items = value ? value.items : [] }
+  }
+  property var keyboard: QtObject {
+    property real demoStripProgress: 1
+    function demoClear() {}
+  }
+  property string pressing: ""
+  property string previewName: ""
+  Timer { id: swipeClock }
+  Timer { id: pressClock }
+  // FROM SOURCE: showStripWords startStripDemo stopStripDemo stripClock stripEntrance reset
+
+  Component.onCompleted: t.run([
+    [0, function() {
+      tour.service.items = [{text:"previous"}]
+      tour.startStripDemo()
+      t.equal(tour.service.items.length, 0, "previous suggestions emptied before entrance")
+      t.equal(tour.keyboard.demoStripProgress, 0, "entrance starts hidden")
+    }],
+    [200, function() {
+      t.equal(tour.service.items.length, 0, "empty pause before demonstration")
+      t.equal(tour.keyboard.demoStripProgress, 0, "strip remains hidden during pause")
+    }],
+    [400, function() {
+      t.equal(tour.service.items[0].text, "walk", "tour supplies illustrative candidates after pause")
+      t.equal(tour.keyboard.demoStripProgress, 1, "entrance settles fully visible")
+      tour.showStripWords()
+      t.equal(tour.keyboard.demoStripProgress, 1, "later candidate changes do not replay entrance")
+      tour.startStripDemo()
+      tour.reset()
+    }],
+    [600, function() {
+      t.equal(tour.service.items.length, 0, "step reset cancels pending reveal")
+      t.equal(tour.keyboard.demoStripProgress, 1, "reset restores ordinary strip rendering")
+      tour.startStripDemo()
+    }],
+    [400, function() { tour.reset() }],
+    [300, function() {
+      t.equal(tour.service.items.length, 0, "reset during animation leaves no demo candidates")
+      t.equal(tour.keyboard.demoStripProgress, 1, "reset stops animation before restoring progress")
+      tour.startStripDemo()
+      tour.running = false
+    }],
+    [600, function() {
+      t.equal(tour.service.items.length, 0, "a late callback cannot reveal after tour exit")
+      tour.reset()
+      t.equal(tour.keyboard.demoStripProgress, 1, "exit reset restores visibility")
+    }]
+  ])
+}

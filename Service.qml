@@ -165,12 +165,50 @@ Item {
   readonly property int monitorCount: Hyprland.monitors.values.length
 
   function setDisplay(name) {
-    if (displayProc.running) return
+    if (displayProc.running || root.displaySaving !== "") return
+    if (!root.displayOptions.some(function(o) { return o.value === name })) return
+    root.displayPreview = name
+    root.displaySeconds = 15
+    displayPreviewTimer.restart()
+  }
+  property string displayPreview: ""
+  property string displaySaving: ""
+  property int displaySeconds: 0
+  function revertDisplay() {
+    if (root.displaySaving !== "") return
+    displayPreviewTimer.stop()
+    root.displayPreview = ""
+    root.displaySeconds = 0
+  }
+  function keepDisplay() {
+    if (root.displayPreview === "" || root.displaySaving !== "") return
+    displayPreviewTimer.stop()
+    root.displaySaving = root.displayPreview
     displayProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                           "display", "set", name]
+                           "display", "set", root.displaySaving]
     displayProc.running = true
   }
-  Process { id: displayProc }
+  function displayFinished(code) {
+    // The write has committed; avoid jumping to the old display while the
+    // settings watcher catches up with its atomic rename.
+    if (code === 0) root.settings = Object.assign({}, root.settings, { display: root.displaySaving })
+    root.displaySaving = ""
+    root.revertDisplay()
+    if (code !== 0) root.preferenceFailed = true
+  }
+  Timer {
+    id: displayPreviewTimer
+    interval: 1000
+    repeat: true
+    onTriggered: {
+      root.displaySeconds--
+      if (root.displaySeconds <= 0) root.revertDisplay()
+    }
+  }
+  Process {
+    id: displayProc
+    onExited: function(code) { root.displayFinished(code) }
+  }
 
   readonly property var keyboardLayoutOptions: [
     { value: "auto", label: root.t("layout.auto") },
@@ -188,12 +226,9 @@ Item {
   // A board the tour is showing, never written. Empty when it is not.
   property string previewLayout: ""
   function setKeyboardLayout(name) {
-    if (root.keyboardLayouts.indexOf(name) === -1 || keyboardLayoutProc.running) return
-    keyboardLayoutProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                  "keyboard-layout", "set", name]
-    keyboardLayoutProc.running = true
+    if (root.keyboardLayouts.indexOf(name) !== -1)
+      root.queuePreference(["keyboard-layout", "set", name])
   }
-  Process { id: keyboardLayoutProc }
 
   // Whether the on-screen keyboard is on offer at all: the "keyboard"
   // setting, cycled from the bar button and Setup › Tablet › Keyboard.
@@ -203,9 +238,8 @@ Item {
   //           nothing or someone who wants touch keys at a desk
   //   off      never, for a machine with a keyboard attached for good
   //
-  // Only the keyboard reads this. Tablet mode itself still decides the
-  // overlay clones and whether rotation follows the sensor, because
-  // turning the keys off is not the same as saying this is a laptop.
+  // Overlay focus follows keyboard availability too. Rotation continues to
+  // follow tablet mode independently.
   readonly property var keyboardModes: ["sensor", "on", "off"]
   readonly property string keyboardMode:
     ["on", "off"].indexOf(root.settings["keyboard"]) !== -1 ? root.settings["keyboard"] : "sensor"
@@ -215,12 +249,9 @@ Item {
   onKeyboardAvailableChanged: if (!root.keyboardAvailable) root.setOskVisible(false)
 
   function setKeyboardMode(mode) {
-    if (root.keyboardModes.indexOf(mode) === -1 || keyboardModeProc.running) return
-    keyboardModeProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                "keyboard", "set", mode]
-    keyboardModeProc.running = true
+    if (root.keyboardModes.indexOf(mode) !== -1)
+      root.queuePreference(["keyboard", "set", mode])
   }
-  Process { id: keyboardModeProc }
 
   function toggleOsk() {
     setOskVisible(!root.oskVisible)
@@ -584,7 +615,7 @@ Item {
   //     bound one (input:touchdevice:output, which reads [[Auto]] unset)
   //   the built-in panel, which on a convertible is the touchscreen
   //   whatever is first, so there is always an answer
-  readonly property string displaySetting: String(root.settings["display"] || "auto")
+  readonly property string displaySetting: root.displayPreview || String(root.settings["display"] || "auto")
   property string touchOutput: ""
   readonly property string keyboardMonitorName: {
     var monitors = Hyprland.monitors.values
@@ -1040,8 +1071,10 @@ Item {
       }
       if (layoutChanged) root.sendKeys("reload")
       if (name === "configreloaded") {
-        // A reload drops runtime rules, and the surfaces re-map with it.
-        root.layerRulesReady = false
+        // A reload drops runtime rules. Restore them on the existing
+        // surfaces: clearing readiness here unmaps the keyboard/handle,
+        // then makes Hyprland animate them back in after a theme change.
+        // Only initial startup needs to wait before mapping the surfaces.
         root.applyLayerRules()
         if (root.blurKeyboard) root.applyBlur()
         // It drops the rotation with them: the transform is a runtime value,
@@ -1614,7 +1647,10 @@ Item {
       return
     }
     if (root.fieldPending) {
-      root.pendingTyped.push(line)
+      // Nothing must not retain plaintext even in the short focus-check
+      // queue. Its sentence state starts afresh once focus is confirmed.
+      if (root.typingMemory === "none") root.dropTyped(false)
+      else root.pendingTyped.push(line)
       return
     }
     var next = Record.note({ tail: root.typedTail, cursor: root.typedCursor,
@@ -1891,7 +1927,7 @@ Item {
   // A language Ragtop has a list for and has not fetched is offered in the
   // strip, where its words would go, one tap to fetch it: the only way a
   // list is downloaded without being asked for by name. "Not now" is kept,
-  // and the CLI can fetch it any time.
+  // and the controls panel or CLI can fetch it any time.
   property bool wordsFetching: false
   readonly property string offerLanguage: {
     var lang = root.wordLanguage
@@ -1916,9 +1952,16 @@ Item {
       : [{ text: root.t("offer.add", root.languageName(lang, info.name)), note: root.t("offer.size", info.size) },
          { text: root.t("offer.notNow"), note: "" }], prev: false, next: false, cursor: -1 })
   }
+  function installWordLanguage(lang) {
+    if (!(lang in root.wordLanguages) || wordsOfferProc.running) return
+    root.wordsFetching = true
+    wordsOfferProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                              "words", "install", lang]
+    wordsOfferProc.running = true
+  }
   function answerOffer(index) {
     var lang = root.offerLanguage
-    if (lang === "" || root.wordsFetching || index > 1) return
+    if (lang === "" || wordsOfferProc.running || index < 0 || index > 1) return
     wordsOfferProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
                               "words", index === 0 ? "install" : "decline", lang]
     root.wordsFetching = index === 0
@@ -2021,6 +2064,7 @@ Item {
   // what comes next is still the start of the field. A swipe still being
   // decoded belongs to the field it was drawn in (fieldGeneration).
   function forgetField(fromStart) {
+    root.pendingTyped = []
     root.fieldGeneration++
     root.dropTyped(fromStart)
     // Each answer still takes its place in the queue, and finds undefined.
@@ -2715,13 +2759,39 @@ Item {
 
   // The controls panel's switches. Through the CLI, which is what fetches
   // the word list when it is missing and says so.
-  function toggleSetting(name) {
-    if (settingToggleProc.running) return   // a second tap mid-write would be lost
-    settingToggleProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                 name, "toggle"]
-    settingToggleProc.running = true
+  // Serialize preference commands so rapid taps reach the CLI in order.
+  property var preferenceQueue: []
+  property bool preferenceBusy: false
+  property bool preferenceFailed: false
+  function queuePreference(args) {
+    if (!root.preferenceBusy) root.preferenceFailed = false
+    root.preferenceQueue = root.preferenceQueue.concat([args])
+    root.flushPreferences()
   }
-  Process { id: settingToggleProc }
+  function flushPreferences() {
+    if (root.preferenceBusy || root.preferenceQueue.length === 0) return
+    var args = root.preferenceQueue[0]
+    root.preferenceQueue = root.preferenceQueue.slice(1)
+    root.preferenceBusy = true
+    preferenceProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, "")].concat(args)
+    preferenceProc.running = true
+  }
+  function preferenceFinished(code) {
+    root.preferenceBusy = false
+    if (code !== 0) root.preferenceFailed = true
+    Qt.callLater(root.flushPreferences)
+  }
+  Process {
+    id: preferenceProc
+    onExited: function(code) { root.preferenceFinished(code) }
+  }
+
+  function toggleSetting(name) {
+    root.queuePreference([name, "toggle"])
+  }
+  function setMechanicalMaterial(material) {
+    root.queuePreference(["mechanical-material", "set", material])
+  }
   onWantPredictorChanged: {
     predictorRestart.stop()
     predictorProc.running = root.wantPredictor
@@ -2904,12 +2974,9 @@ Item {
   // to own this on its own shell.json entry, which meant the tile, the IPC
   // and the bar button all did nothing on a bar with no Ragtop widget on it.
   function setRotationMode(mode) {
-    if (root.rotationModes.indexOf(mode) === -1 || rotationModeProc.running) return
-    rotationModeProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                "rotation", "set", mode]
-    rotationModeProc.running = true
+    if (root.rotationModes.indexOf(mode) !== -1)
+      root.queuePreference(["rotation", "set", mode])
   }
-  Process { id: rotationModeProc }
 
   // Key size against whatever the theme asked for, stepped rather than set,
   // so the keyboard needs no argument-taking IPC to offer it.
@@ -3063,12 +3130,8 @@ Item {
   // moment you want it off is the moment it has just appeared over what you
   // were reading.
   function toggleAutoShow() {
-    if (autoShowProc.running) return   // a second tap mid-write would be lost
-    autoShowProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                            "auto-show", "toggle"]
-    autoShowProc.running = true
+    root.queuePreference(["auto-show", "toggle"])
   }
-  Process { id: autoShowProc }
 
   // The themes there are to step through, by slug. Read once, since a theme
   // arriving in the folder mid-session is not worth watching a directory for,
@@ -3084,18 +3147,8 @@ Item {
     }
   }
   function stepTheme(by) {
-    // Until the write lands, currentTheme still names the old one, so a
-    // second tap would both compute the same answer and be dropped for
-    // reassigning a running process. Two taps would move one theme, or none.
-    if (root.themeList.length === 0 || themeApplyProc.running) return
-    var at = root.themeList.indexOf(root.currentTheme)
-    var count = root.themeList.length
-    var next = root.themeList[(((at < 0 ? 0 : at) + by) % count + count) % count]
-    themeApplyProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                              "theme", "apply", next]
-    themeApplyProc.running = true
+    if (by === 1 || by === -1) root.queuePreference(["theme", "step", String(by)])
   }
-  Process { id: themeApplyProc }
 
   // A machine that upgraded in place still has the previous version's
   // settings and menu rows. Nothing else runs on an update: the only hook
@@ -3111,18 +3164,36 @@ Item {
   // Switch to one of the layouts Hyprland has configured, by its index.
   // Hyprland owns the layout, so this asks rather than imposes: nothing is
   // written to anyone's config, and the switch is the same one a keybinding
-  // would do. It emits activelayout, which is already what tells the helper
-  // to re-read the keymap, so the keys and their labels follow on their own.
+  // would do. Refresh after the command as well as on activelayout: the
+  // shell's event connection can close while hyprctl still works.
+  property int pendingLayout: -1
   function switchLayout(index) {
-    if (switchLayoutProc.running) return
+    if (switchLayoutProc.running) {
+      root.pendingLayout = index
+      return
+    }
+    root.pendingLayout = -1
     switchLayoutProc.command = ["hyprctl", "switchxkblayout", "all", String(index)]
     switchLayoutProc.running = true
   }
-  Process { id: switchLayoutProc }
+  function layoutSwitchFinished(exitCode) {
+    if (root.pendingLayout >= 0) {
+      root.switchLayout(root.pendingLayout)
+      return
+    }
+    if (exitCode === 0) root.sendKeys("reload")
+  }
+  Process {
+    id: switchLayoutProc
+    onExited: function(exitCode, exitStatus) { root.layoutSwitchFinished(exitCode) }
+  }
+
+  GlowPalette { id: desktopGlowPalette }
 
   KeyboardTheme {
     id: keyboardTheme
     look: root.look
+    glowPalette: desktopGlowPalette.colors
   }
 
   // ---- The keyboard's look ---------------------------------------------
@@ -3156,6 +3227,11 @@ Item {
         if (["round", "cut", "square"].indexOf(parts[i]) === -1) return "auto"
       return parts.join(" ")
     }
+    var mechanical = root.lookSettings["theme"] === "mechanical"
+      && Object.keys(root.previewSettings).length === 0
+    var material = mechanical ? pick("mechanical-material",
+      ["plain", "pudding", "frosted", "translucent"], "plain")
+      : pick("keycap-material", ["solid", "pudding", "frosted", "translucent"], "solid")
     return {
       shape: pick("shape", ["omarchy", "rounded", "pill", "angular", "bevel"], "omarchy"),
       corners: cornerSpec(),
@@ -3164,7 +3240,17 @@ Item {
       keyTransparency: num("key-transparency", 0, 100, 0),
       // Raised keys stand on a side, like a keycap, and flat ones don't.
       relief: pick("relief", ["flat", "raised"], "flat"),
-      fill: pick("fill", ["auto", "dark", "light", "outline"], "light"),
+      fill: pick("fill", ["auto", "dark", "light", "surface", "outline"], "light"),
+      contrast: pick("contrast", ["normal", "strong"], "normal"),
+      backlight: mechanical ? (root.lookSettings["mechanical-backlight"] === "off" ? "off" : "accent")
+        : pick("backlight", ["off", "accent"], "off"),
+      shineThrough: !mechanical || root.lookSettings["mechanical-shine-through"] !== "off",
+      backlightMotion: pick("backlight-motion", ["off", "ripple"], "ripple"),
+      animateBacklight: root.settings["backlight-animation"] === "on",
+      backlightPressColor: color("backlight-press-color"),
+      keycapMaterial: material === "plain" ? "solid" : material,
+      keycapProfile: pick("keycap-profile", ["standard", "sculpted"], "standard"),
+      wallOpacity: num("wall-opacity", 0, 100, 50),
       // The theme's key size, as a percentage of the usual, and the nudge on
       // top of it that is the user's alone. A theme cannot write size-adjust,
       // so how big the keys are for these eyes survives changing theme.
@@ -3196,6 +3282,9 @@ Item {
   // Hyprland to leave every window alone, and only the keyboard blurs.
   // Nothing is written to the Hyprland config: `hyprctl reload` clears it.
   readonly property bool blurKeyboard: root.lookSettings["blur"] === "on"
+    || root.look.keycapMaterial === "frosted"
+    || (root.look.keycapMaterial === "pudding"
+        && (root.look.backlight === "accent" || root.look.keycapProfile === "sculpted"))
   // Whether Hyprland's global blur was already on, i.e. the user's own
   // choice, which Ragtop leaves alone.
   property bool globalBlurWasOn: false
@@ -3253,14 +3342,14 @@ Item {
   }
   Process { id: blurProc }
 
-  // The look, for the lock screen's keyboard, which can't reach this
-  // service and takes only the shape and measurements from it.
+  // The lock keyboard always uses Omarchy styling. Export only the user's
+  // size adjustment; the lock reader also ignores all legacy theme fields.
   onLookChanged: root.writeStyleForLock()
   function writeStyleForLock() {
     styleWriteProc.command = [
       "sh", "-c",
       'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-style.json.tmp" && mv -f "$d/ragtop-style.json.tmp" "$d/ragtop-style.json"',
-      "--", JSON.stringify(root.look)
+      "--", JSON.stringify({sizeNudge: root.look.sizeNudge})
     ]
     styleWriteProc.running = true
   }
@@ -3601,7 +3690,7 @@ Item {
   PanelWindow {
     id: pickerNavWindow
     screen: root.keyboardScreen
-    visible: root.tabletMode && root.pickerOpen && root.pickerPatched && root.layerRulesReady
+    visible: root.keyboardAvailable && root.pickerOpen && root.pickerPatched && root.layerRulesReady
 
     WlrLayershell.namespace: "ragtop-picker-nav"
     WlrLayershell.layer: WlrLayer.Top
@@ -3721,20 +3810,23 @@ Item {
     }
     // The things worth binding a key to, and every one of them takes no
     // argument, so nothing on this socket can be handed a value to act on.
+    function openControls(): string {
+      root.setOskVisible(true)
+      root.toolsOpen = root.oskVisible
+      return root.toolsOpen ? "ok" : "keyboard-off"
+    }
     function toggleControls(): string {
       if (!root.oskVisible) root.setOskVisible(true)
       root.toolsOpen = !root.toolsOpen
       return "ok"
     }
     function cycleRotation(): string {
-      var order = root.rotationModes
-      root.setRotationMode(order[(order.indexOf(root.rotationMode) + 1) % order.length])
+      root.queuePreference(["rotation", "cycle"])
       return root.rotationMode
     }
     // Sensor, then on, then off, the same three the bar button cycles.
     function cycleKeyboardMode(): string {
-      var order = root.keyboardModes
-      root.setKeyboardMode(order[(order.indexOf(root.keyboardMode) + 1) % order.length])
+      root.queuePreference(["keyboard", "cycle"])
       return root.keyboardMode
     }
     function keyboardModeState(): string { return root.keyboardMode }
@@ -3756,9 +3848,9 @@ Item {
         assists: !root.assistsEnabled ? "off" : root.inTerminal ? "terminal" : root.assistsActive ? "on" : "idle",
         field: !root.fieldInfo ? "unknown" : root.fieldInfo.password ? "password"
           : root.fieldInfo.terminal ? "terminal" : root.fieldInfo.noCapitals ? "nocapitals" : "plain",
-        swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
+        swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : root.typingMemory === "none" ? "memory-off" : !root.wordsReady ? "nowords"
           : root.swipeActive ? "on" : "idle",
-        predictions: !root.predictionsEnabled ? "off"
+        predictions: !root.predictionsEnabled ? "off" : root.typingMemory === "none" ? "memory-off"
           : root.terminalSuggesting ? "prompt"
           : !predictorProc.running ? root.retryHealth("predict", false)
           : !root.wordsReady ? "nowords"

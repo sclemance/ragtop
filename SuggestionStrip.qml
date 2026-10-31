@@ -3,7 +3,7 @@ import QtQuick
 // The band above the keys that offers what a word could be: the kanji for
 // some kana, the hanzi for some pinyin, and later whatever else fills it
 // (Service.qml, suggestions). It only draws. Each suggestion is a key, thin
-// and as long as its word, in the theme's shape and in Enter's style
+// and as long as its word, in Omarchy's default shape and Enter's style
 // (keyKind): there is no panel behind the keyboard for plain words to sit
 // on, and a key reads over any wallpaper. Which item a touch means is
 // asked of it (cellAt), and the keyboard's own touch layer does the asking,
@@ -12,6 +12,7 @@ import QtQuick
 Item {
   id: strip
 
+  // Keyboard supplies its flat SupportingTheme, not the main cap theme.
   required property var theme
   // How the keyboard draws Enter, which the suggestions are drawn as.
   property string keyKind: "accent"
@@ -33,6 +34,11 @@ Item {
   // bigger target, not bigger writing (Keyboard.qml, stripFraction).
   property real textHeight: height
 
+  // Only the tour animates an entrance; ordinary candidate changes stay still.
+  property real entranceProgress: 1
+  opacity: entranceProgress
+  transform: Translate { y: (1 - strip.entranceProgress) * strip.height * 0.4 }
+
   readonly property int prevCell: -2
   readonly property int nextCell: -3
   readonly property int scrollLeftCell: -4
@@ -51,7 +57,11 @@ Item {
   readonly property bool canScrollRight: overflows && scroll < maxScroll - 0.5
   readonly property real listLeft: spanLeft + (overflows ? chevronWidth : 0)
   readonly property real listWidth: spanWidth - (overflows ? 2 * chevronWidth : 0)
-  readonly property int textSize: Math.max(12, Math.round(textHeight * 0.6))
+  // Size words against a compact key's face, excluding its raised side.
+  // More target height still buys touch room rather than larger lettering.
+  readonly property real textFaceHeight: textHeight
+    - Math.min(theme.keyDepth, textHeight * theme.maxDepthFraction)
+  readonly property int textSize: Math.max(10, Math.round(textFaceHeight * 0.55))
   readonly property int noteSize: Math.max(9, Math.round(textSize * 0.55))
   readonly property real pad: Math.round(textHeight * 0.45)
 
@@ -61,7 +71,10 @@ Item {
   // Each item's cell, left to right, as { x, width } within the list. As
   // wide as its text, and never narrower than it is tall, so a single
   // character is still something a finger can land on.
-  readonly property var cells: {
+  // advanceWidth() is a method; reading its result alone does not track a
+  // font change. Include both fonts so cells refit when theme/size changes.
+  readonly property var cells: measureCells(textMetrics.font, noteMetrics.font)
+  function measureCells(textFont, noteFont) {
     var out = []
     var x = 0
     for (var i = 0; i < strip.items.length; i++) {
@@ -132,6 +145,7 @@ Item {
         height: strip.height
 
         KeyboardKey {
+          id: candidateKey
           x: Math.round(strip.theme.gap / 2)
           width: parent.width - strip.theme.gap
           height: parent.height
@@ -144,13 +158,15 @@ Item {
         }
 
         Row {
-          anchors.centerIn: parent
+          anchors.horizontalCenter: parent.horizontalCenter
+          y: candidateKey.faceY + (candidateKey.faceHeight - height) / 2
           spacing: Math.round(strip.pad / 2)
 
           Text {
             textFormat: Text.PlainText
             text: modelData.text
-            color: parent.parent.chosen ? strip.theme.accentText
+            color: strip.theme.strongContrast ? candidateKey.labelColor
+              : parent.parent.chosen ? strip.theme.accentText
               : strip.keyKind === "accent" ? strip.theme.accent : strip.theme.text
             font.family: strip.theme.fontFamily
             font.pixelSize: strip.textSize
@@ -160,7 +176,7 @@ Item {
             textFormat: Text.PlainText
             visible: !!modelData.note
             text: modelData.note || ""
-            color: strip.theme.specialText
+            color: strip.theme.strongContrast ? candidateKey.labelColor : strip.theme.specialText
             font.family: strip.theme.fontFamily
             font.pixelSize: strip.noteSize
             anchors.verticalCenter: parent.verticalCenter
@@ -195,7 +211,8 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         text: parent.modelData.glyph
-        color: strip.theme.accent
+        color: strip.theme.strongContrast
+          ? strip.theme.readableText(strip.theme.accent, parent.color) : strip.theme.accent
         font.family: strip.theme.fontFamily
         font.pixelSize: Math.round(strip.textSize * 1.3)
         font.bold: true

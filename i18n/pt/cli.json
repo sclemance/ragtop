@@ -110,5 +110,7 @@
   "uninstall.plugin": "A remover o plugin",
   "uninstall.rule": "A remover a regra de acesso ao interruptor",
   "uninstall.ruleNone": "não instalada, nada a remover",
-  "uninstall.rulePassword": "remover a regra de acesso ao interruptor requer a tua palavra-passe"
+  "uninstall.rulePassword": "remover a regra de acesso ao interruptor requer a tua palavra-passe",
+  "setup.overlaysFailed": "Falha ao alterar as sobreposições. Consulte o registo da configuração.",
+  "uninstall.overlaysFailed": "A limpeza das sobreposições falhou. O Ragtop foi mantido para os clones restantes funcionarem. Resolva as alterações indicadas e tente desinstalar novamente."
 }

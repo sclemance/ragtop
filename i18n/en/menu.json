@@ -86,6 +86,9 @@
   "setup.tablet.size-adjust": {
     "label": "Key Size"
   },
+  "setup.tablet.size-adjust.custom": {
+    "label": "Custom / Adjust…"
+  },
   "setup.tablet.size-adjust.auto": {
     "label": "Automatic"
   },
@@ -111,6 +114,6 @@
     "label": "Run Setup"
   },
   "setup.tablet.diagnostics": {
-    "label": "Diagnostics"
+    "label": "Copy Diagnostics"
   }
 }

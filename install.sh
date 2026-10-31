@@ -187,7 +187,10 @@ offer_overlays() {
       ;;
   esac
 
-  "$repo/overlay-clones.sh" install | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
+  if ! "$repo/overlay-clones.sh" apply "menu emojis clipboard polkit image-picker lock" ""; then
+    record_overlays
+    die "$(t setup.overlaysFailed)"
+  fi
   overlays_enabled=1
   record_overlays
 }
@@ -301,7 +304,9 @@ uninstall() {
   remove_udev_rule
 
   say "$(t uninstall.overlays)"
-  "$repo/overlay-clones.sh" remove | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
+  if ! "$repo/overlay-clones.sh" apply "" "menu emojis clipboard polkit image-picker lock"; then
+    die "$(t uninstall.overlaysFailed)"
+  fi
 
   say "$(t uninstall.menu)"
   menu_block remove

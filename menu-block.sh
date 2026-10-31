@@ -66,7 +66,7 @@ rows = {
     "setup.tablet.mode.off": dict(icon="\U000f0322", label="Always Off",
         checked=f'"{cmd}" tablet-mode is off', action=f'"{cmd}" tablet-mode set off'),
     # Whether there is an on-screen keyboard at all. Separate from Tablet
-    # Mode, which still decides the patched overlays and rotation: a
+    # Mode, which still decides sensor-driven rotation: a
     # machine can be a tablet and still not want keys, or be a laptop and
     # want them. Icons are reused from the rows above rather than picked by
     # codepoint, since a guessed Nerd Font codepoint draws the wrong thing.
@@ -137,6 +137,9 @@ rows = {
     # The panel has a slider for this. A menu cannot slide, so the five names
     # stay as the coarse way in, and Auto joins them.
     "setup.tablet.size-adjust": dict(icon="\U000f004c", label="Key Size"),
+    "setup.tablet.size-adjust.custom": dict(icon="\U000f004c", label="Custom / Adjust…",
+        checked=f'"{cmd}" size-adjust is custom',
+        action='omarchy-shell ragtop openControls'),
     "setup.tablet.size-adjust.auto": dict(icon="\U000f006a", label="Automatic",
         checked=f'"{cmd}" size-adjust is auto', action=f'"{cmd}" size-adjust set auto'),
     **{f"setup.tablet.size-adjust.{name}": dict(icon="\U000f004c", label=label,
@@ -144,16 +147,14 @@ rows = {
        for name, label in (("smallest", "Smallest"), ("smaller", "Smaller"),
                            ("regular", "Regular"), ("larger", "Larger"),
                            ("largest", "Largest"))},
-    # Each overlay turned on or off restarts the shell, so they are chosen
-    # together in the shell's own window and applied once (SetupWizard.qml,
-    # overlaysOnly), not toggled one restart at a time from here.
+    # Choose overlays together and publish the validated selection in one batch.
     "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays",
         action=f'"{cmd}" overlays'),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),
     # One tap puts everything a report needs on the clipboard, so nobody has
     # to find a terminal on a machine whose keyboard is folded away.
-    "setup.tablet.diagnostics": dict(icon="\U000f085e", label="Diagnostics",
+    "setup.tablet.diagnostics": dict(icon="\U000f085e", label="Copy Diagnostics",
         action=f'"{cmd}" diagnostics copy'),
 }
 # The labels above are English, the source of truth. Written in the language

@@ -110,5 +110,7 @@
   "uninstall.plugin": "Rimozione del plugin",
   "uninstall.rule": "Rimozione della regola di accesso all'interruttore",
   "uninstall.ruleNone": "non installata, niente da rimuovere",
-  "uninstall.rulePassword": "rimuovere la regola di accesso all'interruttore richiede la tua password"
+  "uninstall.rulePassword": "rimuovere la regola di accesso all'interruttore richiede la tua password",
+  "setup.overlaysFailed": "Modifica delle sovrapposizioni non riuscita. Consulta il registro della configurazione.",
+  "uninstall.overlaysFailed": "Pulizia delle sovrapposizioni non riuscita. Ragtop è stato conservato per i cloni rimasti. Risolvi le modifiche segnalate e riprova la disinstallazione."
 }

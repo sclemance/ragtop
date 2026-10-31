@@ -111,6 +111,9 @@
     "label": "Lancer la configuration"
   },
   "setup.tablet.diagnostics": {
-    "label": "Diagnostic"
+    "label": "Copier le diagnostic"
+  },
+  "setup.tablet.size-adjust.custom": {
+    "label": "Personnalisé / Ajuster…"
   }
 }

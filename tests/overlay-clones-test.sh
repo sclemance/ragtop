@@ -41,11 +41,11 @@ old_patch_is_the_event_driven_one() {
   local menu picker
   menu=$(<"$(entry_of menu)")
   picker=$(<"$(entry_of image-picker)")
-  assert_contains "$menu" 'WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive'
-  assert_contains "$menu" 'exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore'
+  assert_contains "$menu" 'WlrLayershell.keyboardFocus: ragtopKeyboardSettings.available ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive'
+  assert_contains "$menu" 'exclusionMode: ragtopKeyboardSettings.available ? ExclusionMode.Normal : ExclusionMode.Ignore'
   assert_contains "$menu" 'visible: root.opened && root.rowsLoaded'
   assert_contains "$menu" 'ragtopAppLibrary'
-  assert_contains "$picker" 'root.opened && root.imagesLoaded ? (ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive) : WlrKeyboardFocus.None'
+  assert_contains "$picker" 'root.opened && root.imagesLoaded ? (ragtopKeyboardSettings.available ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive) : WlrKeyboardFocus.None'
   # Nothing but the entry file is touched or added on this Omarchy.
   assert_no_path "$(clone_of menu)/RagtopOverlayWindow.qml"
   assert_equal "$(cd "$(clone_of polkit)" && ls -A | LC_ALL=C sort | tr '\n' ' ')" ".ragtop-base PolkitAgent.qml PolkitModel.js manifest.json "
@@ -166,7 +166,7 @@ new_menu_gets_a_window_of_its_own() {
   local menu
   menu=$(<"$(entry_of menu)")
   assert_equal "$(count_in "$(entry_of menu)" 'id: ragtopMode')" 1 "mode readers in menu"
-  assert_contains "$menu" $'\n  RagtopOverlayWindow {\n    id: panel\n    ragtopTablet: ragtopMode.tablet\n'
+  assert_contains "$menu" $'\n  RagtopOverlayWindow {\n    id: panel\n    ragtopTablet: ragtopKeyboardSettings.available\n'
   assert_lacks "$menu" $'\n  OverlayWindow {'
   # What the entry file asks of its window is not Ragtop's to change.
   assert_contains "$menu" $'\n    shown: root.opened && root.rowsLoaded\n    WlrLayershell.namespace: "omarchy-menu"\n'
@@ -188,7 +188,7 @@ new_install_patches_every_overlay() {
   done
   for o in "${shared_windows[@]}"; do
     assert_file "$(helper_of "$o")"
-    assert_contains "$(<"$(entry_of "$o")")" $'\n  RagtopOverlayWindow {\n    id: panel\n    ragtopTablet: ragtopMode.tablet\n'
+    assert_contains "$(<"$(entry_of "$o")")" $'\n  RagtopOverlayWindow {\n    id: panel\n    ragtopTablet: ragtopKeyboardSettings.available\n'
   done
   # The image picker's own focus gate is still the entry file's to state.
   assert_contains "$(<"$(entry_of image-picker)")" $'\n    shown: root.opened\n    shownKeyboardFocus: root.imagesLoaded ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None\n    WlrLayershell.namespace: "omarchy-image-selector"\n'
@@ -196,7 +196,7 @@ new_install_patches_every_overlay() {
   # and keep the patch and the capability they had.
   assert_no_path "$(helper_of polkit)"
   assert_no_path "$(helper_of lock)"
-  assert_contains "$(<"$(entry_of polkit)")" 'WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive'
+  assert_contains "$(<"$(entry_of polkit)")" 'WlrLayershell.keyboardFocus: ragtopKeyboardSettings.available ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive'
   assert_contains "$(<"$(entry_of lock)")" 'sclemance.ragtop/LockKeyboard.qml'
   assert_equal "$(jq -c .omarchy.capabilities "$(clone_of polkit)/manifest.json")" '["authentication"]'
   assert_equal "$(jq -c .omarchy.capabilities "$(clone_of lock)/manifest.json")" '["authentication"]'
@@ -587,7 +587,7 @@ run_test "4.0.4 to 7cc6a55: a sync that cannot patch removes the clone and says 
 
 # --- Moving between the two ------------------------------------------------
 
-old_per_open_focus='WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive'
+old_per_open_focus='WlrLayershell.keyboardFocus: ragtopKeyboardSettings.available ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive'
 
 updating_omarchy_moves_clones_to_the_shared_window() {
   make_sandbox "$old_omarchy"
@@ -659,7 +659,7 @@ an_edited_clone_is_kept_across_an_update() {
 a_clone_from_the_ragtop_before_is_repatched() {
   make_sandbox "$old_omarchy"
   clones install menu
-  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 4 "the patch revision recorded"
+  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 6 "the patch revision recorded"
   # As the Ragtop before this one left it.
   sed -i '2s/.*/3/' "$(clone_of menu)/.ragtop-base"
   clones status menu
@@ -667,10 +667,109 @@ a_clone_from_the_ragtop_before_is_repatched() {
   clones sync menu
   assert_rc 0
   assert_contains "$out" "Re-patched tester.menu for this version of Ragtop."
-  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 4 "the patch revision recorded"
+  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 6 "the patch revision recorded"
 }
 
-run_test "a clone made at patch revision 3 is re-patched at 4" a_clone_from_the_ragtop_before_is_repatched
+
+a_revision_four_lock_is_repatched() {
+  make_sandbox "$old_omarchy"
+  clones install lock
+  assert_rc 0
+  /usr/bin/python3 - "$(entry_of lock)" <<'PYTHON'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+s = p.read_text()
+start = s.index('    FileView {\n      id: ragtopKeyboardSettings')
+end = s.index('    Loader {', start)
+s = s[:start] + '    // Ragtop: an on-screen keyboard for the lock screen in tablet mode.\n' + s[end:]
+s = s.replace('active: ragtopKeyboardSettings.available', 'active: ragtopMode.tablet')
+p.write_text(s)
+PYTHON
+  sed -i '2s/.*/4/' "$(clone_of lock)/.ragtop-base"
+  clones status lock
+  assert_contains "$out" "lock: installed, Ragtop's patches have changed"
+  assert_lacks "$out" "edits besides"
+  clones sync lock
+  assert_rc 0
+  assert_contains "$out" "Re-patched tester.lock for this version of Ragtop."
+  assert_contains "$(<"$(entry_of lock)")" 'active: ragtopKeyboardSettings.available'
+  assert_equal "$(sed -n 2p "$(clone_of lock)/.ragtop-base")" 6 "lock patch revision"
+  clones sync lock
+  assert_rc 0
+  assert_lacks "$out" "Re-patched"
+  clones status lock
+  assert_contains "$out" "lock: installed, in sync with the built-in"
+}
+
+# Reconstruct revision 5 entries and records using the desktop locale, then
+# verify from C. Real content edits must still prevent refresh.
+legacy_locale_and_policy_migrate() {
+  for tree in "$old_omarchy" "$new_omarchy" "$rc_omarchy"; do
+    make_sandbox "$tree"
+    clones install
+    assert_rc 0
+    /usr/bin/python3 - "$plugins" <<'PYTHON'
+from pathlib import Path
+import sys
+for path in Path(sys.argv[1]).glob('tester.*/*.qml'):
+    if path.name == 'LockView.qml' or 'RagtopOverlayWindow' in path.name:
+        continue
+    s = path.read_text()
+    start = s.find('    FileView {\n      id: ragtopKeyboardSettings')
+    if start < 0:
+        continue
+    end = s.index('      onTriggered: ragtopKeyboardSettings.reload()\n    }', start)
+    end += len('      onTriggered: ragtopKeyboardSettings.reload()\n    }\n')
+    s = s[:start] + s[end:]
+    s = s.replace('ragtopKeyboardSettings.available', 'ragtopMode.tablet')
+    path.write_text(s)
+PYTHON
+    local locale_name=C o digest
+    if locale -a | grep -qx 'en_US.utf8'; then locale_name=en_US.utf8; fi
+    for o in "${all[@]}"; do
+      digest=$(cd "$sandbox/omarchy/shell/plugins/$o" && find . -type f ! -name manifest.json ! -name .ragtop-base -print0 | LC_ALL="$locale_name" sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+      sed -i "1s/.*/$digest/;2s/.*/5/" "$(clone_of "$o")/.ragtop-base"
+    done
+    clones LC_ALL=C status
+    assert_lacks "$out" "edits besides"
+    assert_lacks "$out" "built-in has changed"
+    echo '// real edit' >>"$(entry_of emojis)"
+    clones LC_ALL=C sync
+    assert_rc 1
+    assert_contains "$err" "tester.emojis has edits besides Ragtop's"
+    assert_contains "$(<"$(entry_of emojis)")" '// real edit'
+    assert_contains "$(<"$(entry_of menu)")" 'ragtopKeyboardSettings.available'
+    clones LC_ALL="$locale_name" status menu
+    assert_contains "$out" "menu: installed, in sync"
+    assert_lacks "$out" "edits besides"
+    clones LC_ALL=C sync menu
+    assert_rc 0
+    assert_lacks "$out" "Re-patched"
+  done
+}
+concurrent_installs_are_serialized() {
+  make_sandbox "$old_omarchy"
+  sandboxed bash "$repo/overlay-clones.sh" install menu emojis >"$sandbox/first.log" 2>&1 &
+  local first=$!
+  sandboxed bash "$repo/overlay-clones.sh" install menu emojis >"$sandbox/second.log" 2>&1 &
+  local second=$!
+  wait "$first"
+  wait "$second"
+  clones status menu emojis
+  assert_lacks "$out" "edits besides"
+  assert_contains "$out" "menu: installed, in sync"
+  assert_contains "$out" "emojis: installed, in sync"
+  assert_equal "$(calls | grep -c 'clone omarchy.menu')" 1 "menu cloned only once"
+  assert_equal "$(calls | grep -c 'clone omarchy.emojis')" 1 "emojis cloned only once"
+}
+run_test "concurrent installs serialize clone mutations" concurrent_installs_are_serialized
+
+run_test "legacy locale hashes and Keyboard policy migrate without replacing real edits" legacy_locale_and_policy_migrate
+
+run_test "revision 4 lock gains Keyboard policy and remains in sync" a_revision_four_lock_is_repatched
+
+run_test "a clone made at patch revision 3 is re-patched at 6" a_clone_from_the_ragtop_before_is_repatched
 run_test "4.0.4 to 7cc6a55: sync moves every clone over, the four onto a window of their own" updating_omarchy_moves_clones_to_the_shared_window
 run_test "7cc6a55 to 4.0.4: sync moves every clone back and leaves no window file behind" downgrading_omarchy_moves_clones_back
 run_test "4.0.4 to 7cc6a55: a clone with edits of its own is kept as it was" an_edited_clone_is_kept_across_an_update

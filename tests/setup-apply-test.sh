@@ -21,13 +21,16 @@ apply() {
   cat >"$copy/overlay-clones.sh" <<STUB
 #!/bin/bash
 cmd=\$1; shift
-for o in "\$@"; do
-  case \$cmd in
-    install) [[ " ${FAILS:-} " == *" \$o "* ]] && exit 1; touch "$sandbox/clones/\$o" ;;
-    remove) [[ -e "$sandbox/clones/\$o.edited" ]] && exit 1; rm -f "$sandbox/clones/\$o" ;;
-    installed) [[ -e "$sandbox/clones/\$o" ]] || exit 1 ;;
-  esac
-done
+if [[ \$cmd == apply ]]; then
+  add=\$1; drop=\$2
+  for o in \$add; do [[ " ${FAILS:-} " == *" \$o "* ]] && exit 1; done
+  for o in \$drop; do [[ -e "$sandbox/clones/\$o.edited" ]] && exit 1; done
+  for o in \$add; do touch "$sandbox/clones/\$o"; done
+  for o in \$drop; do rm -f "$sandbox/clones/\$o"; done
+else
+  for o in "\$@"; do [[ -e "$sandbox/clones/\$o" ]] || exit 1; done
+fi
+
 STUB
   chmod +x "$copy/menu-block.sh" "$copy/overlay-clones.sh"
   for o in ${PRESENT:-}; do touch "$sandbox/clones/$o"; done
@@ -68,19 +71,19 @@ a_failed_copy_does_not_restart() {
 a_copy_restarts_once() {
   apply "menu" "" "menu"
   assert_rc 0
-  assert_equal "$(grep -c restart-shell "$sandbox/calls.log")" 1 "restarts"
+  assert_lacks "$(calls)" "restart-shell"
 }
 
 a_restart_that_lost_the_race_is_tried_again() {
   RESTART_FAILS=1 apply "menu" "" "menu"
   assert_rc 0
-  assert_equal "$(grep -c restart-shell "$sandbox/calls.log")" 2 "restarts"
+  assert_lacks "$(calls)" "restart-shell"
 }
 
 run_test "setup: a setup that did everything says it is done" everything_done_says_so
 run_test "setup: an overlay that could not be copied leaves the shell running" a_failed_copy_does_not_restart
-run_test "setup: an overlay copied restarts the shell once" a_copy_restarts_once
-run_test "setup: a restart that lost the race with the old shell is tried once more" a_restart_that_lost_the_race_is_tried_again
+run_test "setup: a completed selection uses the shell watcher without restart" a_copy_restarts_once
+run_test "setup: batched setup does not depend on the restart command" a_restart_that_lost_the_race_is_tried_again
 run_test "setup: a copy that could not be removed is reported, not called done" a_kept_copy_is_reported
 run_test "setup: menu rows that could not be added are reported" a_failed_menu_is_reported
 finish

@@ -1,24 +1,20 @@
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import "KeyContrast.js" as KeyContrast
 
-// On-screen keyboard for Omarchy's lock screen in tablet mode. The lock
+// On-screen keyboard for Omarchy's lock screen. The lock
 // screen is a session lock, which hides every other surface, the on-screen
 // keyboard included, so Ragtop's patched clone of it (overlay-clones.sh) loads
 // this inside it and sets `view` to its LockView. Keys edit the password through
 // LockView's own signals, the path typing takes, so checking it is untouched.
-// From the service it takes only data, never code: the active layout's letters
-// and symbols, and the key style's shape and measurements, each re-checked
-// here by this file's own rules.
+// From the service it takes only data: the active layout's letters/symbols
+// and the user's key-size adjustment, re-checked here. Appearance is always
+// Omarchy's flat keyboard in the lock screen's own palette (Color.lock).
 //
-// Deliberately separate from Keyboard.qml: it shares no code with it, so
-// nothing added to the desktop keyboard reaches the lock screen unless it's
-// added here too. It only edits the password text: no key events, no helper,
-// no modifiers other than Shift. It copies the desktop keyboard's key shapes
-// and proportions, in the lock screen's own colours (Color.lock), and takes
-// only the key style's shape and measurements, never its background.
+// Deliberately separate from Keyboard.qml. It edits the password through
+// LockView's signals: no key events, helper, or modifiers other than Shift.
 Item {
   id: root
 
@@ -40,18 +36,61 @@ Item {
   ]
   property var layoutRows: usRows
   property string layoutName: ""
+  readonly property var digits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+  readonly property var usDigits: ({"1":["!"], "2":["@"], "3":["#"], "4":["$"],
+    "5":["%"], "6":["^"], "7":["&"], "8":["*"], "9":["("], "0":[")"]})
+  property var digitLevels: usDigits
+
+  function cleanDigits(raw) {
+    var out = {}
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out
+    root.digits.forEach(function(digit) {
+      if (!Array.isArray(raw[digit])) return
+      var alternatives = []
+      raw[digit].slice(0, 8).forEach(function(c) {
+        if (root.cleanChar(c) !== "" && c !== digit && alternatives.indexOf(c) === -1)
+          alternatives.push(c)
+      })
+      if (alternatives.length) out[digit] = alternatives
+    })
+    return out
+  }
+
+  function applyLayout(layout) {
+    var ok = root.validLayout(layout)
+    root.layoutRows = ok ? layout.rows : root.usRows
+    root.layoutName = ok && typeof layout.name === "string" ? layout.name.slice(0, 40) : ""
+    root.layoutSymbols = ok ? root.cleanSymbols(layout.symbols) : []
+    root.layoutLetters = ok ? root.cleanSymbols(layout.letters) : []
+    // An old valid layout without digit metadata gets no invented US hints.
+    root.digitLevels = ok ? root.cleanDigits(layout.digits) : root.usDigits
+    root.layoutPunctuation = ok ? root.cleanSymbols(layout.punctuation) : []
+    root.cancelInteraction()
+  }
   // The symbols the active layout carries that the pages below don't (§ and
   // ° on a German keyboard, ¡ and ¿ on a Spanish one). Same source, checked
   // by this file's own rules: single printable characters, nothing that
   // could pass for a control or run away with the layout.
   property var layoutSymbols: []
+  property var layoutPunctuation: []
+  readonly property var punctuationCore: [".", ",", "?", "!", ":", ";", "\"", "'", "-"]
+  readonly property var punctuationExtras: root.layoutPunctuation.filter(function(c) {
+    return root.pageCharacters.indexOf(c) === -1 && root.extraSymbols.indexOf(c) === -1
+  }).slice(0, 4)
 
   // One printable character and nothing else: not two, not whitespace,
   // nothing that could pass for a control. Everything this keyboard takes
   // from the layout file goes through this before it can be typed.
   function cleanChar(c) {
-    return typeof c === "string" && Array.from(c).length === 1 && c.trim() === c
-      && c.charCodeAt(0) >= 0x20 && c.charCodeAt(0) !== 0x7f ? c : ""
+    if (typeof c !== "string" || c.trim() !== c) return ""
+    var first = c.charCodeAt(0)
+    if (c.length === 1)
+      return first >= 0x20 && !(first >= 0x7f && first <= 0x9f)
+        && !(first >= 0xd800 && first <= 0xdfff) ? c : ""
+    // Count a UTF-16 surrogate pair as one printable character, without
+    // accepting two ordinary characters or a lone half-surrogate.
+    return c.length === 2 && first >= 0xd800 && first <= 0xdbff
+      && c.charCodeAt(1) >= 0xdc00 && c.charCodeAt(1) <= 0xdfff ? c : ""
   }
 
   function cleanSymbols(raw) {
@@ -68,7 +107,7 @@ Item {
         // so a layout with something odd on a third level still types its
         // letters rather than falling back to US and losing them.
         return Array.isArray(k) && k.length >= 2 && k.slice(0, 2).every(function(c) {
-          return typeof c === "string" && c.length >= 1 && c.length <= 2 && c.trim() === c
+          return c !== "" && root.cleanChar(c) === c
         })
       })
     })
@@ -82,18 +121,9 @@ Item {
     onLoaded: {
       var layout = null
       try { layout = JSON.parse(text()) } catch (e) {}
-      var ok = root.validLayout(layout)
-      root.layoutRows = ok ? layout.rows : root.usRows
-      root.layoutName = ok && typeof layout.name === "string" ? layout.name.slice(0, 40) : ""
-      root.layoutSymbols = ok ? root.cleanSymbols(layout.symbols) : []
-      root.layoutLetters = ok ? root.cleanSymbols(layout.letters) : []
+      root.applyLayout(layout)
     }
-    onLoadFailed: {
-      root.layoutRows = root.usRows
-      root.layoutName = ""
-      root.layoutSymbols = []
-      root.layoutLetters = []
-    }
+    onLoadFailed: root.applyLayout(null)
   }
 
   // Each letter's shifted character, e.g. "Ü" for "ü".
@@ -204,77 +234,129 @@ Item {
 
   function variantsFor(key) {
     var out = []
-    function add(c) { if (c !== "" && c !== undefined && out.indexOf(c) === -1) out.push(c) }
-    add(root.upper ? key.toUpperCase() : key)
-    // The two deeper levels are already a pair, the second being the first
-    // with Shift, so they go on as they are rather than through the case
-    // the keyboard happens to be typing in.
-    add(root.level3Of[key])
-    add(root.level4Of[key])
-    var list = root.variantsOf[key] || []
-    list.forEach(function(c) { add(root.upper ? c.toUpperCase() : c) })
-    return out.length > 1 ? out.slice(0, 9) : []
+    var typed = root.upper ? root.shifted(key) : key
+    function add(c) {
+      if (c && c !== typed && out.indexOf(c) === -1) out.push(c)
+    }
+    // A tap already types the base character. Hold choices contain only
+    // alternatives, even when just one exists (1 -> ! on a US layout).
+    if (root.digits.indexOf(key) !== -1) {
+      (root.digitLevels[key] || []).forEach(add)
+    } else if (root.punctuation.indexOf(key) !== -1) {
+      root.punctuationExtras.concat(root.punctuationCore).forEach(add)
+    } else {
+      // Keymap levels are literal characters, not case-converted accents.
+      add(root.level3Of[key])
+      add(root.level4Of[key])
+      ;(root.variantsOf[key] || []).forEach(function(c) { add(root.upper ? c.toUpperCase() : c) })
+    }
+    return out.slice(0, 12)
   }
 
-  // The open popup: { key, items, index, x, y, cellWidth, cellHeight }, or
-  // null. A plain object, so changing it means replacing it.
-  property var popup: null
+  function hintFor(key) {
+    if (root.digits.indexOf(key) !== -1) return (root.digitLevels[key] || [])[0] || ""
+    return root.page === "letters" ? root.level3Of[key] || "" : ""
+  }
 
-  function openPopup(key, item) {
+  // Geometry belongs to a particular gesture. Resizing, changing page or
+  // starting authentication invalidates it, including any pending release.
+  property int interactionSerial: 0
+  property var popup: null
+  property bool popupTravelled: false
+  function cancelInteraction() {
+    root.popup = null
+    root.popupTravelled = false
+    root.interactionSerial++
+  }
+  onWidthChanged: root.cancelInteraction()
+  onHeightChanged: root.cancelInteraction()
+  onTypingChanged: if (!root.typing) root.cancelInteraction()
+  onVisibleChanged: if (!visible) root.cancelInteraction()
+
+  function openPopup(key, item, startX, startY) {
     var items = root.variantsFor(key)
-    if (items.length < 2 || !root.typing) return
+    if (items.length < 1 || !root.typing) return
     var at = item.mapToItem(root, 0, 0)
-    var cell = Math.max(item.width + root.gap, root.unit * 0.92)
+    var room = Math.max(1, root.width - 2 * root.padding)
+    var cell = Math.min(room, Math.max(item.width + root.gap, root.unit * 0.92))
+    items = items.slice(0, Math.max(1, Math.floor(room / cell)))
     var total = items.length * cell
-    var x = total > root.width - 2 * root.padding ? (root.width - total) / 2
-      : Math.min(Math.max(at.x, root.padding), root.width - root.padding - total)
-    root.popup = { key: key, items: items, index: 0, x: x,
-                   y: Math.max(0, at.y - item.height - root.gap),
+    var from = at.x
+    var y = at.y - item.height - root.gap
+    // A top-row card must not hide under the finger. Put it beside the key
+    // where possible, reversing when it opens to the left, like desktop.
+    var beside = at.y - item.height / 2 < root.gap
+      && item.width + root.gap + total <= room
+    if (beside) {
+      y = at.y
+      from = at.x + item.width + root.gap
+      if (from + total > root.width - root.padding) {
+        from = at.x - root.gap - total
+        items = items.slice().reverse()
+      }
+    }
+    var x = Math.min(Math.max(from, root.padding), root.width - root.padding - total)
+    var near = beside && from < at.x ? items.length - 1 : 0
+    // Only the printed digit alternate is a hold-and-release shortcut.
+    // A shifted/clamped accent card never silently chooses a character.
+    var first = root.digits.indexOf(key) !== -1 && x === from
+      && items[near] === root.hintFor(key) ? near : -1
+    root.popupTravelled = false
+    root.popup = { key: key, items: items, index: first, preset: first, x: x,
+                   y: Math.max(root.gap, y), beside: beside,
+                   startX: startX === undefined ? at.x + item.width / 2 : startX,
+                   startY: startY === undefined ? at.y + item.height / 2 : startY,
                    cellWidth: cell, cellHeight: item.height }
   }
 
-  // Which cell the finger is on, in this item's coordinates. Sliding well
-  // below the popup takes nothing.
   function selectAt(x, y) {
     var p = root.popup
     if (!p) return
-    var index = -1
-    if (y < p.y + p.cellHeight + root.keyHeight) {
-      index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
-    }
+    var travelled = Math.abs(x - p.startX) + Math.abs(y - p.startY) > root.unit * 0.4
+    if (travelled) root.popupTravelled = true
+    // Small finger jitter does not cancel the printed alternate shortcut.
+    if (!root.popupTravelled) return
+    var within = y >= p.y - p.cellHeight / 2 && y <= p.y + p.cellHeight + root.gap
+    if (within && p.beside && (x < p.x || x > p.x + p.items.length * p.cellWidth)) within = false
+    var index = within ? Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth))) : -1
     if (index === p.index) return
-    var next = Object.assign({}, p)
-    next.index = index
-    root.popup = next
+    root.popup = Object.assign({}, p, {index: index})
   }
 
   function choosePopup() {
     var p = root.popup
+    var travelled = root.popupTravelled
     root.popup = null
-    if (!p || p.index < 0 || !root.typing) return
+    root.popupTravelled = false
+    if (!p || !root.typing) return
+    if (p.index < 0) {
+      // Holding a letter still is a slow tap; entering the card and then
+      // leaving it is cancellation. Neither needs the base in the card.
+      if (!travelled) root.press(p.key)
+      return
+    }
     root.view.wakeRequested()
     root.type(p.items[p.index])
   }
 
+  // Every page has the same row count. Extra height grows upwards while
+  // the two bottom rows (Backspace and Enter) stay anchored in place.
   readonly property var pages: ({
-    "letters": [
+    "letters": (showNumberRow ? [digits] : []).concat([
       letters(layoutRows[0]),
       letters(layoutRows[1]),
       ["shift"].concat(letters(layoutRows[2]), ["backspace"]),
       ["symbols", "space", ".", "enter"]
-    ],
-    "symbols": [
-      symbolRows[0],
-      symbolRows[1],
+    ]),
+    "symbols": [symbolRows[0], symbolRows[1]].concat(showNumberRow ? [moreRows[0]] : []).concat([
       ["more"].concat(punctuation, extraSymbols.slice(0, 2), ["backspace"]),
       ["letters", "space", ",", "enter"]
-    ],
-    "more": [
-      moreRows[0],
-      moreRows[1],
+    ]),
+    "more": (showNumberRow ? [digits] : []).concat([
+      moreRows[0], moreRows[1],
       ["symbols"].concat(punctuation, extraSymbols.slice(2, 4), ["backspace"]),
       ["letters", "space", ",", "enter"]
-    ]
+    ])
   })
   // The key back to the letters page names the script rather than a
   // language: the layout's own first three letters by code point, A B C on a
@@ -299,49 +381,13 @@ Item {
     "space": 5.5, "enter": 2
   })
 
-  // The key style's shape and measurements, as Ragtop's service last wrote
-  // them. Checked again here with this file's own rules. Anything missing,
-  // unknown or out of range gets the Rounded default.
+  // Only the user's size adjustment crosses from the desktop. Old style
+  // files may contain theme fields; none of those are accepted here.
   property var style: cleanStyle(null)
-
   function cleanStyle(raw) {
-    raw = raw && typeof raw === "object" ? raw : {}
-    function num(value, low, high, fallback) {
-      return typeof value === "number" && isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback
-    }
-    function pick(value, allowed, fallback) {
-      return allowed.indexOf(value) !== -1 ? value : fallback
-    }
-    // Four corner styles clockwise from the top left, or "auto" for the
-    // shape's own. Checked word by word, not trusted: this comes out of a
-    // file and is drawn on a lock screen.
-    function cornerSpec(value) {
-      var text = String(value === undefined || value === null ? "auto" : value)
-      text = text.trim().toLowerCase()
-      if (text === "" || text === "auto") return "auto"
-      var parts = text.split(/\s+/)
-      if (parts.length !== 4) return "auto"
-      for (var i = 0; i < 4; i++)
-        if (["round", "cut", "square"].indexOf(parts[i]) === -1) return "auto"
-      return parts.join(" ")
-    }
-    return {
-      shape: pick(raw.shape, ["omarchy", "rounded", "pill", "angular", "bevel"], "omarchy"),
-      corners: cornerSpec(raw.corners),
-      relief: pick(raw.relief, ["flat", "raised"], "flat"),
-      fill: pick(raw.fill, ["auto", "dark", "light", "outline"], "light"),
-      // Numbers since the look went numeric. Checked, not trusted: this
-      // comes out of a file and is drawn on a lock screen.
-      keyTransparency: num(raw.keyTransparency, 0, 100, 0),
-      size: num(raw.size, 60, 160, 100),
-      sizeNudge: num(raw.sizeNudge, 0.5, 2, 1),
-      labels: pick(raw.labels, ["small", "normal", "large"], "normal"),
-      depth: num(raw.depth, 0, 10, 4),
-      chamfer: num(raw.chamfer, 0, 20, 8),
-      // Off-theme sizes. Colours are left to the lock screen's own palette.
-      borderWidth: typeof raw.borderWidth === "number" ? num(raw.borderWidth, 0, 4, "auto") : "auto",
-      radius: typeof raw.radius === "number" ? num(raw.radius, 0, 30, "auto") : "auto"
-    }
+    var value = raw && typeof raw === "object" ? raw.sizeNudge : undefined
+    return { sizeNudge: typeof value === "number" && isFinite(value)
+      ? Math.min(2, Math.max(0.5, value)) : 1 }
   }
 
   FileView {
@@ -357,18 +403,9 @@ Item {
     onLoadFailed: root.style = root.cleanStyle(null)
   }
 
-  // Sized as the desktop keyboard is, on Omarchy's spacing scale, stepped
-  // by the style's density.
-  // Size the way the desktop keyboard works it out, the theme's percentage
-  // times the user's own nudge, but checked here rather than trusted: this
-  // comes out of a file and is drawn on a lock screen.
-  readonly property real keyScale: {
-    var base = Number(style.size)
-    if (!isFinite(base)) base = 100
-    var nudge = Number(style.sizeNudge)
-    if (!isFinite(nudge) || nudge <= 0) nudge = 1
-    return Math.max(0.6, Math.min(1.6, base / 100 * nudge))
-  }
+  // Omarchy's 100% base size, with the user's checked adjustment. Desktop
+  // theme size is deliberately excluded, so changing theme cannot resize it.
+  readonly property real keyScale: Math.max(0.6, Math.min(1.6, style.sizeNudge))
   readonly property string density: keyScale < 0.95 ? "compact"
     : keyScale > 1.08 ? "roomy" : "normal"
   readonly property int gap: density === "compact" ? Style.spacing.sm
@@ -377,14 +414,9 @@ Item {
     : density === "roomy" ? Style.spacing.xl : Style.spacing.lg
   readonly property real rowUnits: Math.max(10, layoutRows[0].length, layoutRows[1].length, layoutRows[2].length + 3)
 
-  // How wide a key is, in units, once a short row has been stretched to the
-  // keyboard's width by its own stretchy keys: the space bar, or the wide
-  // keys at both ends of a third row. Rows of plain keys stay centred, so
-  // the letters keep one size. Copied by hand from the desktop keyboard
-  // (Keyboard.qml's stretch), as everything here is. The letter rows come up
-  // short only on some layouts. French's bottom row is six keys against
-  // eleven on the row above, while the symbol pages' third row is short on
-  // any of them.
+  // Stretch Space on the bottom row and characters on the row above it.
+  // Both rows span the same width, with fixed outer control slots. Plain
+  // letter and digit rows stay centred at their normal key width.
   function keyUnits(row, index) {
     var key = row[index]
     var base = root.widths[key] || 1
@@ -393,8 +425,11 @@ Item {
     if (slack <= 0.01) return base
     var space = row.indexOf("space")
     if (space !== -1) return key === "space" ? base + slack : base
-    if (row.length > 1 && (row[0] in root.widths) && (row[row.length - 1] in root.widths)
-        && (index === 0 || index === row.length - 1)) return base + slack / 2
+    if (row.length > 2 && row[row.length - 1] === "backspace") {
+      // Keep both outer controls fixed. Spread spare space among the
+      // characters, so fewer symbols never enlarge or move Backspace.
+      return index > 0 && index < row.length - 1 ? base + slack / (row.length - 2) : base
+    }
     return base
   }
   readonly property real unit: Math.min((width - 2 * padding) / rowUnits, Math.round(84 * keyScale))
@@ -402,100 +437,50 @@ Item {
   readonly property real keyHeight: Math.max(30,
     Math.min(Math.round(60 * keyScale), Math.round(unit * 1.4)))
 
+  // The host lock view is full-screen, unlike our Loader (whose height
+  // follows implicitHeight). Never use the Loader's height in this decision.
+  // Reserve room below the centred password field for status text and a gap.
+  readonly property real availableHeight: root.view && typeof root.view.height === "number"
+    ? Math.max(0, root.view.height / 2
+        - (typeof root.view.fieldHeight === "number" ? root.view.fieldHeight : 67) / 2
+        - 2 * root.padding - 2 * Style.font.body) : 0
+  readonly property real expandedHeight: 5 * keyHeight + 4 * gap + 2 * padding + 12
+  readonly property bool showNumberRow: expandedHeight <= availableHeight
+  onShowNumberRowChanged: root.cancelInteraction()
+  onPageChanged: root.cancelInteraction()
+  onGapChanged: root.cancelInteraction()
+  onPaddingChanged: root.cancelInteraction()
+
   // Omarchy's shared control states, in the lock screen's own colours.
   readonly property color themeKeyColor: Style.normalFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
-  // A raised key's side: a translucent wash towards the lock screen's text
-  // colour, which contrasts with its surface on dark and light themes
-  // alike, with a little of its accent so it reads as an edge.
-  // A raised key's side is part of the key: the face's colour in shadow,
-  // fading with it. An outline key has no face colour, so it stays a wash.
-  // Where the face is too dark to hold a shadow the side steps up instead,
-  // as the desktop keyboard's does. On a dark theme a dark key's side is
-  // otherwise the same colour as its face, which is a keycap with no side.
-  property real sideShadow: 0.25
-  property real sideLift: 0.09
-  property real sideMinStep: 0.035
-  property real sideAccent: 0.12
-  function shaded(c) {
-    var down = Qt.tint(c, Qt.rgba(0, 0, 0, sideShadow))
-    return Math.abs(luminance(down) - luminance(c)) >= sideMinStep
-      ? down : Qt.tint(c, Qt.rgba(1, 1, 1, sideLift))
-  }
-  readonly property color keySide: seeThrough(style.fill === "outline"
-    ? Util.alpha(Qt.tint(Color.lock.text, Util.alpha(Color.lock.borderActive, 0.35)), 0.3)
-    : Qt.tint(shaded(keyBase), Util.alpha(Color.lock.borderActive, sideAccent)))
-  // A side can't take more than this much of the key. Pressing sinks the
-  // face most of the way into it.
-  property real maxDepthFraction: 0.25
-  property real pressSink: 0.6
-  // Solid keys sit on the lock screen's own surface colour, subtle ones let
-  // it show through, outline keys are carried by their edge alone.
-  // How see-through the keys are. What shows through is the lock screen
-  // behind them.
-  readonly property real keyOpacity: 1 - style.keyTransparency / 100
-  function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
-
   // A key sits darker or lighter than the lock screen's own surface. Where
   // that surface already is the theme's darkest or lightest colour, the
   // step is taken from the surface itself.
   function luminance(c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b }
   readonly property color lockSurface: Qt.rgba(Color.lock.background.r, Color.lock.background.g, Color.lock.background.b, 1)
   readonly property color lighterRole: luminance(Color.lock.text) > luminance(lockSurface) ? Color.lock.text : lockSurface
-  readonly property color darkerRole: luminance(Color.lock.text) > luminance(lockSurface) ? lockSurface : Color.lock.text
   function stepped(role, factorColor) {
     var mixed = Qt.tint(lockSurface, Util.alpha(role, 0.14))
     return Math.abs(luminance(mixed) - luminance(lockSurface))
       >= Math.abs(luminance(factorColor) - luminance(lockSurface)) ? mixed : factorColor
   }
   readonly property color lightKeyBase: stepped(lighterRole, Qt.lighter(lockSurface, 1.3))
-  readonly property color darkKeyBase: stepped(darkerRole, Qt.darker(lockSurface, 1.35))
-  // "auto" takes whichever direction the lock screen's own surface has room
-  // for, as the desktop keyboard does.
-  readonly property color autoKeyBase: Math.abs(luminance(lightKeyBase) - luminance(lockSurface))
-    >= Math.abs(luminance(darkKeyBase) - luminance(lockSurface)) ? lightKeyBase : darkKeyBase
-  readonly property color keyBase: style.fill === "outline" ? "transparent"
-    : Qt.tint(style.fill === "dark" ? darkKeyBase
-              : style.fill === "light" ? lightKeyBase : autoKeyBase,
-              themeKeyColor)
-  readonly property color keyColor: seeThrough(keyBase)
-  readonly property color pressedKeyColor: Style.pressedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  readonly property color keyBase: Qt.tint(lightKeyBase, themeKeyColor)
+  readonly property color keyColor: keyBase
+  readonly property color pressedOverlay: Style.pressedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  function pressFill(base) { return KeyContrast.pressedFill(base, pressedOverlay) }
   readonly property color latchedKeyColor: Style.selectedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
   readonly property color specialTextColor: Color.lock.placeholder
   readonly property var keyBorderSpec: Border.controlSpec("normal", Color.lock.text, Color.lock.borderActive, Color.lock.textError)
   readonly property color keyBorder: Border.color(keyBorderSpec)
-  readonly property real keyBorderWidth: style.borderWidth !== "auto" ? Style.space(style.borderWidth)
-    // An outline key is its edge, so it always keeps one.
-    : style.fill === "outline" ? Math.max(1, Border.top(keyBorderSpec))
-    : Border.top(keyBorderSpec)
-  // The Outline shape's edges, which carry the key on their own.
-  readonly property color outline: Util.alpha(Color.lock.text, 0.45)
-  readonly property real keyRadius: style.radius !== "auto" ? Style.space(style.radius)
-    : style.shape === "omarchy" ? Style.cornerRadius
-    : style.shape === "angular" ? 0
-    : style.shape === "bevel" ? Style.space(8)
-    : Style.space(8)
-  readonly property real keyDepth: style.relief === "raised" ? Style.space(style.depth) : 0
-  readonly property real keyChamfer: Style.space(style.chamfer)
-  // The same corner set the keyboard proper uses, read the same way, so a
-  // theme looks like itself on the lock screen too.
-  readonly property var keyCorners: {
-    if (style.corners !== "auto") return String(style.corners).split(" ")
-    if (style.shape === "angular") return ["cut", "cut", "cut", "cut"]
-    if (style.shape === "bevel") return ["cut", "round", "cut", "round"]
-    return ["round", "round", "round", "round"]
-  }
-  readonly property bool cornersAllRound: keyCorners[0] === "round"
-    && keyCorners[1] === "round" && keyCorners[2] === "round"
-    && keyCorners[3] === "round"
-  // Labels on Omarchy's scales, growing with the keys. Glyph keys take its
-  // icon scale.
+  readonly property real keyBorderWidth: Border.top(keyBorderSpec)
+  readonly property real keyRadius: Style.cornerRadius
+  readonly property real keyDepth: 0
+  // Labels follow Omarchy's normal type scale and the user's key size.
   function labelPx(size) { return Math.max(8, Math.round(size * keyScale)) }
-  readonly property int labelSize: labelPx(style.labels === "small" ? Style.font.heading
-    : style.labels === "large" ? Style.font.displayLarge : Style.font.display)
-  readonly property int wordSize: labelPx(style.labels === "small" ? Style.font.bodySmall
-    : style.labels === "large" ? Style.font.heading : Style.font.title)
-  readonly property int iconSize: labelPx(style.labels === "small" ? Style.font.iconSmall
-    : style.labels === "large" ? Style.font.display : Style.font.iconLarge)
+  readonly property int labelSize: labelPx(Style.font.display)
+  readonly property int wordSize: labelPx(Style.font.title)
+  readonly property int iconSize: labelPx(Style.font.iconLarge)
   readonly property var iconKeys: ["shift", "backspace", "enter"]
   function labelKind(key) {
     if (iconKeys.indexOf(key) !== -1) return "drawn"
@@ -534,7 +519,13 @@ Item {
       else root.shift = true
       break
     case "backspace":
-      root.view.passwordTextEdited(root.view.passwordText.slice(0, -1))
+      // QString/JS indices are UTF-16 code units. Remove both halves of a
+      // supplementary character rather than leaving an invalid surrogate.
+      var text = root.view.passwordText
+      var end = Math.max(0, text.length - 1)
+      if (end > 0 && text.charCodeAt(end) >= 0xdc00 && text.charCodeAt(end) <= 0xdfff
+          && text.charCodeAt(end - 1) >= 0xd800 && text.charCodeAt(end - 1) <= 0xdbff) end--
+      root.view.passwordTextEdited(text.slice(0, end))
       break
     case "enter":
       // As the password field's own Enter does.
@@ -559,11 +550,8 @@ Item {
   // The popup, over the rows above the key being held: the letters on a card
   // of their own, so it reads as one thing lifted off the keyboard rather
   // than a few keys floating over it. Card and keys are both opaque, and what
-  // is behind them is the keyboard, and Key Transparency is for showing the
-  // lock screen through the keyboard, not the keyboard through itself. It
-  // draws its own keys rather than reusing this file's delegate, which is
-  // bound to a row model. The shapes and measurements are the same ones,
-  // from the same style.
+  // is behind them is the keyboard. It draws its own keys rather than
+  // reusing the row delegate, with the same Omarchy shape and measurements.
   Item {
     id: popupLayer
     visible: root.popup !== null
@@ -592,13 +580,11 @@ Item {
         x: index * (root.popup ? root.popup.cellWidth : 0) + root.gap / 2
         width: (root.popup ? root.popup.cellWidth : 0) - root.gap
         height: parent.height
-        radius: root.style.shape === "pill" ? height / 2 : root.keyRadius
-        // Opaque, both of them: Key Transparency is there to let the lock
-        // screen show through the keyboard, and behind a popup key is the
-        // popup's own panel, so all it would do here is muddy the letter.
+        radius: root.keyRadius
+        // Opaque popup keys keep alternatives legible over the keyboard.
         color: chosen ? Color.lock.borderActive : root.keyBase
         border.width: root.keyBorderWidth
-        border.color: root.style.fill === "outline" ? root.outline : root.keyBorder
+        border.color: root.keyBorder
 
         Text {
           // Never rich text. A window title, a layout name and an error
@@ -644,101 +630,28 @@ Item {
             readonly property bool accent: modelData === "enter" || (modelData === "shift" && root.capsLock)
             readonly property bool latched: modelData === "shift" && root.shift
             readonly property bool special: modelData in root.labels || modelData === "space"
-            readonly property string shape: root.style.shape
-            readonly property color fill: area.pressed ? root.pressedKeyColor
-              : accent ? root.seeThrough(Color.lock.borderActive)
-              : latched ? root.seeThrough(root.latchedKeyColor)
-              : root.keyColor
-            // Keycap: the face sits above the key's side and sinks when pressed.
-            readonly property real depth: Math.min(root.keyDepth, height * root.maxDepthFraction)
-            readonly property real faceY: area.pressed ? depth * root.pressSink : 0
-            readonly property real faceHeight: height - depth
+            readonly property color restingFill: accent ? Color.lock.borderActive
+              : latched ? root.latchedKeyColor : root.keyColor
+            readonly property color fill: area.pressed ? root.pressFill(restingFill) : restingFill
+            readonly property real faceY: 0
+            readonly property real faceHeight: height
             width: root.unit * root.keyUnits(keyRow.modelData, index) - root.gap
             height: root.keyHeight
 
-            // Each corner drawn the way its style asks, the same path
-            // serving the face and the side, so a raised key keeps whatever
-            // corners it has. A square corner is a cut of no length, so the
-            // line that draws a cut draws it too.
-            readonly property var corners: root.keyCorners
-            readonly property bool boxy: root.cornersAllRound
-            readonly property real chamfer: Math.min(root.keyChamfer, width / 3, height / 3)
-            function cornerPath(top, boxHeight) {
-              var w = width, bottom = top + boxHeight
-              var r = Math.min(root.keyRadius, w / 2, boxHeight / 2)
-              var c = Math.min(chamfer, w / 3, boxHeight / 3)
-              function reach(i) {
-                return key.corners[i] === "round" ? r : key.corners[i] === "cut" ? c : 0
-              }
-              function turn(i, x, y) {
-                return key.corners[i] === "round"
-                  ? " A " + r + " " + r + " 0 0 1 " + x + " " + y
-                  : " L " + x + " " + y
-              }
-              var tl = reach(0), tr = reach(1), br = reach(2), bl = reach(3)
-              return "M " + tl + " " + top
-                + " L " + (w - tr) + " " + top + turn(1, w, top + tr)
-                + " L " + w + " " + (bottom - br) + turn(2, w - br, bottom)
-                + " L " + bl + " " + bottom + turn(3, 0, bottom - bl)
-                + " L 0 " + (top + tl) + turn(0, tl, top)
-                + " Z"
-            }
-
-            // A raised key's side, only ever below the face.
             Rectangle {
-              visible: key.depth > 0 && key.boxy
-              y: key.faceY
-              width: key.width
-              height: key.height - key.faceY
-              radius: key.shape === "pill" ? height / 2 : root.keyRadius
-              color: root.keySide
-            }
-
-            Shape {
-              visible: key.depth > 0 && !key.boxy
               anchors.fill: parent
-              preferredRendererType: Shape.CurveRenderer
-
-              ShapePath {
-                fillColor: root.keySide
-                strokeWidth: 0
-                strokeColor: "transparent"
-                PathSvg { path: key.cornerPath(key.faceY, key.height - key.faceY) }
-              }
-            }
-
-            // The face, in every shape but Angular.
-            Rectangle {
-              visible: key.boxy
-              y: key.faceY
-              width: key.width
-              height: key.faceHeight
-              radius: key.shape === "pill" ? height / 2 : root.keyRadius
+              radius: root.keyRadius
               color: key.fill
               border.width: root.keyBorderWidth
-              border.color: root.style.fill === "outline" ? root.outline : root.keyBorder
-            }
-
-            // Angular: the corners cut off.
-            Shape {
-              visible: !key.boxy
-              anchors.fill: parent
-              preferredRendererType: Shape.CurveRenderer
-
-              ShapePath {
-                fillColor: key.fill
-                strokeColor: root.style.fill === "outline" ? root.outline : root.keyBorder
-                strokeWidth: root.keyBorderWidth
-                joinStyle: ShapePath.MiterJoin
-                PathSvg { path: key.cornerPath(key.faceY, key.faceHeight) }
-              }
+              border.color: root.keyBorder
             }
 
             // The label's size on Omarchy's scales, kept inside the key.
             readonly property string kind: root.labelKind(modelData)
-            readonly property color labelColor: accent ? Color.background
+            readonly property color preferredLabelColor: accent ? Color.background
               : special ? root.specialTextColor
               : Color.lock.text
+            readonly property color labelColor: preferredLabelColor
             readonly property int labelPixelSize: Math.min(
               kind === "drawn" ? root.iconSize : kind === "word" ? root.wordSize : root.labelSize,
               Math.round(faceHeight * 0.62))
@@ -768,13 +681,9 @@ Item {
             Text {
               // Never rich text, for the reason given above.
               textFormat: Text.PlainText
-              readonly property string hint: root.page === "letters"
-                ? (root.level3Of[key.modelData] || "") : ""
-              // How far the corner eats into the face, so the mark clears a
-              // rounded or cut one instead of sitting on the curve.
-              readonly property real inset: key.corners[1] === "cut" ? key.chamfer * 0.5
-                : key.corners[1] === "square" ? 0
-                : (key.shape === "pill" ? key.faceHeight / 2 : root.keyRadius) * 0.3
+              readonly property string hint: root.hintFor(key.modelData)
+              // Keep the hint clear of Omarchy's rounded corner.
+              readonly property real inset: root.keyRadius * 0.3
               visible: hint !== ""
               y: key.faceY + Math.round(root.gap / 2 + inset / 2)
               width: key.width - Math.round(root.gap / 2 + inset)
@@ -806,30 +715,52 @@ Item {
               // middle of the gap and a tap there isn't lost.
               anchors.fill: parent
               anchors.margins: -root.gap / 2
-              // A key with variants types when it lifts instead, so a hold
-              // can still become a popup rather than a letter already typed.
-              readonly property bool holdable: root.variantsFor(key.modelData).length > 1
+              // All character keys type on release, as on the desktop,
+              // whether or not they happen to have hold alternatives.
+              enabled: root.typing
+              readonly property bool holdable: root.variantsFor(key.modelData).length > 0
+              readonly property bool deferred: !key.special
+              property bool offeredPopup: false
+              property int pressSerial: -1
+              property real startX: 0
+              property real startY: 0
               pressAndHoldInterval: 420
-              onPressed: if (!holdable) root.press(key.modelData)
+              onPressed: function(mouse) {
+                offeredPopup = false
+                pressSerial = root.interactionSerial
+                var at = mapToItem(root, mouse.x, mouse.y)
+                startX = at.x
+                startY = at.y
+                if (!deferred) root.press(key.modelData)
+              }
               // Holding backspace keeps deleting, and holding a letter offers the
               // characters that belong to it.
               onPressAndHold: {
+                if (pressSerial !== root.interactionSerial || !root.typing) return
                 if (key.modelData === "backspace") repeat.start()
-                else if (holdable) root.openPopup(key.modelData, key)
+                else if (holdable) {
+                  offeredPopup = true
+                  root.openPopup(key.modelData, key, startX, startY)
+                }
               }
               onPositionChanged: function(mouse) {
-                if (root.popup === null) return
+                if (pressSerial !== root.interactionSerial || root.popup === null || root.popup.key !== key.modelData) return
                 var at = mapToItem(root, mouse.x, mouse.y)
                 root.selectAt(at.x, at.y)
               }
               onReleased: {
                 repeat.stop()
-                if (root.popup !== null) root.choosePopup()
-                else if (holdable) root.press(key.modelData)
+                if (pressSerial !== root.interactionSerial || !root.typing) return
+                if (root.popup !== null && root.popup.key === key.modelData) root.choosePopup()
+                else if (deferred && !offeredPopup) root.press(key.modelData)
               }
               onCanceled: {
                 repeat.stop()
-                root.popup = null
+                root.cancelInteraction()
+              }
+              Connections {
+                target: root
+                function onInteractionSerialChanged() { repeat.stop() }
               }
             }
 
@@ -837,7 +768,10 @@ Item {
               id: repeat
               interval: 80
               repeat: true
-              onTriggered: root.press("backspace")
+              onTriggered: {
+                if (area.pressed && root.typing && area.pressSerial === root.interactionSerial) root.press("backspace")
+                else stop()
+              }
             }
           }
         }

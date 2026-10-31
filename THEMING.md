@@ -23,8 +23,8 @@ ragtop theme list
 ragtop theme apply spaceship
 ```
 
-Six ship: `omarchy`, `soft`, `typewriter`, `glass`, `industrial`,
-`spaceship`.
+Nine ship: `omarchy`, `soft`, `chiclet`, `focus`, `mechanical`,
+`typewriter`, `glass`, `industrial`, `spaceship`.
 
 ## The smallest theme that works
 
@@ -124,6 +124,7 @@ fill = "auto"
 | `auto` | follows whether your Omarchy theme is dark or light |
 | `dark` | sits darker than the background |
 | `light` | sits lighter than it |
+| `surface` | uses the Omarchy popup surface with its normal control tint |
 | `outline` | is its edge, with no fill at all |
 
 `key-fill-alpha` (0 to 1) overrides how strong that fill is.
@@ -140,6 +141,17 @@ label-color = "#ffcc00"
 
 Both take `foreground`, `background`, `accent`, `urgent`, or a hex colour
 of 6 or 8 digits. Only what you set stops following your Omarchy theme.
+
+`contrast = "strong"` opts into full-strength modifier labels and corner
+hints, stronger borders, and labels checked against their key face in each
+state. It keeps the preferred palette colour when its contrast is at least
+4.5:1; otherwise it uses black or white. Use opaque fills for predictable
+results: wallpaper behind transparent keys cannot be measured here.
+The default, `"normal"`, preserves the usual label and border treatment.
+Focus uses `"strong"`; other themes can opt in independently.
+
+Pressing a filled key tints its existing face while retaining its opacity.
+An outline key still gains the shell's translucent press fill.
 
 ## What is behind the keys
 
@@ -194,16 +206,19 @@ theme.
 | `chamfer` | cut corner depth, 0 to 20 | 8 |
 | `relief` | `flat`, `raised` | `flat` |
 | `depth` | raised key side, 0 to 10 | 4 |
-| `fill` | `auto`, `dark`, `light`, `outline` | `light` |
+| `fill` | `auto`, `dark`, `light`, `surface`, `outline` | `light` |
+| `contrast` | `normal`, `strong` | `normal` |
+| `backlight` | `off`, `accent` | `off` |
+| `backlight-motion` | `off`, `ripple` (desktop main keys only) | `ripple`, gated by user preference |
+| `backlight-press-color` | `foreground`, `background`, `accent`, `urgent`, `#hex` | palette complement |
+| `keycap-material` | `solid`, `pudding`, `frosted`, `translucent` (clear faces require the Sculpted profile) | `solid` |
+| `keycap-profile` | `standard`, `sculpted` (raised, rounded caps) | `standard` |
+| `wall-opacity` | 0 transparent to 100 opaque (Pudding sides only) | 50 |
 | `key-fill-alpha` | 0 to 1 | auto |
 | `border-width` | 0 to 4 | auto |
 | `key-color` | `foreground`, `background`, `accent`, `urgent`, `#hex` | follows Omarchy |
 | `label-color` | the same | follows Omarchy |
-| `background` | `tint`, `gradient` | `tint` |
-| `transparency` | 0 solid to 100 gone | 0 |
 | `key-transparency` | 0 solid to 100 gone | 0 |
-| `edge` | `border`, `fade`, `none` | `none` |
-| `edge-fade` | 0 to 24 | 8 |
 | `blur` | `true`, `false`, or `"on"`, `"off"` | `false` |
 | `labels` | `small`, `normal`, `large` | `normal` |
 | `size` | 60 to 160 | 100 |
@@ -217,29 +232,175 @@ doing what you wrote, check the spelling first.
 
 ## The shipped themes, as worked examples
 
-**Omarchy** is the plain one. Your Omarchy theme's corner radius, flat, no
-edge. It exists so there is a way back.
+**Omarchy** is the plain one: your Omarchy theme's corner radius, flat, and
+`fill = "light"`. It exists so there is a way back.
 
-**Soft** and **Glass** are the same shape doing different things with the
-backdrop. Soft is a gradient at 30 with a 16px fade. Glass is a tint at 50
-with keys at 30 on top of it, so the desktop comes through twice.
+**Soft** and **Glass** are the same rounded, flat key doing different things
+with the wallpaper behind it. Soft's keys are 15% see-through. Glass's are
+30%, with `blur = true`, so what shows through is softened.
 
-**Typewriter** is `pill` and raised, which on a near square key reads as a
-round typewriter key.
+**Chiclet** is `rounded` at `radius = 4` and raised at `depth = 6`, solid,
+with a thin edge and darker modifiers. Its visible side and sinking press
+give it the familiar form of a physical keyboard, with normal-size legends
+and room for secondary hints. Its face is flat; nothing here draws a
+dished one.
 
-**Industrial** is `angular` and raised with `chamfer = 12`, `labels =
-"large"` and a border. Four cut corners and a heavy edge.
+**Typewriter** is `pill` and raised at `depth = 8`, which on a near square
+key reads as a round typewriter key, with `labels = "large"` and `size =
+115` asking for keys a little bigger than usual.
 
-**Spaceship** is `bevel` at `chamfer = 18`, raised, gradient, with a border.
-It is the one that uses `corners` explicitly, and its file explains why its
-diagonal runs the way it does.
+**Focus** is flat and opaque, with `radius = 6`, large labels and a 2-unit
+border. Its `surface` fill follows the Omarchy surface, and `contrast =
+"strong"` keeps modifier labels and corner hints at full strength and checks
+label contrast in normal, pressed and selected states. Size stays at 100.
+
+## Backlit themes
+
+`backlight = "accent"` declares a backlit theme. Desktop backlighting supports
+raised, opaque caps with round corners; flat, transparent and cut-corner
+caps omit the halo. Mechanical offers Plain, Pudding, Frosted and Translucent
+materials independently of lighting behaviour.
+
+Backlighting uses a centred light shaped to each cap's footprint.
+Pressing lowers the cap and changes
+its light to the complementary palette colour, keeping the cap's fill unchanged.
+Underlighting and illuminated legends share a colour. Letter/word legends, drawn icons and
+corner hints use the existing brightening (18% white) and faint luminous
+rim (22% light colour); locked modifiers retain contrasting legends.
+
+**Mechanical** defaults to opaque plastic walls and a shallow perspective profile
+(`keycap-profile = "sculpted"`, `keycap-material = "solid"`). Its centred face has a shallow curved top edge and a gently bowed lower
+edge over a broader skirt, following the supplied SVG reference. Both sides
+and the front wall are visible. Static gradients suggest a dished surface.
+The 8-unit depth compresses by 55% on press, leaving a visible solid skirt.
+Letters, icons and corner hints shine through, and light escapes underneath;
+the walls are opaque and do not change colour with the backlight. The theme
+does not request backdrop blur. Label placement follows the inset face.
+Sculpted uses a smaller outer light inset (at most 0.75 units times the size
+scale), keeping the outer gaps compact. Its side inset is bounded by 6 units,
+8.5% of cap width and 17% of face height. The face ends up to 3 units higher
+(7% of face height on small caps), exposing a deeper front wall. Legends
+follow the inset face. Key slots and touch targets stay rectangular and unchanged.
+
+The profile loads a small vector renderer only when selected. Its geometry
+changes on depression, not on ripple frames. It requires rounded, raised,
+keys; incompatible shapes use the standard profile. Backlighting can be off.
+The lock keyboard uses its existing conservative rendering instead.
+
+Mechanical's gear controls separate material and lighting from the Sculpted
+profile. No profile selector is shown while there is only one option.
+
+| Control | Behaviour |
+|---------|-----------|
+| Backlight | Master light switch; cap shape and material remain visible when off. |
+| Plain | Opaque plastic face and walls, the original Sculpted appearance. |
+| Pudding | Opaque face; walls at 50% opacity, illuminated when backlit, with backdrop blur. |
+| Frosted | Entire cap at 50% opacity with backdrop blur; opaque, contrasting glyphs. |
+| Translucent | Entire cap at 50% opacity without backdrop blur; opaque, contrasting glyphs. |
+| Shine-through glyphs | Available with backlight on and Plain/Pudding; letters, SVG icons and hints share the light. |
+| Lighting effects | Existing ripple animation preference. Off keeps steady light and immediate press colour. |
+
+Frosted and Pudding still use compositor blur when lighting effects or the
+backlight are off. Clear surfaces adjoin rather than stacking transparent
+fills; they do not create per-key capture textures. The underlight itself
+also obscures some background. Actual readability depends on what is behind
+a translucent keyboard.
+
+`mechanical-backlight` and `mechanical-shine-through` default on;
+`mechanical-material` defaults to `plain`. These saved user preferences are
+independent of theme files and survive theme changes. Disabled controls do
+not erase their values. Lighting effects reuse `backlight-animation`, whose
+existing value is retained (off by default). These overrides apply only to
+the selected Mechanical theme, not tour previews or other themes.
+
+```sh
+ragtop mechanical-backlight disable
+ragtop mechanical-material set frosted
+ragtop mechanical-shine-through enable
+ragtop backlight-animation disable
+```
+
+The former `sculpted` theme selection migrates to `mechanical` without
+resetting other settings. `ragtop theme apply sculpted` remains an alias;
+a user-authored theme named `sculpted` keeps its own identity. The theme list
+shows Mechanical once. `sculpted` remains the profile's internal name.
+
+The resting light follows the bright palette counterpart nearest Omarchy's
+accent, or the accent itself if no counterpart is close. Dim colours on
+dark themes are lifted towards white. Modern named colours and older ANSI
+`color1`–`color14` palettes are supported. The active `colors.toml` is watched,
+and `theme.name` reattaches the watch when Omarchy replaces the theme
+directory. Palette selection runs on theme changes, never animation frames.
+Resting lighting stays at 100% intensity. Presses use a bright palette colour
+near the opposite hue; selection accounts for the existing white brightness
+and legend tints and discounts nearly neutral candidates. Named and legacy
+ANSI palettes are supported. Sparse or monochrome palettes fall back to an
+authored foreground, then white if none is available.
+`backlight-press-color` can override the automatic choice.
+
+The travelling wave blends towards that complementary colour while dimming
+neighbouring keys towards 50%, then returns to the resting colour and
+100%. A held key stays fully lit in the press colour; its release changes
+colour without dimming. Underlight, walls, legend cores and rims share the
+brightness wave, applied after the legend's white tint. Material opacity
+and the solid cap colour stay unchanged. Percentages scale RGB intensity,
+not measured display luminance.
+
+On dark themes the wave mixes in just enough white to keep its sampled
+colour transition above a trial relative-luminance floor of 0.18. This
+softens the dip for darker complements; bright-enough colours receive no
+extra tint. The lift tapers to zero as the wave settles and does not affect
+resting or held-key colours. It is calculated once per palette or explicit
+press-colour change, with no per-frame luminance analysis. The floor is an
+appearance heuristic, not a text-contrast guarantee.
+Light themes retain their palette hue without the dark-theme brightness
+lift; these materials are designed primarily for dark themes.
+
+### Animation preference
+
+**Animate backlight** appears in the gear panel for backlit themes only.
+It defaults to off, giving immediate complementary colour on press and
+restoration on release, at full brightness throughout. This creates no ripple
+helpers or animation timers. The setting is a user preference, preserved
+when applying any theme:
+
+```sh
+ragtop backlight-animation enable
+ragtop backlight-animation disable
+```
+
+With animation enabled, the default `backlight-motion = "ripple"` transitions
+the pressed light in 90 ms and sends a wave up to 2.4 key pitches away.
+Neighbours dip towards 50% with the complementary colour and the brightness
+floor above, delayed by 65 ms per pitch, with a 90 ms dip and 300 ms recovery.
+Each key replaces its prior wave; held keys resist incoming waves. Hiding
+the keyboard destroys the helpers. Static frosting/blur still has a
+compositor cost with animation disabled. A theme may explicitly set
+`backlight-motion = "off"` to suppress ripple animation.
+
+Suggestions and held-key cards use the flat Omarchy default look at the
+keyboard's size scale, independently of its cap theme: no raised profile,
+backlight, glow or ripple. Alternate characters, language/layout choices,
+held-word forms and erase-preview cards share this supporting-control look.
+The suggestion list retains its scrolling clip; without luminous keys inside
+it, the clip no longer cuts off candidate-key halos. The lock keyboard always
+uses flat Omarchy keys with normal legends and no backlighting or effects.
+Desktop halos use Qt RectangularShadow (Qt 6.9+), with no key-content captures
+or animated blur geometry.
+
+**Industrial** is `angular` and raised at `depth = 6`, with `chamfer = 12`
+and `labels = "large"`. Four cut corners on a solid key.
+
+**Spaceship** is `bevel` at `chamfer = 18`, raised at `depth = 4`, with keys
+10% see-through. It is the one that uses `corners` explicitly, and its file
+explains why its diagonal runs the way it does.
 
 ## Where the look is actually kept
 
 Applying a theme writes flat `key=value` lines into
 `~/.config/ragtop/settings.conf`, alongside settings that are not part of
-the look. Tablet mode, auto-show and Size Adjust are never touched by a
-theme.
+the look. Tablet mode, auto-show, Size Adjust and the animation preference are never
+touched by a theme.
 
 You can change one field from the keyboard's own settings panel without
 writing a theme at all. That writes to the same file, and applying a theme
@@ -255,7 +416,9 @@ takes effect immediately, with no restart. If it does not, the value was
 dropped, and the two usual reasons are a misspelled field and a value
 outside its range.
 
-The lock screen reads the same theme through its own copy of the parser, in
-`LockKeyboard.qml`, so check it there too by locking the screen. The two
-parsers are separate code and have drifted before, which is exactly the kind
-of thing a theme notices first.
+The lock keyboard always uses the flat **Omarchy** appearance in `Color.lock`
+colours. Desktop theme shape, fill, transparency, type scale, materials and
+lighting do not apply. `LockKeyboard.qml` reads only the user's checked
+`sizeNudge` from the runtime style file; it uses a fixed 100% base size and
+ignores old theme fields. Layout and alternate characters remain available.
+Theme previews and tests do not require locking the live session.

@@ -12,8 +12,11 @@ ShellRoot {
 
   // ---- Stand-ins -----------------------------------------------------------
   property real width: 1600
+  property real implicitHeight: 500
+  property bool stripShown: false
   property var service: QtObject {
     property bool stripPossible: true
+    property bool tourActive: false
     property string keyboardLayout: ""
     property var keyLabels: null
   }
@@ -29,7 +32,7 @@ ShellRoot {
   // ---- Keyboard.qml's own --------------------------------------------------
   // FROM SOURCE: rowUnits unit keyHeightUncapped keyHeight topRowFraction formLadder
   // FROM SOURCE: formUnitsOf rowHeightsOf formHeightOf minKeyWidth maxHeight wanted form
-  // FROM SOURCE: formFits formUnits topPadding stripCompact stripFraction stripSlot stripHeight
+  // FROM SOURCE: formFits formUnits topPadding stripCompact stripFraction stripSlot stripHeight visibleHeight
 
   // ---- The test ------------------------------------------------------------
   // With these stand-ins a key is 60 tall. The 80% board is 403 with a half
@@ -75,6 +78,14 @@ ShellRoot {
       root.service.stripPossible = false
       t.equal(root.stripSlot, 0, "no strip possible: no room kept for one")
       root.service.stripPossible = true
+      root.service.tourActive = true
+      t.equal(root.visibleHeight, root.implicitHeight, "tour reserves the empty strip slot")
+      root.stripShown = true
+      t.equal(root.visibleHeight, root.implicitHeight, "strip arrival cannot resize tour reservation")
+      root.stripShown = false
+      root.service.tourActive = false
+      t.equal(root.visibleHeight, root.implicitHeight - root.stripSlot,
+              "ordinary hidden strip gives its room back after the tour")
     }],
   ])
 }

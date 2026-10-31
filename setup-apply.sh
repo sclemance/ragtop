@@ -41,8 +41,8 @@ for o in $overlays; do
   "$here/overlay-clones.sh" installed "$o" && before="$before $o"
 done
 
-[[ -n $add ]] && "$here/overlay-clones.sh" install $add
-[[ -n $drop ]] && "$here/overlay-clones.sh" remove $drop
+apply_ok=true
+"$here/overlay-clones.sh" apply "$add" "$drop" || apply_ok=false
 
 # However the copies went, the record describes the machine as it is.
 on=""
@@ -67,6 +67,7 @@ for o in $drop; do
   "$here/overlay-clones.sh" installed "$o" && kept+=("$o")
 done
 problems=()
+$apply_ok || problems+=("$(t setup.overlaysFailed)")
 $menu_ok || problems+=("$(t setup.noMenu)")
 ((${#missing[@]})) && problems+=("$(t setup.notCopied "$(names "${missing[@]}")")")
 ((${#kept[@]})) && problems+=("$(t setup.notRemoved "$(names "${kept[@]}")")")
@@ -76,16 +77,6 @@ else
   notify "Ragtop" "$(t setup.done)"
 fi
 
-# Copies are only picked up when the shell starts, so it restarts when one
-# came or went, and only then: after a clone that failed, the shell is
-# already back on the built-in (overlay-clones.sh, forget_clone), and a
-# restart is one more thing to go wrong.
-#
-# omarchy-restart-shell gives the old shell five seconds to exit, and one
-# still loading the plugins it was just handed can take longer. The new one
-# then finds the old one there and quits, which leaves no shell at all. Once
-# more, with the old one gone by then, is enough.
-if [[ ${on# } != "${before# }" ]]; then
-  omarchy-restart-shell || { sleep 2; omarchy-restart-shell; }
-fi
+# The completed directory/config batch is noticed by Omarchy's debounced
+# plugin watcher. Do not restart the whole shell after its single reload.
 ((${#problems[@]} == 0))

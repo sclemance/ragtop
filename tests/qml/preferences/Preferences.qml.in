@@ -1,0 +1,13 @@
+import QtQuick
+import Quickshell.Io
+Item {
+  id: root
+  property var settings: ({display: "auto"})
+  property var displayOptions: [{value: "auto"}, {value: "HDMI-A-1"}]
+  property var keyboardModes: ["sensor", "on", "off"]
+  property var keyboardLayouts: ["auto", "mobile", "60", "75", "80"]
+  property var rotationModes: ["auto", "locked", "unlocked"]
+  // FROM SOURCE: preferenceQueue preferenceBusy preferenceFailed queuePreference flushPreferences preferenceFinished toggleSetting toggleAutoShow setKeyboardLayout setKeyboardMode setRotationMode stepTheme
+  // FROM SOURCE: displayPreview displaySaving displaySeconds setDisplay keepDisplay revertDisplay displayFinished displayPreviewTimer displaySetting
+  // PROCESSES
+}

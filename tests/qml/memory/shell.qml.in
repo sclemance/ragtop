@@ -74,6 +74,23 @@ ShellRoot {
 
   Component.onCompleted: t.run([
     [0, function() {
+      root.mode("none")
+      root.focus(root.plain)
+      root.fieldHidden()
+      root.typeWord("private")
+      t.equal(root.pendingTyped.length, 0, "Nothing does not queue plaintext while focus is pending")
+      t.equal(root.letters(root.held()), "", "Nothing retains no letters during a pending focus report")
+      root.fieldReported(root.plain)
+      root.mode("full")
+      root.focus(root.plain)
+      root.fieldHidden()
+      root.typeWord("private")
+      t.ok(root.pendingTyped.length > 0, "Full queues input while focus is pending")
+      root.mode("none")
+      t.equal(root.pendingTyped.length, 0, "switching to Nothing clears pending plaintext immediately")
+      root.fieldReported(root.plain)
+    }],
+    [0, function() {
       root.mode("full")
       root.focus(root.plain)
       root.typeWord("hello")

@@ -110,5 +110,7 @@
   "uninstall.plugin": "Plugin wird entfernt",
   "uninstall.rule": "Die Zugriffsregel für den Schalter wird entfernt",
   "uninstall.ruleNone": "nicht installiert, nichts zu entfernen",
-  "uninstall.rulePassword": "das Entfernen der Zugriffsregel braucht dein Passwort"
+  "uninstall.rulePassword": "das Entfernen der Zugriffsregel braucht dein Passwort",
+  "setup.overlaysFailed": "Overlay-Änderungen fehlgeschlagen. Details stehen im Einrichtungsprotokoll.",
+  "uninstall.overlaysFailed": "Die Overlay-Bereinigung ist fehlgeschlagen. Ragtop bleibt erhalten, damit verbleibende Klone funktionieren. Beheben Sie die gemeldeten Änderungen und versuchen Sie die Deinstallation erneut."
 }

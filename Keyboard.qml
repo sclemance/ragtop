@@ -1,4 +1,5 @@
 import QtQuick
+import "GlowWave.js" as GlowWave
 
 // Ragtop's on-screen keyboard. It draws the keys and decides what each tap
 // means. keyboard-helper.py, run by the service, turns that into key events.
@@ -12,6 +13,7 @@ Item {
   // Service.qml: sendKeys(command), openSettings(), keyLabels.
   required property var service
   required property var theme
+  property SupportingTheme supportTheme: SupportingTheme { keyboardScale: root.theme.keyScale }
 
   property string page: "letters"
 
@@ -687,8 +689,8 @@ Item {
   // guessed: layout names are proportional text and vary a lot in length.
   TextMetrics {
     id: wordMetrics
-    font.family: root.theme.fontFamily
-    font.pixelSize: root.theme.wordSize
+    font.family: root.supportTheme.fontFamily
+    font.pixelSize: root.supportTheme.wordSize
   }
   function wordCell(items) {
     var widest = 0
@@ -832,6 +834,7 @@ Item {
   // kept, which is when no strip is possible at all, that still holds.
   readonly property bool stripWanted: root.service.suggestionsShown === true
   property bool stripShown: false
+  property real demoStripProgress: 1
   readonly property bool touching: Object.keys(root.held).length > 0 || root.swipe !== null
     || root.popup !== null || root.stripTouch !== null || root.pendingPoint !== -1
   function syncStrip() {
@@ -869,7 +872,8 @@ Item {
   // Where the keys begin, the same whether the strip is shown or not.
   readonly property real keysTop: root.topPadding + root.stripSlot
   // How much of the keyboard is there to see, from the bottom.
-  readonly property real visibleHeight: root.implicitHeight - (root.stripShown ? 0 : root.stripSlot)
+  readonly property real visibleHeight: root.implicitHeight
+    - (root.stripShown || root.service.tourActive === true ? 0 : root.stripSlot)
   // What the keyboard reserves on screen, which the windows above make room
   // for. It follows visibleHeight, but only while no finger is down: making
   // room resizes every window above, the compositor holds the keyboard's
@@ -1776,7 +1780,9 @@ Item {
         return
       }
       if (root.service.imeEngine) root.service.leaveEngine()
-      if (p.index !== root.activeLayout) root.service.switchLayout(p.index)
+      // Labels can lag behind Hyprland (or its event connection can drop).
+      // An explicit selection must still reach the compositor.
+      root.service.switchLayout(p.index)
       return
     }
     root.service.sendKeys("type " + p.items[p.index])
@@ -1823,14 +1829,15 @@ Item {
   SuggestionStrip {
     id: strip
     parent: board
-    keyKind: root.kind("enter")
+    keyKind: "accent"
     visible: root.stripShown
-    theme: root.theme
+    theme: root.supportTheme
     x: Math.max(root.theme.padding, root.keysLeft)
     y: root.topPadding
     width: Math.min(root.width - root.theme.padding, root.keysRight) - x
     height: root.stripHeight
     textHeight: Math.round(root.keyHeight * root.stripCompact)
+    entranceProgress: root.demoStripProgress
     items: root.stripModel.items
     cursor: root.stripModel.cursor
     hasPrev: root.stripModel.prev
@@ -2049,7 +2056,7 @@ Item {
     return null
   }
   function demoRect(name) {
-    var r = name === "strip" ? (root.stripShown ? strip : null)
+    var r = name === "strip" ? (root.stripShown || root.service.tourActive === true ? strip : null)
       : name === "popup" ? (root.popup ? popupLayer : null)
       : name === "erase" ? (erasePreview.visible ? erasePreview : null)
       // The keys, and the strip's room wherever there is one, shown or not,
@@ -2212,16 +2219,27 @@ Item {
   }
 
   Repeater {
+    id: keyCaps
     parent: board
     model: root.slots
 
     KeyboardKey {
+      id: cap
       required property var modelData
+      // Make room for light around the cap without shrinking its touch
+      // slot, changing row spacing or making the whole keyboard taller.
+      readonly property real capInset: root.theme.capInsetFor(modelData.width, modelData.height)
       theme: root.theme
-      x: modelData.x
-      y: modelData.y
-      width: modelData.width
-      height: modelData.height
+      x: modelData.x + capInset
+      y: modelData.y + capInset
+      width: modelData.width - 2 * capInset
+      height: modelData.height - 2 * capInset
+      glowGap: root.theme.gap + 2 * capInset
+      rippleEnabled: root.theme.ripple === true && root.visible
+      onPressedChanged: {
+        if (pressed && rippleEnabled)
+          GlowWave.spread(keyCaps, cap, root.unit, root.keyHeight + root.theme.gap)
+      }
       label: root.label(modelData.key)
       hint: root.hintFor(modelData.key)
       // Only on the letters page, where the symbol pages are somewhere
@@ -2258,10 +2276,10 @@ Item {
     Rectangle {
       anchors.fill: parent
       anchors.margins: -root.theme.gap
-      radius: root.theme.keyRadius + root.theme.gap / 2
-      color: root.theme.solidBase
-      border.width: Math.max(1, root.theme.keyBorderWidth)
-      border.color: root.theme.accent
+      radius: root.supportTheme.keyRadius + root.supportTheme.gap / 2
+      color: root.supportTheme.solidBase
+      border.width: Math.max(1, root.supportTheme.keyBorderWidth)
+      border.color: root.supportTheme.accent
     }
 
     Repeater {
@@ -2270,7 +2288,7 @@ Item {
       KeyboardKey {
         required property int index
         required property string modelData
-        theme: root.theme
+        theme: root.supportTheme
         x: index * (root.popup ? root.popup.cellWidth : 0) + root.theme.gap / 2
         width: (root.popup ? root.popup.cellWidth : 0) - root.theme.gap
         height: parent.height
@@ -2307,18 +2325,18 @@ Item {
 
     Rectangle {
       anchors.fill: parent
-      radius: root.theme.keyRadius + root.theme.gap / 2
-      color: root.theme.solidBase
-      border.width: Math.max(1, root.theme.keyBorderWidth)
-      border.color: root.theme.accent
+      radius: root.supportTheme.keyRadius + root.supportTheme.gap / 2
+      color: root.supportTheme.solidBase
+      border.width: Math.max(1, root.supportTheme.keyBorderWidth)
+      border.color: root.supportTheme.accent
     }
     Text {
       id: eraseText
       textFormat: Text.PlainText
       anchors.centerIn: parent
       text: "\u232b " + root.eraseLabel
-      color: root.theme.accent
-      font.family: root.theme.fontFamily
+      color: root.supportTheme.accent
+      font.family: root.supportTheme.fontFamily
       font.pixelSize: root.eraseFontSize
     }
   }

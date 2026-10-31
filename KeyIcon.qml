@@ -16,6 +16,9 @@ Item {
   // "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
+  // Opt-in luminous rim for Glow's legends; ordinary callers keep their
+  // exact fill/stroke geometry and colour.
+  property color glowColor: "transparent"
 
   // Enter's arrow runs twice as wide as it is tall. The rest are square.
   readonly property real aspect: name === "enter" ? 2 : 1
@@ -240,6 +243,24 @@ Item {
   readonly property string filledPath: name === "settings" ? gearPath()
     : name === "omarchy" ? omarchyPath()
     : name === "menu" ? menuPath() : ""
+
+  // Trace the same vector with a slightly wider, faint stroke. Both line
+  // icons and filled marks get a luminous rim without a blur texture.
+  Shape {
+    anchors.fill: parent
+    visible: icon.glowColor.a > 0 && (icon.filledPath !== "" || icon.strokedPath !== "")
+    rotation: icon.isArrow ? icon.arrowTurn[icon.name] : 0
+    preferredRendererType: Shape.CurveRenderer
+
+    ShapePath {
+      fillColor: "transparent"
+      strokeColor: icon.glowColor
+      strokeWidth: (icon.filledPath !== "" ? 0 : icon.stroke) + 1.4
+      capStyle: ShapePath.RoundCap
+      joinStyle: ShapePath.RoundJoin
+      PathSvg { path: icon.filledPath !== "" ? icon.filledPath : icon.strokedPath }
+    }
+  }
 
   Shape {
     anchors.fill: parent

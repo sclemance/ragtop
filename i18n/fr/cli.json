@@ -110,5 +110,7 @@
   "uninstall.plugin": "Suppression du plugin",
   "uninstall.rule": "Suppression de la règle d'accès au capteur",
   "uninstall.ruleNone": "non installée, rien à supprimer",
-  "uninstall.rulePassword": "la suppression de la règle d'accès au capteur demande votre mot de passe"
+  "uninstall.rulePassword": "la suppression de la règle d'accès au capteur demande votre mot de passe",
+  "setup.overlaysFailed": "La modification des superpositions a échoué. Consultez le journal de configuration.",
+  "uninstall.overlaysFailed": "Le nettoyage des superpositions a échoué. Ragtop est conservé pour que les clones restants fonctionnent. Résolvez les modifications signalées puis relancez la désinstallation."
 }

@@ -1,0 +1,15 @@
+name = "Focus"
+
+# Opaque, calm faces with full-strength legends and distinct boundaries.
+# Strong contrast is opt-in; the other themes retain their usual labels.
+shape = "rounded"
+radius = 6
+relief = "flat"
+fill = "surface"
+contrast = "strong"
+size = 100
+key-transparency = 0
+border-width = 2
+labels = "large"
+special-keys = "off"
+blur = false

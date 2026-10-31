@@ -3,8 +3,8 @@
 # menu, emoji picker, clipboard picker, polkit password prompt and image
 # picker) and its lock screen, patched for tablets.
 #
-# While Ragtop reports tablet mode (via $XDG_RUNTIME_DIR/ragtop-mode),
-# each clone:
+# While the Keyboard setting enables the keyboard (Always On, or Follow
+# Sensor with tablet mode from $XDG_RUNTIME_DIR/ragtop-mode), each clone:
 #   - takes keyboard focus on demand instead of exclusively. Hyprland routes
 #     every touch to a layer surface with exclusive focus before hit-testing
 #     anything above it, so with a stock overlay a tap on the on-screen
@@ -12,7 +12,7 @@
 #     focus when the overlay opens and still receives typed keys.
 #   - respects reserved screen space, so it sits above the keyboard instead of
 #     running underneath it.
-# In laptop mode each behaves exactly like the stock overlay: an on-demand
+# With the keyboard disabled each behaves like the stock overlay: an on-demand
 # overlay can lose focus to a window under the mouse on another monitor.
 # Focus approach from Gimbal (MIT): github.com/mechanicsunlocked/gimbal
 #
@@ -27,7 +27,7 @@
 #
 # The lock screen is a session lock, which hides every other surface, the
 # on-screen keyboard included, so its clone instead loads Ragtop's own
-# LockKeyboard.qml at the bottom of the screen while in tablet mode.
+# LockKeyboard.qml at the bottom, following Ragtop's Keyboard setting.
 #
 # Clones stop receiving Omarchy's updates, so `sync` re-clones and re-patches
 # any whose built-in has changed. `install` registers it as an Omarchy
@@ -49,7 +49,7 @@ overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitA
 
 # Bumped whenever the patches below change, so `sync` re-clones a clone that
 # was made by an older Ragtop even though Omarchy's own file hasn't moved.
-patch_revision=4
+patch_revision=6
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 omarchy_root="${OMARCHY_PATH:-/usr/share/omarchy}"
@@ -202,7 +202,7 @@ import Quickshell
 import Quickshell.Io'
 stock_lock_view='    BorderSurface {
       id: inputField'
-patched_lock_view="    $mode_file_view
+legacy_lock_view_v4="    $mode_file_view
     // Ragtop: an on-screen keyboard for the lock screen in tablet mode.
     Loader {
       anchors.left: parent.left
@@ -214,7 +214,74 @@ patched_lock_view="    $mode_file_view
     }
     BorderSurface {
       id: inputField"
-legacy_lock_view=${patched_lock_view/"$mode_file_view"/"$legacy_mode_file_view"}
+legacy_lock_view=${legacy_lock_view_v4/"$mode_file_view"/"$legacy_mode_file_view"}
+
+# The lock keyboard follows the same policy as the desktop keyboard. Read
+# only the setting here: the lock screen must also work without the desktop
+# keyboard surface or its service. Ordinary overlays share this policy so
+# Always On works in laptop mode and Never restores stock focus.
+lock_settings_view=$(cat <<'LOCK_SETTINGS'
+    FileView {
+      id: ragtopKeyboardSettings
+      property string mode: "sensor"
+      readonly property bool available: mode === "on" || (mode === "sensor" && ragtopMode.tablet)
+      path: Quickshell.env("HOME") + "/.config/ragtop/settings.conf"
+      watchChanges: true
+      printErrors: false
+      onFileChanged: reload()
+      onLoaded: {
+        ragtopSettingsRetry.stop()
+        var value = "sensor"
+        text().split("\n").forEach(function(line) {
+          var eq = line.indexOf("=")
+          if (eq > 0 && line.slice(0, eq).trim() === "keyboard")
+            value = line.slice(eq + 1).trim()
+        })
+        mode = value === "on" || value === "off" ? value : "sensor"
+      }
+      onLoadFailed: {
+        mode = "sensor"
+        ragtopSettingsRetry.start()
+      }
+    }
+    Timer {
+      id: ragtopSettingsRetry
+      interval: 3000
+      repeat: true
+      onTriggered: ragtopKeyboardSettings.reload()
+    }
+LOCK_SETTINGS
+)
+patched_lock_view="    $mode_file_view
+$lock_settings_view
+    // Ragtop: Always On, Never, or automatic with tablet mode.
+    Loader {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      active: ragtopKeyboardSettings.available
+      source: \"file://\" + Quickshell.env(\"HOME\") + \"/.config/omarchy/plugins/sclemance.ragtop/LockKeyboard.qml\"
+      onLoaded: item.view = root
+    }
+    BorderSurface {
+      id: inputField"
+
+# Revisions 4–5 used only physical tablet mode. Keep their exact patch text
+# for provenance checks before switching ordinary overlays to Keyboard policy.
+previous_focus=$patched_focus
+previous_picker_focus=$patched_picker_focus
+previous_exclusion=$patched_exclusion
+previous_window=$patched_window
+patched_focus=${patched_focus//ragtopMode.tablet/ragtopKeyboardSettings.available}
+patched_focus="$patched_focus
+$lock_settings_view"
+patched_picker_focus=${patched_picker_focus//ragtopMode.tablet/ragtopKeyboardSettings.available}
+patched_picker_focus="$patched_picker_focus
+$lock_settings_view"
+patched_exclusion=${patched_exclusion//ragtopMode.tablet/ragtopKeyboardSettings.available}
+patched_window=${patched_window/ragtopTablet: ragtopMode.tablet/ragtopTablet: ragtopKeyboardSettings.available}
+patched_window="$patched_window
+$lock_settings_view"
 
 # Per-overlay paths and patch (stock/patched text pairs), set by select_overlay.
 # `window_patch` is what an entry file gets instead of `patch` when its
@@ -232,7 +299,7 @@ select_overlay() {
   window_patch=()
   if [[ $name == lock ]]; then
     patch=("$stock_lock_import" "$patched_lock_import" "$stock_lock_view" "$patched_lock_view")
-    legacy=("$stock_lock_view" "$legacy_lock_view")
+    legacy=("$stock_lock_view" "$legacy_lock_view_v4" "$stock_lock_view" "$legacy_lock_view")
   elif [[ $name == menu ]]; then
     patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion"
            "$stock_menu_apps" "$patched_menu_apps")
@@ -247,6 +314,10 @@ select_overlay() {
     # The password prompt is still a window of its own at 7cc6a55.
     [[ $name == polkit ]] || window_patch=("$stock_window" "$patched_window")
     legacy=("$stock_focus" "$legacy_focus")
+  fi
+  if [[ $name != lock ]]; then
+    legacy+=("$stock_focus" "$previous_focus" "$stock_picker_focus" "$previous_picker_focus"
+             "$stock_exclusion" "$previous_exclusion" "$stock_window" "$previous_window")
   fi
   clone_id="$USER.$name"
   clone_dir="$plugins_dir/$clone_id"
@@ -299,7 +370,22 @@ EOF
 # command rewrites it) and our own marker.
 dir_hash() {
   (cd "$1" && find . -type f ! -name manifest.json ! -name .ragtop-base -print0 |
-    sort -z | xargs -0 sha256sum) | sha256sum | cut -d' ' -f1
+    LC_ALL="${2:-C}" sort -z | xargs -0 sha256sum) | sha256sum | cut -d' ' -f1
+}
+
+# Revisions through 5 sorted paths using the caller's locale. A shell launched
+# from the desktop and one launched by an update hook can disagree. Accept
+# those historical orderings only while verifying old records; all new hashes
+# use C. File contents still have to match the recorded digest exactly.
+dir_matches_base() {
+  local directory=$1 wanted=$2 collation
+  [[ $(dir_hash "$directory") == "$wanted" ]] && return 0
+  [[ $(base_revision) =~ ^[1-5]$ ]] || return 1
+  while IFS= read -r collation; do
+    [[ $collation == C || $collation == C.utf8 || $collation == POSIX ]] && continue
+    [[ $(dir_hash "$directory" "$collation") == "$wanted" ]] && return 0
+  done < <(locale -a)
+  return 1
 }
 
 file_hash() { sha256sum "$1" | cut -d' ' -f1; }
@@ -345,16 +431,17 @@ patch_clone() {
   fi
 }
 
-clone_unpatched_hash() {
-  local tmp
+clone_matches_base() {
+  local tmp result=1
   tmp=$(mktemp -d)
   cp -a "$clone_dir/." "$tmp/"
   replace "$tmp/$entry" revert "${patch[@]}" "${window_patch[@]}" "${legacy[@]}"
   # The window Ragtop added is no part of the built-in. window_is_ours
   # answers for it.
   [[ -z $(base_window_hash) ]] || rm -f "$tmp/$helper_name"
-  dir_hash "$tmp"
+  if dir_matches_base "$tmp" "$(base_hash)"; then result=0; fi
   rm -rf "$tmp"
+  return "$result"
 }
 
 is_patched() { [[ -f $clone_dir/$entry ]] && grep -q 'id: ragtopMode' "$clone_dir/$entry"; }
@@ -376,7 +463,7 @@ base_window_hash() { sed -n 3p "$base_file" 2>/dev/null; }
 
 # True when nobody but us changed the clone since it was made.
 clone_is_ours() {
-  is_patched && [[ -f $base_file ]] && window_is_ours && [[ $(clone_unpatched_hash) == "$(base_hash)" ]]
+  is_patched && [[ -f $base_file ]] && window_is_ours && clone_matches_base
 }
 
 # The shared OverlayWindow is as much what a clone was made from as the
@@ -387,7 +474,7 @@ built_in_window_hash() {
   if uses_shared_window "$builtin_dir/$entry"; then file_hash "$shared_window" 2>/dev/null || echo missing; fi
 }
 built_in_unchanged() {
-  [[ $(dir_hash "$builtin_dir") == "$(base_hash)" && $(built_in_window_hash) == "$(base_window_hash)" ]]
+  dir_matches_base "$builtin_dir" "$(base_hash)" && [[ $(built_in_window_hash) == "$(base_window_hash)" ]]
 }
 patches_current() { [[ $patch_revision == "$(base_revision)" ]]; }
 in_sync() { built_in_unchanged && patches_current; }
@@ -484,7 +571,7 @@ EOF
 
 install_hook() {
   mkdir -p "$(dirname "$hook_file")"
-  printf '#!/bin/bash\n# Keeps Ragtop'"'"'s overlay clones in step with Omarchy updates.\n"%s" sync\n' "$self" >"$hook_file"
+  printf '#!/bin/bash\n# Keeps approved Ragtop overlays in step with Omarchy updates.\nhelper=%q\n[[ -x $helper ]] || exit 0\nexec "$helper" sync\n' "$self" >"$hook_file"
   chmod +x "$hook_file"
 }
 
@@ -569,6 +656,123 @@ sync_one() {
   synced=1
 }
 
+# Refresh approved clones without repeatedly disabling/enabling their IDs.
+# Preparation is hidden from Omarchy's watcher; only complete replacements
+# are published, in a short group of directory exchanges. Exceptional cases
+# (interrupted installs or an unsupported new upstream shape) retain the
+# existing recovery/fallback path.
+sync_batch() {
+  local batch_dir="" spec live record message result=0
+  local -a records=() messages=()
+  for spec in "${selected[@]}"; do
+    select_overlay "$spec"
+    if ! is_patched || in_sync || ! clone_is_ours; then
+      sync_one || result=1
+      continue
+    fi
+    if [[ -z $batch_dir ]]; then
+      batch_dir=$(mktemp -d "$plugins_dir/.ragtop-sync.XXXXXX") || return 1
+    fi
+    live=$clone_dir
+    if ! record=$(/usr/bin/python3 "$repo/overlay-publish.py" stage "$builtin_dir" "$live" "$batch_dir/$clone_id"); then
+      result=1
+      continue
+    fi
+    message="Re-cloned $clone_id from the updated built-in."
+    if built_in_unchanged; then message="Re-patched $clone_id for this version of Ragtop."; fi
+    clone_dir="$batch_dir/$clone_id"
+    base_file="$clone_dir/.ragtop-base"
+    if write_base && patch_clone && omarchy-plugin-validate "$clone_dir"; then
+      records+=("$record")
+      messages+=("$message")
+    else
+      # An obsolete authentication clone must not remain in service after
+      # an upstream shape change that cannot be patched. Existing removal
+      # restores the built-in and reports the compatibility failure.
+      select_overlay "$spec"
+      sync_one || result=1
+    fi
+  done
+  if (( ${#records[@]} )); then
+    if /usr/bin/python3 "$repo/overlay-publish.py" publish "${records[@]}"; then
+      printf '%s\n' "${messages[@]}"
+      echo "Applied ${#records[@]} overlay replacements together. Previous copies: $batch_dir"
+      synced=1
+    else
+      echo "Overlay batch failed; inspect the staged/previous copies in $batch_dir" >&2
+      result=1
+    fi
+  fi
+  return "$result"
+}
+
+# One user-approved selection, including first-time additions/removals.
+# Nothing live is touched until every requested change is prepared.
+apply_selection() {
+  local additions=$1 removals=$2 wanted spec operation batch_dir record live found
+  local -a operations=() records=()
+  for operation in add remove; do
+    wanted=$additions
+    [[ $operation == add ]] || wanted=$removals
+    for name in $wanted; do
+      found=""
+      for spec in "${overlays[@]}"; do [[ ${spec%%:*} == "$name" ]] && found=$spec; done
+      [[ -n $found ]] || { echo "Unknown overlay: $name" >&2; return 2; }
+      [[ " $additions " != *" $name "* || " $removals " != *" $name "* ]] || {
+        echo "Overlay cannot be both added and removed: $name" >&2; return 2;
+      }
+      [[ " ${operations[*]} " == *" $operation:$found "* ]] || operations+=("$operation:$found")
+    done
+  done
+  if (( ${#operations[@]} == 0 )); then return 0; fi
+  # Switching the active session-lock implementation while locked is unsafe.
+  if command -v omarchy-hyprland-session-locked >/dev/null; then
+    local lock_state=0
+    omarchy-hyprland-session-locked || lock_state=$?
+    if (( lock_state != 1 )); then
+      echo "Overlay selection requires a confirmed unlocked desktop session; unlock it and retry from that session." >&2
+      return 1
+    fi
+  fi
+  batch_dir=$(mktemp -d "$plugins_dir/.ragtop-apply.XXXXXX") || return 1
+  for spec in "${operations[@]}"; do
+    operation=${spec%%:*}
+    select_overlay "${spec#*:}"
+    live=$clone_dir
+    if [[ $operation == add ]]; then
+      if is_patched; then continue; fi
+      if [[ -e $live || -L $live ]]; then
+        echo "$clone_id is not an approved Ragtop clone; nothing changed." >&2
+        return 1
+      fi
+      record=$(/usr/bin/python3 "$repo/overlay-publish.py" stage "$builtin_dir" "$live" "$batch_dir/$clone_id") || return 1
+      clone_dir="$batch_dir/$clone_id"
+      base_file="$clone_dir/.ragtop-base"
+      write_base && patch_clone && omarchy-plugin-validate "$clone_dir" || {
+        echo "Could not prepare $clone_id; no overlay selections changed." >&2
+        return 1
+      }
+    else
+      if [[ ! -e $live && ! -L $live ]]; then continue; fi
+      if ! clone_is_ours; then
+        echo "$clone_id has edits besides Ragtop's; no overlay selections changed." >&2
+        return 1
+      fi
+      record=$(/usr/bin/python3 "$repo/overlay-publish.py" remove "$live" "$batch_dir/$clone_id") || return 1
+    fi
+    records+=("$record")
+  done
+  if (( ${#records[@]} )); then
+    /usr/bin/python3 "$repo/overlay-publish.py" apply "$HOME/.config/omarchy/shell.json" \
+      "$omarchy_root/config/omarchy/shell.json" "${records[@]}" || return 1
+    echo "Applied ${#records[@]} overlay selection changes together. Backups: $batch_dir"
+  fi
+  local remaining=0
+  for spec in "${overlays[@]}"; do select_overlay "$spec"; is_patched && remaining=1; done
+  if (( remaining )); then install_hook || return 1; else rm -f "$hook_file" || return 1; fi
+  return 0
+}
+
 remove_one() {
   if [[ ! -d $clone_dir ]]; then
     echo "No $clone_id clone installed."
@@ -639,6 +843,23 @@ tappable_one() {
 command="${1:-install}"
 shift || true
 
+# Startup sync, the update hook and Setup can overlap. Serialize mutations
+# across processes so one never removes a clone another is still patching.
+# Read-only probes do not create a lock or change the plugin directory.
+case "$command" in
+  install|sync|remove|apply)
+    mkdir -p "$plugins_dir"
+    exec 9>"$plugins_dir/.ragtop-overlays.lock"
+    flock -x 9
+    ;;
+esac
+
+if [[ $command == apply ]]; then
+  [[ $# == 2 ]] || { echo 'Usage: overlay-clones.sh apply "add names" "remove names"' >&2; exit 2; }
+  apply_selection "$1" "$2"
+  exit $?
+fi
+
 selected=()
 if (( $# == 0 )); then
   selected=("${overlays[@]}")
@@ -647,17 +868,19 @@ else
     match=""
     for o in "${overlays[@]}"; do [[ ${o%%:*} == "$want" ]] && match="$o"; done
     [[ -n $match ]] || { echo "Unknown overlay: $want (expected: menu, emojis, clipboard, polkit, image-picker, lock)" >&2; exit 2; }
-    selected+=("$match")
+    [[ " ${selected[*]} " == *" $match "* ]] || selected+=("$match")
   done
 fi
 
 status=0
 synced=0
+if [[ $command == sync ]]; then
+  sync_batch || status=1
+else
 for o in "${selected[@]}"; do
   select_overlay "$o"
   case "$command" in
     install) install_one || status=1 ;;
-    sync) sync_one || status=1 ;;
     remove) remove_one || status=1 ;;
     status) status_one ;;
     installed) is_patched || status=1 ;;
@@ -665,6 +888,7 @@ for o in "${selected[@]}"; do
     *) echo "Usage: $0 [install|sync|remove|status|installed|tappable] [menu|emojis|clipboard|polkit|image-picker|lock ...]" >&2; exit 2 ;;
   esac
 done
+fi
 
 case "$command" in
   install)

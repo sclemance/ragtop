@@ -110,5 +110,7 @@
   "uninstall.plugin": "Removing the plugin",
   "uninstall.rule": "Removing the switch access rule",
   "uninstall.ruleNone": "not installed, nothing to remove",
-  "uninstall.rulePassword": "removing the switch access rule needs your password"
+  "uninstall.rulePassword": "removing the switch access rule needs your password",
+  "setup.overlaysFailed": "Overlay changes failed. See the setup log for details.",
+  "uninstall.overlaysFailed": "Overlay cleanup did not finish. Ragtop was kept so remaining clones still work. Resolve the reported edits and retry uninstall."
 }

@@ -3,7 +3,7 @@ import Quickshell
 
 // The suggestion strip's hit testing: which item a touch at a given x
 // means, with the input method's page arrows at the ends and the list
-// scrolled. What it looks like is not tested here.
+// scrolled, and whether cell widths follow changes to the text's font.
 ShellRoot {
   id: test
 
@@ -23,6 +23,9 @@ ShellRoot {
     property color outline: "gray"
     property color key: "white"
     property real keyBorderWidth: 1
+    property real keyDepth: 0
+    property real maxDepthFraction: 0.25
+    property real pressSink: 0.6
   }
 
   property SuggestionStrip strip: SuggestionStrip {
@@ -39,6 +42,8 @@ ShellRoot {
     return out
   }
   function middleOf(i) { return test.strip.cells[i].x + test.strip.cells[i].width / 2 }
+  property real flatCellWidth: 0
+  property int compactTextSize: 0
 
   Component.onCompleted: t.run([
     [0, function() {
@@ -101,6 +106,38 @@ ShellRoot {
       t.ok(!test.strip.overflows, "three items fit, so no chevrons")
       test.strip.items = []
       t.equal(test.strip.cellAt(10), -1, "with nothing to choose, nothing is chosen")
+    }],
+    [0, function() {
+      test.strip.height = 30
+      test.strip.textHeight = 30
+      test.strip.items = [{ text: "suggestions", note: "" }]
+    }],
+    [0, function() {
+      test.flatCellWidth = test.strip.cells[0].width
+      fakeTheme.keyDepth = 8
+    }],
+    [0, function() {
+      t.ok(test.strip.cells[0].width < test.flatCellWidth,
+           "same word refits when raised relief reduces the font, without changing items or padding")
+      test.compactTextSize = test.strip.textSize
+      test.strip.height = 60
+    }],
+    [0, function() {
+      t.equal(test.strip.textSize, test.compactTextSize,
+              "a taller touch target keeps the compact lettering")
+      fakeTheme.keyDepth = 0
+    }],
+    [0, function() {
+      t.equal(test.strip.cells[0].width, test.flatCellWidth,
+              "same word regains its width when switching back to a flat theme")
+      t.equal(test.strip.opacity, 1, "ordinary strip is fully visible")
+      test.strip.entranceProgress = 0.5
+      t.equal(test.strip.opacity, 0.5, "tour entrance fades the actual strip")
+      t.equal(test.strip.mapToItem(null, 0, 0).y, test.strip.height * 0.2,
+              "tour entrance translates content without moving its logical slot")
+      t.equal(test.strip.y, 0, "strip slot stays fixed during entrance")
+      test.strip.entranceProgress = 1
+      t.equal(test.strip.mapToItem(null, 0, 0).y, 0, "settled strip returns to its slot")
     }]
   ])
 }

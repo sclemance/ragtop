@@ -12,6 +12,10 @@
 #        ragtop predictions (get | is <which> | set <which> | enabled | enable | disable | toggle)
 #        ragtop swipe (enabled | enable | disable | toggle)
 #        ragtop assists (enabled | enable | disable | toggle)   capitals and double-space full stops
+#        ragtop backlight-animation (enabled | enable | disable | toggle)   off by default
+#        ragtop mechanical-backlight (enabled | enable | disable | toggle)
+#        ragtop mechanical-shine-through (enabled | enable | disable | toggle)
+#        ragtop mechanical-material (get | is <material> | set <material>)
 #        ragtop typing-memory (get | is <memory> | set <memory>)
 #        ragtop words (languages | status | install [lang] | decline <lang> | remove [lang])
 #        ragtop update (check | run)       what an update would bring; Omarchy's updater
@@ -44,8 +48,8 @@
 # Rotation <mode> is locked, unlocked, or auto, which turns the screen while
 # in tablet mode and holds it still in laptop mode. The keyboard's own <mode>
 # is sensor (on offer in tablet mode, which is what it has always done), on
-# (always, laptop mode included) or off (never), and it decides only the
-# keyboard: the patched overlays and rotation still follow tablet mode.
+# (always, laptop mode included) or off (never). Patched overlays follow
+# keyboard availability; rotation still follows tablet mode.
 #
 # display <name> is which monitor Ragtop puts itself on: auto, or a monitor
 # name as hyprctl monitors prints it. Auto takes the monitor the compositor
@@ -136,23 +140,18 @@ set_overlay() {
   label "$overlay" >/dev/null   # a known overlay, or a usage error
   "$clones" installed "$overlay" && was=1
   if (( on )); then
-    "$clones" install "$overlay" >/dev/null
+    "$clones" apply "$overlay" "" >/dev/null
     record
     # A whole sentence for each, never a name put into one: other languages
     # do not put it where English does, or inflect it the same.
     notify "$(t "overlay.on.$overlay")"
   else
-    "$clones" remove "$overlay" >/dev/null
+    "$clones" apply "" "$overlay" >/dev/null
     record
     notify "$(t "overlay.off.$overlay")"
   fi
-  # Omarchy only picks clones up, or drops them, when the shell starts, so it
-  # restarts when one came or went, and once more if the first lost the race
-  # with the old shell (setup-apply.sh says why).
-  local now=0
-  "$clones" installed "$overlay" && now=1
-  (( now != was )) || return 0
-  ( omarchy-restart-shell || { sleep 2; omarchy-restart-shell; } ) >/dev/null 2>&1 &
+  # The batch's file changes trigger one native plugin reload.
+
 }
 
 # get <key> <default>
@@ -431,7 +430,25 @@ choice() {
   local key="$1" default="$2"
   case "${3:-}" in
     get) get "$key" "$default" ;;
-    is) [[ -n ${4:-} ]] || usage; [[ $(get "$key" "$default") == "$4" ]] ;;
+    is)
+      [[ -n ${4:-} ]] || usage
+      if [[ $key == size-adjust ]]; then
+        local current wanted
+        current=$(size_value "$(get "$key" "$default")")
+        wanted=$(size_value "$4")
+        if [[ $wanted == custom ]]; then
+          [[ $current =~ ^[0-9]+$ && ! $current =~ ^(78|88|100|115|130)$ ]]
+        else [[ $current == "$wanted" ]]; fi
+      else [[ $(get "$key" "$default") == "$4" ]]; fi ;;
+    cycle)
+      local current next
+      current=$(get "$key" "$default")
+      case "$key $current" in
+        "keyboard sensor") next=on ;; "keyboard on") next=off ;; "keyboard "*) next=sensor ;;
+        "rotation auto") next=locked ;; "rotation locked") next=unlocked ;; "rotation "*) next=auto ;;
+        *) usage ;;
+      esac
+      choice "$key" "$default" set "$next" ;;
     set)
       local notice
       notice=$(choice_notice "$key" "${4:-}") || usage
@@ -445,8 +462,16 @@ choice() {
   esac
 }
 
+size_value() {
+  case "$1" in
+    smallest) echo 78 ;; smaller) echo 88 ;; regular) echo 100 ;;
+    larger) echo 115 ;; largest) echo 130 ;; *) echo "$1" ;;
+  esac
+}
+
 choice_notice() {
   case "$1 $2" in
+    "mechanical-material plain"|"mechanical-material pudding"|"mechanical-material frosted"|"mechanical-material translucent") : ;;
     "tablet-mode auto") t choice.tabletMode.auto ;;
     "tablet-mode on") t choice.tabletMode.on ;;
     "tablet-mode off") t choice.tabletMode.off ;;
@@ -524,6 +549,9 @@ if os.path.exists(settings_path):
         key, value = line.split("=", 1)
         if key in ("transparency", "key-transparency") and value in TRANS:
             value, changed = str(TRANS[value]), True
+        elif key == "theme" and value in ("sculpted", "keycap") and not os.path.isfile(
+                os.path.join(config_dir, "themes", value, "ragtop.toml")):
+            value, changed = {"sculpted": "mechanical", "keycap": "chiclet"}[value], True
         elif key == "size" and value in SIZE:
             value, changed = str(SIZE[value]), True
         elif key == "preset":
@@ -586,8 +614,20 @@ PYEOF
 
 # Themes: the user's own in ~/.config/ragtop/themes/ win over Ragtop's, the
 # same two places Omarchy looks for its own themes.
+theme_slug() {
+  # Preserve a user theme with the old name; otherwise retain the old CLI alias.
+  if [[ $1 == sculpted && ! -f "$HOME/.config/ragtop/themes/sculpted/ragtop.toml" ]]; then
+    echo mechanical
+  elif [[ $1 == keycap && ! -f "$HOME/.config/ragtop/themes/keycap/ragtop.toml" ]]; then
+    echo chiclet
+  else
+    echo "$1"
+  fi
+}
+
 theme_file() {
   [[ $1 =~ ^[a-z0-9-]{1,32}$ ]] || return 1
+  set -- "$(theme_slug "$1")"
   local f
   for f in "$HOME/.config/ragtop/themes/$1/ragtop.toml" "$repo/themes/$1/ragtop.toml"; do
     [[ -f $f ]] && { echo "$f"; return 0; }
@@ -607,8 +647,7 @@ themes() {
 # the menu shows is what the keyboard does.
 apply_theme() {
   local name
-  name=$(locked theme_values "$1" "$settings") || exit 2
-  put theme "$1"
+  name=$(locked theme_values "$(theme_slug "$1")" "$settings") || exit 2
   notify "$(t theme.applied "$name")"
 }
 
@@ -624,25 +663,30 @@ show_theme() {
 theme_values() {
   local file
   file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; return 2; }
-  /usr/bin/python3 - "$file" "$2" <<'EOF'
+  /usr/bin/python3 - "$file" "$2" "$1" <<'EOF'
 import os, re, sys, tempfile, tomllib
 
-path, settings = sys.argv[1:]
+path, settings, slug = sys.argv[1:]
 # Only these keys, only these values: a theme can't smuggle anything else in.
 choices = {
     "shape": ["omarchy", "rounded", "pill", "angular", "bevel"],
     "relief": ["flat", "raised"],
-    "fill": ["auto", "dark", "light", "outline"],
+    "fill": ["auto", "dark", "light", "surface", "outline"],
+    "contrast": ["normal", "strong"],
+    "backlight": ["off", "accent"],
+    "backlight-motion": ["off", "ripple"],
+    "keycap-material": ["solid", "pudding", "frosted", "translucent"],
+    "keycap-profile": ["standard", "sculpted"],
 
     "labels": ["small", "normal", "large"],
     "special-keys": ["off", "darker", "lighter"],
     "blur": ["on", "off"],
 }
-numbers = {"depth": (0, 10), "chamfer": (0, 20),
+numbers = {"depth": (0, 10), "chamfer": (0, 20), "wall-opacity": (0, 100),
            "key-fill-alpha": (0, 1), "border-width": (0, 4), "radius": (0, 30),
            # 0 is solid and 100 is gone. Size is a percentage of the usual.
            "key-transparency": (0, 100), "size": (60, 160)}
-colors = ("key-color", "label-color")
+colors = ("key-color", "label-color", "backlight-press-color")
 
 try:
     raw = tomllib.load(open(path, "rb"))
@@ -701,8 +745,8 @@ if settings == "-":
 lines = []
 if os.path.exists(settings):
     lines = [l for l in open(settings).read().split("\n")
-             if l and l.split("=", 1)[0] not in look_keys]
-lines += [f"{k}={v}" for k, v in sorted(values.items())]
+             if l and l.split("=", 1)[0] not in look_keys | {"theme"}]
+lines += [f"{k}={v}" for k, v in sorted(values.items())] + [f"theme={slug}"]
 os.makedirs(os.path.dirname(settings), exist_ok=True)
 fd, tmp = tempfile.mkstemp(prefix=os.path.basename(settings) + ".",
                            dir=os.path.dirname(settings))
@@ -1032,7 +1076,18 @@ case "${1:-} ${2:-}" in
   "typing-memory "*) choice typing-memory full "${2:-}" "${3:-}" ;;
   "theme list") themes ;;
   "theme get") get theme omarchy ;;
-  "theme is") [[ -n ${3:-} ]] || usage; [[ $(get theme omarchy) == "$3" ]] ;;
+  "theme is") [[ -n ${3:-} ]] || usage; [[ $(theme_slug "$(get theme omarchy)") == "$(theme_slug "$3")" ]] ;;
+  "theme step")
+    [[ ${3:-} == 1 || ${3:-} == -1 ]] || usage
+    mapfile -t available_themes < <(themes)
+    ((${#available_themes[@]})) || exit 1
+    current_theme=$(theme_slug "$(get theme omarchy)")
+    theme_at=0
+    for i in "${!available_themes[@]}"; do
+      [[ ${available_themes[$i]} != "$current_theme" ]] || theme_at=$i
+    done
+    theme_at=$(( (theme_at + $3 + ${#available_themes[@]}) % ${#available_themes[@]} ))
+    apply_theme "${available_themes[$theme_at]}" ;;
   "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
   "theme show") [[ -n ${3:-} ]] || usage; show_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
@@ -1040,6 +1095,9 @@ case "${1:-} ${2:-}" in
   "predictions "*) predictions "${2:-}" "${3:-}" ;;
   "swipe "*) swipe "${2:-}" ;;
   "assists "*) switch assists "${2:-}" ;;
+  "mechanical-material "*) choice mechanical-material plain "${2:-}" "${3:-}" ;;
+  "mechanical-backlight "*|"mechanical-shine-through "*) switch "$1" "${2:-}" on ;;
+  "backlight-animation "*) switch backlight-animation "${2:-}" off ;;
   "words "*) words "${2:-}" "${3:-}" ;;
   "update "*) update "${2:-}" ;;
   # The tour itself is the shell's; this only remembers that it was taken or

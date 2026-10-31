@@ -1,0 +1,544 @@
+import QtQuick
+import QtQuick.Window
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import "ThemeData.js" as Data
+import "KeyContrast.js" as Contrast
+import "GlowWave.js" as Wave
+import "GlowColors.js" as GlowColors
+
+ShellRoot {
+  id: root
+  Harness { id: t }
+  property var lookSettings: ({})
+  property var settings: ({})
+  property var previewSettings: ({})
+  property bool sizeAuto: false
+  property int autoSizePercent: 100
+  function sizePercent(value) { return 100 }
+  // FROM SOURCE: look blurKeyboard
+
+  property KeyboardTheme skin: KeyboardTheme { look: root.look }
+  property Window stage: Window { visible: true; width: 100; height: 90 }
+  property KeyboardKey key: KeyboardKey { parent: root.stage.contentItem; theme: root.skin; width: 70; height: 60; label: "a"; hint: "é" }
+  property SupportingTheme support: SupportingTheme { keyboardScale: root.skin.keyScale }
+  property KeyboardKey popupKey: KeyboardKey { parent: root.stage.contentItem; theme: root.support; width: 70; height: 35; label: "é"; opaque: true }
+  property SuggestionStrip supportStrip: SuggestionStrip {
+    parent: root.stage.contentItem
+    theme: root.support
+    width: 200; height: 25
+    items: [{text:"suggestion",note:""},{text:"another",note:""},{text:"longer",note:""}]
+    hasPrev: true; hasNext: true
+  }
+  property LockKeyboard lock: LockKeyboard { width: 800; height: 350 }
+  property var palettes: [
+    ["#05182e", "#f6dcac", "#faa968"],
+    ["#eff1f5", "#4c4f69", "#1e66f5"],
+    ["#000000", "#ffffff", "#888888"],
+    ["#777777", "#888888", "#999999"]
+  ]
+  function palette(i) {
+    Color.background = palettes[i][0]
+    Color.foreground = palettes[i][1]
+    Color.accent = palettes[i][2]
+  }
+  // Independent sRGB calculation for the actual rendered face/label pair.
+  function light(c) {
+    function channel(v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+    return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+  }
+  function ratio(text, face) {
+    var a = light(Qt.tint(face, text)), b = light(face)
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+  }
+  function near(a, b) { return Math.abs(a - b) < 0.001 }
+  function state() {
+    return JSON.stringify([String(skin.key), String(skin.specialKey), String(skin.specialText),
+      String(skin.keyBorder), String(skin.latchedKey), String(skin.lockedKey),
+      skin.hintOpacity, skin.keyRadius, skin.keyDepth, skin.labelSize])
+  }
+  function lockState() {
+    return JSON.stringify([String(lock.keyColor), String(lock.specialTextColor),
+      String(lock.keyBorder), String(lock.latchedKeyColor), lock.keyRadius, lock.keyDepth])
+  }
+  function lockKeys(item) {
+    var found = []
+    for (var i = 0; i < item.children.length; i++) {
+      var child = item.children[i]
+      if (child.restingFill !== undefined && child.labelColor !== undefined) found.push(child)
+      found = found.concat(lockKeys(child))
+    }
+    return found
+  }
+  function glowLoader(key) {
+    for (var i = 0; i < key.children.length; i++) {
+      var child = key.children[i]
+      if (child.sourceComponent !== undefined && child.active !== undefined) return child
+    }
+    throw new Error("Missing glow loader")
+  }
+  property string before: ""
+  property string lockBefore: ""
+  function ripple() {
+    for (var i = 0; i < key.children.length; i++) {
+      var child = key.children[i]
+      if (child.item && child.item.pulse !== undefined) return child.item
+    }
+    return null
+  }
+  property GlowPalette livePalette: GlowPalette {}
+  property Process replacePalette: Process {
+    command: ["python3", "-c",
+      "from pathlib import Path; import sys; p=Path(sys.argv[1]); (p/'theme').rename(p/'old-theme'); (p/'theme').mkdir(); (p/'theme/colors.toml').write_text('mode = \"dark\"\\naccent = \"#123456\"\\nblue = \"#123456\"\\nbright_blue = \"#88bbff\"\\nbright_yellow = \"#ffee88\"\\n'); (p/'theme.name').write_text('second\\n')",
+      Quickshell.env("HOME") + "/.local/state/omarchy/current"]
+  }
+  Component.onCompleted: {
+    var steps = []
+    Object.keys(Data.themes).filter(function(name) { return name !== "focus" }).forEach(function(name) {
+      steps.push([0, function() { root.lookSettings = Data.themes[name] }])
+      steps.push([0, function() {
+        root.lock.style = root.lock.cleanStyle(root.look)
+        root.before = root.state()
+        t.ok(!root.skin.strongContrast, name + " keeps normal contrast by default")
+        t.ok(!root.support.backlit && !root.support.sculpted && root.support.keyDepth === 0,
+          name + " keeps supporting controls flat and unlit")
+        t.equal(root.support.keyScale, root.skin.keyScale, name + " supporting controls preserve size")
+      }])
+      steps.push([0, function() {
+        root.lockBefore = root.lockState()
+        root.lock.style = root.lock.cleanStyle({sizeNudge:root.look.sizeNudge})
+        t.equal(root.lockState(), root.lockBefore, name + " desktop style cannot change lock appearance")
+        t.ok(root.lock.keyDepth === 0 && root.lock.keyColor.a === 1, name + " lock is flat and opaque")
+        root.lookSettings = Object.assign({}, Data.themes[name], { contrast: "normal" })
+        root.lock.style = root.lock.cleanStyle(root.look)
+      }])
+      steps.push([0, function() {
+        t.equal(root.state(), root.before, name + " omitted and explicit normal contrast match")
+        t.equal(root.lockState(), root.lockBefore, name + " lock default treatment is unchanged")
+        root.key.pressed = true
+      }])
+      steps.push([0, function() {
+        t.ok(root.near(root.key.fill.a, root.key.restingFill.a), name + " press preserves face opacity")
+        t.equal(Qt.colorEqual(root.key.fill, root.key.restingFill), Data.themes[name].backlight === "accent",
+                Data.themes[name].backlight === "accent" ? name + " press keeps the cap colour" : name + " press still changes the fill")
+        root.key.pressed = false
+      }])
+      if (Data.themes[name].backlight !== "accent") steps.push([0, function() {
+        t.ok(!root.glowLoader(root.key).active, name + " creates no glow effect")
+        t.ok(root.lockKeys(root.lock).every(function(k) { return k.children.every(function(c) { return c.sourceComponent === undefined }) }), name + " lock has no effect loaders")
+      }])
+    })
+    steps.push([0, function() {
+      root.lookSettings = Data.themes.mechanical
+      root.key.pressed = false
+    }])
+    steps.push([0, function() {
+      var cap = root.key.children.filter(function(c) { return c.objectName === "sculptedCap" })[0]
+      t.ok(root.skin.sculpted && root.key.sculpted && cap.item, "Sculpted activates dedicated vector cap")
+      t.ok(root.skin.capInsetFor(40,36) < 1, "small Sculpted caps leave less than a pixel of extra light space")
+      t.ok(!root.skin.pudding && root.look.keycapMaterial === "solid", "Sculpted uses solid material")
+      t.ok(root.key.fill.a === 1 && cap.item.faceColor.a === 1, "Sculpted face stays opaque")
+      t.ok(cap.item.rearLeft === cap.item.frontLeft && cap.item.rearRight === cap.item.frontRight
+        && root.near(cap.item.rearLeft, cap.item.width-cap.item.rearRight),
+        "SVG profile has centred upright face and symmetric skirt")
+      t.ok(root.key.children.filter(function(c) { return c.objectName === "keySide" }).every(function(c) { return !c.visible }),
+        "ordinary illuminated wall is hidden for Sculpted")
+      root.before = String(cap.item.faceColor)
+      root.key.pressed = true
+    }])
+    steps.push([0, function() {
+      var cap = root.key.children.filter(function(c) { return c.objectName === "sculptedCap" })[0]
+      t.equal(String(cap.item.faceColor), root.before, "Sculpted press preserves plastic colour")
+      t.ok(root.key.faceY > 0 && root.key.faceY < root.key.depth, "Sculpted press compresses but retains solid front wall")
+      root.key.pressed = false
+    }])
+    ;["plain", "pudding", "frosted", "translucent"].forEach(function(material) {
+      ;[false, true].forEach(function(lit) {
+        ;[false, true].forEach(function(shine) {
+          ;[false, true].forEach(function(effects) {
+            steps.push([0, function() {
+              root.previewSettings = {}
+              root.settings = {"backlight-animation":effects ? "on" : "off"}
+              root.lookSettings = Object.assign({}, Data.themes.mechanical, {
+                theme:"mechanical", "mechanical-material":material,
+                "mechanical-backlight":lit ? "on" : "off",
+                "mechanical-shine-through":shine ? "on" : "off"})
+              root.key.rippleEnabled = Qt.binding(function() { return root.skin.ripple })
+              root.key.pressed = false
+            }])
+            steps.push([0, function() {
+              var tag = material + "/" + lit + "/" + shine + "/" + effects
+              var clear = material === "frosted" || material === "translucent"
+              var cap = root.key.children.filter(function(c) { return c.objectName === "sculptedCap" })[0].item
+              t.ok(cap && root.key.sculpted, tag + " keeps Sculpted profile")
+              t.equal(root.key.backlit, lit, tag + " master lighting")
+              t.equal(root.key.illuminated, lit && shine && !clear, tag + " glyph treatment")
+              t.equal(!!root.ripple(), lit && effects, tag + " effect helper lifecycle")
+              t.equal(root.blurKeyboard, material === "frosted" || material === "pudding", tag + " blur capability")
+              t.equal(cap.clearFace, clear, tag + " clear face")
+              t.ok(root.near(cap.topTone("transparent").a, clear ? 0.5 : 1), tag + " face opacity")
+              t.equal(cap.transparentWalls, material !== "plain", tag + " wall material")
+              t.ok(root.near(cap.materialOpacity, 0.5), tag + " wall opacity")
+              t.ok(!cap.layer.enabled && root.key.shineColor.a === 1, tag + " no captures; opaque glyphs")
+              t.ok(!root.support.backlit && !root.popupKey.sculpted, tag + " supporting controls unchanged")
+              root.before = String(cap.faceColor)
+              root.key.pressed = true
+            }])
+            steps.push([0, function() {
+              var cap = root.key.children.filter(function(c) { return c.objectName === "sculptedCap" })[0].item
+              t.equal(String(cap.faceColor), root.before, "press preserves solid plastic with backlight off too")
+              t.ok(root.key.faceY > 0, "unlit and lit materials sink on press")
+              root.key.pressed = false
+              if (root.key.transparentCap) {
+                root.key.kind = "locked"
+                t.equal(String(root.key.materialLight), String(root.key.restingFill), "clear modifier retains its locked colour")
+                t.ok(root.ratio(root.key.labelColor, root.key.materialLight) >= 4.5, "clear locked modifier has contrasting glyph")
+                root.key.kind = "normal"
+              }
+            }])
+          })
+        })
+      })
+    })
+    steps.push([0, function() {
+      root.settings = {}
+      root.previewSettings = {name:"Tour"}
+      root.lookSettings = Object.assign({}, Data.themes.mechanical,
+        {theme:"mechanical", "mechanical-backlight":"off", "mechanical-material":"frosted"})
+    }])
+    steps.push([0, function() {
+      t.ok(root.skin.backlit && root.look.keycapMaterial === "solid", "tour preview uses preset without saved Mechanical overrides")
+      root.previewSettings = {}
+      root.settings = {}
+    }])
+    steps.push([0, function() {
+      root.lookSettings = Data.backlight
+      root.key.kind = "normal"
+      root.key.pressed = false
+      root.key.hintLeft = "#"
+    }])
+    steps.push([0, function() { root.lock.style = root.lock.cleanStyle(root.look) }])
+    steps.push([0, function() {
+      t.ok(root.glowLoader(root.key).active && root.glowLoader(root.key).item !== null,
+           "Glow creates its halo")
+      t.equal(root.key.faceY, 0, "Glow cap rests above the base")
+      var legend = root.key.children.filter(function(c) { return c.illuminated === true })[0]
+      t.ok(legend && legend.font.bold && legend.opacity === 1 && legend.color.a === 1,
+           "Glow shine-through lettering is bold and opaque")
+      root.before = String(legend.color)
+      ;[root.key.hint, root.key.hintLeft].forEach(function(text) {
+        var hint = root.key.children.filter(function(c) { return c.text === text && c.illuminated === true })[0]
+        t.ok(hint && hint.opacity === 1 && hint.font.bold
+             && String(hint.color) === String(root.key.shineColor),
+             "Glow illuminates corner character " + text)
+      })
+      t.ok(root.lockKeys(root.lock).every(function(k) { return k.children.every(function(c) { return c.sourceComponent === undefined }) }),
+           "Glow cannot introduce lock effect loaders")
+      root.key.pressed = true
+    }])
+    steps.push([0, function() {
+      t.ok(root.glowLoader(root.key).visible, "static Glow keeps full press illumination")
+      t.equal(root.key.faceY, root.key.depth, "press lowers Glow cap fully")
+      var legend = root.key.children.filter(function(c) { return c.illuminated === true })[0]
+      t.ok(legend.opacity === 1 && String(legend.color) === String(Qt.tint(root.skin.rippleColor, Qt.rgba(1,1,1,0.18))),
+           "Glow lettering is opaque at full brightness while pressed")
+      root.key.pressed = false
+    }])
+    ;["left", "up", "down", "right", "settings", "omarchy", "enter"].forEach(function(name) {
+      steps.push([0, function() { root.key.labelKind = "drawn"; root.key.icon = name }])
+      steps.push([0, function() {
+        var icon = root.key.children.filter(function(c) { return c.name === name && c.glowColor !== undefined })[0]
+        t.ok(icon && icon.glowColor.a > 0 && icon.color.a === 1
+             && Qt.colorEqual(icon.color, root.key.shineColor), "Glow illuminates " + name)
+        t.ok(icon.filledPath !== "" || icon.strokedPath !== "", name + " retains its vector path")
+      }])
+    })
+    steps.push([0, function() { root.key.hintIcon = "settings" }])
+    steps.push([0, function() {
+      var gear = root.key.children.filter(function(c) { return c.name === "settings" && c.glowColor !== undefined })[0]
+      t.ok(gear.glowColor.a > 0 && gear.opacity === 1, "Glow illuminates the corner gear")
+      root.key.kind = "locked"
+    }])
+    steps.push([0, function() {
+      t.ok(Qt.colorEqual(root.key.shineColor, root.key.labelColor) && root.key.legendGlow.a === 0,
+           "locked icon keeps contrasting colour")
+      root.key.kind = "normal"
+      root.key.labelKind = "char"
+      root.key.hintIcon = ""
+    }])
+    steps.push([0, function() {
+      t.ok(root.glowLoader(root.key).visible, "release restores Glow's halo")
+      root.key.height = 30
+    }])
+    steps.push([0, function() {
+      t.ok(root.key.backlit && root.key.faceHeight >= 22.5, "compact Glow keeps space for labels")
+      root.key.height = 60
+      root.lookSettings = Object.assign({}, Data.backlight, {"key-transparency":30})
+    }])
+    steps.push([0, function() {
+      t.ok(!root.glowLoader(root.key).active, "transparent key does not expose the light through its face")
+      root.lookSettings = Object.assign({}, Data.backlight, {shape:"angular"})
+    }])
+    steps.push([0, function() {
+      t.ok(!root.glowLoader(root.key).active, "cut corners omit the rectangular halo")
+      t.equal(root.lock.cleanStyle({backlight:"accent"}).backlight, undefined, "lock does not accept backlight settings")
+    }])
+    palettes.forEach(function(p, i) {
+      steps.push([0, function() { root.palette(i); root.lookSettings = Data.themes.focus }])
+      steps.push([0, function() {
+        root.lock.style = root.lock.cleanStyle(root.look)
+        t.ok(root.skin.strongContrast && root.lock.style.contrast === undefined, "Focus applies only to desktop, palette " + i)
+        t.ok(root.near(root.skin.specialText.a, 1) && root.skin.hintOpacity === 1, "Focus strengthens secondary legends, palette " + i)
+      }])
+      ;["normal", "special", "accent", "latched", "locked"].forEach(function(kind) {
+        ;[false, true].forEach(function(pressed) {
+          steps.push([0, function() { root.key.kind = kind; root.key.pressed = pressed }])
+          steps.push([0, function() {
+            t.ok(root.ratio(root.key.labelColor, root.key.fill) >= 4.5,
+                 "Focus readable " + kind + (pressed ? " pressed" : " idle") + ", palette " + i)
+            t.ok(root.near(root.key.fill.a, 1), "Focus face stays opaque")
+          }])
+        })
+      })
+      steps.push([0, function() {
+        var keys = root.lockKeys(root.lock)
+        t.ok(keys.length > 25, "real lock keyboard keys instantiated")
+        root.lockBefore = root.lockState()
+        root.lock.style = root.lock.cleanStyle(null)
+        t.equal(root.lockState(), root.lockBefore, "Focus cannot restyle lock, palette " + i)
+        root.lock.shift = true
+        var shift = keys.filter(function(k) { return k.modelData === "shift" })[0]
+        t.equal(String(shift.fill), String(root.lock.latchedKeyColor), "lock keeps latched Shift feedback")
+        root.lock.shift = false
+        root.lock.capsLock = true
+        t.equal(String(shift.fill), String(Color.lock.borderActive), "lock keeps Caps feedback")
+        root.lock.capsLock = false
+        root.key.pressed = false
+      }])
+    })
+    steps.push([0, function() {
+      var hostile = {shape:"angular", corners:"cut cut cut cut", relief:"raised", depth:10,
+        fill:"outline", contrast:"strong", keyTransparency:100, backlight:"accent", animateBacklight:true,
+        keycapMaterial:"translucent", size:160, labels:"large", radius:30, borderWidth:4}
+      t.equal(JSON.stringify(root.lock.cleanStyle(hostile)), JSON.stringify(root.lock.cleanStyle(null)),
+        "all legacy desktop appearance fields ignored")
+      ;[null, [], "bad", {sizeNudge:"1.4"}, {sizeNudge:NaN}, {sizeNudge:Infinity}].forEach(function(raw) {
+        t.equal(root.lock.cleanStyle(raw).sizeNudge, 1, "invalid lock size uses default")
+      })
+      root.lock.style = root.lock.cleanStyle(Object.assign({}, hostile, {sizeNudge:1.25}))
+      t.equal(root.lock.keyScale, 1.25, "user key size preserved without desktop theme multiplier")
+      root.lock.style = root.lock.cleanStyle({sizeNudge:999})
+      t.equal(root.lock.keyScale, 1.6, "oversized lock keys bounded")
+      root.lock.style = root.lock.cleanStyle({sizeNudge:-999})
+      t.equal(root.lock.keyScale, 0.6, "undersized lock keys bounded")
+      root.lock.style = root.lock.cleanStyle(null)
+      root.lookSettings = {contrast:"unknown"}
+      t.equal(root.look.contrast, "normal", "invalid desktop contrast falls back")
+      var clear = Qt.rgba(0,0,0,0), overlay = Qt.rgba(1,1,1,0.22)
+      t.ok(Qt.colorEqual(Contrast.pressedFill(clear, overlay), overlay), "outline press keeps its original overlay")
+    }])
+    steps.push([0, function() {
+      root.lookSettings = Object.assign({}, Data.backlight,
+        {"backlight-motion":"ripple", "backlight-press-color":"#e0af68"})
+      root.settings = {"backlight-animation":"on"}
+      root.key.rippleEnabled = true
+      root.key.kind = "normal"
+      root.key.pressed = false
+    }])
+    steps.push([0, function() {
+      t.ok(root.skin.ripple && root.ripple(), "trial opts into actual ripple renderer")
+      root.before = String(root.key.fill)
+      root.key.pressed = true
+    }])
+    steps.push([160, function() {
+      t.ok(root.near(root.ripple().amount, 1), "held key reaches alternate colour")
+      t.equal(String(root.key.backlightColor), "#e0af68", "held halo actually reaches the requested amber")
+      t.ok(root.glowLoader(root.key).visible, "ripple keeps pressed perimeter lit")
+      t.equal(String(root.key.fill), root.before, "ripple preserves cap colour")
+      t.equal(String(root.key.shineColor), String(Qt.tint(root.skin.rippleColor, Qt.rgba(1,1,1,0.18))),
+              "shine-through core follows amber with its existing brightening")
+      t.equal(String(root.key.legendGlow), String(Qt.rgba(root.skin.rippleColor.r,
+              root.skin.rippleColor.g, root.skin.rippleColor.b, 0.22)),
+              "shine-through rim follows amber with its existing strength")
+      root.key.children.forEach(function(c) {
+        if (c.illuminated === true)
+          t.ok(String(c.color) === String(root.key.shineColor)
+               && String(c.styleColor) === String(root.key.legendGlow),
+               "letter/corner core and rim follow the backlight: " + c.text)
+        if (c.glowColor !== undefined)
+          t.ok(String(c.color) === String(root.key.shineColor)
+               && String(c.glowColor) === String(root.key.legendGlow),
+               "vector core and rim follow the backlight: " + c.name)
+      })
+      root.key.pulseGlow(1)
+      t.ok(!root.ripple().running, "neighbour wave cannot override held key")
+    }])
+    steps.push([400, function() {
+      t.equal(root.key.backlightBrightness, 1, "held key stays fully lit beyond a wave lifetime")
+      root.key.pressed = false
+    }])
+    steps.push([400, function() {
+      t.ok(root.ripple().amount === 0 && !root.ripple().running, "release fades fully and stops")
+      t.equal(root.key.backlightBrightness, 1, "released key settles at full brightness")
+      t.equal(String(root.key.shineColor), String(Qt.tint(root.skin.glowColor, Qt.rgba(1,1,1,0.18))),
+              "shine-through returns to full resting light after release")
+      root.key.pulseGlow(2)
+    }])
+    steps.push([50, function() {
+      t.equal(root.ripple().amount, 0, "distant wave waits before arrival")
+    }])
+    steps.push([180, function() {
+      t.ok(root.ripple().amount > 0.8 && root.ripple().amount <= 1, "neighbour receives full-strength wave near its crest")
+      t.ok(root.key.backlightBrightness >= 0.5 && root.key.backlightBrightness < 0.6,
+        "neighbour wave dips near 50% at its colour crest")
+      var source = root.key.lightSourceColor, scale = root.key.backlightBrightness
+      var lift = root.ripple().whiteMix
+      var expected = Qt.tint(Qt.rgba(source.r * scale, source.g * scale, source.b * scale, 1), Qt.rgba(1,1,1,lift))
+      t.equal(String(root.key.backlightColor), String(expected), "actual halo receives the precomputed white lift")
+      t.ok(light(root.key.backlightColor) >= 0.179, "actual animated halo stays above the trial luminance floor")
+      t.ok(lift > 0, "dark amber wave receives a white lift")
+      var fullCore = Qt.tint(source, Qt.rgba(1,1,1,0.18))
+      var expectedCore = Qt.tint(Qt.rgba(fullCore.r * scale, fullCore.g * scale, fullCore.b * scale, 1), Qt.rgba(1,1,1,lift))
+      t.equal(String(root.key.shineColor), String(expectedCore), "legend dims and lifts after its existing white tint")
+      root.key.pressed = true
+      t.equal(root.key.backlightBrightness, 1, "pressing during a dim wave restores full brightness immediately")
+      t.equal(root.ripple().whiteMix, 0, "held key removes neighbour-only white lift")
+      root.key.pressed = false
+      for (var i = 0; i < 500; i++) root.key.pulseGlow(1)
+    }])
+    steps.push([600, function() {
+      t.ok(root.ripple().amount === 0 && !root.ripple().running, "500 overlapping waves leave no queued work")
+      t.equal(root.key.backlightBrightness, 1, "neighbours recover to full resting brightness")
+      t.equal(root.ripple().whiteMix, 0, "settled wave leaves no extra white tint")
+      root.key.pulseGlow(3)
+      root.key.pulseGlow(NaN)
+      t.ok(!root.ripple().running, "out-of-radius and invalid waves ignored")
+      root.key.pulseGlow(1)
+      root.key.visible = false
+    }])
+    steps.push([0, function() {
+      t.ok(root.ripple() === null, "hidden key destroys pending animation")
+      root.key.visible = true
+    }])
+    steps.push([30, function() {
+      t.ok(root.ripple().amount === 0 && !root.ripple().running, "shown key starts at rest")
+      root.lookSettings = Data.backlight
+      root.key.rippleEnabled = false
+      root.settings = {}
+    }])
+    steps.push([0, function() {
+      t.ok(root.ripple() === null && !root.skin.ripple, "static Glow creates no ripple helper")
+      var reached = [], origin = {x:0,y:0,width:60,height:40}
+      var keys = [origin].concat([1,2,3].map(function(i) {
+        return {x:i*70,y:0,width:60,height:40,pulseGlow:function(d) { reached.push(d) }}
+      }))
+      Wave.spread({count:keys.length,itemAt:function(i) { return keys[i] }}, origin, 70, 50)
+      t.equal(JSON.stringify(reached), "[1,2]", "dispatch reaches two neighbours and excludes origin/far key")
+    }])
+    steps.push([0, function() {
+      root.lookSettings = Object.assign({}, Data.backlight, {
+        "keycap-material": "pudding", "wall-opacity": "50",
+        "backlight-motion": "ripple", "blur": "on"
+      })
+      root.palette(0)
+      root.skin.glowPalette = Qt.binding(function() { return livePalette.colors })
+      root.key.rippleEnabled = Qt.binding(function() { return root.skin.ripple })
+    }])
+    steps.push([100, function() {
+      t.ok(root.skin.pudding, "Pudding material capability enabled")
+      t.ok(!root.skin.ripple && !root.ripple(), "animation defaults off without a helper")
+      t.equal(String(root.skin.glowColor), "#7da6ff", "resting light uses authored bright accent")
+      t.equal(String(root.skin.rippleColor), "#ff9e64", "press selects complementary palette orange")
+      t.equal(root.key.backlightBrightness, 1, "static lighting rests at full brightness")
+      t.equal(String(root.key.backlightColor), String(root.skin.glowColor), "underlight stays fully lit at rest")
+      t.ok(root.near(root.key.wallColor.r, root.skin.glowColor.r), "wall lighting stays fully lit at rest")
+      t.equal(String(root.key.shineColor), String(Qt.tint(root.skin.glowColor, Qt.rgba(1,1,1,0.18))),
+        "glyph lighting stays fully lit at rest")
+      t.ok(root.near(root.key.wallColor.a, 0.5), "Pudding sidewall is 50% opaque")
+      t.ok(root.key.fill.a === 1, "Pudding top remains opaque")
+      var wall = root.key.children.filter(function(c) { return c.objectName === "keySide" })[0]
+      t.equal(String(wall.color), String(root.key.wallColor), "actual side rectangle uses translucent material")
+      root.before = String(root.key.fill)
+      root.key.pressed = true
+    }])
+    steps.push([0, function() {
+      t.equal(String(root.key.backlightColor), "#ff9e64", "disabled animation gives immediate full complementary colour")
+      t.ok(root.near(root.key.wallColor.a, 0.5) && root.near(root.key.wallColor.r, root.skin.rippleColor.r),
+           "pressed wall keeps opacity and reaches full brightness")
+      t.ok(root.key.faceY < root.key.depth, "depressed Pudding retains a visible sidewall")
+      t.equal(String(root.key.fill), root.before, "Pudding press preserves solid top colour")
+      t.ok(root.ripple() === null, "static press creates no animation")
+      root.settings = {"backlight-animation":"on"}
+    }])
+    steps.push([160, function() {
+      t.ok(root.ripple() && root.near(root.ripple().amount, 1), "enabling animation while held preserves full brightness")
+      root.settings = {"backlight-animation":"off"}
+    }])
+    steps.push([0, function() {
+      t.ok(root.ripple() === null && String(root.key.backlightColor) === "#ff9e64",
+           "disabling animation while held destroys helper and preserves full brightness")
+      root.key.pressed = false
+      replacePalette.running = true
+    }])
+    steps.push([700, function() {
+      t.equal(String(root.skin.glowColor), "#88bbff", "whole directory replacement reloads palette with unchanged accent")
+      t.equal(String(root.skin.rippleColor), "#ffee88", "theme replacement refreshes complementary colour")
+      t.equal(String(root.key.backlightColor), String(root.skin.glowColor), "released cap follows updated palette at full brightness")
+      var dim = GlowColors.choose({mode:"dark", accent:"#102030"}, GlowColors.color("#102030"),
+        GlowColors.color("#ffffff"), GlowColors.color("#000000"))
+      t.ok(light(dim.base) >= 0.35, "dark theme dim accent lifted into luminous range")
+      var old = GlowColors.choose({mode:"dark",color4:"#123456",color12:"#7da6ff"},
+        GlowColors.color("#123456"), GlowColors.color("#ffffff"), GlowColors.color("#000000"))
+      t.equal(String(old.base), "#7da6ff", "legacy ANSI palette finds bright accent")
+      function selected(p) { return GlowColors.choose(p, GlowColors.color(p.accent || "#123456"),
+        GlowColors.color("#ffffff"), GlowColors.color("#000000")) }
+      var tokyo = selected({mode:"dark",accent:"#7aa2f7",blue:"#7aa2f7",bright_blue:"#7da6ff",
+        bright_red:"#ff7a93",bright_yellow:"#ff9e64",bright_green:"#b9f27c",
+        bright_cyan:"#0db9d7",bright_magenta:"#bb9af7",orange:"#eb927b"})
+      t.equal(String(tokyo.press), "#ff9e64", "Tokyo Night restores blue-to-orange selection")
+      var green = selected({mode:"dark",accent:"#b9f27c",bright_green:"#b9f27c",bright_magenta:"#bb9af7",bright_yellow:"#ff9e64"})
+      t.equal(String(green.press), "#bb9af7", "green selects palette purple")
+      var ansi = selected({mode:"dark",accent:"#123456",color4:"#123456",color12:"#7da6ff",color11:"#ff9e64"})
+      t.equal(String(ansi.press), "#ff9e64", "ANSI complementary selection restored")
+      var pale = selected({mode:"dark",accent:"#7da6ff",bright_yellow:"#fffefd",bright_red:"#ff9e64"})
+      t.equal(String(pale.press), "#ff9e64", "near-white complement loses to distinct candidate")
+      var mono = selected({mode:"dark",accent:"#888888",bright_blue:"#888888",foreground:"#eeeeee"})
+      t.equal(String(mono.press), "#eeeeee", "monochrome palette uses authored foreground")
+      var white = GlowColors.color("#ffffff")
+      t.equal(GlowColors.waveWhiteMix(white, white, true), 0, "already bright trough needs no white lift")
+      t.equal(GlowColors.waveWhiteMix(tokyo.base, tokyo.press, false), 0, "light themes keep existing wave treatment")
+      ;[tokyo, green, ansi, pale, mono].forEach(function(pair, index) {
+        var lift = GlowColors.waveWhiteMix(pair.base, pair.press, true)
+        var lowest = 1
+        // More densely than the selector's grid, using an independent light().
+        for (var i = 0; i <= 128; i++) {
+          var a = i / 128, scale = 1 - 0.5 * a
+          var c = Qt.rgba((pair.base.r + (pair.press.r - pair.base.r) * a) * scale,
+            (pair.base.g + (pair.press.g - pair.base.g) * a) * scale,
+            (pair.base.b + (pair.press.b - pair.base.b) * a) * scale, 1)
+          lowest = Math.min(lowest, light(Qt.tint(c, Qt.rgba(1,1,1,lift*a))))
+        }
+        t.ok(lowest >= 0.179, "palette wave stays luminous through intermediate hues: " + index)
+      })
+      var mix = GlowColors.waveWhiteMix(tokyo.base, tokyo.press, true)
+      t.ok(mix > 0 && mix < 0.5, "Tokyo Night needs only a partial white lift")
+      var trough = Qt.tint(Qt.rgba(tokyo.press.r/2, tokyo.press.g/2, tokyo.press.b/2, 1), Qt.rgba(1,1,1,mix))
+      t.ok(trough.r > trough.g && trough.g > trough.b, "lifted orange retains its warm channel ordering")
+      t.equal(GlowColors.parse('accent = "garbage"').accent, undefined, "malformed colour ignored")
+      root.lookSettings = Data.themes.omarchy
+    }])
+    steps.push([0, function() {
+      t.ok(!root.skin.backlit && !root.skin.pudding && !root.skin.ripple, "non-backlit theme has no lighting capability")
+      t.equal(String(root.support.key), String(root.skin.key), "supporting fill matches Omarchy default")
+      t.equal(root.support.keyRadius, root.skin.keyRadius, "supporting corners match Omarchy default")
+      t.ok(!root.glowLoader(root.popupKey).active && root.popupKey.depth === 0,
+        "actual held-key popup key has no glow or raised profile")
+      var candidates = root.lockKeys(root.supportStrip)
+      t.ok(candidates.length >= 3 && candidates.every(function(k) {
+        return !root.glowLoader(k).active && k.depth === 0 && !k.theme.ripple
+      }), "actual suggestion candidates and paging keys have no clipped glow")
+    }])
+    t.run(steps)
+  }
+}

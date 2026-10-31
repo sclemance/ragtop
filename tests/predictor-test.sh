@@ -54,7 +54,7 @@ make_words() {
 completions_by_rank() {
   make_words
   suggest "$words" hel
-  assert_contains "$out" "ready 14"
+  assert_contains "$out" "ready 15"
   # her is a far slip (see below), so it comes after every completion.
   assert_contains "$out" 'suggest ["help", "held", "hell", "hello", "helm", "helpful", "her"]'
 }
@@ -565,7 +565,7 @@ the_bundled_copy_is_read() {
   out=$( { echo "lang en"; echo "after thank"; echo "quit"; } \
     | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" \
         "$sandbox/nothing-fetched" "$bundled" 2>&1) || true
-  assert_contains "$out" "ready en 2"
+  assert_contains "$out" "ready en 3"
   assert_contains "$out" 'next ["you"]'
 }
 
@@ -583,6 +583,36 @@ a_swipe_follows_the_word_before() {
   assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" \
     "to too " "the swipe alone, then after me"
 }
+
+omarchy_is_available_for_typing_and_swiping() {
+  # Use the shipped English corpus too: a synthetic list alone would not
+  # establish whether Omarchy competes successfully with actual vocabulary.
+  local corpus="$repo/words/en/small_en.msgpack.gz"
+  pre=('after')
+  local prefix
+  for prefix in omar Omarch omarhcy; do
+    suggest "$corpus" "$prefix"
+    assert_contains "$out" 'next []' 'no context-free starters'
+    assert_contains "$out" 'suggest ["Omarchy"' 'proper name from prefix and typo'
+  done
+  suggest "$corpus" OMARCH
+  assert_contains "$out" 'suggest ["OMARCHY"' 'explicit uppercase preserved'
+  mapfile -t pre < <(swipes omarchy)
+  suggest "$corpus"
+  assert_contains "$out" 'swiped ["Omarchy"' 'realistic swipe finds the name'
+  mapfile -t pre < <(swipes omarchy | sed '2s/^swipe /peek /')
+  suggest "$corpus"
+  assert_contains "$out" 'peeked ["Omarchy"' 'in-progress swipe uses proper case'
+  # Loading a pairs file must not discard the built-in proper name, and
+  # changing the prediction language must not lose the shared vocabulary.
+  make_languages
+  pairs_file "$langs/en/pairs_en.tsv.gz" $'<capitals>\ti'
+  pre=('lang en' 'complete omarch' 'lang fr' 'complete omarch')
+  suggest "$langs"
+  assert_equal "$(grep -c '^suggest \["Omarchy"' <<<"$out")" 2 'name in English with pairs and French'
+}
+
+run_test "predictor: Omarchy completes and swipes with its proper name, without starter guesses" omarchy_is_available_for_typing_and_swiping
 
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing

@@ -23,6 +23,8 @@ window_test() {
   fi
   # Ragtop creates the mode file before anything reads it (Service.qml).
   echo laptop >"$sandbox/run/ragtop-mode"
+  mkdir -p "$sandbox/home/.config/ragtop"
+  echo keyboard=sensor >"$sandbox/home/.config/ragtop/settings.conf"
   qml_harness window
   with_clone menu Menu.qml menu
   with_clone image-picker ImagePicker.qml picker

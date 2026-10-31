@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="screenshots/banner.webp" width="100%" alt="Ragtop: made for convertibles, great for tablets, built for Omarchy">
+  <img src="preview.png" width="100%" alt="Ragtop: Made for Convertables. Great for Tablets. Built for Omarchy. Glass keyboard in the 75% layout.">
 </h1>
 
 Fold the screen back, like a
@@ -135,7 +135,7 @@ space until tablet mode turns on.
   one. The keyboard stays drawn underneath, so you see what you changed.
 - **Type into Omarchy's overlays by touch, if you want to.** The Omarchy menu,
   emoji picker, clipboard picker and polkit password prompt normally close when
-  you tap the on-screen keyboard. Ragtop can fix that in tablet mode, bring
+  you tap the on-screen keyboard. Ragtop can fix that whenever its keyboard is enabled, bring
   the keyboard up with them, and keep them clear of it. It's off until you turn
   it on, one overlay at a time (see [Omarchy's overlays](#omarchys-overlays)).
 - **Unlock without putting it back together, if you want to.** The lock screen
@@ -279,7 +279,7 @@ generated files in `~/.local/state/ragtop` and its settings in
 
 ## Privacy and security
 
-Ragtop types. It sends nothing you type anywhere and writes none of it down,
+Ragtop types. It does not upload or deliberately log what you type,
 and it keeps in memory only as much as **Typing Memory** allows, for only as
 long as the field has focus.
 
@@ -287,14 +287,14 @@ long as the field has focus.
 | --- | --- |
 | **Keystrokes** | The keyboard sends keys to whatever window has focus, through Wayland's virtual-keyboard protocol, or through fcitx5 while a Chinese, Japanese or Korean engine is on. It writes no log. The key sender remembers which characters it had to look up in your layout, not in what order or how often, and forgets them when a password field is left. |
 | **Typing memory** | **Setup › Tablet › Typing Memory**, or `ragtop typing-memory set`. **Full**, the default, keeps the text Ragtop typed into the field that has focus, up to 400 characters, so that deleting words can name them, BackSpace back into a word brings its suggestions back, and the next word is chosen by the one before. **Current Word Only** keeps the word being typed and lets it go once it is finished; a swiped word is held until the next key, so that another of the swipe's guesses can take its place. Suggestions and swipe still work, those three do not. **Nothing** keeps no typed characters at all, so there are no suggestions and no swipe either. In every mode, capitals, double-space full stops and hyphen joins still work. In Current Word Only and Nothing, what came before the word is kept only as the last three kinds of thing typed: a word, the end of a sentence (. ! ?), other punctuation (, ; :), a hyphen, a space, a new line, or any other mark. Never a letter, never which word, and never which mark within a kind. |
-| **When it is let go** | In every mode, when focus leaves the field, whether for another field, another window or none, and when a field takes focus, until fcitx5 has said which field it is. Ragtop asks fcitx5 which field has focus after every change it hears of, by the field's own id, so two fields that look alike are still two. Nothing is kept while it cannot tell. |
+| **When it is let go** | In every mode, when focus leaves the field, whether for another field, another window or none, and when a field takes focus, until fcitx5 has said which field it is. Ragtop asks fcitx5 which field has focus after every change it hears of, by the field's own id, so two fields that look alike are still two. When a field first takes focus, nothing is recorded until it is identified. After an ambiguous hide event, Full and Current Word Only may retain input temporarily while confirming whether the same field still has focus, for at most one second. That queue is discarded if focus changed or the check times out; Nothing does not queue typed characters. |
 | **Word suggestions and swipe** | Off unless you turn them on. The suggester is a separate Ragtop process. It is asked about the word being typed and, in Full, the word before it. It holds that word before until the next one replaces it or the field is left, and nothing else of what you typed once it has answered. Nothing is learned from what you type: its word lists are the bundled or downloaded ones, never your own writing. |
-| **Network** | Only when you ask, never by itself, and two things. **Add** on a language's offer in the strip, or `ragtop words install`: that language's word list and pairs, about half a megabyte, from Ragtop's own `data-v1` release on GitHub, each checked against a fixed SHA-256 before it is kept. English's are in Ragtop itself and are never fetched. **Check for updates** on the controls panel, or `ragtop update check`: Ragtop's own `manifest.json` from its repository on GitHub, a couple of kilobytes, to read the version an update would install. Nothing else in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
+| **Network** | Only when you ask, never by itself, and two things. **Add** on a language's offer in the strip or controls panel, or `ragtop words install`: that language's word list and pairs, about half a megabyte, from Ragtop's own `data-v1` release on GitHub, each checked against a fixed SHA-256 before it is kept. English's are in Ragtop itself and are never fetched. **Check for updates** on the controls panel, or `ragtop update check`: Ragtop's own `manifest.json` from its repository on GitHub, a couple of kilobytes, to read the version an update would install. Nothing else in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
 | **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
 | **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
 | **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
-| **Diagnostics** | **Setup › Tablet › Diagnostics** copies versions, hardware and settings. No paths under your home directory, no host name, no user name, and nothing you typed. |
-| **The overlay clones** | A clone is Omarchy's own code living in your config, where anything running as you can rewrite it. The password prompt and the lock screen are on that list. They stay off until you turn them on, one at a time. See [Omarchy's overlays](#omarchys-overlays). |
+| **Diagnostics** | **Setup › Tablet › Copy Diagnostics** copies versions, hardware and settings. No paths under your home directory, no host name, no user name, and nothing you typed. |
+| **The overlay clones** | A clone is Omarchy's own code living in your config, where anything running as you can rewrite it. The password prompt and the lock screen are on that list. They stay off until you choose them in System Overlays and press Apply. See [Omarchy's overlays](#omarchys-overlays). |
 | **The lock screen keyboard** | A separate file that shares no code with the desktop keyboard and sends no key events. What it learns about your layout is data, rechecked by its own rules. See [The lock screen](#the-lock-screen). |
 
 What it cannot do anything about is the room. Keys light up when tapped, the
@@ -332,9 +332,9 @@ you have installed can watch you type.
 
 ## Using it
 
-Ragtop puts three buttons in the bar. Two of them are always there, because
-the one control that turns the keyboard on must not be somewhere you need a
-keyboard to reach:
+Ragtop puts a keyboard button and, when an accelerometer is available, a
+rotation button in the bar. The keyboard button stays accessible even when
+the keyboard is off:
 
 | Button | Does | There |
 | --- | --- | --- |
@@ -597,11 +597,13 @@ the changes, asks, checks the result and rolls back if it fails. A copy of
 Ragtop linked in from a working tree, or not on main, says so and offers
 nothing: git updates those.
 
-**Take the tour**, beside it, is a minute's walk around the keyboard: the
+**Take the tour**, beside it, demonstrates the keyboard: the
 handle that lowers and raises it, where Super and the gear are, a few themes and boards, holding a letter for its
 accents and Space for your layouts, how Shift and the other modifiers stick
 and lock, Fn and AltGr, the suggestion strip and its forms, and swipe. Each
 step lights one part of the keyboard, dims the rest, and shows it working.
+The suggestions demonstration starts empty, then slides and fades its example
+words into place; the keys and reserved screen space stay steady.
 It shows and never changes anything: the themes and boards are previews that
 go away when it ends, suggestions and swipe are shown whether you have them
 on or not, and nothing you touch during it types. The first time the
@@ -660,12 +662,17 @@ whether there is an on-screen keyboard at all: **Follow Sensor**, which is
 tablet mode as before, **Always On**, which offers it in laptop mode too, and
 **Always Off**. It takes the accent for anything but Follow Sensor, and the
 key is struck through while it is off. Turning it
-off is not the same as leaving tablet mode: the patched overlays and the
-rotation rules still follow the switch. The same three are in
+off restores stock focus in the patched overlays; rotation rules still
+follow tablet mode. Always On also enables touch-friendly overlay focus and
+the picker navigation strip in laptop mode. The same three are in
 Setup › Tablet › Keyboard, and `omarchy-shell ragtop cycleKeyboardMode` binds
 to a key.
 
 ### Word suggestions and swipe
+
+**Omarchy** is included as a proper name for typed completions, corrections
+and swipe, across prediction languages. It is offered when the letters or
+swipe fit, never as a context-free starting guess.
 
 **Beta, in English and French, and off until you turn them on**, in Setup ›
 Tablet › **Word Suggestions (beta)**, or with the switches on the keyboard's
@@ -683,7 +690,8 @@ again brings back whichever you chose.
 time you type on a layout whose list Ragtop has but you do not, the strip
 says *Add French word suggestions (135 KB)* and *Not now*. Add fetches it
 (see [Privacy and security](#privacy-and-security)) and suggestions start at
-once; Not now is remembered, and `ragtop words install fr` fetches it any
+once; Not now is remembered. The controls panel offers Add again, and
+`ragtop words install fr` fetches it any
 time. Nothing is downloaded without that tap.
 
 **Hold a word in the strip for its other forms.** The word that is almost
@@ -868,7 +876,7 @@ row in the Omarchy menu under **Setup › Tablet**:
 | Key Size | Automatic, or Smallest, Smaller, Regular, Larger, Largest against whatever size the theme asks for, and the labels scale with the keys |
 | System Overlays | Touch typing in Omarchy's overlays, chosen together and applied at once |
 | Run Setup | Opens setup in the shell |
-| Diagnostics | Copies everything a bug report needs to the clipboard |
+| Copy Diagnostics | Copies everything a bug report needs to the clipboard |
 
 Theme, Layout, Key Size, rotation and the keyboard's own auto-expand are also
 on the panel the gear key opens, which is the quicker way to them while you
@@ -887,8 +895,8 @@ design: no panel where none is needed. The keyboard reserves its own room,
 so windows move out of its way and what is behind it is your wallpaper; a
 panel over that only hid it. Keys can still be partly see-through, and a
 theme can ask for what is behind them to be blurred, which Hyprland then does
-behind the keys alone. Suggestions are drawn as keys too, thin ones in
-Enter's style, so they read over any wallpaper. A fully see-through
+behind the keys alone. Suggestions use flat Omarchy-style keys, as do held-key choices, so they
+remain readable without the main keyboard's glow or raised effects. A fully see-through
 keyboard is yours to make in a theme of your own; none ships with Ragtop.
 
 Whatever a key looks like, a touch goes to the nearest key, so no shape
@@ -897,10 +905,14 @@ makes keys harder to hit.
 ### Themes
 
 A Ragtop theme is a small TOML file, never code. It sets the keyboard's
-**form**. Its colours keep coming from your Omarchy theme, which is why any
-Ragtop theme looks right on any Omarchy one.
+**form**. Its colours follow your Omarchy palette. Backlit styles are
+designed primarily for dark Omarchy themes.
 
-Six ship: Omarchy, Soft, Typewriter, Glass, Industrial and Spaceship. Apply
+Nine ship: Omarchy, Soft, Chiclet, Focus, Mechanical, Typewriter, Glass,
+Industrial and Spaceship. Mechanical has a
+Sculpted keycap profile with Plain, Pudding, Frosted or Translucent materials.
+Its gear controls offer backlighting, shine-through glyphs and lighting effects;
+disabled choices are remembered. Apply
 one from the menu or with `./ragtop theme apply <name>`. Yours go in
 `~/.config/ragtop/themes/<name>/ragtop.toml` and win where the names match.
 
@@ -927,8 +939,8 @@ is written to your Hyprland config, so `hyprctl reload` clears it either
 way. If you have blur on yourself, Ragtop leaves your setup alone and just
 blurs behind its keyboard.
 
-The lock screen's keyboard takes the shape, fill and measurements too,
-checked again by its own code, but never the colours or the background.
+The lock screen's keyboard always uses the flat Omarchy appearance in the
+lock screen's own colours. Only your key-size adjustment carries over.
 
 ## Omarchy's overlays
 
@@ -943,11 +955,14 @@ problem and one of their own: see [The theme and background
 pickers](#the-theme-and-background-pickers).
 
 Ragtop can replace them with clones (made with Omarchy's own
-`omarchy plugin clone`) that change two lines, and only in tablet mode: they
+`omarchy plugin clone`) that cooperate whenever the Keyboard setting enables
+the keyboard: Always On in either device mode, or Follow Sensor in tablet
+mode. They
 take focus *on demand*, which still gets focus when they open and still
 receives typed keys, and they respect the keyboard's reserved space so they
-sit above it. In laptop mode they behave exactly as shipped, and on-demand focus
-there could let a window under the mouse on another monitor take focus away.
+sit above it. Always Off, or Follow Sensor in laptop mode, restores stock
+focus and reserved-space behavior. On-demand focus can let a window under
+the mouse on another monitor take focus away.
 The menu's clone carries one more change, for a reason that has nothing to do
 with touch: see [The menu's Apps list](#the-menus-apps-list).
 
@@ -973,9 +988,14 @@ What turning one on means:
 
 - **It stops getting Omarchy's fixes directly.** A clone is a copy, so once it's
   on, Omarchy's updates to the original don't reach it by themselves. A hook
-  re-clones it after every `omarchy update`, but refuses to replace a clone
-  you've edited yourself, and tells you so.
-- **In tablet mode it doesn't hold the keyboard to itself.** That's the fix,
+  refreshes it after every `omarchy update`, but refuses to replace a clone
+  you've edited yourself, and tells you so. Refreshes prepare and validate
+  all eligible replacements in a hidden staging directory, then exchange
+  the completed directories in one short batch. Enabled states and bar
+  placement stay intact; the shell coalesces the changes into a reload.
+  Previous copies remain in the reported hidden backup directory. Initial
+  installation and removal still use Omarchy's per-plugin commands.
+- **With the keyboard enabled it doesn't hold focus exclusively.** That's the fix,
   but it also means another window could take keyboard focus while the overlay
   is open, for example one under the mouse on a second monitor, and receive
   what you type.
@@ -1003,17 +1023,26 @@ and Omarchy's file is never written to. Three things follow from that:
   yours and Ragtop won't replace or remove it, the same as any other edit.
   If Omarchy changes its shared window, the clone is re-cloned, the same as
   when the overlay itself changes.
-- **An opening overlay holds the keyboard for a moment.** In tablet mode each
+- **An opening overlay holds the keyboard for a moment.** With the keyboard enabled each
   open asks for the keyboard exclusively for 75 milliseconds and then lets
   go, so that a tap can reach the on-screen keyboard. That is what Omarchy's
   own bar panels do, and where the number is from.
 - **It appears as soon as the screen's scale is known.** Omarchy holds an
   overlay back until it fills the whole screen. Above the keyboard it never
-  does, so in tablet mode the clone doesn't wait for that.
+  does, so with the keyboard enabled the clone doesn't wait for that.
 
 Ragtop only patches what it recognises. If Omarchy rewrites an overlay or the
 shared window in a way it hasn't seen, the clone is removed, Omarchy's own
 overlay stays in use, and `./ragtop overlay status` shows it as not installed.
+
+Selections are prepared and validated in a hidden staging directory. All
+requested additions and removals are then published together with one shell
+configuration update, allowing Omarchy's watcher to reload once. A failed
+preparation leaves the selection unchanged; a caught publication error rolls
+back the completed operations. This is not a power-loss transaction across
+the filesystem. Refreshes similarly exchange all prepared approved clones
+in a short batch. Mutation commands share a per-user lock, so concurrent
+setup, refresh and removal jobs cannot interleave. Edited clones are kept.
 
 ### The menu's Apps list
 
@@ -1071,23 +1100,42 @@ picker itself opens, works and closes normally.
 The lock screen is different: while it's up, Hyprland shows nothing else at
 all, so no on-screen keyboard can appear over it. Its clone (**Lock Screen**
 in the same menu) keeps Omarchy's lock screen as it is and adds a keyboard of
-its own along the bottom, in tablet mode only: your layout's letters with
+its own along the bottom. It follows Ragtop's **Keyboard** setting: **Always
+On** shows it in either device mode, **Never** hides it, and **Automatic**
+shows it in tablet mode. It offers your layout's letters with
 Shift (tap twice for Caps), and two pages of digits and symbols, which pick
 up your layout's own symbols the same way the desktop keyboard's do. Holding
 a letter offers its accents there too. A password is typed in characters,
 and on some layouts é or ß is only reachable that way. Its popup sits on a card of
-its own, opaque whatever the theme's key transparency is, so the letter you
-are picking stays legible against the keys it covers. The keys edit
+its own, opaque so the letter you are picking stays legible against the keys it covers. The keys edit
 the password the same way typing does, and Omarchy checks it as usual. The
 keyboard itself is `LockKeyboard.qml` in Ragtop's folder, which the clone
 loads.
+
+When the space below the password field can fit another full-height row,
+the letter page gains **1–0** across the top. Shorter screens keep the compact
+four-row layout; keys are never squeezed to make the extra row fit. Number
+keys show the active layout's first alternative in the corner; hold for its
+symbols and accents (for example, `$` on US 4, or `'` and `{` on French 4).
+Hold menus contain alternatives only, never the character a tap already
+types. Holding a digit still selects its printed alternative when the card
+can open beside or directly above it. Letter accents require a slide onto
+the card; holding still and releasing types the ordinary letter. Sliding
+away cancels. All character keys type on release, including keys without
+alternatives. Punctuation holds also offer the layout's extra marks.
+
+Digits still type digits with Shift or Caps active. Backspace and Enter keep
+the same touch targets and positions across letter and symbol pages.
 
 <p align="center">
   <img src="screenshots/lock-screen-nord.webp" width="560" alt="The lock screen's own keyboard on Nord">
 </p>
 
-It's shaped like the desktop keyboard but drawn in the lock screen's own
-colours, and it's deliberately a separate, self-contained file: it shares no
+It always uses Ragtop's flat **Omarchy** appearance in the lock screen's own
+colours. Desktop keyboard themes, backlighting, materials and effects do not
+apply. Your key-size adjustment is retained against a fixed 100% base;
+a desktop theme's size does not change the lock keyboard. It is deliberately
+a separate file: it shares no
 code with the desktop keyboard, sends no key events and has no Ctrl, Alt or
 Super, so nothing added to the desktop keyboard reaches the lock screen by
 accident, and there's one short file to review. It learns your layout's letters
@@ -1110,7 +1158,7 @@ Always On, so the physical keyboard is there if anything goes wrong.
 ## Settings
 
 Ragtop's settings are in the Omarchy menu under **Setup › Tablet**, which
-the Settings button on the keyboard's own panel opens directly:
+the **More Settings** button on the keyboard's own panel opens directly:
 
 | Setting | Default | Where |
 | --- | --- | --- |
@@ -1312,7 +1360,7 @@ reaches them through [Fn](#which-board).
   `sensor not answering` while that is true. Backing off matters more here
   than elsewhere: asking every three seconds is what keeps the daemon from
   recovering in the first place.
-- **Reporting any of it.** Tap **Setup › Tablet › Diagnostics**. It puts the
+- **Reporting any of it.** Tap **Setup › Tablet › Copy Diagnostics**. It puts the
   machine, the four versions, the screen and its scale, the tablet-mode switch
   and its read access, the keyboard layout, which of Ragtop's surfaces are up,
   the packages, the overlays and every setting on your clipboard, ready to
@@ -1327,13 +1375,27 @@ reaches them through [Fn](#which-board).
 
 ## Uninstall
 
+Run this before removing Ragtop through Omarchy's plugin manager. Omarchy's
+standard Remove action does not run Ragtop's cleanup: optional overlay
+clones, menu entries and the update hook can remain behind.
+
 ```bash
 ./install.sh uninstall
 ```
 
 This removes any overlay clones you turned on, Ragtop's rows in the Omarchy
 menu, the switch access rule, Ragtop's settings and generated files, and the
-plugin itself (or unlinks it, if it was linked from a checkout).
+plugin's configuration. A linked checkout is unlinked; an ordinary plugin
+folder is left for Omarchy's Remove action after cleanup. Edited overlay
+clones are preserved and reported for you to inspect. If any overlay cleanup
+fails, uninstall stops before removing Ragtop's code, settings or runtime
+layout files. Resolve the reported edits and retry. The switch access rule
+may already have been removed: its password prompt must run while the
+current polkit agent is still available.
+
+If you already removed the plugin, restore the same trusted Ragtop version
+and run its uninstaller, then remove it through Omarchy. This restores the
+cleanup code without asking you to delete authentication clones blindly.
 
 Your own themes are kept. Anything in `~/.config/ragtop/themes` (and
 `~/.config/ragtop/presets`, from before 0.39) stays where it is, and the
@@ -1341,14 +1403,12 @@ uninstaller says so. Delete `~/.config/ragtop` yourself if you don't want them.
 
 ## Language
 
-Ragtop is English-only, and so is Omarchy: the shell has no translation layer
-yet, and the proposals for one are still open. That's worth fixing one day.
-In 2026 localization isn't as hard as it used to be, and Linux is for
-everyone, not just English speakers, so the point for now is to not get in
-the way of it. [LOCALIZATION.md](LOCALIZATION.md)
-records where that stands, which of Ragtop's strings are prose and which are
-protocol that must never be translated, and what would change here once a
-standard settles.
+Ragtop follows Omarchy's selected interface language, with English as the
+fallback. It includes catalogs for English, German, French, Italian,
+Portuguese, Brazilian Portuguese and Mexican Spanish. Translations still
+benefit from fluent-speaker review. [LOCALIZATION.md](LOCALIZATION.md)
+explains the catalogs and how to contribute. Keyboard layouts and prediction
+languages are separate from the interface language.
 
 The keyboard itself is mostly language-agnostic already. Its letters, symbols
 and accents come from your active Hyprland layout, and its key glyphs are
@@ -1491,3 +1551,17 @@ itself, is Ragtop's own business and can change in a patch.
 - The swipe decoder follows SHARK2 (Kristensson and Zhai, 2004), as
   FlorisBoard's glide typing does.
 - Ragtop itself is released under the [MIT License](LICENSE).
+
+### Settings recovery in 0.48.0
+
+The controls panel queues rapid preference taps. Theme stepping and bar mode
+cycling use the last saved value, so repeated taps advance in order.
+Typing Memory is shown beside suggestions and swipe; choosing Nothing leaves
+their preferences saved but disables both. A missing word list can be added
+from the panel even after choosing Not now in the strip. Select its keyboard
+language first (with suggestions enabled).
+
+Display changes in the controls panel are previews: press Keep display within
+15 seconds or the keyboard and controls return to their previous screen.
+Key Size's Custom / Adjust entry opens the slider; numeric sizes matching the
+named presets are checked correctly. Copy Diagnostics names what it does.

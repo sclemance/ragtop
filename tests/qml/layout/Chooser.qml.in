@@ -1,0 +1,16 @@
+import QtQuick
+Item {
+  id: root
+  property var service
+  property var popup: null
+  property string pendingKey: "space"
+  property bool popupTravelled: true
+  property var layoutList: ["English", "French"]
+  property var engineList: [{name: "pinyin"}]
+  property int activeLayout: 0
+  function endHold() {}
+  function roleOf(key) { return key }
+  function press(key) { throw new Error("Unexpected keypress") }
+  function afterKey() {}
+  // FROM SOURCE: choosePopup
+}
