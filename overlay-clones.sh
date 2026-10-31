@@ -57,6 +57,17 @@ builtin_root="$omarchy_root/shell/plugins"
 hook_file="$HOME/.config/omarchy/hooks/post-update.d/ragtop-overlay-sync.hook"
 self="$(realpath "$0")"
 
+# Omarchy has no hook for a plugin's removal, and its Remove deletes a
+# marketplace checkout outright, this script with it. The clones are plugins
+# of their own and outlive it, the lock screen's still loading a keyboard
+# from a folder that is gone. So, while any overlay is on, a copy of what
+# takes clones away is kept outside Ragtop, and it runs once Ragtop is found
+# gone (orphaned): as the service is unloaded, which Remove does first; at
+# each boot; and on each Omarchy update.
+ragtop_dir="$plugins_dir/sclemance.ragtop"
+keeper_dir="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/keeper"
+boot_hook_file="$HOME/.config/omarchy/hooks/post-boot.d/ragtop-overlay-check.hook"
+
 # Every patch includes this, which is also how a Ragtop clone is recognised.
 # With no XDG_RUNTIME_DIR it reads nothing and stays in laptop mode. It used
 # to fall back to /tmp, where any local user can create ragtop-mode first and
@@ -601,10 +612,96 @@ if changed:
 EOF
 }
 
+# write_file <path> <content>: only when it differs, as this runs on every
+# startup sync.
+write_file() {
+  [[ -f $1 && $(<"$1") == "$2" ]] && return 0
+  mkdir -p "$(dirname "$1")" && printf '%s\n' "$2" >"$1" && chmod +x "$1"
+}
+
+# The copy kept outside Ragtop: this script and what it reads. Replaced as a
+# whole, so a copy is never half one version and half another.
+refresh_keeper() {
+  [[ $repo != "$keeper_dir" ]] || return 0
+  if [[ -d $keeper_dir ]] && cmp -s "$self" "$keeper_dir/overlay-clones.sh" &&
+     cmp -s "$repo/overlay-publish.py" "$keeper_dir/overlay-publish.py" &&
+     cmp -s "$repo/i18n.sh" "$keeper_dir/i18n.sh" &&
+     diff -rq "$repo/i18n" "$keeper_dir/i18n" >/dev/null 2>&1; then
+    return 0
+  fi
+  local parent tmp
+  parent=$(dirname "$keeper_dir")
+  mkdir -p "$parent" || return 1
+  tmp=$(mktemp -d "$parent/.keeper.XXXXXX") || return 1
+  if ! cp "$self" "$repo/overlay-publish.py" "$repo/i18n.sh" "$tmp/" || ! cp -r "$repo/i18n" "$tmp/"; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  rm -rf -- "$keeper_dir"
+  mv "$tmp" "$keeper_dir"
+}
+
 install_hook() {
-  mkdir -p "$(dirname "$hook_file")"
-  printf '#!/bin/bash\n# Keeps approved Ragtop overlays in step with Omarchy updates.\nhelper=%q\n[[ -x $helper ]] || exit 0\nexec "$helper" sync\n' "$self" >"$hook_file"
-  chmod +x "$hook_file"
+  refresh_keeper || return 1
+  local keeper="$keeper_dir/overlay-clones.sh"
+  write_file "$hook_file" "$(printf '%s\n' '#!/bin/bash' \
+    '# Keeps approved Ragtop overlays in step with Omarchy updates, and takes' \
+    '# them away once Ragtop has been removed (overlay-clones.sh orphaned).' \
+    "ragtop=$(printf %q "$ragtop_dir")" "helper=$(printf %q "$self")" "keeper=$(printf %q "$keeper")" \
+    'if [[ -e $ragtop && -x $helper ]]; then exec "$helper" sync; fi' \
+    'if [[ ! -e $ragtop && ! -L $ragtop && -f $keeper ]]; then exec bash "$keeper" orphaned; fi' \
+    'exit 0')" || return 1
+  write_file "$boot_hook_file" "$(printf '%s\n' '#!/bin/bash' \
+    "# Takes Ragtop's overlays away if Ragtop has been removed since." \
+    "ragtop=$(printf %q "$ragtop_dir")" "keeper=$(printf %q "$keeper")" \
+    'if [[ ! -e $ragtop && ! -L $ragtop && -f $keeper ]]; then exec bash "$keeper" orphaned --retry; fi' \
+    'exit 0')"
+}
+
+# Nothing left to keep in step: the hooks and the kept copy go.
+remove_hooks() {
+  rm -f "$hook_file" "$boot_hook_file" && rm -rf -- "$keeper_dir"
+}
+
+# Ragtop's folder is gone; its clones and hooks are not. Take away each
+# clone that is still the built-in plus Ragtop's patches, as the uninstaller
+# would. One edited since is the user's now and stays, and is named. Locked
+# or not yet able to tell, nothing changes and the next trigger tries again:
+# --wait first gives Remove a moment to delete the folder after unloading
+# the service, and --retry gives a session just starting a minute.
+orphaned() {
+  local mode=${1:-} i spec
+  local -a ours=() edited=()
+  if [[ $mode == --wait ]]; then
+    for (( i = 0; i < 20; i++ )); do
+      [[ -e $ragtop_dir || -L $ragtop_dir ]] || break
+      sleep 0.5
+    done
+  fi
+  # A restart or a disable leaves the folder where it is.
+  if [[ -e $ragtop_dir || -L $ragtop_dir ]]; then return 0; fi
+  for spec in "${overlays[@]}"; do
+    select_overlay "$spec"
+    [[ -e $clone_dir || -L $clone_dir ]] && is_patched || continue
+    if clone_is_ours; then ours+=("$name"); else edited+=("$clone_id"); fi
+  done
+  # Worded first: taking the last clone away takes the kept copy, catalogs
+  # and all, with it (apply_selection, remove_hooks).
+  local -a messages=()
+  (( ${#ours[@]} )) && messages+=("$(t clones.orphanRemoved)")
+  for spec in "${edited[@]}"; do messages+=("$(t clones.orphanEdited "$spec")"); done
+  if (( ${#ours[@]} )); then
+    local tries=1
+    [[ $mode == --retry ]] && tries=12
+    for (( i = 1; ; i++ )); do
+      apply_selection "" "${ours[*]}" && break
+      (( i < tries )) || return 1
+      sleep 5
+    done
+  fi
+  remove_hooks || return 1
+  for spec in "${messages[@]}"; do notify "$spec"; done
+  return 0
 }
 
 # Every step checks for itself rather than leaning on set -e. This runs as
@@ -820,7 +917,7 @@ apply_selection() {
   fi
   local remaining=0
   for spec in "${overlays[@]}"; do select_overlay "$spec"; is_patched && remaining=1; done
-  if (( remaining )); then install_hook || return 1; else rm -f "$hook_file" || return 1; fi
+  if (( remaining )); then install_hook || return 1; else remove_hooks || return 1; fi
   return 0
 }
 
@@ -898,12 +995,17 @@ shift || true
 # across processes so one never removes a clone another is still patching.
 # Read-only probes do not create a lock or change the plugin directory.
 case "$command" in
-  install|sync|remove|apply)
+  install|sync|remove|apply|orphaned)
     mkdir -p "$plugins_dir"
     exec 9>"$plugins_dir/.ragtop-overlays.lock"
     flock -x 9
     ;;
 esac
+
+if [[ $command == orphaned ]]; then
+  orphaned "${1:-}"
+  exit $?
+fi
 
 if [[ $command == apply ]]; then
   [[ $# == 2 ]] || { echo 'Usage: overlay-clones.sh apply "add names" "remove names"' >&2; exit 2; }
@@ -948,12 +1050,16 @@ case "$command" in
     ;;
   sync)
     (( synced )) && notify "$(t clones.updated)"
+    # Brings the hooks and the kept copy up to this version of Ragtop.
+    remaining=0
+    for o in "${overlays[@]}"; do select_overlay "$o"; is_patched && remaining=1; done
+    if (( remaining )); then install_hook || status=1; fi
     ;;
   remove)
     # Only drop the hook once no clones are left for it to keep in step.
     remaining=0
     for o in "${overlays[@]}"; do select_overlay "$o"; is_patched && remaining=1; done
-    (( remaining )) || rm -f "$hook_file"
+    (( remaining )) || remove_hooks
     echo "Run omarchy-restart-shell to go back to the built-in overlays."
     ;;
 esac

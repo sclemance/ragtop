@@ -8,7 +8,8 @@
 - Tell a locked session apart from one whose lock state could not be read when overlays are chosen.
 - A failed overlay step in the installer no longer stops the install part-way: Ragtop is installed, the reason is shown, and the next run offers the overlays again.
 - Preserve rapid settings taps; add display confirmation, Typing Memory explanations, language-download recovery and accurate size checks.
-- Stop uninstall if overlay cleanup fails. Native Omarchy Remove still requires running Ragtop's uninstaller first.
+- Stop uninstall if overlay cleanup fails.
+- Omarchy's own Remove no longer strands the overlay clones: a copy kept outside Ragtop removes its unedited clones and hooks once Ragtop is gone, and names any clone you edited. Menu rows, the switch rule and settings still need `./install.sh uninstall`.
 - Clear queued typed text when switching Typing Memory to Nothing and avoid retaining it after the keyboard hides.
 - Add Mechanical backlight and keycap options, Focus and Chiclet styling; retire standalone Slab, Glow and Pudding Shine Through themes.
 - Use Omarchy styling and palette for the lock keyboard; improve its password-entry layout and Always On visibility.

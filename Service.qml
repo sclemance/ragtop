@@ -994,6 +994,14 @@ Item {
     running: true
     onTriggered: overlaySyncProc.running = true
   }
+  // Omarchy's Remove unloads a plugin and then deletes its folder, and tells
+  // no one. If Ragtop's folder is gone moments after this, the copy of
+  // overlay-clones.sh kept outside it takes the overlays away (orphaned). A
+  // restart or a disable leaves the folder, and the check ends having done
+  // nothing. Through systemd-run, as this plugin's own processes die with it.
+  Component.onDestruction: Quickshell.execDetached([
+    "systemd-run", "--user", "--quiet", "--collect", "--unit", "ragtop-overlay-check-" + Date.now(),
+    "bash", "-c", 'k="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/keeper/overlay-clones.sh"; [ -f "$k" ] && exec bash "$k" orphaned --wait; exit 0'])
 
   // Namespaces of the overlays a touch can get past to the keyboard: the
   // ones patched by overlay-clones.sh, and Omarchy's own where it has

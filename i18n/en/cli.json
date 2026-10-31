@@ -26,6 +26,8 @@
   "choice.typingMemory.none": "Ragtop keeps nothing you type. Word suggestions and swipe typing are off with it.",
   "choice.typingMemory.word": "Ragtop keeps only the word you are typing, and lets it go once it is finished, or a swiped word at your next key.",
   "clones.edited": "Your copy of %1 has edits of its own, so it wasn't resynced.",
+  "clones.orphanEdited": "Your copy %1 has edits of its own, so it was kept. Remove it with: omarchy plugin remove %1",
+  "clones.orphanRemoved": "Ragtop was removed, so Omarchy's own overlays are back.",
   "clones.removed": "Your copy of %1 couldn't be re-patched, so it was removed. Restart the shell to go back to Omarchy's own.",
   "clones.updated": "Overlay clones updated. Restart the shell to load them.",
   "diagnostics.copied": "Diagnostics copied. Paste them into your report.",

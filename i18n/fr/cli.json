@@ -26,6 +26,8 @@
   "choice.typingMemory.none": "Ragtop ne garde rien de ce que vous tapez. Les suggestions de mots et la saisie gestuelle sont désactivées avec.",
   "choice.typingMemory.word": "Ragtop ne garde que le mot en cours de saisie, et l'oublie une fois terminé, ou à la touche suivante pour un mot glissé.",
   "clones.edited": "Votre copie de %1 contient ses propres modifications, elle n'a donc pas été resynchronisée.",
+  "clones.orphanEdited": "Votre copie %1 contient vos propres modifications, elle a donc été conservée. Pour la supprimer : omarchy plugin remove %1",
+  "clones.orphanRemoved": "Ragtop a été supprimé : les fenêtres système d'Omarchy sont de retour.",
   "clones.removed": "Votre copie de %1 n'a pas pu être adaptée à nouveau, elle a donc été supprimée. Redémarrez le shell pour revenir à celle d'Omarchy.",
   "clones.updated": "Copies des fenêtres système mises à jour. Redémarrez le shell pour les charger.",
   "diagnostics.copied": "Diagnostic copié. Collez-le dans votre rapport.",

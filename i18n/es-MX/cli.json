@@ -26,6 +26,8 @@
   "choice.typingMemory.none": "Ragtop no guarda nada de lo que escribes. Las sugerencias de palabras y la escritura deslizando se desactivan con ello.",
   "choice.typingMemory.word": "Ragtop guarda solo la palabra que estás escribiendo, y la olvida al terminarla, o en la siguiente tecla si la deslizaste.",
   "clones.edited": "Tu copia de %1 tiene cambios propios, así que no se volvió a sincronizar.",
+  "clones.orphanEdited": "Tu copia %1 tiene cambios propios, así que se conservó. Quítala con: omarchy plugin remove %1",
+  "clones.orphanRemoved": "Se quitó Ragtop, así que vuelven las ventanas del sistema de Omarchy.",
   "clones.removed": "Tu copia de %1 no se pudo volver a adaptar, así que se quitó. Reinicia el shell para volver a la de Omarchy.",
   "clones.updated": "Copias de las ventanas actualizadas. Reinicia el shell para cargarlas.",
   "diagnostics.copied": "Diagnóstico copiado. Pégalo en tu reporte.",

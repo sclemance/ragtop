@@ -26,6 +26,8 @@
   "choice.typingMemory.none": "Ragtop non conserva nulla di ciò che scrivi. I suggerimenti di parole e la scrittura a scorrimento sono disattivati di conseguenza.",
   "choice.typingMemory.word": "Ragtop conserva solo la parola che stai scrivendo, e la dimentica appena è finita, o al tasto successivo se l'hai tracciata.",
   "clones.edited": "La tua copia di %1 ha modifiche tue, quindi non è stata risincronizzata.",
+  "clones.orphanEdited": "La tua copia %1 ha modifiche proprie, quindi è stata mantenuta. Rimuovila con: omarchy plugin remove %1",
+  "clones.orphanRemoved": "Ragtop è stato rimosso, quindi tornano le finestre di sistema di Omarchy.",
   "clones.removed": "La tua copia di %1 non si è potuta riadattare, quindi è stata rimossa. Riavvia la shell per tornare a quella di Omarchy.",
   "clones.updated": "Copie delle finestre aggiornate. Riavvia la shell per caricarle.",
   "diagnostics.copied": "Diagnostica copiata. Incollala nella tua segnalazione.",

@@ -26,6 +26,8 @@
   "choice.typingMemory.none": "Ragtop behält nichts, was du tippst. Wortvorschläge und Wischtippen sind damit aus.",
   "choice.typingMemory.word": "Ragtop behält nur das Wort, das du gerade tippst, und vergisst es, sobald es fertig ist, ein gewischtes Wort bei der nächsten Taste.",
   "clones.edited": "Deine Kopie von %1 hat eigene Änderungen, daher wurde sie nicht neu abgeglichen.",
+  "clones.orphanEdited": "Deine Kopie %1 hat eigene Änderungen und wurde behalten. Entfernen mit: omarchy plugin remove %1",
+  "clones.orphanRemoved": "Ragtop wurde entfernt, daher sind wieder die Overlays von Omarchy in Gebrauch.",
   "clones.removed": "Deine Kopie von %1 ließ sich nicht neu anpassen und wurde entfernt. Starte die Shell neu, um zu Omarchys eigener zurückzukehren.",
   "clones.updated": "Overlay-Kopien aktualisiert. Starte die Shell neu, um sie zu laden.",
   "diagnostics.copied": "Diagnose kopiert. Füge sie in deinen Bericht ein.",

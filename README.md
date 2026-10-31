@@ -1380,8 +1380,18 @@ reaches them through [Fn](#which-board).
 ## Uninstall
 
 Run this before removing Ragtop through Omarchy's plugin manager. Omarchy's
-standard Remove action does not run Ragtop's cleanup: optional overlay
-clones, menu entries and the update hook can remain behind.
+standard Remove action does not run Ragtop's cleanup, so menu entries, the
+switch access rule and settings remain behind.
+
+The overlay clones are the exception. While any overlay is on, Ragtop keeps
+a small copy of its overlay script in `~/.local/share/ragtop/keeper`, outside
+its own folder. If Ragtop's folder disappears, that copy removes every clone
+that is still exactly Omarchy's built-in plus Ragtop's patches, puts
+Omarchy's own overlays back, and then removes itself and its hooks. It runs
+moments after Omarchy's Remove unloads Ragtop, at the next boot, and after
+the next Omarchy update. A clone you have edited is kept and named in a
+notification. While the session is locked nothing changes, and the next
+check tries again.
 
 ```bash
 ./install.sh uninstall
@@ -1397,9 +1407,10 @@ layout files. Resolve the reported edits and retry. The switch access rule
 may already have been removed: its password prompt must run while the
 current polkit agent is still available.
 
-If you already removed the plugin, restore the same trusted Ragtop version
-and run its uninstaller, then remove it through Omarchy. This restores the
-cleanup code without asking you to delete authentication clones blindly.
+If you removed the plugin with a version older than 0.48, nothing was kept
+outside it. Restore the same trusted Ragtop version and run its uninstaller,
+then remove it through Omarchy. This restores the cleanup code without
+asking you to delete authentication clones blindly.
 
 Your own themes are kept. Anything in `~/.config/ragtop/themes` (and
 `~/.config/ragtop/presets`, from before 0.39) stays where it is, and the

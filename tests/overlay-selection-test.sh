@@ -128,6 +128,80 @@ remove_drops_only_its_own_backup() {
   assert_equal "$(compgen -G "$plugins/.tester.menu.bak.*")" "$plugins/.tester.menu.bak.20200101000000" \
     'the backup made by this removal goes, an older one stays'
 }
+hooks_dir() { echo "$sandbox/home/.config/omarchy/hooks"; }
+keeper() { echo "$sandbox/home/.local/share/ragtop/keeper"; }
+orphan_sandbox() {
+  selection_sandbox
+  clones apply 'menu emojis lock' ''
+  assert_rc 0
+  assert_file "$(keeper)/overlay-clones.sh"
+  assert_file "$(keeper)/overlay-publish.py"
+  assert_file "$(keeper)/i18n/en/cli.json"
+  assert_file "$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook"
+  assert_file "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
+}
+orphan_present_does_nothing() {
+  orphan_sandbox
+  mkdir -p "$plugins/sclemance.ragtop"
+  rc=0; sandboxed bash "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook" >"$sandbox/out" 2>&1 || rc=$?
+  assert_rc 0
+  rc=0; sandboxed bash "$(keeper)/overlay-clones.sh" orphaned >"$sandbox/out" 2>&1 || rc=$?
+  assert_rc 0
+  assert_file "$plugins/tester.menu/manifest.json"
+  assert_file "$(keeper)/overlay-clones.sh"
+}
+orphan_removes_ours_keeps_edited() {
+  orphan_sandbox
+  echo '// user edit' >>"$plugins/tester.emojis/Emojis.qml"
+  : >"$sandbox/calls.log"
+  # As after Omarchy's Remove: no Ragtop folder, and this script gone with it.
+  rc=0; sandboxed bash "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook" >"$sandbox/out" 2>"$sandbox/err" || rc=$?
+  err=$(<"$sandbox/err")
+  assert_rc 0
+  assert_no_path "$plugins/tester.menu"
+  assert_no_path "$plugins/tester.lock"
+  assert_file "$plugins/tester.emojis/Emojis.qml"
+  assert_equal "$(jq -r '.bar.layout.left[0].id' "$sandbox/home/.config/omarchy/shell.json")" omarchy.menu
+  assert_no_path "$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook"
+  assert_no_path "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
+  assert_no_path "$(keeper)"
+  assert_contains "$(calls)" "Omarchy's own overlays are back"
+  assert_contains "$(calls)" 'tester.emojis has edits of its own'
+}
+orphan_locked_retries_later() {
+  orphan_sandbox
+  rc=0; sandboxed STUB_SESSION_LOCKED=0 bash "$(keeper)/overlay-clones.sh" orphaned >"$sandbox/out" 2>&1 || rc=$?
+  assert_rc 1
+  assert_file "$plugins/tester.menu/manifest.json"
+  assert_file "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
+  rc=0; sandboxed bash "$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook" >"$sandbox/out" 2>&1 || rc=$?
+  assert_rc 0
+  assert_no_path "$plugins/tester.menu"
+  assert_no_path "$(keeper)"
+}
+orphan_hooks_go_with_last_overlay() {
+  orphan_sandbox
+  clones apply '' 'menu emojis lock'
+  assert_rc 0
+  assert_no_path "$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook"
+  assert_no_path "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
+  assert_no_path "$(keeper)"
+}
+orphan_sync_upgrades_old_hook() {
+  orphan_sandbox
+  rm -rf "$(keeper)" "$(hooks_dir)/post-boot.d"
+  printf '#!/bin/bash\n"%s" sync\n' "$repo/overlay-clones.sh" >"$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook"
+  clones sync
+  assert_rc 0
+  assert_file "$(keeper)/overlay-clones.sh"
+  assert_file "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
+  assert_contains "$(<"$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook")" 'orphaned'
+}
+run_test 'startup sync brings an older install up to the orphan check' orphan_sync_upgrades_old_hook
+run_test 'with Ragtop still there, the orphan check changes nothing' orphan_present_does_nothing
+run_test 'with Ragtop gone, its own clones go and an edited one stays' orphan_removes_ours_keeps_edited
+run_test 'a locked session keeps everything for the next trigger' orphan_locked_retries_later
+run_test 'removing the last overlay takes the hooks and kept copy too' orphan_hooks_go_with_last_overlay
 run_test 'published selection batches are pruned to the newest two' selection_prunes_batches
 run_test 'failed or empty selections leave no batch folder' selection_failure_leaves_no_batch
 run_test 'a locked session and an undetermined one say different things' selection_lock_messages

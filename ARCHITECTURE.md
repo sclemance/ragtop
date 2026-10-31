@@ -570,7 +570,19 @@ from Gimbal (MIT).
 
 A clone stops receiving Omarchy's updates, so `sync` re-clones and re-patches
 any whose built-in has changed, and `install` registers it as an Omarchy
-post-update hook. The polkit and lock clones keep their authentication
+post-update hook.
+
+Omarchy has no removal hook, and its Remove deletes a marketplace checkout
+outright, but the clones are plugins of their own and outlive it. So while
+any overlay is on, `install_hook` keeps a copy of `overlay-clones.sh`,
+`overlay-publish.py` and the catalogs in `~/.local/share/ragtop/keeper`, and
+`overlay-clones.sh orphaned` runs from there once `sclemance.ragtop` is gone.
+Three things trigger it: the service's `Component.onDestruction`, through
+`systemd-run` and waiting up to ten seconds for the folder to go; a
+`post-boot` hook; and the `post-update` hook. It removes only clones that
+`clone_is_ours`, through the same `apply_selection` as Setup, and then the
+hooks and the copy. Startup sync rewrites the hooks and refreshes the copy,
+so an existing install picks this up without a reinstall. The polkit and lock clones keep their authentication
 capability because Omarchy stamps a clone with its source's capabilities via
 `clonedFrom`.
 
