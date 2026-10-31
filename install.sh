@@ -31,6 +31,7 @@ skip_udev=0
 # "ask", or "on"/"off" from --overlays/--no-overlays.
 overlays_choice=ask
 overlays_enabled=0
+overlays_failed=0
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 # What the installer says, in the language Omarchy is set to (i18n.sh):
@@ -187,9 +188,15 @@ offer_overlays() {
       ;;
   esac
 
+  # The overlays are optional, so a failure here is no reason to leave the
+  # install half-finished: Ragtop is linked and enabled by now, and the
+  # restart and the closing message still matter. The selection is all or
+  # nothing, so nothing was changed, and this asks again on the next run.
   if ! "$repo/overlay-clones.sh" apply "menu emojis clipboard polkit image-picker lock" ""; then
     record_overlays
-    die "$(t setup.overlaysFailed)"
+    warn "$(t install.overlaysFailed)"
+    overlays_failed=1
+    return
   fi
   overlays_enabled=1
   record_overlays
@@ -284,6 +291,8 @@ install() {
     warn "$(t install.restartForClones)"
   fi
   say "$(t install.done)"
+  # Still a failure to whoever asked for the overlays, --overlays included.
+  if (( overlays_failed )); then exit 1; fi
 }
 
 uninstall() {

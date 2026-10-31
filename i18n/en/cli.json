@@ -112,5 +112,6 @@
   "uninstall.ruleNone": "not installed, nothing to remove",
   "uninstall.rulePassword": "removing the switch access rule needs your password",
   "setup.overlaysFailed": "Overlay changes failed. See the setup log for details.",
+  "install.overlaysFailed": "Ragtop is installed, but the system overlays could not be turned on, so Omarchy's own stay in use. The reason is shown above. Try again in Setup › Tablet › System Overlays, or run the installer again.",
   "uninstall.overlaysFailed": "Overlay cleanup did not finish. Ragtop was kept so remaining clones still work. Resolve the reported edits and retry uninstall."
 }

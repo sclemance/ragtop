@@ -496,6 +496,38 @@ notify() {
 # seconds is for that, and only for these commands.
 plugin() { OMARCHY_SHELL_IPC_TIMEOUT="${OMARCHY_SHELL_IPC_TIMEOUT:-10s}" omarchy plugin "$@"; }
 
+# Omarchy keeps a .<id>.bak.<time> copy of every plugin it removes. Ragtop
+# only ever removes a clone of its own, half-made or the built-in plus its
+# patches, which can be made again at any time, so that copy is let go: one
+# kept per removal piled up a folder per overlay turned off. Copies that were
+# there before, the user's own removals among them, are left alone.
+remove_our_clone() {
+  local -a before=() after=()
+  local dir
+  mapfile -t before < <(compgen -G "$plugins_dir/.$clone_id.bak.*")
+  plugin remove "$clone_id" --yes >/dev/null || return 1
+  mapfile -t after < <(compgen -G "$plugins_dir/.$clone_id.bak.*")
+  for dir in "${after[@]}"; do
+    [[ " ${before[*]} " == *" $dir "* ]] || rm -rf -- "$dir"
+  done
+  return 0
+}
+
+# A batch's folder holds the previous copies once it is published, for
+# rolling back by hand. The newest two published batches are kept; older
+# ones are only clutter. A batch that failed to publish is never pruned, as
+# a rollback that itself failed may have left the only old copy there.
+prune_batches() {
+  local -a published=()
+  local dir
+  mapfile -t published < <(ls -1dt "$plugins_dir"/.ragtop-sync.* "$plugins_dir"/.ragtop-apply.* 2>/dev/null)
+  local kept=0
+  for dir in "${published[@]}"; do
+    [[ -f $dir/.published ]] || continue
+    if (( kept < 2 )); then kept=$((kept + 1)); else rm -rf -- "$dir"; fi
+  done
+}
+
 # A clone that failed after the shell was told to use it is deleted by
 # Omarchy's clone command, but what that told the shell is not undone: the
 # bar keeps a place for a clone that is gone and the built-in stays switched
@@ -588,7 +620,7 @@ install_one() {
       return 1
     fi
     # Ours, cloned but never patched, by a run that was cut short. Start over.
-    plugin remove "$clone_id" --yes >/dev/null || return 1
+    remove_our_clone || return 1
   fi
   if is_patched; then
     echo "$clone_id is already patched."
@@ -612,7 +644,7 @@ install_one() {
     # password prompt and the lock screen a stale copy is the worst thing to
     # leave running, so take it away and let the built-in stand.
     echo "Couldn't patch $clone_id, so it was removed and Omarchy's own $name stays in use." >&2
-    plugin remove "$clone_id" --yes >/dev/null && rm -f "$progress_file"
+    remove_our_clone && rm -f "$progress_file"
     return 1
   fi
   rm -f "$progress_file"
@@ -645,7 +677,7 @@ sync_one() {
     notify "$(t clones.edited "$(t "overlay.name.$name")")"
     return 1
   fi
-  plugin remove "$clone_id" --yes >/dev/null || return 1
+  remove_our_clone || return 1
   # Whatever goes wrong from here, install_one leaves either a patched clone or
   # none, and says which on stderr. Only a patched one has been synced.
   if ! install_one >/dev/null; then
@@ -693,11 +725,16 @@ sync_batch() {
       sync_one || result=1
     fi
   done
-  if (( ${#records[@]} )); then
+  if [[ -n $batch_dir ]] && (( ${#records[@]} == 0 )); then
+    # Nothing was published, so the folder holds only unused staged copies.
+    rm -rf -- "$batch_dir"
+  elif (( ${#records[@]} )); then
     if /usr/bin/python3 "$repo/overlay-publish.py" publish "${records[@]}"; then
+      : >"$batch_dir/.published"
       printf '%s\n' "${messages[@]}"
       echo "Applied ${#records[@]} overlay replacements together. Previous copies: $batch_dir"
       synced=1
+      prune_batches
     else
       echo "Overlay batch failed; inspect the staged/previous copies in $batch_dir" >&2
       result=1
@@ -729,11 +766,19 @@ apply_selection() {
   if command -v omarchy-hyprland-session-locked >/dev/null; then
     local lock_state=0
     omarchy-hyprland-session-locked || lock_state=$?
-    if (( lock_state != 1 )); then
-      echo "Overlay selection requires a confirmed unlocked desktop session; unlock it and retry from that session." >&2
+    # 2 is "could not tell", e.g. no monitor has a workspace yet. That is
+    # refused too, but not as a lock: the desktop may well be unlocked.
+    if (( lock_state == 0 )); then
+      echo "The session is locked; unlock it and choose overlays again." >&2
+      return 1
+    elif (( lock_state != 1 )); then
+      echo "Could not tell whether the session is locked, so no overlays were changed. Try again in a moment." >&2
       return 1
     fi
   fi
+  # Until it is published, the batch holds only copies made for it: nothing
+  # live has moved, so a batch that stops early is simply let go.
+  discard_batch() { rm -rf -- "$batch_dir"; }
   batch_dir=$(mktemp -d "$plugins_dir/.ragtop-apply.XXXXXX") || return 1
   for spec in "${operations[@]}"; do
     operation=${spec%%:*}
@@ -743,29 +788,35 @@ apply_selection() {
       if is_patched; then continue; fi
       if [[ -e $live || -L $live ]]; then
         echo "$clone_id is not an approved Ragtop clone; nothing changed." >&2
-        return 1
+        discard_batch; return 1
       fi
-      record=$(/usr/bin/python3 "$repo/overlay-publish.py" stage "$builtin_dir" "$live" "$batch_dir/$clone_id") || return 1
+      record=$(/usr/bin/python3 "$repo/overlay-publish.py" stage "$builtin_dir" "$live" "$batch_dir/$clone_id") || { discard_batch; return 1; }
       clone_dir="$batch_dir/$clone_id"
       base_file="$clone_dir/.ragtop-base"
       write_base && patch_clone && omarchy-plugin-validate "$clone_dir" || {
         echo "Could not prepare $clone_id; no overlay selections changed." >&2
-        return 1
+        discard_batch; return 1
       }
     else
       if [[ ! -e $live && ! -L $live ]]; then continue; fi
       if ! clone_is_ours; then
         echo "$clone_id has edits besides Ragtop's; no overlay selections changed." >&2
-        return 1
+        discard_batch; return 1
       fi
-      record=$(/usr/bin/python3 "$repo/overlay-publish.py" remove "$live" "$batch_dir/$clone_id") || return 1
+      record=$(/usr/bin/python3 "$repo/overlay-publish.py" remove "$live" "$batch_dir/$clone_id") || { discard_batch; return 1; }
     fi
     records+=("$record")
   done
-  if (( ${#records[@]} )); then
-    /usr/bin/python3 "$repo/overlay-publish.py" apply "$HOME/.config/omarchy/shell.json" \
-      "$omarchy_root/config/omarchy/shell.json" "${records[@]}" || return 1
+  if (( ${#records[@]} == 0 )); then
+    discard_batch
+  elif /usr/bin/python3 "$repo/overlay-publish.py" apply "$HOME/.config/omarchy/shell.json" \
+      "$omarchy_root/config/omarchy/shell.json" "${records[@]}"; then
+    : >"$batch_dir/.published"
     echo "Applied ${#records[@]} overlay selection changes together. Backups: $batch_dir"
+    prune_batches
+  else
+    echo "Overlay selection not applied; staged and previous copies are in $batch_dir" >&2
+    return 1
   fi
   local remaining=0
   for spec in "${overlays[@]}"; do select_overlay "$spec"; is_patched && remaining=1; done
@@ -780,7 +831,7 @@ remove_one() {
     echo "$clone_id has edits besides Ragtop's. Remove it yourself with: omarchy plugin remove $clone_id" >&2
     return 1
   else
-    plugin remove "$clone_id" --yes >/dev/null || return 1
+    remove_our_clone || return 1
     rm -f "$progress_file"
     echo "Removed $clone_id."
   fi

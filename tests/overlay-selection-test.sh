@@ -80,6 +80,58 @@ run_test 'concurrent selections serialize and retain both changes' selection_con
 run_test 'all six additions/removals publish one config and preserve placement' selection_add_remove
 run_test 'invalid requests, edited clones and failed preparation leave selection intact' selection_failure_keeps_everything
 run_test 'removal respects a source that was already disabled' selection_preserves_disabled_sources
+
+batch_dirs() { compgen -G "$plugins/.ragtop-apply.*" || true; }
+selection_prunes_batches() {
+  selection_sandbox
+  local i
+  for i in 1 2 3; do
+    clones apply 'menu' ''
+    assert_rc 0
+    clones apply '' 'menu'
+    assert_rc 0
+  done
+  assert_equal "$(batch_dirs | wc -l)" 2 'only the newest two published batches are kept'
+  local dir
+  for dir in $(batch_dirs); do assert_file "$dir/.published"; done
+}
+selection_failure_leaves_no_batch() {
+  selection_sandbox
+  sed -i 's/WlrKeyboardFocus.Exclusive/WlrKeyboardFocus.Different/' "$sandbox/omarchy/shell/plugins/emojis/Emojis.qml"
+  clones apply 'clipboard emojis' ''
+  assert_rc 1
+  assert_equal "$(batch_dirs | wc -l)" 0 'a batch that never published is let go'
+  clones apply 'menu' ''
+  assert_rc 0
+  clones apply 'menu' ''
+  assert_rc 0
+  assert_equal "$(batch_dirs | wc -l)" 1 'a selection with nothing to change leaves no batch'
+}
+selection_lock_messages() {
+  selection_sandbox
+  clones STUB_SESSION_LOCKED=0 apply 'menu' ''
+  assert_rc 1
+  assert_contains "$err" 'The session is locked'
+  clones STUB_SESSION_LOCKED=2 apply 'menu' ''
+  assert_rc 1
+  assert_contains "$err" 'Could not tell whether the session is locked'
+  assert_lacks "$err" 'The session is locked'
+}
+remove_drops_only_its_own_backup() {
+  make_sandbox "$old_omarchy"
+  clones install menu
+  assert_rc 0
+  mkdir -p "$plugins/.tester.menu.bak.20200101000000"
+  clones remove menu
+  assert_rc 0
+  assert_no_path "$plugins/tester.menu"
+  assert_equal "$(compgen -G "$plugins/.tester.menu.bak.*")" "$plugins/.tester.menu.bak.20200101000000" \
+    'the backup made by this removal goes, an older one stays'
+}
+run_test 'published selection batches are pruned to the newest two' selection_prunes_batches
+run_test 'failed or empty selections leave no batch folder' selection_failure_leaves_no_batch
+run_test 'a locked session and an undetermined one say different things' selection_lock_messages
+run_test "removing Ragtop's clone drops Omarchy's backup of it, not older ones" remove_drops_only_its_own_backup
 make_sandbox "$old_omarchy"
 sandboxed /usr/bin/python3 - "$repo/overlay-publish.py" "$sandbox" <<'PYTEST'
 import importlib.util,json,sys

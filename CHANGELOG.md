@@ -4,7 +4,9 @@
 
 - Overlay focus follows Keyboard availability, including Always On in laptop mode.
 - Locale-independent clone tracking recognizes existing approved copies without discarding edit protection.
-- Prepare overlay additions, removals and refreshes before publishing them in batches. Serialize concurrent overlay jobs and retain rollback copies.
+- Prepare overlay additions, removals and refreshes before publishing them in batches. Serialize concurrent overlay jobs and keep rollback copies of the newest two batches only. A batch that never published is removed, and removing one of Ragtop's own clones no longer leaves an Omarchy backup of it behind.
+- Tell a locked session apart from one whose lock state could not be read when overlays are chosen.
+- A failed overlay step in the installer no longer stops the install part-way: Ragtop is installed, the reason is shown, and the next run offers the overlays again.
 - Preserve rapid settings taps; add display confirmation, Typing Memory explanations, language-download recovery and accurate size checks.
 - Stop uninstall if overlay cleanup fails. Native Omarchy Remove still requires running Ragtop's uninstaller first.
 - Clear queued typed text when switching Typing Memory to Nothing and avoid retaining it after the keyboard hides.

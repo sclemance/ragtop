@@ -112,5 +112,6 @@
   "uninstall.ruleNone": "no instalada, nada que quitar",
   "uninstall.rulePassword": "quitar la regla de acceso al interruptor requiere tu contraseña",
   "setup.overlaysFailed": "No se pudieron modificar las superposiciones. Consulta el registro de configuración.",
+  "install.overlaysFailed": "Ragtop está instalado, pero no se pudieron activar las ventanas del sistema, así que siguen las de Omarchy. El motivo aparece arriba. Vuelve a intentarlo en Configurar › Tableta › Ventanas del sistema o ejecuta de nuevo el instalador.",
   "uninstall.overlaysFailed": "No se pudo completar la limpieza de superposiciones. Ragtop se conservó para que funcionen los clones restantes. Resuelve los cambios indicados y vuelve a desinstalar."
 }

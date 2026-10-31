@@ -112,5 +112,6 @@
   "uninstall.ruleNone": "nicht installiert, nichts zu entfernen",
   "uninstall.rulePassword": "das Entfernen der Zugriffsregel braucht dein Passwort",
   "setup.overlaysFailed": "Overlay-Änderungen fehlgeschlagen. Details stehen im Einrichtungsprotokoll.",
+  "install.overlaysFailed": "Ragtop ist installiert, aber die System-Overlays ließen sich nicht einschalten, daher bleiben die von Omarchy in Gebrauch. Der Grund steht oben. Versuche es erneut unter Einrichtung › Tablet › System-Overlays oder führe das Installationsprogramm noch einmal aus.",
   "uninstall.overlaysFailed": "Die Overlay-Bereinigung ist fehlgeschlagen. Ragtop bleibt erhalten, damit verbleibende Klone funktionieren. Beheben Sie die gemeldeten Änderungen und versuchen Sie die Deinstallation erneut."
 }
