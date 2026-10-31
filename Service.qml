@@ -2579,9 +2579,19 @@ Item {
   readonly property bool swipeActive: root.swipeEnabled && root.predicting
   onSwipeActiveChanged: if (!root.swipeActive) root.setSuggestions("swipe", null)
   property var swipeKeys: null
+  property string sentSwipeGeometry: ""
   function setSwipeKeys(value) {
     root.swipeKeys = value
-    if (predictorProc.running) predictorProc.write("keys " + JSON.stringify(value) + "\n")
+    // Layout bindings can settle several times in one event-loop turn.
+    Qt.callLater(root.flushSwipeKeys)
+  }
+  function flushSwipeKeys(force) {
+    if (!predictorProc.running || !root.swipeKeys) return
+    var geometry = JSON.stringify(root.swipeKeys)
+    if (force === true || geometry !== root.sentSwipeGeometry) {
+      predictorProc.write("keys " + geometry + "\n")
+      root.sentSwipeGeometry = geometry
+    }
   }
   // The word the last swipe typed, with its spaces, so a tap on one of the
   // others can take it back; and whether it began with a capital.
@@ -2615,6 +2625,7 @@ Item {
     var path = root.peekPath
     root.peekPath = null
     if (!path) return
+    root.flushSwipeKeys()
     root.peekPending = true
     predictorProc.write("peek " + JSON.stringify(path.map(function(p) {
       return [Math.round(p[0]), Math.round(p[1])]
@@ -2642,6 +2653,7 @@ Item {
     root.swipeDrawing = false
     root.peekPath = null
     if (!root.swipeActive || !predictorProc.running) return
+    root.flushSwipeKeys()
     root.swipesAsked.push({ field: root.fieldGeneration, shifted: shifted })
     predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
       return [Math.round(p[0]), Math.round(p[1])]
@@ -2811,7 +2823,7 @@ Item {
           // A new list: tell it the word before, and get its next words.
           root.sentContext = null
           Qt.callLater(root.updateContext)
-          if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
+          root.flushSwipeKeys(true)
         } else if (line.startsWith("dictionary ")) {
           var parts = line.split(" ")
           root.dictionaryName = parts[2] && parts[2] !== "-" ? parts[2] : ""
@@ -2860,6 +2872,7 @@ Item {
     }
     onRunningChanged: {
       root.swipesAsked = []
+      root.sentSwipeGeometry = ""
       root.nextAsked = []
       root.asked = []
       root.formsAsked = []
