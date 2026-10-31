@@ -67,117 +67,128 @@ Item {
     + " L 0.5 " + skirtTop + " L " + rearLeft + " " + (faceTop+r)
     + " Q " + rearLeft + " " + faceTop + " " + (rearLeft+r) + " " + faceTop + " Z"
 
-  Shape {
-    visible: !cap.transparentWalls
+  // A hidden Shape still owns its paths and live gradient bindings. Create
+  // only the material in use; both constructions keep their exact geometry.
+  Loader {
     anchors.fill: parent
-    preferredRendererType: Shape.CurveRenderer
-    // Outer silhouette follows the reference's sloping shoulders and
-    // upright skirt, with small rounded corners at the foot.
-    ShapePath {
-      strokeWidth: cap.edgeWidth
-      strokeColor: Qt.tint(cap.edgeColor, Qt.rgba(0,0,0,0.35))
-      fillGradient: LinearGradient {
-        x1: 0; y1: cap.faceTop; x2: 0; y2: cap.height
-        GradientStop { position: 0; color: cap.shoulder }
-        GradientStop { position: 1; color: cap.shadow }
+    sourceComponent: cap.transparentWalls ? clearCap : solidCap
+  }
+
+  Component {
+    id: solidCap
+    Shape {
+      anchors.fill: parent
+      preferredRendererType: Shape.CurveRenderer
+      // Outer silhouette follows the reference's sloping shoulders and
+      // upright skirt, with small rounded corners at the foot.
+      ShapePath {
+        strokeWidth: cap.edgeWidth
+        strokeColor: Qt.tint(cap.edgeColor, Qt.rgba(0,0,0,0.35))
+        fillGradient: LinearGradient {
+          x1: 0; y1: cap.faceTop; x2: 0; y2: cap.height
+          GradientStop { position: 0; color: cap.shoulder }
+          GradientStop { position: 1; color: cap.shadow }
+        }
+        PathSvg { path: "M " + (cap.rearLeft+cap.r*0.15) + " " + (cap.faceTop+cap.r*0.3)
+          + " L 0.5 " + cap.skirtTop + " L 0.5 " + (cap.height-cap.outerR)
+          + " Q 0.5 " + (cap.height-0.5) + " " + cap.outerR + " " + (cap.height-0.5)
+          + " L " + (cap.width-cap.outerR) + " " + (cap.height-0.5)
+          + " Q " + (cap.width-0.5) + " " + (cap.height-0.5) + " " + (cap.width-0.5) + " " + (cap.height-cap.outerR)
+          + " L " + (cap.width-0.5) + " " + cap.skirtTop
+          + " L " + (cap.rearRight-cap.r*0.15) + " " + (cap.faceTop+cap.r*0.3) + " Z" }
       }
-      PathSvg { path: "M " + (cap.rearLeft+cap.r*0.15) + " " + (cap.faceTop+cap.r*0.3)
-        + " L 0.5 " + cap.skirtTop + " L 0.5 " + (cap.height-cap.outerR)
-        + " Q 0.5 " + (cap.height-0.5) + " " + cap.outerR + " " + (cap.height-0.5)
-        + " L " + (cap.width-cap.outerR) + " " + (cap.height-0.5)
-        + " Q " + (cap.width-0.5) + " " + (cap.height-0.5) + " " + (cap.width-0.5) + " " + (cap.height-cap.outerR)
-        + " L " + (cap.width-0.5) + " " + cap.skirtTop
-        + " L " + (cap.rearRight-cap.r*0.15) + " " + (cap.faceTop+cap.r*0.3) + " Z" }
-    }
-    // Both side walls are visible, with a fixed light source from the left.
-    ShapePath {
-      strokeWidth: 0
-      fillGradient: LinearGradient {
-        x1: 0; y1: 0; x2: cap.rearLeft; y2: 0
-        GradientStop { position: 0; color: Qt.tint(cap.faceColor, Qt.rgba(1,1,1,0.035)) }
-        GradientStop { position: 1; color: Qt.tint(cap.faceColor, Qt.rgba(0,0,0,0.18)) }
+      // Both side walls are visible, with a fixed light source from the left.
+      ShapePath {
+        strokeWidth: 0
+        fillGradient: LinearGradient {
+          x1: 0; y1: 0; x2: cap.rearLeft; y2: 0
+          GradientStop { position: 0; color: Qt.tint(cap.faceColor, Qt.rgba(1,1,1,0.035)) }
+          GradientStop { position: 1; color: Qt.tint(cap.faceColor, Qt.rgba(0,0,0,0.18)) }
+        }
+        PathSvg { path: "M " + cap.rearLeft + " " + (cap.faceTop+cap.r*0.5)
+          + " L 0.5 " + cap.skirtTop + " L 0.5 " + (cap.height-cap.outerR)
+          + " L " + cap.frontLeft + " " + (cap.front-cap.r) + " Z" }
       }
-      PathSvg { path: "M " + cap.rearLeft + " " + (cap.faceTop+cap.r*0.5)
-        + " L 0.5 " + cap.skirtTop + " L 0.5 " + (cap.height-cap.outerR)
-        + " L " + cap.frontLeft + " " + (cap.front-cap.r) + " Z" }
-    }
-    ShapePath {
-      strokeWidth: 0
-      fillGradient: LinearGradient {
-        x1: cap.rearRight; y1: 0; x2: cap.width; y2: 0
-        GradientStop { position: 0; color: Qt.tint(cap.faceColor, Qt.rgba(0,0,0,0.20)) }
-        GradientStop { position: 1; color: cap.shadow }
+      ShapePath {
+        strokeWidth: 0
+        fillGradient: LinearGradient {
+          x1: cap.rearRight; y1: 0; x2: cap.width; y2: 0
+          GradientStop { position: 0; color: Qt.tint(cap.faceColor, Qt.rgba(0,0,0,0.20)) }
+          GradientStop { position: 1; color: cap.shadow }
+        }
+        PathSvg { path: "M " + cap.rearRight + " " + (cap.faceTop+cap.r*0.5)
+          + " L " + (cap.width-0.5) + " " + cap.skirtTop
+          + " L " + (cap.width-0.5) + " " + (cap.height-cap.outerR)
+          + " L " + cap.frontRight + " " + (cap.front-cap.r) + " Z" }
       }
-      PathSvg { path: "M " + cap.rearRight + " " + (cap.faceTop+cap.r*0.5)
-        + " L " + (cap.width-0.5) + " " + cap.skirtTop
-        + " L " + (cap.width-0.5) + " " + (cap.height-cap.outerR)
-        + " L " + cap.frontRight + " " + (cap.front-cap.r) + " Z" }
-    }
-    ShapePath {
-      strokeWidth: 0
-      fillGradient: LinearGradient {
-        x1: 0; y1: cap.front; x2: 0; y2: cap.height
-        GradientStop { position: 0; color: cap.shoulder }
-        GradientStop { position: 0.32; color: cap.faceColor }
-        GradientStop { position: 1; color: cap.shadow }
+      ShapePath {
+        strokeWidth: 0
+        fillGradient: LinearGradient {
+          x1: 0; y1: cap.front; x2: 0; y2: cap.height
+          GradientStop { position: 0; color: cap.shoulder }
+          GradientStop { position: 0.32; color: cap.faceColor }
+          GradientStop { position: 1; color: cap.shadow }
+        }
+        PathSvg { path: "M " + (cap.frontLeft+cap.r*0.4) + " " + (cap.front-1)
+          + " L " + (cap.frontRight-cap.r*0.4) + " " + (cap.front-1)
+          + " L " + (cap.width-cap.outerR) + " " + (cap.height-0.5)
+          + " L " + cap.outerR + " " + (cap.height-0.5) + " Z" }
       }
-      PathSvg { path: "M " + (cap.frontLeft+cap.r*0.4) + " " + (cap.front-1)
-        + " L " + (cap.frontRight-cap.r*0.4) + " " + (cap.front-1)
-        + " L " + (cap.width-cap.outerR) + " " + (cap.height-0.5)
-        + " L " + cap.outerR + " " + (cap.height-0.5) + " Z" }
-    }
-    // The curved face and a faint upper-edge reflection carry the dish.
-    ShapePath {
-      strokeWidth: cap.edgeWidth
-      strokeColor: cap.edgeColor
-      fillGradient: LinearGradient {
-        x1: 0; y1: cap.faceTop; x2: 0; y2: cap.front
-        GradientStop { position: 0; color: Qt.tint(cap.faceColor, Qt.rgba(1,1,1,0.09)) }
-        GradientStop { position: 0.18; color: cap.faceColor }
-        GradientStop { position: 0.65; color: Qt.tint(cap.faceColor, Qt.rgba(0,0,0,0.13)) }
-        GradientStop { position: 1; color: Qt.tint(cap.faceColor, Qt.rgba(1,1,1,0.035)) }
+      // The curved face and a faint upper-edge reflection carry the dish.
+      ShapePath {
+        strokeWidth: cap.edgeWidth
+        strokeColor: cap.edgeColor
+        fillGradient: LinearGradient {
+          x1: 0; y1: cap.faceTop; x2: 0; y2: cap.front
+          GradientStop { position: 0; color: Qt.tint(cap.faceColor, Qt.rgba(1,1,1,0.09)) }
+          GradientStop { position: 0.18; color: cap.faceColor }
+          GradientStop { position: 0.65; color: Qt.tint(cap.faceColor, Qt.rgba(0,0,0,0.13)) }
+          GradientStop { position: 1; color: Qt.tint(cap.faceColor, Qt.rgba(1,1,1,0.035)) }
+        }
+        PathSvg { path: cap.facePath }
       }
-      PathSvg { path: cap.facePath }
-    }
-    ShapePath {
-      fillColor: "transparent"
-      strokeColor: Qt.rgba(1,1,1,0.14)
-      strokeWidth: 0.7
-      PathSvg { path: cap.topCurve }
+      ShapePath {
+        fillColor: "transparent"
+        strokeColor: Qt.rgba(1,1,1,0.14)
+        strokeWidth: 0.7
+        PathSvg { path: cap.topCurve }
+      }
     }
   }
 
-  Shape {
-    visible: cap.transparentWalls
-    anchors.fill: parent
-    preferredRendererType: Shape.CurveRenderer
-    ShapePath {
-      fillRule: ShapePath.OddEvenFill
-      strokeWidth: 0
-      fillGradient: LinearGradient {
-        x1: 0; y1: cap.faceTop; x2: 0; y2: cap.height
-        GradientStop { position: 0; color: cap.alpha(cap.litMaterial, cap.materialOpacity) }
-        GradientStop { position: 1; color: cap.alpha(Qt.darker(cap.litMaterial, 1.5), cap.materialOpacity) }
+  Component {
+    id: clearCap
+    Shape {
+      anchors.fill: parent
+      preferredRendererType: Shape.CurveRenderer
+      ShapePath {
+        fillRule: ShapePath.OddEvenFill
+        strokeWidth: 0
+        fillGradient: LinearGradient {
+          x1: 0; y1: cap.faceTop; x2: 0; y2: cap.height
+          GradientStop { position: 0; color: cap.alpha(cap.litMaterial, cap.materialOpacity) }
+          GradientStop { position: 1; color: cap.alpha(Qt.darker(cap.litMaterial, 1.5), cap.materialOpacity) }
+        }
+        PathSvg { path: cap.skirtPath + " " + cap.facePath }
       }
-      PathSvg { path: cap.skirtPath + " " + cap.facePath }
-    }
-    ShapePath {
-      strokeWidth: cap.edgeWidth
-      strokeColor: cap.clearFace ? cap.alpha(cap.edgeColor, cap.materialOpacity) : cap.edgeColor
-      fillGradient: LinearGradient {
-        x1: 0; y1: cap.faceTop; x2: 0; y2: cap.front
-        GradientStop { position: 0; color: cap.topTone(Qt.rgba(1,1,1,0.09)) }
-        GradientStop { position: 0.18; color: cap.topTone("transparent") }
-        GradientStop { position: 0.65; color: cap.topTone(Qt.rgba(0,0,0,0.13)) }
-        GradientStop { position: 1; color: cap.topTone(Qt.rgba(1,1,1,0.035)) }
+      ShapePath {
+        strokeWidth: cap.edgeWidth
+        strokeColor: cap.clearFace ? cap.alpha(cap.edgeColor, cap.materialOpacity) : cap.edgeColor
+        fillGradient: LinearGradient {
+          x1: 0; y1: cap.faceTop; x2: 0; y2: cap.front
+          GradientStop { position: 0; color: cap.topTone(Qt.rgba(1,1,1,0.09)) }
+          GradientStop { position: 0.18; color: cap.topTone("transparent") }
+          GradientStop { position: 0.65; color: cap.topTone(Qt.rgba(0,0,0,0.13)) }
+          GradientStop { position: 1; color: cap.topTone(Qt.rgba(1,1,1,0.035)) }
+        }
+        PathSvg { path: cap.facePath }
       }
-      PathSvg { path: cap.facePath }
-    }
-    ShapePath {
-      fillColor: "transparent"
-      strokeColor: Qt.rgba(1,1,1,0.14)
-      strokeWidth: 0.7
-      PathSvg { path: cap.topCurve }
+      ShapePath {
+        fillColor: "transparent"
+        strokeColor: Qt.rgba(1,1,1,0.14)
+        strokeWidth: 0.7
+        PathSvg { path: cap.topCurve }
+      }
     }
   }
 }
