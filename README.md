@@ -169,7 +169,7 @@ Ragtop has been tested on these:
 | Device | Shape | Status |
 | --- | --- | --- |
 | Lenovo 300w Yoga Gen 4 | Convertible | Works. Folding switches modes, rotation follows the device |
-| Microsoft Surface Book 2 | Detachable | Tablet mode and rotation work: **detaching the slate turns the keyboard on exactly as folding a hinge does**, reattaching turns it off, and rotation is correct. Touch itself doesn't work on this machine. See below |
+| Microsoft Surface Book 2 | Detachable | Tablet mode and rotation work: **detaching the slate turns the keyboard on exactly as folding a hinge does**, reattaching turns it off, and rotation is correct. Touch typing works once the linux-surface kernel is installed. See below |
 
 Nothing in Ragtop is written for either model: the tablet-mode switch is
 auto-detected, and rotation comes from the standard accelerometer stack.
