@@ -16,8 +16,12 @@ cat >"$copy/overlay-clones.sh" <<EOF
 #!/bin/bash
 echo "\$*" >>"$sandbox/clones.log"
 case "\$1" in
-  apply) [[ -f "$sandbox/apply-works" ]] && exit 0; echo "Could not prepare tester.menu; no overlay selections changed." >&2; exit 1 ;;
+  apply) [[ -f "$sandbox/apply-works" ]] && exit 0
+         [[ -f "$sandbox/hooks-fail" ]] && exit 3
+         echo "Could not prepare tester.menu; no overlay selections changed." >&2; exit 1 ;;
   installed) exit 1 ;;
+  status) [[ -f "$sandbox/menu-on" ]] && echo "menu: installed, in sync with the built-in"; exit 0 ;;
+  hooks) [[ -f "$sandbox/hooks-fail" ]] && exit 3; touch "$sandbox/hooks-written" ;;
 esac
 exit 0
 EOF
@@ -52,10 +56,30 @@ assert_contains "$out" "$(jq -r '."install.done"' "$repo/i18n/en/cli.json")" 'th
 assert_equal "$(grep '^overlays=' "$sandbox/home/.local/state/ragtop/install.conf")" 'overlays=' 'no overlay recorded as on'
 echo 'ok - failed overlays still finish the install, and say so'
 
+touch "$sandbox/hooks-fail"
+install_run
+assert_rc 1
+assert_contains "$err" "couldn't write its hooks"
+assert_lacks "$err" 'could not be turned on'
+echo 'ok - overlays on without their hooks say exactly that'
+rm -f "$sandbox/hooks-fail"
+
 touch "$sandbox/apply-works"
 : >"$sandbox/clones.log"
 install_run
 assert_rc 0
 assert_contains "$(cat "$sandbox/clones.log")" 'apply menu emojis clipboard polkit image-picker lock'
 echo 'ok - running the installer again offers the overlays again'
+
+# Overlays already on: a rerun, even with --no-restart, puts the hooks back.
+touch "$sandbox/menu-on"
+install_run
+assert_rc 0
+assert_file "$sandbox/hooks-written"
+echo 'ok - a rerun with overlays on restores their hooks'
+touch "$sandbox/hooks-fail"
+install_run
+assert_rc 1 'a rerun that cannot restore the hooks is not a success'
+assert_contains "$err" "couldn't write its hooks"
+echo 'ok - and says so when it cannot'
 finish

@@ -139,19 +139,24 @@ set_overlay() {
   local overlay="$1" on="$2" was=0
   label "$overlay" >/dev/null   # a known overlay, or a usage error
   "$clones" installed "$overlay" && was=1
+  local rc=0
   if (( on )); then
-    "$clones" apply "$overlay" "" >/dev/null
-    record
-    # A whole sentence for each, never a name put into one: other languages
-    # do not put it where English does, or inflect it the same.
-    notify "$(t "overlay.on.$overlay")"
+    "$clones" apply "$overlay" "" >/dev/null || rc=$?
   else
-    "$clones" apply "" "$overlay" >/dev/null
-    record
-    notify "$(t "overlay.off.$overlay")"
+    "$clones" apply "" "$overlay" >/dev/null || rc=$?
   fi
   # The batch's file changes trigger one native plugin reload.
-
+  record
+  # Said only when it happened. 3 is done, but without the hooks.
+  if (( rc != 0 && rc != 3 )); then
+    notify "$(t overlay.failed)"
+    return "$rc"
+  fi
+  # A whole sentence for each, never a name put into one: other languages
+  # do not put it where English does, or inflect it the same.
+  if (( on )); then notify "$(t "overlay.on.$overlay")"; else notify "$(t "overlay.off.$overlay")"; fi
+  if (( rc == 3 )); then notify "$(t overlays.hookFailed)"; fi
+  return "$rc"
 }
 
 # get <key> <default>

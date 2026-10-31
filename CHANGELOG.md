@@ -7,6 +7,7 @@
 - Prepare overlay additions, removals and refreshes before publishing them in batches. Serialize concurrent overlay jobs and keep rollback copies of the newest two batches only. A batch that never published is removed, and removing one of Ragtop's own clones no longer leaves an Omarchy backup of it behind.
 - Tell a locked session apart from one whose lock state could not be read when overlays are chosen.
 - A failed overlay step in the installer no longer stops the install part-way: Ragtop is installed, the reason is shown, and the next run offers the overlays again.
+- Overlays that went through without the hooks that keep them in step are reported as exactly that, by the installer, Setup and `ragtop overlay`. Startup sync and a rerun of the installer, `--no-restart` included, put the hooks back. `ragtop overlay enable/disable` no longer announces a change that failed.
 - Preserve rapid settings taps; add display confirmation, Typing Memory explanations, language-download recovery and accurate size checks.
 - Stop uninstall if overlay cleanup fails.
 - Omarchy's own Remove no longer strands the overlay clones: a copy kept outside Ragtop removes its unedited clones and hooks once Ragtop is gone, and names any clone you edited. Menu rows, the switch rule and settings still need `./install.sh uninstall`.

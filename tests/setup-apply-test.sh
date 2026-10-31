@@ -27,6 +27,7 @@ if [[ \$cmd == apply ]]; then
   for o in \$drop; do [[ -e "$sandbox/clones/\$o.edited" ]] && exit 1; done
   for o in \$add; do touch "$sandbox/clones/\$o"; done
   for o in \$drop; do rm -f "$sandbox/clones/\$o"; done
+  [[ -z "${HOOK_FAILS:-}" ]] || exit 3
 else
   for o in "\$@"; do [[ -e "$sandbox/clones/\$o" ]] || exit 1; done
 fi
@@ -44,6 +45,14 @@ everything_done_says_so() {
   PRESENT="lock" apply "menu" "lock" "menu"
   assert_rc 0
   assert_contains "$(calls)" "notify -g 󰌌 Ragtop Setup is done." "notification"
+  assert_equal "$(cat "$sandbox/home/.local/state/ragtop/install.conf")" "overlays=menu" "the record"
+}
+
+unwritten_hooks_are_reported_as_such() {
+  HOOK_FAILS=1 apply "menu" "" "menu"
+  assert_rc 1
+  assert_contains "$(calls)" "couldn't write its hooks" "notification"
+  assert_lacks "$(calls)" "Overlay changes failed" "the overlays did change"
   assert_equal "$(cat "$sandbox/home/.local/state/ragtop/install.conf")" "overlays=menu" "the record"
 }
 
@@ -80,6 +89,7 @@ a_restart_that_lost_the_race_is_tried_again() {
   assert_lacks "$(calls)" "restart-shell"
 }
 
+run_test "setup: overlays set but hooks unwritten are reported as such" unwritten_hooks_are_reported_as_such
 run_test "setup: a setup that did everything says it is done" everything_done_says_so
 run_test "setup: an overlay that could not be copied leaves the shell running" a_failed_copy_does_not_restart
 run_test "setup: a completed selection uses the shell watcher without restart" a_copy_restarts_once

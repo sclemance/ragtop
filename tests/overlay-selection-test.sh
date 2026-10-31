@@ -197,6 +197,43 @@ orphan_sync_upgrades_old_hook() {
   assert_file "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
   assert_contains "$(<"$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook")" 'orphaned'
 }
+unwritable_hooks_then_recovered() {
+  selection_sandbox
+  mkdir -p "$(hooks_dir)"
+  # A file where the boot hook's folder should be: the hook cannot be written.
+  : >"$(hooks_dir)/post-boot.d"
+  clones apply 'menu' ''
+  assert_rc 3 'the selection went through, the hooks did not'
+  assert_contains "$err" "hooks could not be updated"
+  assert_file "$plugins/tester.menu/manifest.json"
+  : >"$sandbox/calls.log"
+  clones sync
+  assert_rc 1
+  assert_contains "$(calls)" "couldn't write its hooks"
+  rm -f "$(hooks_dir)/post-boot.d"
+  clones sync
+  assert_rc 0
+  assert_file "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
+  assert_file "$(keeper)/overlay-clones.sh"
+}
+hooks_command_restores_and_clears() {
+  orphan_sandbox
+  rm -rf "$(keeper)" "$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook" "$(hooks_dir)/post-boot.d"
+  clones hooks
+  assert_rc 0
+  assert_file "$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook"
+  assert_file "$(hooks_dir)/post-boot.d/ragtop-overlay-check.hook"
+  assert_file "$(keeper)/overlay-clones.sh"
+  assert_file "$plugins/tester.menu/manifest.json"
+  clones apply '' 'menu emojis lock'
+  assert_rc 0
+  : >"$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook"
+  clones hooks
+  assert_rc 0
+  assert_no_path "$(hooks_dir)/post-update.d/ragtop-overlay-sync.hook"
+}
+run_test 'hooks restores missing hooks while overlays are on, clears them when none are' hooks_command_restores_and_clears
+run_test 'unwritten hooks are their own outcome, and startup sync repairs them' unwritable_hooks_then_recovered
 run_test 'startup sync brings an older install up to the orphan check' orphan_sync_upgrades_old_hook
 run_test 'with Ragtop still there, the orphan check changes nothing' orphan_present_does_nothing
 run_test 'with Ragtop gone, its own clones go and an edited one stays' orphan_removes_ours_keeps_edited

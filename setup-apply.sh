@@ -41,8 +41,11 @@ for o in $overlays; do
   "$here/overlay-clones.sh" installed "$o" && before="$before $o"
 done
 
-apply_ok=true
-"$here/overlay-clones.sh" apply "$add" "$drop" || apply_ok=false
+apply_ok=true hooks_ok=true
+apply_rc=0
+"$here/overlay-clones.sh" apply "$add" "$drop" || apply_rc=$?
+# 3 is the selection applied, but not the hooks that follow it.
+case $apply_rc in 0) ;; 3) hooks_ok=false ;; *) apply_ok=false ;; esac
 
 # However the copies went, the record describes the machine as it is.
 on=""
@@ -68,6 +71,7 @@ for o in $drop; do
 done
 problems=()
 $apply_ok || problems+=("$(t setup.overlaysFailed)")
+$hooks_ok || problems+=("$(t overlays.hookFailed)")
 $menu_ok || problems+=("$(t setup.noMenu)")
 ((${#missing[@]})) && problems+=("$(t setup.notCopied "$(names "${missing[@]}")")")
 ((${#kept[@]})) && problems+=("$(t setup.notRemoved "$(names "${kept[@]}")")")

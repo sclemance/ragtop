@@ -161,6 +161,13 @@ offer_overlays() {
   if [[ -n $on ]]; then
     tell install.overlaysOn "$on"
     tell install.overlaysChange
+    # Already on, but perhaps without the hooks, after a run that could not
+    # write them or a hand that deleted them. Restored here rather than left
+    # to the next shell start, which --no-restart puts off.
+    if ! "$repo/overlay-clones.sh" hooks; then
+      warn "$(t overlays.hookFailed)"
+      overlays_failed=1
+    fi
     return
   fi
 
@@ -192,7 +199,16 @@ offer_overlays() {
   # install half-finished: Ragtop is linked and enabled by now, and the
   # restart and the closing message still matter. The selection is all or
   # nothing, so nothing was changed, and this asks again on the next run.
-  if ! "$repo/overlay-clones.sh" apply "menu emojis clipboard polkit image-picker lock" ""; then
+  local rc=0
+  "$repo/overlay-clones.sh" apply "menu emojis clipboard polkit image-picker lock" "" || rc=$?
+  if (( rc == 3 )); then
+    # On, but without the hooks that keep them in step and clean them up.
+    overlays_enabled=1
+    record_overlays
+    warn "$(t overlays.hookFailed)"
+    overlays_failed=1
+    return
+  elif (( rc )); then
     record_overlays
     warn "$(t install.overlaysFailed)"
     overlays_failed=1
@@ -313,7 +329,11 @@ uninstall() {
   remove_udev_rule
 
   say "$(t uninstall.overlays)"
-  if ! "$repo/overlay-clones.sh" apply "" "menu emojis clipboard polkit image-picker lock"; then
+  # 3: the clones are gone and only Ragtop's hook files stayed. Those do
+  # nothing once Ragtop is gone, so this is no reason to stop.
+  local rc=0
+  "$repo/overlay-clones.sh" apply "" "menu emojis clipboard polkit image-picker lock" || rc=$?
+  if (( rc != 0 && rc != 3 )); then
     die "$(t uninstall.overlaysFailed)"
   fi
 

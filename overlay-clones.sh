@@ -917,7 +917,13 @@ apply_selection() {
   fi
   local remaining=0
   for spec in "${overlays[@]}"; do select_overlay "$spec"; is_patched && remaining=1; done
-  if (( remaining )); then install_hook || return 1; else remove_hooks || return 1; fi
+  # The selection itself has gone through by now, so a hook that cannot be
+  # written is its own outcome (3), not a failed selection: the overlays
+  # are as asked, and the next startup sync tries the hooks again.
+  if (( remaining )); then install_hook; else remove_hooks; fi || {
+    echo "Overlays changed, but Ragtop's hooks could not be updated ($hook_file, $boot_hook_file, $keeper_dir). The next shell start tries again." >&2
+    return 3
+  }
   return 0
 }
 
@@ -995,12 +1001,25 @@ shift || true
 # across processes so one never removes a clone another is still patching.
 # Read-only probes do not create a lock or change the plugin directory.
 case "$command" in
-  install|sync|remove|apply|orphaned)
+  install|sync|remove|apply|orphaned|hooks)
     mkdir -p "$plugins_dir"
     exec 9>"$plugins_dir/.ragtop-overlays.lock"
     flock -x 9
     ;;
 esac
+
+# The hooks and the kept copy as the clones call for, and nothing else: for
+# the installer, which finds overlays already on and must not leave them
+# without what keeps them in step and cleans them up.
+if [[ $command == hooks ]]; then
+  remaining=0
+  for o in "${overlays[@]}"; do select_overlay "$o"; is_patched && remaining=1; done
+  if (( remaining )); then install_hook; else remove_hooks; fi || {
+    echo "Ragtop's hooks could not be updated ($hook_file, $boot_hook_file, $keeper_dir)." >&2
+    exit 3
+  }
+  exit 0
+fi
 
 if [[ $command == orphaned ]]; then
   orphaned "${1:-}"
@@ -1053,7 +1072,10 @@ case "$command" in
     # Brings the hooks and the kept copy up to this version of Ragtop.
     remaining=0
     for o in "${overlays[@]}"; do select_overlay "$o"; is_patched && remaining=1; done
-    if (( remaining )); then install_hook || status=1; fi
+    if (( remaining )) && ! install_hook; then
+      status=1
+      notify "$(t overlays.hookFailed)"
+    fi
     ;;
   remove)
     # Only drop the hook once no clones are left for it to keep in step.
