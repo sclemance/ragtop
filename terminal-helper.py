@@ -36,7 +36,11 @@ class Worker:
         proc = self.notes_proc
         if proc is None:
             return
-        self.selector.unregister(proc.stdout)
+        # Shutdown can interrupt startup before the pipe was registered.
+        try:
+            self.selector.unregister(proc.stdout)
+        except (KeyError, ValueError):
+            pass
         proc.stdout.close()
         if proc.poll() is None:
             proc.terminate()

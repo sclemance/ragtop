@@ -1,5 +1,6 @@
 """Real isolated worker protocol, metadata delay, and process cleanup."""
 import json
+import importlib.util
 import os
 from pathlib import Path
 import select
@@ -120,6 +121,21 @@ class WorkerTest(unittest.TestCase):
         else: self.fail('metadata job exceeded timeout')
         self.send(2, 'gre')
         self.assertEqual(self.read()['items'][0]['text'], 'grep')
+
+    def test_cleanup_before_metadata_pipe_registration(self):
+        sys.path.insert(0, str(REPO))
+        spec = importlib.util.spec_from_file_location('terminal_worker', REPO / 'terminal-helper.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        worker = module.Worker()
+        proc = subprocess.Popen(['/bin/sleep', '30'], stdout=subprocess.PIPE)
+        worker.notes_proc = proc
+        try:
+            worker.stop_notes()
+            self.assertIsNotNone(proc.poll())
+        finally:
+            if proc.poll() is None: proc.kill(); proc.wait()
+            worker.selector.close()
 
 
 if __name__ == '__main__': unittest.main()
