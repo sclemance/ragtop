@@ -1123,15 +1123,26 @@ class Swipes:
         self.unit = 1.0
         self.ends = {}
         self.lengths = {}
+        self.geometry_ready = False
 
     def set_keys(self, value):
         """{"unit": w, "keys": {"q": [x, y], ...}} from the keyboard."""
         keys = value.get("keys") if isinstance(value, dict) else None
         unit = value.get("unit") if isinstance(value, dict) else None
-        if not isinstance(keys, dict) or not isinstance(unit, (int, float)) or unit <= 0:
+        if not isinstance(keys, dict) or type(unit) not in (int, float) or not math.isfinite(unit) or unit <= 0:
             return
-        self.keys = {k.lower(): (float(v[0]), float(v[1])) for k, v in keys.items()
-                     if isinstance(k, str) and len(k) == 1 and isinstance(v, list) and len(v) == 2}
+        # Validate before replacing a working layout. Keep the comparison on
+        # this decoder: another language has its own word-path index.
+        normal = {}
+        for k, v in keys.items():
+            if not isinstance(k, str) or len(k) != 1 or not isinstance(v, list) or len(v) != 2:
+                return
+            if any(type(n) not in (int, float) or not math.isfinite(n) for n in v):
+                return
+            normal[k.lower()] = (float(v[0]), float(v[1]))
+        if self.geometry_ready and normal == self.keys and float(unit) == self.unit:
+            return
+        self.keys = normal
         self.unit = float(unit)
         # Words by their first and last letters, the ones a path's ends
         # pick between, and only words every letter of which has a key.
@@ -1143,6 +1154,7 @@ class Swipes:
         # Each word's path length on these keys, for decode's cheap first
         # look at a candidate.
         self.lengths = {w: path_length(self.ideal(w)) for ws in self.ends.values() for w in ws}
+        self.geometry_ready = True
 
     def ideal(self, word):
         """The path through a word's keys, a letter typed twice in a row
