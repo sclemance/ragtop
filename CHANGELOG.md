@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.48.2 — Unreleased
+## 0.48.2 — 2026-11-01
 
 - What was typed is kept when the focused window's title changes. Hyprland repeats its window event on every title change (Claude Code's spinner, shells on each prompt), and Ragtop had taken each one for another window and forgotten the line.
 - Where Ragtop never sees a line begin, as in a terminal running a program or after typing on another keyboard, the first word it types is now kept and named by BackSpace. A word begun on another keyboard and finished here is named by the letters typed here.
