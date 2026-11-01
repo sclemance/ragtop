@@ -1658,7 +1658,10 @@ Item {
   function noteTyped(line) {
     if (line === "") return
     if (!root.keepAnything) {
-      if (/^(type|key|down) /.test(line)) root.dropTyped(false)
+      if (/^(type|key|down) /.test(line)) {
+        if (root.touchTrace) root.traceField("typed while nothing may be kept (" + root.recordState() + "): the record is dropped")
+        root.dropTyped(false)
+      }
       return
     }
     if (root.fieldPending) {
@@ -1672,6 +1675,8 @@ Item {
                              fromStart: root.typedFromStart },
                            line, root.typingMemory, root.atPrompt)
     if (next === null) return
+    if (root.typedFromStart && !next.fromStart)
+      root.traceField("a key whose effect Ragtop cannot follow (" + line.split(" ")[0] + "), or the record outgrew its limit: no longer from the field's start")
     root.typedTail = next.tail
     root.typedCursor = next.cursor
     root.typedFromStart = next.fromStart
@@ -1737,6 +1742,7 @@ Item {
       // together when a window is tapped into, the window's often second,
       // and it undid the field's fresh start.
       if (Date.now() - root.freshFieldAt < 500) return
+      root.traceField("another window became active (" + root.activeClass + "): the record is cleared and no longer from the field's start")
       root.typedTail = ""
       root.typedFromStart = false
       root.sentenceStart = false
@@ -1764,6 +1770,7 @@ Item {
   // else's.
   readonly property int ownHideWithin: 250
   function finishWord() {
+    root.traceField("a hide long after Ragtop's last key, taken as another keyboard: the record is cleared and no longer from the field's start")
     root.setFinished("", "", false)
     root.typedTail = ""
     root.typedFromStart = false
