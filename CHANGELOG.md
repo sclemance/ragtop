@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.48.1 — 2026-10-31
+
+- Check for updates saves the fetched manifest to a temporary file and reads its version from there, rather than piping the download. Behaviour is unchanged; the marketplace's security baseline misread the old line.
+
 ## 0.48.0 — 2026-10-31
 
 - Overlay focus follows Keyboard availability, including Always On in laptop mode.
