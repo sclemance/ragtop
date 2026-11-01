@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sclemance.ragtop",
   "name": "Ragtop",
-  "version": "0.48.0",
+  "version": "0.48.1",
   "author": "Stan Clemance",
   "license": "MIT",
   "description": "On-screen keyboard (OSK) and tablet mode for Omarchy on Hyprland. Touchscreen or mouse input; automatic rotation and resizing for convertible 2-in-1 devices. Mobile, 60%, 75% and 80% TKL layouts; accents, dead keys and AltGr. Nine keyboard themes, Glass styling and optional backlighting. Beta: swipe typing, word suggestions and Chinese, Japanese, Korean (CJK) input. Typing-memory controls and optional lock screen/system overlay support.",
