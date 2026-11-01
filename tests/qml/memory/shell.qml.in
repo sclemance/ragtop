@@ -31,6 +31,7 @@ ShellRoot {
   QtObject { id: finishedPause; function restart() {} function stop() {} }
   function clearTerminalRequests() {}
   property bool touchTrace: false
+  function readTermPlace() {}
 
   // ---- Service.qml's own ----------------------------------------------------
   // FROM SOURCE: fieldInfo fieldShown fieldHidden fieldReported fieldPending pendingTyped fieldPendingLimit
@@ -39,7 +40,7 @@ ShellRoot {
   // FROM SOURCE: onKeepAnythingChanged onTypingMemoryChanged forgetField dropTyped
   // FROM SOURCE: typedTail typedCursor beforeCursor typedFromStart sentenceStart
   // FROM SOURCE: isWordChar noteTyped freshField freshFieldAt fieldGeneration
-  // FROM SOURCE: traceField
+  // FROM SOURCE: traceField activeClass activeWindowAddress windowEvent termJustFocused
   // FROM SOURCE: predicting onPredictingChanged trackWord currentWord swipedWord autoSpaced hyphenJoined
   // FROM SOURCE: finished finishedFormsAsked setFinished joinFirst joinPair joinOffer
   // FROM SOURCE: asked pendingCompletion cancelCompletions onFieldGenerationChanged formsAsked joinAsked nextAsked nextWords nextReplied nextArrived
@@ -241,6 +242,28 @@ ShellRoot {
       root.press("key space")
       t.equal(root.finished, null, "word does not keep a finished word")
       t.equal(root.wordsBefore(3).length, 0, "nor name words before the cursor")
+    }],
+    [0, function() {
+      // A terminal whose title changes as it works (Claude Code's spinner):
+      // Hyprland repeats activewindow, and activewindowv2 with the same
+      // address. What was typed stays; another window lets it go.
+      root.mode("full")
+      root.windowEvent("activewindowv2", "5d604c36f3b0")
+      root.focus(root.plain)
+      root.freshFieldAt = 0
+      root.typeWord("hello")
+      root.press("key space")
+      root.windowEvent("activewindow", "foot,◑ Ragtop project")
+      root.windowEvent("activewindowv2", "5d604c36f3b0")
+      root.windowEvent("activewindow", "foot,◐ Ragtop project")
+      root.windowEvent("activewindowv2", "5d604c36f3b0")
+      t.equal(root.typedTail, "hello ", "a title change keeps what was typed")
+      t.ok(root.typedFromStart, "and the field's start")
+      t.equal(root.activeClass, "foot", "the class still follows activewindow")
+      root.windowEvent("activewindow", "firefox,Some page")
+      root.windowEvent("activewindowv2", "5d604c36aaaa")
+      t.equal(root.typedTail, "", "another window lets what was typed go")
+      t.ok(!root.typedFromStart, "and its start is no longer known")
     }],
   ])
 }

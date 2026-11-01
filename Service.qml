@@ -1732,21 +1732,34 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (String(event && event.name ? event.name : "") !== "activewindow") return
-      var data = String(event.data || "")
-      root.activeClass = data.slice(0, data.indexOf(",") < 0 ? data.length : data.indexOf(","))
-      root.termJustFocused = true
-      Qt.callLater(root.readTermPlace)
-      // A new window is a new place to type, and where in it is unknown,
-      // unless fcitx5 has just said a text field took focus: the two come
-      // together when a window is tapped into, the window's often second,
-      // and it undid the field's fresh start.
-      if (Date.now() - root.freshFieldAt < 500) return
-      root.traceField("another window became active (" + root.activeClass + "): the record is cleared and no longer from the field's start")
-      root.typedTail = ""
-      root.typedFromStart = false
-      root.sentenceStart = false
+      root.windowEvent(String(event && event.name ? event.name : ""), String(event && event.data ? event.data : ""))
     }
+  }
+  // Hyprland sends activewindow (class,title) again whenever the focused
+  // window's title changes, which a terminal running Claude Code does every
+  // second for its spinner, and a shell on every prompt: taken as a new
+  // window, each one wiped what was typed in mid-line. Which window it is
+  // comes in activewindowv2, by address, sent straight after; only a
+  // different address is focus that moved.
+  property string activeWindowAddress: ""
+  function windowEvent(name, data) {
+    if (name === "activewindow") {
+      root.activeClass = data.slice(0, data.indexOf(",") < 0 ? data.length : data.indexOf(","))
+      return
+    }
+    if (name !== "activewindowv2" || data === root.activeWindowAddress) return
+    root.activeWindowAddress = data
+    root.termJustFocused = true
+    Qt.callLater(root.readTermPlace)
+    // A new window is a new place to type, and where in it is unknown,
+    // unless fcitx5 has just said a text field took focus: the two come
+    // together when a window is tapped into, the window's often second,
+    // and it undid the field's fresh start.
+    if (Date.now() - root.freshFieldAt < 500) return
+    root.traceField("another window became active (" + root.activeClass + "): the record is cleared and no longer from the field's start")
+    root.typedTail = ""
+    root.typedFromStart = false
+    root.sentenceStart = false
   }
   Process {
     id: activeClassProc
@@ -1754,7 +1767,12 @@ Item {
     running: true
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.activeClass = String(JSON.parse(text).class || "") } catch (e) {}
+        try {
+          var w = JSON.parse(text)
+          root.activeClass = String(w.class || "")
+          // As activewindowv2 writes it, without the 0x.
+          root.activeWindowAddress = String(w.address || "").replace(/^0x/, "")
+        } catch (e) {}
       }
     }
   }
@@ -2445,7 +2463,7 @@ Item {
     root.readTermPlace()
   }
   // Set on every window focus, two terminals of one class included, which a
-  // change of class would miss (the activewindow handler).
+  // change of class would miss (windowEvent), but not on a title change.
   property bool termJustFocused: false
   // Keep command metadata warm across focus changes and keyboard hiding.
   // Only visible, known prompts may send requests or display their replies.
