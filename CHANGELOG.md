@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.48.2 — Unreleased
+
+- What was typed is kept when the focused window's title changes. Hyprland repeats its window event on every title change (Claude Code's spinner, shells on each prompt), and Ragtop had taken each one for another window and forgotten the line.
+- Where Ragtop never sees a line begin, as in a terminal running a program or after typing on another keyboard, the first word it types is now kept and named by BackSpace. A word begun on another keyboard and finished here is named by the letters typed here.
+- touch-trace also logs field focus, the bridge's reports and every reset of the typed record, as events and ids, never text.
+
 ## 0.48.1 — 2026-10-31
 
 - Check for updates saves the fetched manifest to a temporary file and reads its version from there, rather than piping the download. Behaviour is unchanged; the marketplace's security baseline misread the old line.
