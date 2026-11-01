@@ -816,9 +816,11 @@ Item {
   // top row and the current page, rows centred. A key's slot is this
   // rectangle. How it's drawn inside is up to KeyboardKey.qml, and never
   // affects which key a touch means.
-  // A soft or bordered top edge (Setup › Tablet › Edge) gets its own space
-  // above the keys, so it's clear of the first row.
-  readonly property real topPadding: root.theme.padding
+  // The space above the strip, or the first row without one. Nothing is
+  // drawn behind the keys, so it frames nothing and only keeps them off
+  // what is above: Omarchy's spacing (theme.edgePadding), never under 5 px.
+  readonly property real topPadding: Math.max(5, root.theme.edgePadding !== undefined
+    ? root.theme.edgePadding : root.theme.padding)
 
   // The suggestion strip, between the top edge and the first row, while
   // there is something to fill it (Service.qml, suggestionsShown). Half a
