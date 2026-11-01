@@ -1,4 +1,5 @@
 #!/bin/bash
+# quick: skip, about a minute: runs a real fcitx5 on a private bus.
 # Chinese, Japanese and Korean through the on-screen keyboard: the fcitx5
 # bridge and the helper's fcitx route, run against a real fcitx5 with real
 # engines, Mozc, Pinyin and Hangul. Each test gets a private fcitx5 on a bus

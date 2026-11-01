@@ -1,8 +1,14 @@
 #!/bin/bash
 # Runs Ragtop's tests: every tests/*-test.sh, or the ones named.
 #
-#   tests/run                       all of them
+#   tests/run                       all of them, one after another
 #   tests/run overlay-clones        just tests/overlay-clones-test.sh
+#   tests/run --quick               the quick ones, four at a time
+#   tests/run --quick fit memory    those of the named that are quick
+#
+# --quick is for nudging things: it leaves out the files that carry a
+# "# quick: skip" line (each says why), which take most of the full run, and
+# runs the rest in parallel. The full run is still the one before a push.
 #
 # Needs bash, python3, jq and, for the QML tests, the quickshell that Omarchy
 # ships. Nothing here touches ~/.config, the installed Omarchy or the running
@@ -11,6 +17,9 @@ set -uo pipefail
 
 tests_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+quick=0
+if [[ ${1:-} == --quick ]]; then quick=1; shift; fi
+
 files=()
 if (( $# == 0 )); then
   files=("$tests_dir"/*-test.sh)
@@ -18,14 +27,45 @@ else
   for name in "$@"; do files+=("$tests_dir/${name%-test.sh}-test.sh"); done
 fi
 
+skipped=()
+if (( quick )); then
+  kept=()
+  for file in "${files[@]}"; do
+    if grep -q '^# quick: skip' "$file"; then skipped+=("${file##*/}"); else kept+=("$file"); fi
+  done
+  files=("${kept[@]}")
+fi
+
 # Keeps going after a failing file, so one failure doesn't hide the rest.
 failed=()
-for file in "${files[@]}"; do
-  echo "==> ${file##*/}"
-  bash "$file" || failed+=("${file##*/}")
-done
+if (( quick )); then
+  # Each file has a sandbox of its own (lib.sh), so they can run side by
+  # side. Output is kept per file and shown only for the ones that failed.
+  logs=$(mktemp -d "${TMPDIR:-/tmp}/ragtop-quick.XXXXXX")
+  trap 'rm -rf "$logs"' EXIT
+  jobs_max=$(nproc 2>/dev/null || echo 4)
+  for file in "${files[@]}"; do
+    while (( $(jobs -rp | wc -l) >= jobs_max )); do wait -n; done
+    ( bash "$file" >"$logs/${file##*/}.log" 2>&1; echo $? >"$logs/${file##*/}.rc" ) &
+  done
+  wait
+  for file in "${files[@]}"; do
+    name=${file##*/}
+    if [[ $(cat "$logs/$name.rc" 2>/dev/null) != 0 ]]; then
+      failed+=("$name")
+      echo "==> $name"
+      grep -E '^(not ok|  #)' "$logs/$name.log" || tail -n 20 "$logs/$name.log"
+    fi
+  done
+else
+  for file in "${files[@]}"; do
+    echo "==> ${file##*/}"
+    bash "$file" || failed+=("${file##*/}")
+  done
+fi
 
 echo
+(( ${#skipped[@]} )) && echo "Left out by --quick: ${skipped[*]}"
 if (( ${#failed[@]} > 0 )); then
   echo "${#failed[@]} of ${#files[@]} test files failed: ${failed[*]}"
   exit 1

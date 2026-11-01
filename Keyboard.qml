@@ -708,7 +708,7 @@ Item {
   // divides by the form's own width and not by the mobile layout's. A key is
   // never larger than the size setting asks for, so a board narrower than
   // the screen sits centred with a margin rather than growing into it.
-  readonly property real unit: Math.min((width - 2 * theme.padding) / root.formUnits,
+  readonly property real unit: Math.min((width - 2 * root.sidePadding) / root.formUnits,
                                         Math.round(84 * theme.keyScale))
   // Height follows the size setting, not the width a key happens to get. On
   // a narrow screen the width is spent long before the ladder runs out, so
@@ -804,7 +804,7 @@ Item {
   }
   function formFits(form, checkHeight) {
     if (form === "mobile") return true
-    if ((root.width - 2 * root.theme.padding) / root.formUnitsOf(form) < root.minKeyWidth)
+    if ((root.width - 2 * root.sidePadding) / root.formUnitsOf(form) < root.minKeyWidth)
       return false
     return !(checkHeight && root.maxHeight > 0 && root.formHeightOf(form) > root.maxHeight)
   }
@@ -816,9 +816,28 @@ Item {
   // top row and the current page, rows centred. A key's slot is this
   // rectangle. How it's drawn inside is up to KeyboardKey.qml, and never
   // affects which key a touch means.
-  // A soft or bordered top edge (Setup › Tablet › Edge) gets its own space
-  // above the keys, so it's clear of the first row.
-  readonly property real topPadding: root.theme.padding
+  // The space above the strip (or the first row without one) and at the
+  // sides. Nothing is drawn behind the keys, so it frames nothing: the keys
+  // are spaced as Hyprland spaces windows (Service.qml, windowSpacing), and
+  // never closer to anything than to each other (theme.gap), so the board
+  // reads as one grid to its edges. Until that is read, Omarchy's own
+  // spacing (theme.edgePadding).
+  readonly property real edgePadding: Math.max(root.theme.gap, root.theme.edgePadding !== undefined
+    ? root.theme.edgePadding : root.theme.padding)
+  readonly property var windowSpacing: root.service.windowSpacing || null
+  // From the window above to a keycap's (or strip button's) edge is what is
+  // between two windows (gaps_in twice), or one key gap if that is more, and
+  // Hyprland's own gaps_out is part of it rather than added to it.
+  readonly property real topPadding: root.windowSpacing
+    ? Math.max(0, Math.max(root.theme.gap, root.windowSpacing.inTop + root.windowSpacing.inBottom)
+                  - root.windowSpacing.outBottom)
+    : root.edgePadding
+  // A keycap's edge lines up with a window's edge, gaps_out in from the
+  // screen's side, or sits one key gap in if that is more. Each key is set
+  // in by half a gap already (slotsOf), so that half is not added twice.
+  readonly property real sidePadding: root.windowSpacing
+    ? Math.max(root.theme.gap, root.windowSpacing.outLeft, root.windowSpacing.outRight) - root.theme.gap / 2
+    : root.edgePadding
 
   // The suggestion strip, between the top edge and the first row, while
   // there is something to fill it (Service.qml, suggestionsShown). Half a
@@ -1502,7 +1521,7 @@ Item {
   // Whether a label fits across the keyboard, over the card it is drawn on.
   function eraseFits(text) {
     var w = eraseMetrics.advanceWidth("\u232b " + text) + 2 * root.theme.padding + 2 * root.theme.gap
-    return w <= root.width - 2 * root.theme.padding
+    return w <= root.width - 2 * root.sidePadding
   }
 
   // A hold in progress: the finger that started it and the key under it,
@@ -1629,7 +1648,7 @@ Item {
     var slot = null
     for (var i = 0; i < root.slots.length; i++) if (root.slots[i].key === key) { slot = root.slots[i]; break }
     if (!slot) return
-    var room = root.width - 2 * root.theme.padding
+    var room = root.width - 2 * root.sidePadding
     var cell = layouts ? Math.min(root.wordCell(items), room / items.length)
       : Math.max(slot.width + root.theme.gap, root.unit * 0.92)
     // Characters are cut to what the keyboard is wide enough to show, so a
@@ -1657,13 +1676,13 @@ Item {
     if (beside) {
       y = slot.y
       from = slot.x + slot.width + root.theme.gap
-      if (from + total > root.width - root.theme.padding) {
+      if (from + total > root.width - root.sidePadding) {
         from = slot.x - root.theme.gap - total
         items = items.slice().reverse()
       }
     }
     var x = total > room ? (root.width - total) / 2
-      : Math.min(Math.max(from, root.theme.padding), root.width - root.theme.padding - total)
+      : Math.min(Math.max(from, root.sidePadding), root.width - root.sidePadding - total)
     root.popupTravelled = false
     // The one exception to nothing being chosen: a key whose corner prints
     // its other level (see shiftLevelOf) opens with that cell chosen, so
@@ -1832,9 +1851,11 @@ Item {
     keyKind: "accent"
     visible: root.stripShown
     theme: root.supportTheme
-    x: Math.max(root.theme.padding, root.keysLeft)
+    // Half a gap out from the keys, as the strip sets each button in by
+    // half a gap: the first and last buttons' edges line up with the keys'.
+    x: Math.max(root.sidePadding, root.keysLeft - root.theme.gap / 2)
     y: root.topPadding
-    width: Math.min(root.width - root.theme.padding, root.keysRight) - x
+    width: Math.min(root.width - root.sidePadding, root.keysRight + root.theme.gap / 2) - x
     height: root.stripHeight
     textHeight: Math.round(root.keyHeight * root.stripCompact)
     entranceProgress: root.demoStripProgress
@@ -1901,12 +1922,12 @@ Item {
   }
   function openForms(t, forms) {
     var c = strip.cells[t.cell]
-    var room = root.width - 2 * root.theme.padding
+    var room = root.width - 2 * root.sidePadding
     var cell = Math.min(root.wordCell(forms), room / forms.length)
     var total = cell * forms.length
     // Centred on the word held, kept on the keyboard.
     var middle = strip.x + strip.listLeft + c.x - strip.scroll + c.width / 2
-    var x = Math.min(Math.max(middle - total / 2, root.theme.padding), root.width - root.theme.padding - total)
+    var x = Math.min(Math.max(middle - total / 2, root.sidePadding), root.width - root.sidePadding - total)
     root.popupTravelled = false
     root.popup = { key: "", kind: "forms", items: forms, pointId: t.pointId, index: -1, preset: -1,
                    x: x, y: root.keysTop, beside: false, cellWidth: cell,
@@ -2319,7 +2340,7 @@ Item {
     }
     width: eraseText.implicitWidth + 2 * root.theme.padding + root.theme.gap * 2
     height: slot ? slot.height : 0
-    x: slot ? Math.max(root.theme.padding, Math.min(root.width - root.theme.padding - width,
+    x: slot ? Math.max(root.sidePadding, Math.min(root.width - root.sidePadding - width,
                                                     slot.x + slot.width - width)) : 0
     y: slot ? Math.max(root.popupTop, slot.y - slot.height - root.theme.gap) : 0
 

@@ -1,4 +1,5 @@
 #!/bin/bash
+# quick: skip, about 20 s: loads each Omarchy tree's overlay windows in quickshell.
 # The window a patched clone gets on an Omarchy whose overlays share one
 # OverlayWindow: what it asks the compositor for, closed and open, in laptop
 # and in tablet mode, and when it lets its content be seen.

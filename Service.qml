@@ -1079,6 +1079,8 @@ Item {
       }
       if (layoutChanged) root.sendKeys("reload")
       if (name === "configreloaded") {
+        // The gaps toggle (Super+Shift+Backspace) is a reload too.
+        root.readWindowSpacing()
         // A reload drops runtime rules. Restore them on the existing
         // surfaces: clearing readiness here unmaps the keyboard/handle,
         // then makes Hyprland animate them back in after a theme change.
@@ -1485,6 +1487,13 @@ Item {
         root.traceTouch({ t: now - gap, ev: "stall", id: -1, x: 0, y: 0, what: "Ragtop was busy for " + gap + " ms" })
     }
   }
+  // touch-trace: what happened to the field and the record of what was
+  // typed in it, as events, input-context ids and counts, never the text.
+  // For telling a field Ragtop dropped apart from one it never saw begin.
+  function traceField(what) {
+    if (root.touchTrace)
+      root.traceTouch({ t: Date.now(), ev: "field", id: -1, x: 0, y: 0, what: what })
+  }
   function traceTouch(entry) {
     if (!root.touchTrace || root.secretField) return
     // Screen height, for the touch's place on it: the keyboard sits on the
@@ -1503,6 +1512,12 @@ Item {
   // back to where the record starts is left out unless the record starts at
   // the start of the field: it may be the end of a word typed before Ragtop
   // was watching.
+  // Where Ragtop never saw the line begin (a terminal running a program,
+  // after another keyboard), the record's first word could still be named:
+  // it was typed here, whole or from its first letter, so deleting it takes
+  // exactly what was typed. Only a word begun on another keyboard and
+  // finished here is named short, and the label shows what goes.
+  property bool recordStartsAtWord: false
   function wordsBefore(most) {
     if (!root.keepContext) return []
     var t = root.beforeCursor
@@ -1512,7 +1527,8 @@ Item {
       var i = end
       while (i > 0 && /\s/.test(t[i - 1])) i--
       while (i > 0 && !/\s/.test(t[i - 1])) i--
-      if (i === 0 && !root.typedFromStart) break
+      if (i === 0 && !root.typedFromStart
+          && !(root.recordStartsAtWord && /\S/.test(t.slice(0, end)))) break
       out.push(t.slice(i, end))
       end = i
     }
@@ -1526,6 +1542,10 @@ Item {
     if (!root.keepContext) return "typing memory: " + root.typingMemory
     if (!root.predicting && root.typedTail === "") return "nothing kept here"
     if (root.typedTail === "") return root.typedFromStart ? "empty field" : "nothing typed since the record was lost"
+    if (root.recordStartsAtWord && !root.typedFromStart) {
+      var n = root.beforeCursor.split(/\s+/).filter(function(w) { return w !== "" }).length
+      return n + " words before the cursor, from the first word Ragtop typed"
+    }
     var words = root.beforeCursor.split(/\s+/).filter(function(w) { return w !== "" }).length
     return words + " words before the cursor, " + (root.typedFromStart ? "from the field's start" : "not from the field's start")
       + (root.typedCursor < root.typedTail.length ? ", cursor moved back" : "")
@@ -1651,7 +1671,10 @@ Item {
   function noteTyped(line) {
     if (line === "") return
     if (!root.keepAnything) {
-      if (/^(type|key|down) /.test(line)) root.dropTyped(false)
+      if (/^(type|key|down) /.test(line)) {
+        if (root.touchTrace) root.traceField("typed while nothing may be kept (" + root.recordState() + "): the record is dropped")
+        root.dropTyped(false)
+      }
       return
     }
     if (root.fieldPending) {
@@ -1665,6 +1688,15 @@ Item {
                              fromStart: root.typedFromStart },
                            line, root.typingMemory, root.atPrompt)
     if (next === null) return
+    // A record begun from empty at an unknown place starts at what Ragtop
+    // typed. Emptied again, or cut to its last MOST characters, it no
+    // longer does.
+    if (root.typedTail === "" && !root.typedFromStart && next.tail !== "" && !next.fromStart)
+      root.recordStartsAtWord = true
+    else if (next.tail === "" || next.fromStart || next.tail.length >= Record.MOST)
+      root.recordStartsAtWord = false
+    if (root.typedFromStart && !next.fromStart)
+      root.traceField("a key whose effect Ragtop cannot follow (" + line.split(" ")[0] + "), or the record outgrew its limit: no longer from the field's start")
     root.typedTail = next.tail
     root.typedCursor = next.cursor
     root.typedFromStart = next.fromStart
@@ -1676,6 +1708,7 @@ Item {
     root.fieldGeneration++
     root.typedTail = ""
     root.typedFromStart = true
+    root.recordStartsAtWord = false
     root.sentenceStart = true
     root.freshFieldAt = Date.now()
     Qt.callLater(root.updateContext)
@@ -1720,20 +1753,35 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (String(event && event.name ? event.name : "") !== "activewindow") return
-      var data = String(event.data || "")
-      root.activeClass = data.slice(0, data.indexOf(",") < 0 ? data.length : data.indexOf(","))
-      root.termJustFocused = true
-      Qt.callLater(root.readTermPlace)
-      // A new window is a new place to type, and where in it is unknown,
-      // unless fcitx5 has just said a text field took focus: the two come
-      // together when a window is tapped into, the window's often second,
-      // and it undid the field's fresh start.
-      if (Date.now() - root.freshFieldAt < 500) return
-      root.typedTail = ""
-      root.typedFromStart = false
-      root.sentenceStart = false
+      root.windowEvent(String(event && event.name ? event.name : ""), String(event && event.data ? event.data : ""))
     }
+  }
+  // Hyprland sends activewindow (class,title) again whenever the focused
+  // window's title changes, which a terminal running Claude Code does every
+  // second for its spinner, and a shell on every prompt: taken as a new
+  // window, each one wiped what was typed in mid-line. Which window it is
+  // comes in activewindowv2, by address, sent straight after; only a
+  // different address is focus that moved.
+  property string activeWindowAddress: ""
+  function windowEvent(name, data) {
+    if (name === "activewindow") {
+      root.activeClass = data.slice(0, data.indexOf(",") < 0 ? data.length : data.indexOf(","))
+      return
+    }
+    if (name !== "activewindowv2" || data === root.activeWindowAddress) return
+    root.activeWindowAddress = data
+    root.termJustFocused = true
+    Qt.callLater(root.readTermPlace)
+    // A new window is a new place to type, and where in it is unknown,
+    // unless fcitx5 has just said a text field took focus: the two come
+    // together when a window is tapped into, the window's often second,
+    // and it undid the field's fresh start.
+    if (Date.now() - root.freshFieldAt < 500) return
+    root.traceField("another window became active (" + root.activeClass + "): the record is cleared and no longer from the field's start")
+    root.typedTail = ""
+    root.typedFromStart = false
+    root.recordStartsAtWord = false
+    root.sentenceStart = false
   }
   Process {
     id: activeClassProc
@@ -1741,7 +1789,12 @@ Item {
     running: true
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.activeClass = String(JSON.parse(text).class || "") } catch (e) {}
+        try {
+          var w = JSON.parse(text)
+          root.activeClass = String(w.class || "")
+          // As activewindowv2 writes it, without the 0x.
+          root.activeWindowAddress = String(w.address || "").replace(/^0x/, "")
+        } catch (e) {}
       }
     }
   }
@@ -1757,9 +1810,11 @@ Item {
   // else's.
   readonly property int ownHideWithin: 250
   function finishWord() {
+    root.traceField("a hide long after Ragtop's last key, taken as another keyboard: the record is cleared and no longer from the field's start")
     root.setFinished("", "", false)
     root.typedTail = ""
     root.typedFromStart = false
+    root.recordStartsAtWord = false
     root.sentenceStart = false
     root.currentWord = ""
     root.swipedWord = ""
@@ -2006,6 +2061,7 @@ Item {
   // A field took focus, and which is not known until the bridge has asked
   // fcitx5: nothing is kept until it says.
   function fieldShown() {
+    root.traceField("shown: a new field, the record starts at its start")
     root.fieldInfo = null
     root.fieldPending = false
     root.pendingTyped = []
@@ -2017,6 +2073,7 @@ Item {
   // bridge's next report says which, and until it does what is typed is
   // held apart (fieldPending).
   function fieldHidden() {
+    root.traceField("hidden: what is typed is held until the bridge reports")
     root.fieldPending = true
     root.pendingTyped = []
     fieldPendingLimit.restart()
@@ -2028,6 +2085,12 @@ Item {
     root.pendingTyped = []
     fieldPendingLimit.stop()
     root.fieldInfo = value
+    if (root.touchTrace) {
+      var ids = (was ? was.id : "none") + " -> " + (value ? value.id : "none")
+      root.traceField(!value ? "report: no field (" + ids + ")"
+        : was && value.id !== was.id ? "report: a different field (" + ids + "), the record is dropped"
+        : "report: the same field (" + ids + "), " + held.length + " held key line(s) kept")
+    }
     if (value && was && value.id !== was.id) root.forgetField(false)
     // The same field still: what was typed while it was in question is its.
     else if (value && held.length > 0) held.forEach(root.noteTyped)
@@ -2042,6 +2105,8 @@ Item {
     id: fieldPendingLimit
     interval: 1000
     onTriggered: {
+      root.traceField("no report within a second of a hide: " + root.pendingTyped.length
+                      + " held key line(s) and the record are dropped")
       root.fieldPending = false
       root.pendingTyped = []
       root.forgetField(false)
@@ -2082,6 +2147,7 @@ Item {
     root.pendingTyped = []
     root.fieldGeneration++
     root.dropTyped(fromStart)
+    if (root.touchTrace) root.traceField("record dropped, now: " + root.recordState())
     // Each answer still takes its place in the queue, and finds undefined.
     var gone = function() { return undefined }
     root.asked = root.asked.map(gone)
@@ -2097,6 +2163,7 @@ Item {
     root.typedTail = ""
     root.typedCursor = 0
     root.typedFromStart = fromStart
+    root.recordStartsAtWord = false
     root.sentenceStart = fromStart
     root.currentWord = ""
     root.swipedWord = ""
@@ -2109,6 +2176,7 @@ Item {
     root.fieldGeneration++
     root.typedTail = ""
     root.typedFromStart = false
+    root.recordStartsAtWord = false
     root.sentenceStart = false
     root.currentWord = ""
     root.swipedWord = ""
@@ -2395,6 +2463,7 @@ Item {
             root.termJustFocused = false
             if (root.atPrompt && root.typedTail === "" && !root.typedFromStart) {
               root.typedFromStart = true
+              root.recordStartsAtWord = false
               root.typedCursor = 0
               moved = true
             }
@@ -2420,7 +2489,7 @@ Item {
     root.readTermPlace()
   }
   // Set on every window focus, two terminals of one class included, which a
-  // change of class would miss (the activewindow handler).
+  // change of class would miss (windowEvent), but not on a title change.
   property bool termJustFocused: false
   // Keep command metadata warm across focus changes and keyboard hiding.
   // Only visible, known prompts may send requests or display their replies.
@@ -2818,6 +2887,7 @@ Item {
     if (!root.swipeActive || !keyboardHelper.running) return
     // Drawn in a field that has since lost focus: the word was for there.
     if (ask.field !== root.fieldGeneration) {
+      root.traceField("a swiped word was not typed: the field changed while it was read")
       if (root.suggestions.source === "swipe" && root.swipedWord === "") root.setSuggestions("swipe", null)
       return
     }
@@ -2842,6 +2912,8 @@ Item {
     root.swipedWord = word
     root.autoSpaced = true
     root.setFinished(root.capitalised(words[0]), " ", true)
+    if (root.touchTrace) root.traceField("a swiped word was typed, " + (root.fieldPending
+      ? "held while the field is in question" : "record: " + root.recordState()))
     root.setSuggestions("swipe", { items: words.map(function(w) { return { text: root.capitalised(w), note: "" } }),
                                    prev: false, next: false, cursor: 0 })
   }
@@ -3340,6 +3412,39 @@ Item {
   }
 
   GlowPalette { id: desktopGlowPalette }
+
+  // Hyprland's window gaps, so the keys sit as a window would (Keyboard.qml,
+  // topPadding and sidePadding): { inTop, inBottom, outBottom, outLeft,
+  // outRight }, or null until read. Read at start and on each config reload.
+  property var windowSpacing: null
+  function readWindowSpacing() {
+    if (!windowSpacingProc.running) windowSpacingProc.running = true
+  }
+  Process {
+    id: windowSpacingProc
+    running: true
+    command: ["sh", "-c", "hyprctl -j getoption general:gaps_in; hyprctl -j getoption general:gaps_out"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        // Two objects, one after another, each gap as CSS: top right bottom
+        // left, or fewer values as CSS shortens them.
+        var found = (text.match(/\{[^{}]*\}/g) || []).map(function(o) {
+          try { return JSON.parse(o) } catch (e) { return null }
+        })
+        function sides(o) {
+          var v = o && typeof o.css === "string" ? o.css.trim().split(/\s+/).map(Number)
+            : o && typeof o.int === "number" ? [o.int] : []
+          if (v.length === 0 || v.some(function(n) { return !isFinite(n) || n < 0 })) return null
+          while (v.length < 4) v.push(v[v.length === 3 ? 1 : v.length === 2 ? 0 : 0])
+          return v
+        }
+        var gin = sides(found[0]), gout = sides(found[1])
+        root.windowSpacing = gin && gout
+          ? { inTop: gin[0], inBottom: gin[2], outBottom: gout[2], outLeft: gout[3], outRight: gout[1] }
+          : null
+      }
+    }
+  }
 
   KeyboardTheme {
     id: keyboardTheme

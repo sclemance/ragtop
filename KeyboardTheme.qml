@@ -256,6 +256,9 @@ QtObject {
   // Density steps through Omarchy's spacing tokens and scales the keys.
   property int gap: density === "compact" ? Style.spacing.sm : density === "roomy" ? Style.spacing.lg : Style.spacing.md
   property int padding: density === "compact" ? Style.spacing.md : density === "roomy" ? Style.spacing.xl : Style.spacing.lg
+  // Above the strip or the first row: Omarchy's own spacing, whatever the
+  // density, since nothing is drawn behind the keys for it to frame.
+  readonly property int edgePadding: Style.spacing.lg
   property real keyScale: Math.max(0.6, Math.min(1.6, look.size / 100 * sizeNudge))
 
   // Visual room for underlighting inside an unchanged touch slot. Sculpted

@@ -1,4 +1,5 @@
 #!/bin/bash
+# quick: skip, about 15 s: builds and searches word lists through predictor.py.
 # predictor.py: reading a word list in wordfreq's own format, and what it
 # suggests for a partly typed word. The list here is made up for the test,
 # in the same format, so no wordfreq data lives in the repository: the real

@@ -19,6 +19,7 @@ ShellRoot {
     property bool tourActive: false
     property string keyboardLayout: ""
     property var keyLabels: null
+    property var windowSpacing: null
   }
   property var theme: QtObject {
     property real keyScale: 1
@@ -32,6 +33,7 @@ ShellRoot {
   // ---- Keyboard.qml's own --------------------------------------------------
   // FROM SOURCE: rowUnits unit keyHeightUncapped keyHeight topRowFraction formLadder
   // FROM SOURCE: formUnitsOf rowHeightsOf formHeightOf minKeyWidth maxHeight wanted form
+  // FROM SOURCE: edgePadding windowSpacing sidePadding
   // FROM SOURCE: formFits formUnits topPadding stripCompact stripFraction stripSlot stripHeight visibleHeight
 
   // ---- The test ------------------------------------------------------------
@@ -86,6 +88,28 @@ ShellRoot {
       root.service.tourActive = false
       t.equal(root.visibleHeight, root.implicitHeight - root.stripSlot,
               "ordinary hidden strip gives its room back after the tour")
+    }],
+    [0, function() {
+      // Spaced like a window, with a 4 px key gap and 6 px Omarchy padding.
+      function spacing(inGap, outGap) {
+        root.service.windowSpacing = { inTop: inGap, inBottom: inGap, outBottom: outGap,
+                                       outLeft: outGap, outRight: outGap }
+      }
+      root.service.windowSpacing = null
+      t.equal(root.topPadding, 6, "before Hyprland is read, Omarchy's spacing at the top")
+      t.equal(root.sidePadding, 6, "and at the sides")
+      spacing(5, 10)
+      t.equal(root.topPadding, 0, "gaps on: Hyprland's gap is the space above, nothing added")
+      t.equal(root.sidePadding + root.theme.gap / 2, 10, "and the side keys' edges sit where the windows' do")
+      spacing(0, 0)
+      t.equal(root.topPadding, root.theme.gap, "gaps off: a key gap above")
+      t.equal(root.sidePadding + root.theme.gap / 2, root.theme.gap, "and a key gap at the sides")
+      spacing(5, 20)
+      t.equal(root.topPadding, 0, "a wide gaps_out is already more than between windows")
+      t.equal(root.sidePadding + root.theme.gap / 2, 20, "and the keys follow the windows in")
+      spacing(12, 10)
+      t.equal(root.topPadding, 14, "wide gaps_in: topped up to what is between two windows")
+      root.service.windowSpacing = null
     }],
   ])
 }
