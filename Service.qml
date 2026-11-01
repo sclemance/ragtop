@@ -1510,6 +1510,12 @@ Item {
   // back to where the record starts is left out unless the record starts at
   // the start of the field: it may be the end of a word typed before Ragtop
   // was watching.
+  // Where Ragtop never saw the line begin (a terminal running a program,
+  // after another keyboard), the record's first word could still be named:
+  // it was typed here, whole or from its first letter, so deleting it takes
+  // exactly what was typed. Only a word begun on another keyboard and
+  // finished here is named short, and the label shows what goes.
+  property bool recordStartsAtWord: false
   function wordsBefore(most) {
     if (!root.keepContext) return []
     var t = root.beforeCursor
@@ -1519,7 +1525,8 @@ Item {
       var i = end
       while (i > 0 && /\s/.test(t[i - 1])) i--
       while (i > 0 && !/\s/.test(t[i - 1])) i--
-      if (i === 0 && !root.typedFromStart) break
+      if (i === 0 && !root.typedFromStart
+          && !(root.recordStartsAtWord && /\S/.test(t.slice(0, end)))) break
       out.push(t.slice(i, end))
       end = i
     }
@@ -1533,6 +1540,10 @@ Item {
     if (!root.keepContext) return "typing memory: " + root.typingMemory
     if (!root.predicting && root.typedTail === "") return "nothing kept here"
     if (root.typedTail === "") return root.typedFromStart ? "empty field" : "nothing typed since the record was lost"
+    if (root.recordStartsAtWord && !root.typedFromStart) {
+      var n = root.beforeCursor.split(/\s+/).filter(function(w) { return w !== "" }).length
+      return n + " words before the cursor, from the first word Ragtop typed"
+    }
     var words = root.beforeCursor.split(/\s+/).filter(function(w) { return w !== "" }).length
     return words + " words before the cursor, " + (root.typedFromStart ? "from the field's start" : "not from the field's start")
       + (root.typedCursor < root.typedTail.length ? ", cursor moved back" : "")
@@ -1675,6 +1686,13 @@ Item {
                              fromStart: root.typedFromStart },
                            line, root.typingMemory, root.atPrompt)
     if (next === null) return
+    // A record begun from empty at an unknown place starts at what Ragtop
+    // typed. Emptied again, or cut to its last MOST characters, it no
+    // longer does.
+    if (root.typedTail === "" && !root.typedFromStart && next.tail !== "" && !next.fromStart)
+      root.recordStartsAtWord = true
+    else if (next.tail === "" || next.fromStart || next.tail.length >= Record.MOST)
+      root.recordStartsAtWord = false
     if (root.typedFromStart && !next.fromStart)
       root.traceField("a key whose effect Ragtop cannot follow (" + line.split(" ")[0] + "), or the record outgrew its limit: no longer from the field's start")
     root.typedTail = next.tail
@@ -1688,6 +1706,7 @@ Item {
     root.fieldGeneration++
     root.typedTail = ""
     root.typedFromStart = true
+    root.recordStartsAtWord = false
     root.sentenceStart = true
     root.freshFieldAt = Date.now()
     Qt.callLater(root.updateContext)
@@ -1759,6 +1778,7 @@ Item {
     root.traceField("another window became active (" + root.activeClass + "): the record is cleared and no longer from the field's start")
     root.typedTail = ""
     root.typedFromStart = false
+    root.recordStartsAtWord = false
     root.sentenceStart = false
   }
   Process {
@@ -1792,6 +1812,7 @@ Item {
     root.setFinished("", "", false)
     root.typedTail = ""
     root.typedFromStart = false
+    root.recordStartsAtWord = false
     root.sentenceStart = false
     root.currentWord = ""
     root.swipedWord = ""
@@ -2140,6 +2161,7 @@ Item {
     root.typedTail = ""
     root.typedCursor = 0
     root.typedFromStart = fromStart
+    root.recordStartsAtWord = false
     root.sentenceStart = fromStart
     root.currentWord = ""
     root.swipedWord = ""
@@ -2152,6 +2174,7 @@ Item {
     root.fieldGeneration++
     root.typedTail = ""
     root.typedFromStart = false
+    root.recordStartsAtWord = false
     root.sentenceStart = false
     root.currentWord = ""
     root.swipedWord = ""
@@ -2438,6 +2461,7 @@ Item {
             root.termJustFocused = false
             if (root.atPrompt && root.typedTail === "" && !root.typedFromStart) {
               root.typedFromStart = true
+              root.recordStartsAtWord = false
               root.typedCursor = 0
               moved = true
             }
