@@ -1,0 +1,13 @@
+#!/bin/bash
+# Stands in for omarchy-restart-shell in the tests, so nothing under test can
+# restart the real shell. Records that it was asked to. STUB_RESTART_FAILS
+# is how many times in a row it fails first, as one that lost the race with
+# the old shell does.
+[[ -z ${STUB_LOG:-} ]] || echo "restart-shell" >>"$STUB_LOG"
+if [[ -n ${STUB_RESTART_FAILS:-} ]]; then
+  count="${STUB_LOG:-/dev/null}.restarts"
+  n=$(( $(cat "$count" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" >"$count"
+  (( n > STUB_RESTART_FAILS )) || { echo "Omarchy shell did not become ready after restart." >&2; exit 1; }
+fi
+exit 0

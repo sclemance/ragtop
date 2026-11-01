@@ -1,0 +1,96 @@
+import QtQuick
+import Quickshell
+
+// Keyboard.qml's taps on the suggestion strip, its own members copied in by
+// extract.py, and the strip and service stood in for below: a tap takes the
+// word that was under the finger, and nothing if the suggestions changed
+// or another field took focus before it lifted.
+ShellRoot {
+  id: root
+
+  Harness { id: t }
+
+  // ---- Stand-ins -----------------------------------------------------------
+  property var service: QtObject {
+    property var suggestions: ({ source: "", items: [], prev: false, next: false, cursor: -1 })
+    property int fieldGeneration: 0
+    property var chosen: []
+    property var formsFor: []
+    function chooseSuggestion(index) { chosen.push(suggestions.items[index].text) }
+    function pageSuggestions(forward) { chosen.push(forward ? "next page" : "prev page") }
+    function askForms(word) { formsFor.push(word) }
+  }
+  // Each cell 100 wide from 0; a touch's x is the cell it lands on.
+  QtObject {
+    id: strip
+    property real x: 0
+    property real scroll: 0
+    property int pressedIndex: -1
+    readonly property int prevCell: -2
+    readonly property int nextCell: -3
+    readonly property int scrollLeftCell: -4
+    readonly property int scrollRightCell: -5
+    function cellAt(x) { return Math.floor(x / 100) }
+    function scrollBy(d) {}
+  }
+  QtObject { id: formsHold; function restart() {} function stop() {} }
+  property string formsWord: ""
+
+  // ---- Keyboard.qml's own --------------------------------------------------
+  // FROM SOURCE: stripTouch stripModel stripStill stripPressed stripLifted askForms
+
+  // ---- The test ------------------------------------------------------------
+  function offer(words) {
+    root.service.suggestions = { source: "predict", items: words.map(function(w) { return { text: w } }),
+                                 prev: false, next: false, cursor: -1 }
+  }
+  function down(cell) { root.stripPressed({ pointId: 1, x: cell * 100 + 50 }) }
+  function up(cell) { root.stripLifted({ pointId: 1, x: cell * 100 + 50 }) }
+
+  Component.onCompleted: t.run([
+    [0, function() {
+      root.offer(["hello", "help"])
+      root.down(1); root.up(1)
+      t.equal(root.service.chosen.join(), "help", "a tap takes the word under it")
+    }],
+    [0, function() {
+      root.service.chosen = []
+      root.offer(["hello", "help"])
+      root.down(1)
+      root.offer(["helmet", "helium"])
+      t.equal(root.stripModel.items[1].text, "help", "while the finger is down the strip still shows what it touched")
+      root.up(1)
+      t.equal(root.service.chosen.length, 0, "suggestions changed under the finger: nothing is taken")
+      t.equal(root.stripModel.items[1].text, "helium", "and the strip shows the new ones once it lifts")
+    }],
+    [0, function() {
+      root.service.chosen = []
+      root.offer(["hello", "help"])
+      root.down(0)
+      root.offer(["hello", "help"])
+      root.up(0)
+      t.equal(root.service.chosen.join(), "hello", "the same words sent again: the tap still counts")
+    }],
+    [0, function() {
+      root.service.chosen = []
+      root.offer(["hello", "help"])
+      root.down(0)
+      root.service.fieldGeneration++
+      root.up(0)
+      t.equal(root.service.chosen.length, 0, "another field took focus mid-tap: nothing is taken")
+    }],
+    [0, function() {
+      root.service.formsFor = []
+      root.offer(["hello", "help"])
+      root.down(1)
+      root.offer(["helmet", "helium"])
+      root.askForms()
+      t.equal(root.service.formsFor.length, 0, "a hold on a word that changed asks for no forms")
+      root.up(1)
+      root.down(1)
+      root.askForms()
+      t.equal(root.service.formsFor.join(), "helium", "a hold on a word that stayed asks for its forms")
+      root.up(1)
+    }],
+  ])
+}

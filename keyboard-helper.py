@@ -17,6 +17,8 @@ commands on stdin, one per line:
   hold <mod> / release <mod>  sticky modifiers, applied to later keys
   reload                      re-read Hyprland's layouts, e.g. after a switch
   route fcitx | wayland       where keys go: see FcitxRoute
+  forget                      drop which characters have been looked up and
+                              any spare keys bound to them, after a password
   quit
 
 At startup and after each reload it also prints "labels <json>": the active
@@ -136,6 +138,7 @@ def xkbcommon():
     lib = ctypes.CDLL(ctypes.util.find_library("xkbcommon"))
     signatures = {
         "xkb_context_new": (ptr, [ctypes.c_int]),
+        "xkb_context_unref": (None, [ptr]),
         "xkb_keymap_new_from_string": (ptr, [ptr, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]),
         "xkb_keymap_unref": (None, [ptr]),
         "xkb_keymap_key_by_name": (u32, [ptr, ctypes.c_char_p]),
@@ -171,7 +174,6 @@ class XkbLabels:
 
     def __init__(self):
         self.lib = xkbcommon()
-        self.context = self.lib.xkb_context_new(0)
 
     # The letter rows of a physical keyboard, by xkb key name.
     ROWS = (("AD", 12), ("AC", 11), ("AB", 10))
@@ -223,9 +225,20 @@ class XkbLabels:
         keycap prints in its corner, and are empty where the layout puts
         nothing at that level."""
         lib = self.lib
-        keymap = lib.xkb_keymap_new_from_string(self.context, keymap_text.encode(), 1, 0)
+        # Native objects, freed here: Python's collector never sees them, and
+        # a layout switch or a config reload reads labels each time.
+        context = lib.xkb_context_new(0)
+        keymap = lib.xkb_keymap_new_from_string(context, keymap_text.encode(), 1, 0)
+        lib.xkb_context_unref(context)   # the keymap holds its own reference
         if not keymap:
             return None
+        try:
+            return self._read(keymap, group)
+        finally:
+            lib.xkb_keymap_unref(keymap)
+
+    def _read(self, keymap, group):
+        lib = self.lib
 
         def char(code, level):
             syms = ctypes.POINTER(ctypes.c_uint32)()
@@ -275,7 +288,6 @@ class XkbLabels:
         for g in range(lib.xkb_keymap_num_layouts(keymap)):
             other = lib.xkb_keymap_layout_get_name(keymap, g)
             layouts.append(localized_layout_name(other.decode() if other else ""))
-        lib.xkb_keymap_unref(keymap)
         return {"name": localized_layout_name(name.decode() if name else ""),
                 "rows": rows, "symbols": symbols, "letters": letters,
                 "digits": digits, "punctuation": punctuation, "keys": keys,
@@ -440,6 +452,10 @@ class Keymap:
         self.extras = {}      # keysym name -> key name, oldest use first
         self.lookups = {}
         self.lock = threading.Lock()
+        # Held while the compiled keymap is read, and while it is freed: the
+        # warming thread may still be reading it when a reload replaces it.
+        self.native = threading.Lock()
+        self.compiled = None
         keycodes = self._section("xkb_keycodes")
         codes = {m.group(1): int(m.group(2)) for m in re.finditer(r"<([^>]+)>\s*=\s*(\d+);", keycodes)}
         aliases = {m.group(1): m.group(2) for m in re.finditer(r"alias\s*<([^>]+)>\s*=\s*<([^>]+)>;", keycodes)}
@@ -459,6 +475,7 @@ class Keymap:
         lib = self.xkb = xkbcommon()
         context = lib.xkb_context_new(0)
         keymap = lib.xkb_keymap_new_from_string(context, self.base.encode(), 1, 0)
+        lib.xkb_context_unref(context)   # the keymap holds its own reference
         if not keymap:
             raise RuntimeError("libxkbcommon could not read the keymap")
         self.compiled = keymap
@@ -544,6 +561,22 @@ class Keymap:
         with self.lock:
             if key in self.lookups:
                 return self.lookups[key]
+        with self.native:
+            if self.compiled is None:
+                return None     # closed: replaced by a reload
+            best = self._find(target, keysym)
+        with self.lock:
+            self.lookups[key] = best
+        return best
+
+    def close(self):
+        """Free the compiled keymap, once nothing is reading it."""
+        with self.native:
+            if self.compiled:
+                self.xkb.xkb_keymap_unref(self.compiled)
+                self.compiled = None
+
+    def _find(self, target, keysym):
         best = fallback = None
         # A named key like BackSpace, Return or space is the same key in every
         # layout, and how-to-type says so once, under the first one. Asking
@@ -578,10 +611,7 @@ class Keymap:
             elif (shared or self._types_here(code, level, sym)) \
                     and (fallback is None or len(mods) < len(fallback[1])):
                 fallback = candidate
-        best = best if best is not None else fallback
-        with self.lock:
-            self.lookups[key] = best
-        return best
+        return best if best is not None else fallback
 
     def extra_key(self, char):
         """(evdev keycode, keymap changed) for a spare key typing `char`; the
@@ -673,7 +703,9 @@ class Keyboard:
 
     def reload(self):
         names, group = hyprland_layout()
-        self.keymap = Keymap(names, group)
+        old, self.keymap = getattr(self, "keymap", None), Keymap(names, group)
+        if old:
+            old.close()
         self._new_device()
         threading.Thread(target=self.keymap.warm, daemon=True).start()
         try:
@@ -847,6 +879,15 @@ class Keyboard:
             except Exception as e:
                 self.fcitx = None
                 raise ValueError(f"can't reach fcitx5: {type(e).__name__}")
+        elif cmd == "forget":
+            # Which characters were looked up, and which have spare keys,
+            # says which were typed, a password's among them, if not in what
+            # order. The keyboard holds the device until a key is up again.
+            self.keymap.lookups.clear()
+            threading.Thread(target=self.keymap.warm, daemon=True).start()
+            if self.keymap.extras and not self.down and not self.fcitx_down:
+                self.keymap.extras.clear()
+                self._new_device()
         elif cmd == "reload":
             self.release_all()
             self.reload()

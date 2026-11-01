@@ -1,0 +1,119 @@
+{
+  "setup.tablet": {
+    "label": "Tablette"
+  },
+  "setup.tablet.mode": {
+    "label": "Mode tablette"
+  },
+  "setup.tablet.mode.auto": {
+    "label": "Automatique"
+  },
+  "setup.tablet.mode.on": {
+    "label": "Toujours actif"
+  },
+  "setup.tablet.mode.off": {
+    "label": "Toujours inactif"
+  },
+  "setup.tablet.keyboard": {
+    "label": "Clavier"
+  },
+  "setup.tablet.keyboard.sensor": {
+    "label": "Suivre le capteur"
+  },
+  "setup.tablet.keyboard.on": {
+    "label": "Toujours actif"
+  },
+  "setup.tablet.keyboard.off": {
+    "label": "Toujours inactif"
+  },
+  "setup.tablet.keyboard-layout": {
+    "label": "Disposition"
+  },
+  "setup.tablet.keyboard-layout.auto": {
+    "label": "Automatique"
+  },
+  "setup.tablet.keyboard-layout.mobile": {
+    "label": "Mobile"
+  },
+  "setup.tablet.keyboard-layout.60": {
+    "label": "60%"
+  },
+  "setup.tablet.keyboard-layout.75": {
+    "label": "75%"
+  },
+  "setup.tablet.keyboard-layout.80": {
+    "label": "80% (TKL)"
+  },
+  "setup.tablet.auto-show": {
+    "label": "Clavier automatique"
+  },
+  "setup.tablet.input-methods": {
+    "label": "Choix CJK au clavier"
+  },
+  "setup.tablet.predictions": {
+    "label": "Suggestions (bêta)"
+  },
+  "setup.tablet.predictions.off": {
+    "label": "Désactivées"
+  },
+  "setup.tablet.predictions.layout": {
+    "label": "Dans la langue de la disposition"
+  },
+  "setup.tablet.predictions.all": {
+    "label": "En anglais, toute disposition"
+  },
+  "setup.tablet.assists": {
+    "label": "Majuscules et points"
+  },
+  "setup.tablet.typing-memory": {
+    "label": "Mémoire de saisie"
+  },
+  "setup.tablet.typing-memory.full": {
+    "label": "Complète"
+  },
+  "setup.tablet.typing-memory.word": {
+    "label": "Mot en cours seulement"
+  },
+  "setup.tablet.typing-memory.none": {
+    "label": "Rien"
+  },
+  "setup.tablet.swipe": {
+    "label": "Saisie gestuelle (bêta)"
+  },
+  "setup.tablet.theme": {
+    "label": "Thème"
+  },
+  "setup.tablet.size-adjust": {
+    "label": "Taille des touches"
+  },
+  "setup.tablet.size-adjust.auto": {
+    "label": "Automatique"
+  },
+  "setup.tablet.size-adjust.smallest": {
+    "label": "Très petite"
+  },
+  "setup.tablet.size-adjust.smaller": {
+    "label": "Petite"
+  },
+  "setup.tablet.size-adjust.regular": {
+    "label": "Normale"
+  },
+  "setup.tablet.size-adjust.larger": {
+    "label": "Grande"
+  },
+  "setup.tablet.size-adjust.largest": {
+    "label": "Très grande"
+  },
+  "setup.tablet.overlays": {
+    "label": "Fenêtres système"
+  },
+  "setup.tablet.setup": {
+    "label": "Lancer la configuration"
+  },
+  "setup.tablet.diagnostics": {
+    "label": "Copier le diagnostic"
+  },
+  "setup.tablet.size-adjust.custom": {
+    "label": "Personnalisé / Ajuster…"
+  }
+}

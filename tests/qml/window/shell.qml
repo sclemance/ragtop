@@ -20,6 +20,13 @@ ShellRoot {
     preload: false
     blockWrites: true
   }
+  FileView {
+    id: settingsFile
+    path: Quickshell.env("HOME") + "/.config/ragtop/settings.conf"
+    preload: false
+    blockWrites: true
+  }
+  function setKeyboard(mode) { settingsFile.setText("keyboard=" + mode + "\n") }
   function setMode(mode) { modeFile.setText(mode + "\n") }
 
   function focus(entry) { return entry.panel.layershell.keyboardFocus }
@@ -179,6 +186,36 @@ ShellRoot {
       t.equal(test.focus(picker), WlrKeyboardFocus.Exclusive, "laptop, picker loaded: stays exclusive")
       t.equal(picker.panel.exclusionMode, ExclusionMode.Ignore, "laptop, picker: covers reserved space, as stock")
       picker.opened = false
+      test.setKeyboard("on")
+    }],
+    [test.settle, function() {
+      menu.opened = true
+      picker.opened = true
+      t.equal(test.focus(menu), WlrKeyboardFocus.Exclusive, "Always On in laptop mode still primes focus")
+      test.fill(menu, 300)
+    }],
+    [test.settle, function() {
+      for (var entry of [menu, picker]) {
+        t.equal(test.focus(entry), WlrKeyboardFocus.OnDemand, "Always On in laptop mode: touch-friendly focus")
+        t.equal(entry.panel.exclusionMode, ExclusionMode.Normal, "Always On: respects reserved space")
+      }
+      t.equal(menu.panel.contentRevealed, true, "Always On: content visible above keyboard")
+      test.setMode("tablet")
+      test.setKeyboard("off")
+    }],
+    [test.settle, function() {
+      for (var entry of [menu, picker]) {
+        t.equal(test.focus(entry), WlrKeyboardFocus.Exclusive, "Never in tablet mode: stock focus")
+        t.equal(entry.panel.exclusionMode, ExclusionMode.Ignore, "Never: stock reserved-space behavior")
+      }
+      test.setKeyboard("sensor")
+    }],
+    [test.settle, function() {
+      t.equal(test.focus(menu), WlrKeyboardFocus.OnDemand, "Follow Sensor restores tablet cooperation while open")
+      test.setMode("laptop")
+    }],
+    [test.settle, function() {
+      t.equal(test.focus(menu), WlrKeyboardFocus.Exclusive, "Follow Sensor restores stock laptop focus")
     }]
   ])
 }

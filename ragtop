@@ -11,15 +11,25 @@
 #        ragtop input-methods (enabled | enable | disable | toggle)
 #        ragtop predictions (get | is <which> | set <which> | enabled | enable | disable | toggle)
 #        ragtop swipe (enabled | enable | disable | toggle)
+#        ragtop assists (enabled | enable | disable | toggle)   capitals and double-space full stops
+#        ragtop backlight-animation (enabled | enable | disable | toggle)   off by default
+#        ragtop mechanical-backlight (enabled | enable | disable | toggle)
+#        ragtop mechanical-shine-through (enabled | enable | disable | toggle)
+#        ragtop mechanical-material (get | is <material> | set <material>)
+#        ragtop typing-memory (get | is <memory> | set <memory>)
 #        ragtop words (languages | status | install [lang] | decline <lang> | remove [lang])
+#        ragtop update (check | run)       what an update would bring; Omarchy's updater
+#        ragtop tour (done | declined | reset)   whether the first-run tour is offered again
+#        ragtop touch-trace (on | off | show | compare)   find touches that did nothing
 #        ragtop keyboard (get | is <mode> | set <mode>)
 #        ragtop keyboard-layout (get | is <name> | set <name>)
 #        ragtop display (get | is <name> | set <name>)
 #        ragtop tablet-mode (get | is <mode> | set <mode>)
 #        ragtop size-adjust (get | is <adjust> | set <adjust>)
 #        ragtop rotation (get | is <mode> | set <mode>)
-#        ragtop theme (list | apply <theme>)
+#        ragtop theme (list | apply <theme> | show <theme>)
 #        ragtop setup                       open setup in the shell
+#        ragtop overlays                    choose overlays in the shell, applied together
 #        ragtop diagnostics [copy]          what a bug report needs
 # where <overlay> is menu, emojis, clipboard, polkit, image-picker or lock,
 # <mode> is auto
@@ -27,9 +37,9 @@
 # on or off.
 #
 # What a key looks like is a Ragtop theme's to say, so shape, relief, fill,
-# background, edge and both transparencies have no verb here and no menu
-# row. Whether the keyboard has a background at all follows Omarchy's bar,
-# which a double tap on it toggles. What is left is <adjust>, one of
+# transparency and blur have no verb here and no menu row. The keyboard has
+# no background at all, and its handle follows Omarchy's bar, which a double
+# tap on the bar makes transparent. What is left is <adjust>, one of
 # smallest, smaller, regular, larger or largest, or a percentage from 60 to
 # 160, or auto. It sizes the keys against whatever the theme asked for and is
 # never written by applying one. Auto asks the screen: Ragtop reads how many
@@ -38,14 +48,14 @@
 # Rotation <mode> is locked, unlocked, or auto, which turns the screen while
 # in tablet mode and holds it still in laptop mode. The keyboard's own <mode>
 # is sensor (on offer in tablet mode, which is what it has always done), on
-# (always, laptop mode included) or off (never), and it decides only the
-# keyboard: tiling mode and the patched overlays still follow tablet mode.
+# (always, laptop mode included) or off (never). Patched overlays follow
+# keyboard availability; rotation still follows tablet mode.
 #
 # display <name> is which monitor Ragtop puts itself on: auto, or a monitor
 # name as hyprctl monitors prints it. Auto takes the monitor the compositor
 # binds the touchscreen to if one is bound, then the built-in panel, which on
-# a convertible is the touchscreen. The keyboard, its handle, the controls and
-# tiling mode all go to the same one. Rotation is the exception and stays with
+# a convertible is the touchscreen. The keyboard, its handle and the controls
+# all go to the same one. Rotation is the exception and stays with
 # the built-in panel, because that is the screen that physically turns.
 #
 # keyboard-layout <name> is which board is drawn: auto, which takes the
@@ -62,6 +72,13 @@
 # It sets the keyboard's form. Its colours keep coming from the Omarchy theme.
 # Applying one writes its values into settings.conf, so afterwards every
 # setting shows what is actually in effect and nothing stays hidden in a file.
+#
+# typing-memory <memory> is how much of what is typed Ragtop keeps while a
+# field has focus: full, the text before the cursor, which deleting words by
+# name, BackSpace back into a word and next-word suggestions read; word, only
+# the word being typed, which its suggestions and swipe need; or none, no
+# typed text at all, and so no suggestions or swipe either. In any of them,
+# nothing in a password or sensitive field, and nothing once focus has gone.
 #
 # Touch typing in an overlay means replacing Omarchy's own with a patched
 # clone (see overlay-clones.sh), so each one is off until the user turns it on.
@@ -110,37 +127,36 @@ record() {
   fi
 }
 
+# Ragtop's own words, in the language Omarchy is set to (i18n.sh).
+source "$repo/i18n.sh"
+
 notify() {
   command -v omarchy-notification-send >/dev/null &&
     omarchy-notification-send -g 󰌌 "Ragtop" "$1" || true
 }
 
 set_overlay() {
-  local overlay="$1" on="$2" name
-  name=$(label "$overlay")
+  local overlay="$1" on="$2" was=0
+  label "$overlay" >/dev/null   # a known overlay, or a usage error
+  "$clones" installed "$overlay" && was=1
+  local rc=0
   if (( on )); then
-    "$clones" install "$overlay" >/dev/null
-    record
-    if [[ $overlay == lock ]]; then
-      notify "The lock screen now has an on-screen keyboard in tablet mode."
-    elif [[ $overlay == image-picker ]]; then
-      notify "${name^} now have arrows and a Select button in tablet mode."
-    else
-      notify "Touch typing is on for ${name}."
-    fi
+    "$clones" apply "$overlay" "" >/dev/null || rc=$?
   else
-    "$clones" remove "$overlay" >/dev/null
-    record
-    if [[ $overlay == lock ]]; then
-      notify "The lock screen no longer has an on-screen keyboard."
-    elif [[ $overlay == image-picker ]]; then
-      notify "${name^} no longer have arrows and a Select button."
-    else
-      notify "Touch typing is off for ${name}."
-    fi
+    "$clones" apply "" "$overlay" >/dev/null || rc=$?
   fi
-  # Omarchy only picks clones up, or drops them, when the shell starts.
-  omarchy-restart-shell >/dev/null 2>&1 &
+  # The batch's file changes trigger one native plugin reload.
+  record
+  # Said only when it happened. 3 is done, but without the hooks.
+  if (( rc != 0 && rc != 3 )); then
+    notify "$(t overlay.failed)"
+    return "$rc"
+  fi
+  # A whole sentence for each, never a name put into one: other languages
+  # do not put it where English does, or inflect it the same.
+  if (( on )); then notify "$(t "overlay.on.$overlay")"; else notify "$(t "overlay.off.$overlay")"; fi
+  if (( rc == 3 )); then notify "$(t overlays.hookFailed)"; fi
+  return "$rc"
 }
 
 # get <key> <default>
@@ -195,37 +211,69 @@ switch() {
   esac
   put "$key" "$value"
   case "$key $value" in
-    "auto-show on") notify "The keyboard now comes up by itself on text fields." ;;
-    "auto-show off") notify "The keyboard no longer comes up by itself on text fields." ;;
-    "input-methods on") notify "Chinese, Japanese and Korean input methods now show their choices on the keyboard." ;;
-    "input-methods off") notify "The keyboard no longer shows input method choices. fcitx5 shows its own." ;;
-    "swipe on") notify "Swipe typing is on: draw a word across the letters." ;;
-    "swipe off") notify "Swipe typing is off." ;;
+    "auto-show on") notify "$(t switch.autoShow.on)" ;;
+    "auto-show off") notify "$(t switch.autoShow.off)" ;;
+    "input-methods on") notify "$(t switch.inputMethods.on)" ;;
+    "input-methods off") notify "$(t switch.inputMethods.off)" ;;
+    "swipe on") notify "$(t switch.swipe.on)" ;;
+    "swipe off") notify "$(t switch.swipe.off)" ;;
+    "assists on") notify "$(t switch.assists.on)" ;;
+    "assists off") notify "$(t switch.assists.off)" ;;
   esac
 }
 
-# Word suggestions read wordfreq's lists, which are CC-BY-SA rather than MIT
-# and so are not in the repository. Each is fetched when it is first wanted,
-# from one fixed release, checked against a fixed hash, and kept exactly as
-# published with its notice beside it (words/NOTICE.md).
+# Each language Ragtop predicts in has two files: wordfreq's word list,
+# unmodified, and Ragtop's pairs, which words follow which, counted from
+# Tatoeba (bench/pairs.py). Both are CC BY-SA 4.0 rather than MIT (see
+# words/NOTICE.md). English's are in the repository, in words/en, so it needs
+# nothing fetched. The others are assets of Ragtop's own data-v1 release on
+# GitHub, fetched when first wanted, each checked against a fixed hash, and
+# kept with the notice beside them.
 #
-# The languages Ragtop offers, one line each: code, size in KB, name, and
-# the list's SHA-256. Only languages made to work, accents and apostrophes
-# and all, are here, and this table is the one list of them: the service
-# reads it through `words languages`.
+# The languages Ragtop offers, one line each: code, size in KB of what is
+# fetched, name, the list's SHA-256 and the pairs'. Only languages made to
+# work, accents and apostrophes and all, are here, and this table is the one
+# list of them: the service reads it through `words languages`.
 words_root="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/words"
-words_release="https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data"
+words_release="https://github.com/sclemance/ragtop/releases/download/data-v1"
 words_table="\
-en 125 English f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247
-fr 135 French 8fbbf619ff2e6ff5b3d99d41e69c105daf5795771ce8ef36529f210d571abe6e"
+en 740 English f94a80cba6a3857b260d0666b5432bb7ea9b85315574dee9c306e87f61298247 d653178af315be3a158f14f91f3d6a4c670c62094ec38f6ed0e2fcf7a1cdd3a1
+fr 495 French 8fbbf619ff2e6ff5b3d99d41e69c105daf5795771ce8ef36529f210d571abe6e 8979b831a321d52fe33422d394eed08f265f50be8f817b03475afeee5b76c352"
 
 # words_field <lang> <n>: that language's nth field in the table, or nothing.
 words_field() { awk -v l="$1" -v n="$2" '$1 == l { print $n }' <<<"$words_table"; }
 words_file() { echo "$words_root/$1/small_$1.msgpack.gz"; }
-words_installed() { [[ -f $(words_file "${1:-en}") ]]; }
+pairs_file() { echo "$words_root/$1/pairs_$1.tsv.gz"; }
+# Ragtop's own copy, in the repository, which needs no fetching.
+words_bundled() { [[ -f $repo/words/${1:-en}/small_${1:-en}.msgpack.gz ]]; }
+# Installed is both files, fetched or bundled. A list fetched before Ragtop
+# had pairs counts as not yet, so the strip offers the language again and the
+# tap fetches only what is missing.
+words_installed() {
+  local lang="${1:-en}"
+  words_bundled "$lang" && return 0
+  [[ -f $(words_file "$lang") && ( -z $(words_field "$lang" 5) || -f $(pairs_file "$lang") ) ]]
+}
+
+# fetch_checked <url> <sha256> <destination>: kept only when it matches.
+fetch_checked() {
+  local tmp
+  tmp=$(mktemp "$(dirname "$3")/.download.XXXXXX")
+  if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 60 -o "$tmp" "$1"; then
+    rm -f "$tmp"
+    echo "Could not download $(basename "$3") from GitHub." >&2
+    return 1
+  fi
+  if [[ $(sha256sum "$tmp" | cut -d' ' -f1) != "$2" ]]; then
+    rm -f "$tmp"
+    echo "The downloaded $(basename "$3") is not the one expected, so it was not kept." >&2
+    return 1
+  fi
+  mv -f "$tmp" "$3"
+}
 
 words_install() {
-  local lang="${1:-en}" sha dir tmp
+  local lang="${1:-en}" sha pairs_sha dir
   sha=$(words_field "$lang" 4)
   if [[ -z $sha ]]; then
     echo "Ragtop has no word list for \"$lang\"." >&2
@@ -234,19 +282,14 @@ words_install() {
   words_installed "$lang" && return 0
   dir="$words_root/$lang"
   mkdir -p "$dir"
-  tmp=$(mktemp "$dir/.download.XXXXXX")
-  if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 60 -o "$tmp" "$words_release/small_$lang.msgpack.gz"; then
-    rm -f "$tmp"
-    echo "Could not download the word list from GitHub." >&2
-    return 1
+  if [[ ! -f $(words_file "$lang") ]]; then
+    fetch_checked "$words_release/small_$lang.msgpack.gz" "$sha" "$(words_file "$lang")" || return 1
   fi
-  if [[ $(sha256sum "$tmp" | cut -d' ' -f1) != "$sha" ]]; then
-    rm -f "$tmp"
-    echo "The downloaded word list is not the one expected, so it was not kept." >&2
-    return 1
+  pairs_sha=$(words_field "$lang" 5)
+  if [[ -n $pairs_sha && ! -f $(pairs_file "$lang") ]]; then
+    fetch_checked "$words_release/pairs_$lang.tsv.gz" "$pairs_sha" "$(pairs_file "$lang")" || return 1
   fi
   cp "$repo/words/NOTICE.md" "$dir/NOTICE.md"
-  mv -f "$tmp" "$(words_file "$lang")"
 }
 
 # words declined: the languages whose offer was answered "Not now", which
@@ -265,7 +308,13 @@ words() {
       done <<<"$words_table" ;;
     status)
       while read -r code _ name _; do
-        echo "$name: $(words_installed "$code" && echo "installed, $(words_file "$code")" || echo "not installed")"
+        if [[ -f $(words_file "$code") ]] && words_installed "$code"; then
+          echo "$name: installed, $(dirname "$(words_file "$code")")"
+        elif words_bundled "$code"; then
+          echo "$name: bundled with Ragtop, $repo/words/$code"
+        else
+          echo "$name: not installed"
+        fi
       done <<<"$words_table" ;;
     install)
       if words_install "$lang"; then
@@ -279,6 +328,53 @@ words() {
       [[ -n $(words_field "$lang" 1) ]] || usage
       { words_declined; echo "$lang"; } | sort -u | words_set_declined ;;
     remove) [[ -n $(words_field "$lang" 1) ]] || usage; rm -rf "${words_root:?}/$lang" ;;
+    *) usage ;;
+  esac
+}
+
+# Updates. Ragtop never checks by itself: `update check` runs when someone
+# taps Check for updates, and asks the one thing that matters, the version in
+# the manifest on main, since main is what `omarchy plugin update` installs.
+# One small file from the install's own repository, so a fork checks its
+# own. It prints "<state> <installed> <latest>", state being current,
+# available, dev (a working copy, linked in or not on main, which git
+# updates) or failed. `update run` opens Omarchy's own updater, which shows
+# the changes, asks, validates and rolls back.
+plugin_id=$(jq -r .id "$repo/manifest.json")
+
+version_newer() {   # version_newer <a> <b>: whether a is later than b
+  [[ $1 != "$2" && $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1) == "$1" ]]
+}
+
+update_check() {
+  local installed latest origin raw branch
+  installed=$(jq -r .version "$repo/manifest.json")
+  branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  if [[ -L "$HOME/.config/omarchy/plugins/$plugin_id" || $branch != main ]]; then
+    echo "dev $installed -"
+    return
+  fi
+  origin=$(git -C "$repo" remote get-url origin 2>/dev/null || echo "")
+  if [[ $origin =~ github\.com[:/]([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)$ ]]; then
+    raw="https://raw.githubusercontent.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}/main/manifest.json"
+  else
+    echo "failed $installed -"
+    return
+  fi
+  latest=$(curl -fsS --proto '=https' --tlsv1.2 --max-time 15 "$raw" 2>/dev/null | jq -r '.version // empty' 2>/dev/null)
+  if [[ ! $latest =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    echo "failed $installed -"
+  elif version_newer "$latest" "$installed"; then
+    echo "available $installed $latest"
+  else
+    echo "current $installed $latest"
+  fi
+}
+
+update() {
+  case "${1:-}" in
+    check) update_check ;;
+    run) omarchy-launch-floating-terminal-with-presentation omarchy plugin update "$plugin_id" ;;
     *) usage ;;
   esac
 }
@@ -314,9 +410,9 @@ predictions() {
   put predictions "$mode"
   [[ $mode == off ]] || put predictions-on "$mode"
   case "$mode" in
-    layout) notify "Word suggestions are on, in your layout's language." ;;
-    all) notify "Word suggestions are on, in English on any layout." ;;
-    off) notify "Word suggestions are off, and swipe typing with them." ;;
+    layout) notify "$(t predictions.layout)" ;;
+    all) notify "$(t predictions.all)" ;;
+    off) notify "$(t predictions.off)" ;;
   esac
 }
 
@@ -326,7 +422,7 @@ predictions() {
 swipe() {
   if [[ ${1:-} == enable || ( ${1:-} == toggle && $(get swipe off) != on ) ]]; then
     if [[ $(predictions_mode) == off ]]; then
-      notify "Turn on word suggestions first: swipe typing uses the same words."
+      notify "$(t swipe.needsSuggestions)"
       return 1
     fi
   fi
@@ -339,7 +435,25 @@ choice() {
   local key="$1" default="$2"
   case "${3:-}" in
     get) get "$key" "$default" ;;
-    is) [[ -n ${4:-} ]] || usage; [[ $(get "$key" "$default") == "$4" ]] ;;
+    is)
+      [[ -n ${4:-} ]] || usage
+      if [[ $key == size-adjust ]]; then
+        local current wanted
+        current=$(size_value "$(get "$key" "$default")")
+        wanted=$(size_value "$4")
+        if [[ $wanted == custom ]]; then
+          [[ $current =~ ^[0-9]+$ && ! $current =~ ^(78|88|100|115|130)$ ]]
+        else [[ $current == "$wanted" ]]; fi
+      else [[ $(get "$key" "$default") == "$4" ]]; fi ;;
+    cycle)
+      local current next
+      current=$(get "$key" "$default")
+      case "$key $current" in
+        "keyboard sensor") next=on ;; "keyboard on") next=off ;; "keyboard "*) next=sensor ;;
+        "rotation auto") next=locked ;; "rotation locked") next=unlocked ;; "rotation "*) next=auto ;;
+        *) usage ;;
+      esac
+      choice "$key" "$default" set "$next" ;;
     set)
       local notice
       notice=$(choice_notice "$key" "${4:-}") || usage
@@ -353,11 +467,19 @@ choice() {
   esac
 }
 
+size_value() {
+  case "$1" in
+    smallest) echo 78 ;; smaller) echo 88 ;; regular) echo 100 ;;
+    larger) echo 115 ;; largest) echo 130 ;; *) echo "$1" ;;
+  esac
+}
+
 choice_notice() {
   case "$1 $2" in
-    "tablet-mode auto") echo "Tablet mode now follows the hardware: fold the screen back, or take the keyboard off." ;;
-    "tablet-mode on") echo "Tablet mode is on until you change it back." ;;
-    "tablet-mode off") echo "Tablet mode is off until you change it back." ;;
+    "mechanical-material plain"|"mechanical-material pudding"|"mechanical-material frosted"|"mechanical-material translucent") : ;;
+    "tablet-mode auto") t choice.tabletMode.auto ;;
+    "tablet-mode on") t choice.tabletMode.on ;;
+    "tablet-mode off") t choice.tabletMode.off ;;
     # A percentage from 60 to 160, the word auto, or one of the five names an
     # older Ragtop wrote. None of them says anything: the keyboard resizes
     # under the slider as you drag it, so it announces itself.
@@ -369,7 +491,7 @@ choice_notice() {
         ''|*[!0-9]*) return 1 ;;
         *) (( $2 >= 60 && $2 <= 160 )) || return 1; echo "" ;;
       esac ;;
-    "display auto") echo "Ragtop follows the touchscreen, or the built-in panel." ;;
+    "display auto") t choice.display.auto ;;
     # Every other setting here is a fixed list, and the final case rejects
     # anything not on it. This one takes a monitor name, so it has to check
     # the shape itself: "display "* matched whatever it was handed, and a
@@ -380,19 +502,22 @@ choice_notice() {
     # touchscreen or the built-in panel while the named one is absent.
     "display "*)
       [[ $2 =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-      echo "Ragtop moves to $2." ;;
-    "keyboard-layout auto") echo "The keyboard picks the biggest board that fits." ;;
-    "keyboard-layout 60") echo "A 60% keyboard, where the screen is wide enough." ;;
-    "keyboard-layout 75") echo "A 75% keyboard, where the screen is wide enough." ;;
-    "keyboard-layout 80") echo "A tenkeyless keyboard, where the screen is wide enough." ;;
-    "keyboard-layout mobile") echo "The mobile keyboard, with its symbol pages." ;;
-    "keyboard sensor") echo "The keyboard comes up in tablet mode." ;;
-    "keyboard on") echo "The keyboard is on offer whatever mode you are in." ;;
-    "keyboard off") echo "The keyboard is off. The bar icon is struck through while it is." ;;
-    "rotation locked") echo "The screen will not rotate." ;;
-    "rotation unlocked") echo "The screen follows the sensor." ;;
-    "rotation auto") echo "The screen rotates while in tablet mode." ;;
-    "labels small"|"labels normal"|"labels large") echo "The key labels are now $2." ;;
+      t choice.display.named "$2" ;;
+    "keyboard-layout auto") t choice.layout.auto ;;
+    "keyboard-layout 60") t choice.layout.60 ;;
+    "keyboard-layout 75") t choice.layout.75 ;;
+    "keyboard-layout 80") t choice.layout.80 ;;
+    "keyboard-layout mobile") t choice.layout.mobile ;;
+    "keyboard sensor") t choice.keyboard.sensor ;;
+    "keyboard on") t choice.keyboard.on ;;
+    "keyboard off") t choice.keyboard.off ;;
+    "rotation locked") t choice.rotation.locked ;;
+    "rotation unlocked") t choice.rotation.unlocked ;;
+    "rotation auto") t choice.rotation.auto ;;
+    # A sentence each: small, normal and large are settings, not words to
+    # put into a sentence in another language.
+    "labels small"|"labels normal"|"labels large") t "choice.labels.$2" ;;
+    "typing-memory full"|"typing-memory word"|"typing-memory none") t "choice.typingMemory.$2" ;;
     *) return 1 ;;
   esac
 }
@@ -429,11 +554,16 @@ if os.path.exists(settings_path):
         key, value = line.split("=", 1)
         if key in ("transparency", "key-transparency") and value in TRANS:
             value, changed = str(TRANS[value]), True
+        elif key == "theme" and value in ("sculpted", "keycap") and not os.path.isfile(
+                os.path.join(config_dir, "themes", value, "ragtop.toml")):
+            value, changed = {"sculpted": "mechanical", "keycap": "chiclet"}[value], True
         elif key == "size" and value in SIZE:
             value, changed = str(SIZE[value]), True
         elif key == "preset":
             key, changed = "theme", True
-        elif key == "modifiers":
+        elif key in ("modifiers", "background", "transparency", "edge", "edge-fade"):
+            # Retired: the keyboard has had no background, and so no edge to
+            # it, since 0.48.0.
             changed = True
             continue
         out.append("%s=%s" % (key, value))
@@ -489,8 +619,20 @@ PYEOF
 
 # Themes: the user's own in ~/.config/ragtop/themes/ win over Ragtop's, the
 # same two places Omarchy looks for its own themes.
+theme_slug() {
+  # Preserve a user theme with the old name; otherwise retain the old CLI alias.
+  if [[ $1 == sculpted && ! -f "$HOME/.config/ragtop/themes/sculpted/ragtop.toml" ]]; then
+    echo mechanical
+  elif [[ $1 == keycap && ! -f "$HOME/.config/ragtop/themes/keycap/ragtop.toml" ]]; then
+    echo chiclet
+  else
+    echo "$1"
+  fi
+}
+
 theme_file() {
   [[ $1 =~ ^[a-z0-9-]{1,32}$ ]] || return 1
+  set -- "$(theme_slug "$1")"
   local f
   for f in "$HOME/.config/ragtop/themes/$1/ragtop.toml" "$repo/themes/$1/ragtop.toml"; do
     [[ -f $f ]] && { echo "$f"; return 0; }
@@ -509,30 +651,47 @@ themes() {
 # apply_theme <name>: write the theme's settings into settings.conf, so what
 # the menu shows is what the keyboard does.
 apply_theme() {
-  local file name
-  file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; exit 2; }
-  name=$(locked /usr/bin/python3 - "$file" "$settings" <<'EOF'
+  local name
+  name=$(locked theme_values "$(theme_slug "$1")" "$settings") || exit 2
+  notify "$(t theme.applied "$name")"
+}
+
+# show_theme <name>: the settings the theme would write, as key=value lines
+# after a name= line, with nothing written. The tour shows themes this way
+# and puts yours back after.
+show_theme() {
+  theme_values "$1" - || exit 2
+}
+
+# theme_values <name> <settings file, or - to print>: the one place a theme
+# file is read and checked.
+theme_values() {
+  local file
+  file=$(theme_file "$1") || { echo "No theme named '$1'. Available: $(themes | tr '\n' ' ')" >&2; return 2; }
+  /usr/bin/python3 - "$file" "$2" "$1" <<'EOF'
 import os, re, sys, tempfile, tomllib
 
-path, settings = sys.argv[1:]
+path, settings, slug = sys.argv[1:]
 # Only these keys, only these values: a theme can't smuggle anything else in.
 choices = {
     "shape": ["omarchy", "rounded", "pill", "angular", "bevel"],
     "relief": ["flat", "raised"],
-    "fill": ["auto", "dark", "light", "outline"],
+    "fill": ["auto", "dark", "light", "surface", "outline"],
+    "contrast": ["normal", "strong"],
+    "backlight": ["off", "accent"],
+    "backlight-motion": ["off", "ripple"],
+    "keycap-material": ["solid", "pudding", "frosted", "translucent"],
+    "keycap-profile": ["standard", "sculpted"],
 
-    "background": ["tint", "gradient"],
-
-    "edge": ["border", "fade", "none"],
     "labels": ["small", "normal", "large"],
     "special-keys": ["off", "darker", "lighter"],
     "blur": ["on", "off"],
 }
-numbers = {"depth": (0, 10), "chamfer": (0, 20), "edge-fade": (0, 24),
+numbers = {"depth": (0, 10), "chamfer": (0, 20), "wall-opacity": (0, 100),
            "key-fill-alpha": (0, 1), "border-width": (0, 4), "radius": (0, 30),
            # 0 is solid and 100 is gone. Size is a percentage of the usual.
-           "transparency": (0, 100), "key-transparency": (0, 100), "size": (60, 160)}
-colors = ("key-color", "label-color")
+           "key-transparency": (0, 100), "size": (60, 160)}
+colors = ("key-color", "label-color", "backlight-press-color")
 
 try:
     raw = tomllib.load(open(path, "rb"))
@@ -576,25 +735,100 @@ if isinstance(v, str):
 # whatever the last one left, which is a keyboard whose keys stop changing
 # shape with the theme.
 look_keys = set(choices) | set(numbers) | set(colors) | {"corners"}
+label = raw.get("name")
+label = (label.strip() if isinstance(label, str) and label.strip()
+         else os.path.basename(os.path.dirname(path)))
+# For a preview (the tour's), the values as they would be written, and
+# nothing written: the same checks, so a theme cannot smuggle anything into
+# a preview either. A look key the theme leaves out is printed empty, which
+# the keyboard reads as its default, the same as a line stripped here.
+if settings == "-":
+    print(f"name={label}")
+    for k in sorted(look_keys):
+        print(f"{k}={values.get(k, '')}")
+    sys.exit(0)
 lines = []
 if os.path.exists(settings):
     lines = [l for l in open(settings).read().split("\n")
-             if l and l.split("=", 1)[0] not in look_keys]
-lines += [f"{k}={v}" for k, v in sorted(values.items())]
+             if l and l.split("=", 1)[0] not in look_keys | {"theme"}]
+lines += [f"{k}={v}" for k, v in sorted(values.items())] + [f"theme={slug}"]
 os.makedirs(os.path.dirname(settings), exist_ok=True)
 fd, tmp = tempfile.mkstemp(prefix=os.path.basename(settings) + ".",
                            dir=os.path.dirname(settings))
 with os.fdopen(fd, "w") as f:
     f.write("\n".join(lines) + "\n")
 os.replace(tmp, settings)
-
-label = raw.get("name")
-print(label if isinstance(label, str) and label.strip()
-      else os.path.basename(os.path.dirname(path)))
+print(label)
 EOF
-  ) || exit 2
-  put theme "$1"
-  notify "The keyboard now looks like $name."
+}
+
+# touch-trace: for a tap that seems not to register. `on` has the keyboard
+# keep its last minute of touches in memory, by kind of key, never the
+# character; `compare` lays them against what the touchscreen itself
+# reported, recorded meanwhile by `sudo bench/touch-trace.py`, and lists
+# every finger the screen saw that Ragtop did nothing with, and why where it
+# knows. A tap the screen never reported is the panel's; one it reported and
+# Ragtop dropped is a fault to fix.
+touch_trace() {
+  case "${1:-}" in
+    on) omarchy-shell ragtop touchTraceOn >/dev/null && echo "Tracing touches. Run 'sudo $repo/bench/touch-trace.py' in a terminal too, type, and when a tap is missed run: ragtop touch-trace compare" ;;
+    off) omarchy-shell ragtop touchTraceOff >/dev/null && echo "Stopped, and the trace is cleared." ;;
+    show) omarchy-shell ragtop touchTraceLog | jq -r '.touches[] | "\(.t)  \(.ev)  finger \(.id)  at \(.x*100|floor)%,\(.y*100|floor)%  \(.what)"' ;;
+    compare)
+      local trace
+      trace=$(omarchy-shell ragtop touchTraceLog) || { echo "The shell did not answer." >&2; return 1; }
+      /usr/bin/python3 - "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ragtop-touch-kernel.log" "$trace" <<'EOF'
+import json, os, sys, time
+trace = json.loads(sys.argv[2])
+mine, top, turned = trace["touches"], trace["keyboardTop"], trace["orientation"] != "normal"
+kernel = []
+if os.path.exists(sys.argv[1]):
+    for line in open(sys.argv[1]):
+        try:
+            kernel.append(json.loads(line))
+        except ValueError:
+            pass
+if not mine:
+    sys.exit("Ragtop has no touches traced. Turn it on with: ragtop touch-trace on")
+since = mine[0]["t"] - 1000
+kernel = [k for k in kernel if k["t"] >= since and k["ev"] == "down"]
+if turned:
+    print("The screen is turned, and the touchscreen reports in its own unturned terms, so every")
+    print("touch it saw is counted, the keyboard's or not. Hold it upright for a cleaner comparison.")
+else:
+    # Only the touches that landed on the keyboard, a little above its top for a
+    # finger at the edge of the first row.
+    kernel = [k for k in kernel if k["y"] >= top - 0.02]
+downs = [m for m in mine if m["ev"] == "down"]
+now = time.time() * 1000
+def ago(t): return f"{(now - t) / 1000:5.1f}s ago"
+print(f"Last {(now - since) / 1000:.0f}s: the screen reported {len(kernel)} touches, Ragtop received {len(downs)}.")
+if not kernel:
+    print("No touchscreen record for that time: run 'sudo bench/touch-trace.py' alongside.")
+# Each finger the screen reported, and the first finger Ragtop got after it,
+# within a second: late is a press handled where the finger had moved to.
+missed = []
+for k in kernel:
+    after = [m for m in downs if -50 <= m["t"] - k["t"] <= 1000]
+    if not after:
+        missed.append(k)
+        print(f"  {ago(k['t'])}  screen saw a finger at {k['x']*100:.0f}%,{k['y']*100:.0f}% of the panel; Ragtop got nothing")
+    elif after[0]["t"] - k["t"] > 100:
+        print(f"  {ago(k['t'])}  screen saw a finger; Ragtop got it {after[0]['t'] - k['t']} ms late")
+for m in mine:
+    if m["ev"] in ("stall", "room"):
+        print(f"  {ago(m['t'])}  {m['what']}")
+ignored = [m for m in mine if m["what"].startswith("ignored") or m["what"].startswith("nothing")
+           or m["what"] == "closes the controls"]
+for m in ignored:
+    where = f" at {m['x']*100:.0f}%,{m['y']*100:.0f}% of the screen" if m["ev"] in ("down", "up") else ""
+    print(f"  {ago(m['t'])}  {m['ev']}{where}: {m['what']}")
+if kernel and not missed and not ignored and not any(m["ev"] == "stall" for m in mine):
+    print("Every touch the screen reported reached Ragtop and did something.")
+EOF
+      ;;
+    *) usage ;;
+  esac
 }
 
 # What the issue forms ask for by hand, gathered in one place.
@@ -614,7 +848,7 @@ row() { printf '%-13s %s\n' "$1" "$2"; }
 # One flat string field out of the service's health JSON.
 health=""
 health_field() {
-  printf '%s' "$health" | sed -n "s/.*\"$1\":\"\([a-z:0-9]*\)\".*/\1/p"
+  printf '%s' "$health" | sed -n "s/.*\"$1\":\"\([A-Za-z_.:0-9-]*\)\".*/\1/p"
 }
 # The same, for a field whose value is a bare number rather than a string.
 health_number() {
@@ -769,6 +1003,11 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   fi
   # on, off, idle (a layout that is not English, or a CJK engine on), or
   # nowords when the list has not been downloaded.
+  assists=$(health_field assists)
+  if [[ -n $assists ]]; then
+    row "Capitals and full stops" "$assists"
+  fi
+  row "Typing memory" "$(get typing-memory full)"
   swipe=$(health_field swipe)
   if [[ -n $swipe ]]; then
     row "Swipe typing" "$swipe"
@@ -776,6 +1015,9 @@ print(", " + str(len(ms)) + " connected: " + ", ".join(m["name"] for m in ms))' 
   predictions=$(health_field predictions)
   if [[ -n $predictions ]]; then
     row "Word suggestions" "$(predictions_mode), $predictions, lists: $(words languages | awk '$3 == "installed" { printf "%s%s", sep, $1; sep = " " }')"
+    # Optional, so "none" is not a fault: a dictionary only widens joins and
+    # gives forms to languages without rules of their own.
+    row "Spelling dictionary" "$(health_field dictionary)"
   fi
 
   if [[ -z $health ]]; then
@@ -836,15 +1078,38 @@ case "${1:-} ${2:-}" in
   "size-adjust "*) choice size-adjust regular "${2:-}" "${3:-}" ;;
   "rotation "*) choice rotation auto "${2:-}" "${3:-}" ;;
   "labels "*) choice labels normal "${2:-}" "${3:-}" ;;
+  "typing-memory "*) choice typing-memory full "${2:-}" "${3:-}" ;;
   "theme list") themes ;;
   "theme get") get theme omarchy ;;
-  "theme is") [[ -n ${3:-} ]] || usage; [[ $(get theme omarchy) == "$3" ]] ;;
+  "theme is") [[ -n ${3:-} ]] || usage; [[ $(theme_slug "$(get theme omarchy)") == "$(theme_slug "$3")" ]] ;;
+  "theme step")
+    [[ ${3:-} == 1 || ${3:-} == -1 ]] || usage
+    mapfile -t available_themes < <(themes)
+    ((${#available_themes[@]})) || exit 1
+    current_theme=$(theme_slug "$(get theme omarchy)")
+    theme_at=0
+    for i in "${!available_themes[@]}"; do
+      [[ ${available_themes[$i]} != "$current_theme" ]] || theme_at=$i
+    done
+    theme_at=$(( (theme_at + $3 + ${#available_themes[@]}) % ${#available_themes[@]} ))
+    apply_theme "${available_themes[$theme_at]}" ;;
   "theme apply") [[ -n ${3:-} ]] || usage; apply_theme "$3" ;;
+  "theme show") [[ -n ${3:-} ]] || usage; show_theme "$3" ;;
   "auto-show "*) switch "$1" "${2:-}" ;;
   "input-methods "*) switch "$1" "${2:-}" ;;
   "predictions "*) predictions "${2:-}" "${3:-}" ;;
   "swipe "*) swipe "${2:-}" ;;
+  "assists "*) switch assists "${2:-}" ;;
+  "mechanical-material "*) choice mechanical-material plain "${2:-}" "${3:-}" ;;
+  "mechanical-backlight "*|"mechanical-shine-through "*) switch "$1" "${2:-}" on ;;
+  "backlight-animation "*) switch backlight-animation "${2:-}" off ;;
   "words "*) words "${2:-}" "${3:-}" ;;
+  "update "*) update "${2:-}" ;;
+  # The tour itself is the shell's; this only remembers that it was taken or
+  # turned down, so it is offered once. Reset offers it again.
+  "tour done"|"tour declined") put tour "$2" ;;
+  "tour reset") put tour "" ;;
+  "touch-trace "*) touch_trace "${2:-}" ;;
   "overlay enabled") [[ -n ${3:-} ]] || usage; label "$3" >/dev/null; "$clones" installed "$3" ;;
   "overlay enable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 1 ;;
   "overlay disable") [[ -n ${3:-} ]] || usage; set_overlay "$3" 0 ;;
@@ -857,7 +1122,7 @@ case "${1:-} ${2:-}" in
   "migrate "*|"migrate")
     changed=$(migrate)
     if [[ -n $changed ]]; then
-      notify "Ragtop brought your settings up to date for this version."
+      notify "$(t migrate.done)"
     fi
     # The rows this version writes, whenever the file holds something else.
     # A row an older Ragtop left behind and a row this one added are the same
@@ -872,10 +1137,11 @@ case "${1:-} ${2:-}" in
     fi
     ;;
   "setup "*|"setup") omarchy-shell ragtop openSetup >/dev/null ;;
+  "overlays "*|"overlays") omarchy-shell ragtop openOverlays >/dev/null ;;
   "diagnostics copy")
     if command -v wl-copy >/dev/null; then
       diagnostics | wl-copy
-      notify "Diagnostics copied. Paste them into your report."
+      notify "$(t diagnostics.copied)"
     else
       diagnostics
     fi

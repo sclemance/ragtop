@@ -96,7 +96,29 @@ print(km.lookup(" "), km.lookup("a"))'
   assert_equal "$out" "(57, set()) (16, set())"
 }
 
+# What a password typed through spare keys or uncommon characters leaves in
+# the helper: the characters looked up, and the spare keys bound to them.
+# forget drops both, and the next lookup still works.
+forget_drops_typed_characters() {
+  helper '
+km = h.Keymap(US, 0)
+km.warm()
+for c in "pä€":
+    km.lookup(c)
+km.extra_key("€")
+kb = object.__new__(h.Keyboard)
+kb.keymap, kb.down, kb.fcitx_down, kb.held, kb.fcitx = km, {}, {}, set(), None
+kb._new_device = lambda: None
+class D:
+    def roundtrip(self): pass
+kb.display = D()
+kb.handle("forget")
+print(any(k[0] in "ä€" for k in km.lookups), km.extras, km.lookup("p"))'
+  assert_equal "$out" "False {} (25, set())"
+}
+
 run_test "keyboard helper: looking up a character starts no process" lookups_start_no_process
+run_test "keyboard helper: forget drops the characters a password left behind" forget_drops_typed_characters
 run_test "keyboard helper: a character needing a modifier it cannot press is not looked up there" unpressable_modifiers_are_skipped
 run_test "keyboard helper: a key every layout shares is found on any of them" shared_keys_reach_every_layout
 run_test "keyboard helper: finds the key and modifiers for a character or keysym" lookups_find_the_key

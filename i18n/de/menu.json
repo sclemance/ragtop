@@ -1,0 +1,119 @@
+{
+  "setup.tablet": {
+    "label": "Tablet"
+  },
+  "setup.tablet.mode": {
+    "label": "Tablet-Modus"
+  },
+  "setup.tablet.mode.auto": {
+    "label": "Automatisch"
+  },
+  "setup.tablet.mode.on": {
+    "label": "Immer an"
+  },
+  "setup.tablet.mode.off": {
+    "label": "Immer aus"
+  },
+  "setup.tablet.keyboard": {
+    "label": "Tastatur"
+  },
+  "setup.tablet.keyboard.sensor": {
+    "label": "Dem Sensor folgen"
+  },
+  "setup.tablet.keyboard.on": {
+    "label": "Immer an"
+  },
+  "setup.tablet.keyboard.off": {
+    "label": "Immer aus"
+  },
+  "setup.tablet.keyboard-layout": {
+    "label": "Bauform"
+  },
+  "setup.tablet.keyboard-layout.auto": {
+    "label": "Automatisch"
+  },
+  "setup.tablet.keyboard-layout.mobile": {
+    "label": "Mobil"
+  },
+  "setup.tablet.keyboard-layout.60": {
+    "label": "60%"
+  },
+  "setup.tablet.keyboard-layout.75": {
+    "label": "75%"
+  },
+  "setup.tablet.keyboard-layout.80": {
+    "label": "80% (TKL)"
+  },
+  "setup.tablet.auto-show": {
+    "label": "Tastatur automatisch"
+  },
+  "setup.tablet.input-methods": {
+    "label": "CJK-Auswahl auf der Tastatur"
+  },
+  "setup.tablet.predictions": {
+    "label": "Wortvorschläge (Beta)"
+  },
+  "setup.tablet.predictions.off": {
+    "label": "Aus"
+  },
+  "setup.tablet.predictions.layout": {
+    "label": "In der Sprache des Layouts"
+  },
+  "setup.tablet.predictions.all": {
+    "label": "Englisch, jedes Layout"
+  },
+  "setup.tablet.assists": {
+    "label": "Großschreibung und Punkte"
+  },
+  "setup.tablet.typing-memory": {
+    "label": "Tippgedächtnis"
+  },
+  "setup.tablet.typing-memory.full": {
+    "label": "Vollständig"
+  },
+  "setup.tablet.typing-memory.word": {
+    "label": "Nur das aktuelle Wort"
+  },
+  "setup.tablet.typing-memory.none": {
+    "label": "Nichts"
+  },
+  "setup.tablet.swipe": {
+    "label": "Wischtippen (Beta)"
+  },
+  "setup.tablet.theme": {
+    "label": "Design"
+  },
+  "setup.tablet.size-adjust": {
+    "label": "Tastengröße"
+  },
+  "setup.tablet.size-adjust.auto": {
+    "label": "Automatisch"
+  },
+  "setup.tablet.size-adjust.smallest": {
+    "label": "Am kleinsten"
+  },
+  "setup.tablet.size-adjust.smaller": {
+    "label": "Kleiner"
+  },
+  "setup.tablet.size-adjust.regular": {
+    "label": "Normal"
+  },
+  "setup.tablet.size-adjust.larger": {
+    "label": "Größer"
+  },
+  "setup.tablet.size-adjust.largest": {
+    "label": "Am größten"
+  },
+  "setup.tablet.overlays": {
+    "label": "System-Overlays"
+  },
+  "setup.tablet.setup": {
+    "label": "Einrichtung starten"
+  },
+  "setup.tablet.diagnostics": {
+    "label": "Diagnose kopieren"
+  },
+  "setup.tablet.size-adjust.custom": {
+    "label": "Benutzerdefiniert / Anpassen…"
+  }
+}

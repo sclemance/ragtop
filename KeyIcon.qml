@@ -12,11 +12,13 @@ Item {
   id: icon
 
   // "settings", "shift", "backspace", "enter", "rotate", "keyboard",
-  // "windows", "omarchy", "check", "float", "wide", "tiled", "split", "scroll",
-  // "keyboard-off", "rotate-off", "rotate-left", "rotate-right",
+  // "omarchy", "check", "menu", "keyboard-off", "rotate-off", "rotate-left", "rotate-right",
   // "left", "up", "down", "right".
   property string name: ""
   property color color: "white"
+  // Opt-in luminous rim for Glow's legends; ordinary callers keep their
+  // exact fill/stroke geometry and colour.
+  property color glowColor: "transparent"
 
   // Enter's arrow runs twice as wide as it is tall. The rest are square.
   readonly property real aspect: name === "enter" ? 2 : 1
@@ -147,16 +149,6 @@ Item {
     return path
   }
 
-  // A tiled layout: one pane on the left, two stacked on the right. It is
-  // the shape of what tiling mode rearranges, which reads faster than
-  // any word would at this size.
-  function windowsPath() {
-    return move(0.1, 0.22) + line(0.9, 0.22) + line(0.9, 0.78)
-      + line(0.1, 0.78) + line(0.1, 0.22)
-      + move(0.48, 0.22) + line(0.48, 0.78)
-      + move(0.48, 0.5) + line(0.9, 0.5)
-  }
-
   // A keyboard: the case, a row of keys and a space bar. At the size this is
   // drawn the keys are dots rather than squares, since anything with a shape
   // of its own turns to mush by 20 pixels.
@@ -218,58 +210,20 @@ Item {
     return move(0.2, 0.52) + line(0.42, 0.74) + line(0.8, 0.28)
   }
 
+  // The Menu key, as a mouse pointer on a bar: a right click's menu, in the
+  // one shape that still reads at the size of a key's corner, where the
+  // physical key's list-with-a-pointer turns to mush. Filled, both of it,
+  // so it keeps its weight that small.
+  function menuPath() {
+    var bar = move(0.06, 0.04) + line(0.70, 0.04) + line(0.70, 0.17) + line(0.06, 0.17) + "Z "
+    var pointer = move(0.3, 0.24) + line(0.3, 0.936) + line(0.468, 0.768) + line(0.588, 1.008)
+      + line(0.708, 0.948) + line(0.588, 0.72) + line(0.804, 0.708) + "Z"
+    return bar + pointer
+  }
+
   // A plain arrow pointing left. `arrowTurn` turns it the other ways.
   function arrowPath() {
     return move(0.88, 0.5) + line(0.16, 0.5) + " " + move(0.42, 0.26) + line(0.16, 0.5) + line(0.42, 0.74)
-  }
-
-  // A floating window: one pane lifted off another. The standard windowed
-  // mark, so it reads without a label beside it.
-  function floatPath() {
-    return move(0.34, 0.16) + line(0.9, 0.16) + line(0.9, 0.62)
-      + move(0.1, 0.38) + line(0.66, 0.38) + line(0.66, 0.84)
-      + line(0.1, 0.84) + line(0.1, 0.38)
-  }
-
-  // Full width: a pane with the sides pushed out to the edges it is going
-  // to reach.
-  function widePath() {
-    return move(0.26, 0.24) + line(0.74, 0.24) + line(0.74, 0.76)
-      + line(0.26, 0.76) + line(0.26, 0.24)
-      + move(0.16, 0.5) + line(0.02, 0.5)
-      + move(0.07, 0.42) + line(0.02, 0.5) + line(0.07, 0.58)
-      + move(0.84, 0.5) + line(0.98, 0.5)
-      + move(0.93, 0.42) + line(0.98, 0.5) + line(0.93, 0.58)
-  }
-
-  // Tiled full screen: four corners opening outwards, which is what a
-  // full-screen mark looks like everywhere else.
-  function tiledPath() {
-    return move(0.1, 0.34) + line(0.1, 0.1) + line(0.34, 0.1)
-      + move(0.66, 0.1) + line(0.9, 0.1) + line(0.9, 0.34)
-      + move(0.9, 0.66) + line(0.9, 0.9) + line(0.66, 0.9)
-      + move(0.34, 0.9) + line(0.1, 0.9) + line(0.1, 0.66)
-  }
-
-  // Split: one pane divided, with the divider turned, which is what the
-  // toggle does to the next window opened beside this one.
-  // A scrolling workspace: a full pane in the middle with one running off
-  // each edge, because the row is wider than the screen and you move along
-  // it. The clipped sides are the whole point, so they are left open rather
-  // than closed into boxes.
-  function scrollPath() {
-    return move(0.02, 0.22) + line(0.18, 0.22) + line(0.18, 0.78) + line(0.02, 0.78)
-      + move(0.32, 0.16) + line(0.68, 0.16) + line(0.68, 0.84)
-      + line(0.32, 0.84) + line(0.32, 0.16)
-      + move(0.98, 0.22) + line(0.82, 0.22) + line(0.82, 0.78) + line(0.98, 0.78)
-  }
-
-  function splitPath() {
-    return move(0.1, 0.16) + line(0.9, 0.16) + line(0.9, 0.84)
-      + line(0.1, 0.84) + line(0.1, 0.16)
-      + move(0.5, 0.16) + line(0.5, 0.84)
-      + move(0.34, 0.5) + line(0.2, 0.5)
-      + move(0.66, 0.5) + line(0.8, 0.5)
   }
 
   readonly property string strokedPath: name === "shift" ? shiftPath()
@@ -281,19 +235,32 @@ Item {
     : name === "rotate-off" ? rotateOffPath()
     : name === "rotate-left" ? turnPath(false)
     : name === "rotate-right" ? turnPath(true)
-    : name === "windows" ? windowsPath()
     : name === "check" ? checkPath()
-    : name === "float" ? floatPath()
-    : name === "wide" ? widePath()
-    : name === "tiled" ? tiledPath()
-    : name === "split" ? splitPath()
-    : name === "scroll" ? scrollPath()
     : isArrow ? arrowPath()
     : ""
 
-  // The gear and Omarchy's mark are filled shapes. The rest are strokes.
+  // The gear, Omarchy's mark and Menu are filled shapes. The rest are strokes.
   readonly property string filledPath: name === "settings" ? gearPath()
-    : name === "omarchy" ? omarchyPath() : ""
+    : name === "omarchy" ? omarchyPath()
+    : name === "menu" ? menuPath() : ""
+
+  // Trace the same vector with a slightly wider, faint stroke. Both line
+  // icons and filled marks get a luminous rim without a blur texture.
+  Shape {
+    anchors.fill: parent
+    visible: icon.glowColor.a > 0 && (icon.filledPath !== "" || icon.strokedPath !== "")
+    rotation: icon.isArrow ? icon.arrowTurn[icon.name] : 0
+    preferredRendererType: Shape.CurveRenderer
+
+    ShapePath {
+      fillColor: "transparent"
+      strokeColor: icon.glowColor
+      strokeWidth: (icon.filledPath !== "" ? 0 : icon.stroke) + 1.4
+      capStyle: ShapePath.RoundCap
+      joinStyle: ShapePath.RoundJoin
+      PathSvg { path: icon.filledPath !== "" ? icon.filledPath : icon.strokedPath }
+    }
+  }
 
   Shape {
     anchors.fill: parent

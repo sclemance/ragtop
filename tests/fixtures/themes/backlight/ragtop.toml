@@ -1,0 +1,15 @@
+# Generic static backlighting fixture; not a shipped theme.
+name = "Backlight fixture"
+
+shape = "rounded"
+radius = 5
+relief = "raised"
+depth = 4
+fill = "surface"
+backlight = "accent"
+size = 100
+key-transparency = 0
+border-width = 1
+labels = "normal"
+special-keys = "off"
+blur = false

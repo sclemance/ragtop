@@ -13,6 +13,19 @@ addon), which fcitx5 tells three things:
   {"name", "label", "title"}, and "engine null" for a plain keyboard layout or
   no field at all. "engines <json>" lists every composing one in the user's
   fcitx5 group, the same objects, for the keyboard to offer.
+- which field has focus, and what kind. Printed as "field <json>", {"id",
+  "password", "terminal", "noCapitals"}, or "field null" when no field has
+  focus or there is no telling. The id is fcitx5's for the field's input
+  context, so the service can tell one field from another with the same
+  flags, and a field from none: whatever it kept for one is let go when
+  another, or none, has focus. Asked again after every hide, which is how
+  focus leaving a field is seen at all. A
+  password field, so that nothing typed into one is kept or offered; a
+  terminal, which is not prose; and one that asks for no capitals (an
+  e-mail address, a URL). Read from fcitx5's DebugInfo, which lists every
+  input context with its capability flags and which one has focus. It is a
+  report for people rather than an interface, so it is read defensively,
+  and anything unreadable is "null", never a guess.
 - what the composing one has to choose from. Printed as "candidates <json>",
   {"items": [{"text", "note"}], "prev", "next", "cursor"}, with "items"
   empty when there is nothing to choose.
@@ -44,10 +57,6 @@ import sys
 
 from gi.repository import Gio, GLib
 
-# End with the shell that started us. Nothing else would tell us it's gone
-# if it exits uncleanly, and a leftover copy would keep running unseen.
-ctypes.CDLL(None).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
-
 NAME = "org.fcitx.Fcitx5.VirtualKeyboard"
 PATH = "/org/fcitx/virtualkeyboard/impanel"
 IFACE = "org.fcitx.Fcitx5.VirtualKeyboard1"
@@ -75,7 +84,8 @@ XML = f"""
 </node>
 """
 
-bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+bus = None    # the session bus, from main(); the tests load this file without one
+loop = None
 arming = False
 rearm_source = 0
 # Whether fcitx5 has ever spoken to us. Until it has, a working arm and one
@@ -160,6 +170,55 @@ def refresh_methods():
     call(CONTROLLER, "AvailableInputMethods", reply="(a(ssssssb))", done=got_available)
 
 
+# fcitx5's capability flags (fcitx-utils/capabilityflags.h).
+CAP_PASSWORD = 1 << 3
+CAP_EMAIL = 1 << 7
+CAP_NO_AUTO_UPPER = 1 << 11
+CAP_URL = 1 << 12
+CAP_TERMINAL = 1 << 32
+CAP_SENSITIVE = 1 << 36
+FOCUSED = re.compile(r"\bIC \[([0-9a-fA-F]+)\][^\n]*?\bcap:([0-9a-fA-F]+)\s+focus:1\b")
+
+
+def field_of(debug_info):
+    """The focused field from DebugInfo's text, or None."""
+    found = FOCUSED.findall(debug_info)
+    if len(found) != 1:
+        return None
+    ic, cap = found[0]
+    cap = int(cap, 16)
+    return {"id": ic,
+            "password": bool(cap & (CAP_PASSWORD | CAP_SENSITIVE)),
+            "terminal": bool(cap & CAP_TERMINAL),
+            "noCapitals": bool(cap & (CAP_NO_AUTO_UPPER | CAP_EMAIL | CAP_URL | CAP_TERMINAL
+                                      | CAP_PASSWORD | CAP_SENSITIVE))}
+
+
+printed_field = "unset"
+# Each ask is numbered, and an answer older than one already printed is
+# dropped: what it says is about a field that may no longer have focus.
+field_asks = 0
+field_answered = 0
+
+
+def ask_field():
+    """Which field has focus, by asking fcitx5 for its report."""
+    global field_asks
+    field_asks += 1
+    number = field_asks
+
+    def got(value):
+        global printed_field, field_answered
+        if number < field_answered:
+            return
+        field_answered = number
+        field = field_of(value[0]) if value else None
+        if field != printed_field:
+            printed_field = field
+            say("field", field)
+    call(CONTROLLER, "DebugInfo", reply="(s)", done=got)
+
+
 def ask_engine():
     """fcitx5 names the engine when a field gains focus, and not when an arm
     puts it back into on-screen keyboard mode, so after an arm it is asked."""
@@ -197,6 +256,7 @@ def arm():
             rearm_in(2000)
             return
         ask_engine()
+        ask_field()
 
     bus.call(FCITX, "/virtualkeyboard",
              "org.fcitx.Fcitx.VirtualKeyboard1", "ShowVirtualKeyboard",
@@ -214,18 +274,38 @@ def candidates(texts, has_prev, has_next, _page, cursor):
 
 
 def on_call(conn, sender, path, iface, method, params, invocation):
-    global asked
+    global asked, printed_field, field_answered
     invocation.return_value(None)
     asked = True
     args = params.unpack() if params is not None else ()
-    if method == "ShowVirtualKeyboard" and not arming:
-        print("show", flush=True)
+    if method == "ShowVirtualKeyboard":
+        # Asked whenever a field may have changed, armed or not: a password
+        # field must be known before the first key is typed into it.
+        if not arming:
+            # The service keeps nothing after a show until it hears which
+            # field this is, so the answer is said even if it is the same
+            # field as before, and any answer to an earlier question, about
+            # the field that had focus then, is dropped.
+            global printed_field, field_answered
+            printed_field = "unset"
+            field_answered = field_asks + 1
+            print("show", flush=True)
+        ask_field()
     elif method == "HideVirtualKeyboard":
+        # Ragtop's own keys cause a hide, and so does focus leaving the
+        # field, and only fcitx5's report tells them apart. The service
+        # holds what is typed apart until it hears, so the answer is said
+        # even when nothing changed, and one to a question asked before the
+        # hide is dropped.
+        printed_field = "unset"
+        field_answered = field_asks + 1
         print("hide", flush=True)
+        ask_field()
         # Wait for a burst of typing to settle before re-arming.
         rearm_in(300)
     elif method == "NotifyIMActivated":
         set_engine(args[0])
+        ask_field()
     elif method == "NotifyIMDeactivated":
         set_engine("")
     elif method == "NotifyIMListChanged":
@@ -255,6 +335,13 @@ def on_command(source, condition):
     return True
 
 
+def forget_asks():
+    """No answer to a question already asked is printed: it was asked of an
+    fcitx5 that has gone, or about a field that may no longer have focus."""
+    global field_answered
+    field_answered = field_asks + 1
+
+
 def on_fcitx_appeared(conn, name, owner):
     """fcitx5 came back, so whatever we told the old one is gone with it.
 
@@ -265,12 +352,19 @@ def on_fcitx_appeared(conn, name, owner):
     """
     global asked
     asked = False
+    forget_asks()
     refresh_methods()
     rearm_in(500)
 
 
 def on_fcitx_vanished(conn, name):
+    global printed_field
     set_engine("")
+    forget_asks()
+    # No fcitx5, no telling which field has focus.
+    if printed_field is not None:
+        printed_field = None
+        say("field", None)
 
 
 def watchdog():
@@ -286,10 +380,6 @@ def watchdog():
     return GLib.SOURCE_CONTINUE
 
 
-bus.register_object_with_closures2(
-    PATH, Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0], on_call, None, None)
-
-
 def on_name(conn, name):
     # fcitx5 notices the new owner and switches its interface over.
     GLib.timeout_add(200, arm)
@@ -299,13 +389,24 @@ def on_name_lost(conn, name):
     sys.exit(1)
 
 
-Gio.bus_watch_name_on_connection(bus, FCITX, Gio.BusNameWatcherFlags.NONE,
-                                 on_fcitx_appeared, on_fcitx_vanished)
-GLib.timeout_add_seconds(10, watchdog)
-GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_command)
+def main():
+    global bus, loop
+    # End with the shell that started us. Nothing else would tell us it's
+    # gone if it exits uncleanly, and a leftover copy would keep running
+    # unseen.
+    ctypes.CDLL(None).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+    bus.register_object_with_closures2(
+        PATH, Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0], on_call, None, None)
+    Gio.bus_watch_name_on_connection(bus, FCITX, Gio.BusNameWatcherFlags.NONE,
+                                     on_fcitx_appeared, on_fcitx_vanished)
+    GLib.timeout_add_seconds(10, watchdog)
+    GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_command)
+    Gio.bus_own_name_on_connection(bus, NAME, Gio.BusNameOwnerFlags.NONE,
+                                   on_name, on_name_lost)
+    loop = GLib.MainLoop()
+    loop.run()
 
 
-Gio.bus_own_name_on_connection(bus, NAME, Gio.BusNameOwnerFlags.NONE,
-                               on_name, on_name_lost)
-loop = GLib.MainLoop()
-loop.run()
+if __name__ == "__main__":
+    main()

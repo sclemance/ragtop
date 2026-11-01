@@ -1,0 +1,19 @@
+name = "Mechanical"
+
+# Shallow-perspective solid caps with illuminated legends and underlighting.
+# Animation follows the user's existing backlight preference.
+shape = "rounded"
+radius = 5
+relief = "raised"
+depth = 8
+fill = "surface"
+backlight = "accent"
+backlight-motion = "ripple"
+keycap-material = "solid"
+keycap-profile = "sculpted"
+size = 100
+key-transparency = 0
+border-width = 1
+labels = "normal"
+special-keys = "off"
+blur = false

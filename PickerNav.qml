@@ -28,9 +28,9 @@ Item {
   // throws the picker away from the three that work it.
   readonly property var buttons: [
     { name: "prev", keysym: "Left", label: "", icon: "left", kind: "special", units: 1.6, hold: true, pad: 0 },
-    { name: "select", keysym: "Return", label: "Select", icon: "", kind: "accent", units: 3, hold: false, pad: 0 },
+    { name: "select", keysym: "Return", label: "picker.select", icon: "", kind: "accent", units: 3, hold: false, pad: 0 },
     { name: "next", keysym: "Right", label: "", icon: "right", kind: "special", units: 1.6, hold: true, pad: 0 },
-    { name: "cancel", keysym: "Escape", label: "Cancel", icon: "", kind: "special", units: 3, hold: false, pad: 1.2 }
+    { name: "cancel", keysym: "Escape", label: "picker.cancel", icon: "", kind: "special", units: 3, hold: false, pad: 1.2 }
   ]
 
   // Sized like the keyboard's keys, so the strip is the keyboard's bottom
@@ -39,7 +39,7 @@ Item {
   readonly property real unit: Math.min((width - 2 * theme.padding) / totalUnits, Math.round(84 * theme.keyScale))
   readonly property real keyHeight: Math.max(Math.round(36 * theme.keyScale),
     Math.min(Math.round(unit * 0.78), Math.round(60 * theme.keyScale)))
-  readonly property real topPadding: theme.padding + theme.edgeFade + theme.edgeBorder
+  readonly property real topPadding: theme.padding
 
   implicitHeight: topPadding + keyHeight + theme.padding
 
@@ -67,11 +67,6 @@ Item {
     if (button.hold) service.sendKeys("up " + button.keysym)
   }
 
-  // The background and top edge, shared with the keyboard.
-  KeyboardSurface {
-    anchors.fill: parent
-    theme: root.theme
-  }
 
   Repeater {
     model: root.slots
@@ -87,7 +82,8 @@ Item {
       KeyboardKey {
         anchors.fill: parent
         theme: root.theme
-        label: slot.modelData.button.label
+        // A catalog key for the two that carry words (Select, Cancel).
+        label: slot.modelData.button.label !== "" ? root.service.t(slot.modelData.button.label) : ""
         kind: slot.modelData.button.kind
         labelKind: slot.modelData.button.icon !== "" ? "drawn" : "word"
         icon: slot.modelData.button.icon

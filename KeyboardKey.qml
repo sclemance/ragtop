@@ -43,20 +43,57 @@ Item {
   // key in a long-press popup is the popup's own panel, so being see-through
   // there would only muddy the letter.
   property bool opaque: false
+  // The clear space around the drawn cap can exceed the layout's gap.
+  property real glowGap: theme.gap
+  // Enabled only on the main desktop board; popup/strip/lock stay static.
+  property bool rippleEnabled: false
+  readonly property real backlightBrightness: rippleLoader.item ? rippleLoader.item.brightness : 1
+  readonly property color lightSourceColor: rippleLoader.item ? rippleLoader.item.color
+    : pressed && theme.backlit ? theme.rippleColor : theme.glowColor
+  function lightAtBrightness(color) {
+    var dim = Qt.rgba(color.r * backlightBrightness, color.g * backlightBrightness,
+                      color.b * backlightBrightness, color.a)
+    return rippleLoader.item && rippleLoader.item.whiteMix > 0
+      ? Qt.tint(dim, Qt.rgba(1, 1, 1, rippleLoader.item.whiteMix)) : dim
+  }
+  readonly property color backlightColor: lightAtBrightness(lightSourceColor)
+  readonly property bool pudding: theme.pudding === true && (backlit || sculpted)
+  readonly property bool sculpted: theme.sculpted === true && boxy && depth > 0
+  readonly property bool transparentCap: sculpted && theme.transparentCap === true
+  readonly property bool illuminated: theme.shineThrough === undefined ? theme.backlit === true : theme.shineThrough
+  // Clear caps still need to distinguish latched/locked modifiers from a
+  // normal cap. Their glyph contrast follows the same material colour.
+  readonly property color materialLight: transparentCap && (kind === "locked" || kind === "latched")
+    ? restingFill : backlit ? backlightColor : theme.keySide
+  readonly property color wallColor: pudding
+    ? Qt.rgba(backlightColor.r, backlightColor.g, backlightColor.b, theme.wallOpacity)
+    : sculpted ? theme.keySide : backlit ? backlightColor : theme.keySide
+  function pulseGlow(distance) {
+    if (rippleLoader.item) rippleLoader.item.pulse(distance)
+  }
 
   readonly property string shape: theme.keyShape
   readonly property bool outlined: theme.keyFill === "outline"
-  readonly property color tinted: pressed ? theme.pressedKey
-    : kind === "locked" ? theme.lockedKey
+  readonly property color restingFill: kind === "locked" ? theme.lockedKey
     : kind === "latched" ? theme.latchedKey
     : kind === "special" || kind === "accent" ? theme.specialKey
     : theme.key
+  // Backlit caps signal a press by sinking and changing their light colour.
+  readonly property color tinted: pressed && !theme.backlit && !sculpted ? theme.pressFill(restingFill) : restingFill
   readonly property color fill: opaque && tinted.a > 0
     ? Qt.rgba(tinted.r, tinted.g, tinted.b, 1) : tinted
-  readonly property color labelColor: kind === "locked" ? theme.accentText
+  readonly property color preferredLabelColor: kind === "locked" ? theme.accentText
     : kind === "accent" ? theme.accent
     : kind === "special" ? theme.specialText
     : theme.text
+  readonly property color labelColor: transparentCap
+    ? theme.readableText(preferredLabelColor, Qt.rgba(materialLight.r, materialLight.g, materialLight.b, 1))
+    : theme.strongContrast ? theme.readableText(preferredLabelColor, fill) : preferredLabelColor
+  readonly property color shineColor: illuminated && kind !== "locked"
+    ? lightAtBrightness(Qt.tint(Qt.rgba(lightSourceColor.r, lightSourceColor.g, lightSourceColor.b, 1),
+              Qt.rgba(1, 1, 1, 0.18))) : labelColor
+  readonly property color legendGlow: illuminated && kind !== "locked"
+    ? Qt.rgba(backlightColor.r, backlightColor.g, backlightColor.b, 0.22) : "transparent"
 
   // An accent edge is what marks Enter now that it is not filled. Any style
   // can set a border width of zero, so this one insists on a hairline.
@@ -70,6 +107,10 @@ Item {
   // The face, where the label goes: the whole key but for a keycap's side.
   readonly property real faceY: pressed ? depth * theme.pressSink : 0
   readonly property real faceHeight: height - depth
+  readonly property real legendInset: sculpted ? Math.min(6, width * 0.085, faceHeight * 0.17) : 0
+  readonly property real legendHeight: faceHeight - (sculpted ? Math.min(3, faceHeight * 0.07) : 0)
+  readonly property real legendShift: 0
+  readonly property bool backlit: theme.backlit === true && boxy && depth > 0 && fill.a >= 0.99
 
   // Which corner is drawn how, clockwise from the top left. A shape name
   // is only ever shorthand for one of these sets, so there is no shape to
@@ -121,15 +162,42 @@ Item {
       + " Z"
   }
 
+  Loader {
+    anchors.fill: parent
+    active: key.backlit
+    sourceComponent: KeyGlow {
+      accent: key.backlightColor
+      rounding: key.shape === "pill" ? key.height / 2 : key.theme.keyRadius
+      gap: key.glowGap
+      // Leave a visible background contribution through the frosted walls.
+      // The underlight adds occlusion to their own 50% material opacity.
+      strength: key.pudding || key.transparentCap ? 0.55 : 0.95
+      blur: Math.max(6, key.glowGap * 1.8)
+    }
+  }
+
+  Loader {
+    id: rippleLoader
+    active: key.backlit && key.rippleEnabled && key.visible
+    sourceComponent: GlowRipple {
+      active: key.visible && key.rippleEnabled
+      pressed: key.pressed
+      baseColor: key.theme.glowColor
+      pressColor: key.theme.rippleColor
+      floorWhiteMix: key.theme.rippleWhiteMix
+    }
+  }
+
   // A raised key's side, which only ever shows below the face: it starts
   // where the face does, so a pressed key shows nothing above it.
   Rectangle {
-    visible: key.depth > 0 && key.boxy
+    visible: key.depth > 0 && key.boxy && !key.sculpted
     y: key.faceY
     width: key.width
     height: key.height - key.faceY
     radius: key.shape === "pill" ? height / 2 : key.theme.keyRadius
-    color: key.theme.keySide
+    objectName: "keySide"
+    color: key.wallColor
   }
 
   Shape {
@@ -147,7 +215,7 @@ Item {
 
   // The face, when every corner is round: a rectangle with its own radius.
   Rectangle {
-    visible: key.boxy
+    visible: key.boxy && !key.sculpted
     y: key.faceY
     width: key.width
     height: key.faceHeight
@@ -172,6 +240,23 @@ Item {
     }
   }
 
+  Loader {
+    objectName: "sculptedCap"
+    anchors.fill: parent
+    active: key.sculpted
+    sourceComponent: SculptedKeycap {
+      faceColor: key.fill
+      material: key.theme.look.keycapMaterial || "solid"
+      lightColor: key.materialLight
+      materialOpacity: key.theme.wallOpacity
+      edgeColor: key.edgeColor
+      edgeWidth: key.edgeWidth
+      faceY: key.faceY
+      faceHeight: key.faceHeight
+      rounding: key.theme.keyRadius
+    }
+  }
+
   // The label's size on Omarchy's scales, kept inside the key.
   readonly property int labelPixelSize: Math.min(
     labelKind === "icon" || labelKind === "drawn" ? theme.iconSize
@@ -183,32 +268,42 @@ Item {
   // centring of icon glyphs. Plain text doesn't need it.
   OpticalGlyph {
     visible: key.labelKind === "icon"
+    x: key.legendInset + key.legendShift
     y: key.faceY
-    width: key.width
-    height: key.faceHeight
+    width: key.width - 2 * key.legendInset
+    height: key.legendHeight
     text: key.labelKind === "icon" ? key.label : ""
-    color: key.labelColor
+    color: key.shineColor
     fontFamily: key.theme.fontFamily
     fontSize: key.labelPixelSize
   }
 
   Text {
+    id: legend
     // Never rich text. A window title, a layout name and an error
     // string all arrive from outside, and AutoText would sniff markup
     // in them and render it, which for Qt includes fetching a remote
     // image named in an img tag.
     textFormat: Text.PlainText
     visible: key.labelKind === "char" || key.labelKind === "word"
+    readonly property bool illuminated: key.illuminated
+    x: key.legendInset + key.legendShift
     y: key.faceY
-    width: key.width
-    height: key.faceHeight
+    width: key.width - 2 * key.legendInset
+    height: key.legendHeight
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
     text: key.label
-    color: key.labelColor
+    // Opaque shine-through lettering, with a small luminous rim. No
+    // background sampling, transparency or per-letter blur texture.
+    // A locked modifier keeps its contrasting legend over the accent fill.
+    color: key.shineColor
+    style: illuminated ? Text.Outline : Text.Normal
+    styleColor: key.legendGlow
     elide: Text.ElideRight
     font.family: key.theme.fontFamily
     font.pixelSize: key.labelPixelSize
+    font.bold: illuminated
   }
 
   Text {
@@ -218,30 +313,38 @@ Item {
     // image named in an img tag.
     textFormat: Text.PlainText
     visible: key.hint !== "" && key.hintIcon === ""
+    readonly property bool illuminated: key.illuminated
     y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInset / 2)
-    width: key.width - Math.round(key.theme.gap / 2 + key.cornerInset)
+    width: key.width - Math.round(key.theme.gap / 2 + key.cornerInset) - key.legendInset + key.legendShift
     horizontalAlignment: Text.AlignRight
     text: key.hint
-    color: key.labelColor
+    color: key.shineColor
     // Quieter than the label it sits beside: it says what the key can also
     // do, and should not compete with what it does now.
-    opacity: 0.5
+    opacity: illuminated || key.transparentCap ? 1 : key.theme.hintOpacity
+    style: illuminated ? Text.Outline : Text.Normal
+    styleColor: key.legendGlow
     font.family: key.theme.fontFamily
     font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
+    font.bold: illuminated
   }
 
   Text {
     // Outside strings reach this one too: see the note above.
     textFormat: Text.PlainText
     visible: key.hintLeft !== ""
-    x: Math.round(key.theme.gap / 2 + key.cornerInsetLeft)
+    readonly property bool illuminated: key.illuminated
+    x: Math.round(key.theme.gap / 2 + key.cornerInsetLeft) + key.legendInset + key.legendShift
     y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInsetLeft / 2)
     horizontalAlignment: Text.AlignLeft
     text: key.hintLeft
-    color: key.labelColor
-    opacity: 0.5
+    color: key.shineColor
+    opacity: illuminated || key.transparentCap ? 1 : key.theme.hintOpacity
+    style: illuminated ? Text.Outline : Text.Normal
+    styleColor: key.legendGlow
     font.family: key.theme.fontFamily
     font.pixelSize: Math.max(9, Math.round(key.labelPixelSize * 0.52))
+    font.bold: illuminated
   }
 
   // The right hint as a drawn icon. Same corner and the same quietness as the
@@ -260,22 +363,24 @@ Item {
     visible: key.hintIcon !== ""
     height: Math.min(key.labelPixelSize,
                      Math.max(11, Math.round(key.labelPixelSize * 0.64)))
-    x: key.width - Math.round(key.theme.gap / 2 + key.cornerInset) - width
+    x: key.width - Math.round(key.theme.gap / 2 + key.cornerInset) - width - key.legendInset + key.legendShift
     y: key.faceY + Math.round(key.theme.gap / 2 + key.cornerInset / 2)
     name: key.hintIcon
-    color: key.labelColor
-    opacity: 0.5
+    color: key.shineColor
+    glowColor: key.legendGlow
+    opacity: key.illuminated || key.transparentCap ? 1 : key.theme.hintOpacity
   }
 
   KeyIcon {
     visible: key.labelKind === "drawn"
-    y: key.faceY + (key.faceHeight - height) / 2
-    x: (key.width - width) / 2
+    y: key.faceY + (key.legendHeight - height) / 2
+    x: (key.width - width) / 2 + key.legendShift
     height: Math.round(key.labelPixelSize * 1.2)
     // Wider than tall for icons that ask for it, e.g. Enter's long arrow.
-    width: Math.min(implicitWidth, key.width - key.theme.gap)
+    width: Math.min(implicitWidth, key.width - key.theme.gap - 2 * key.legendInset)
     name: key.icon
-    color: key.labelColor
+    color: key.shineColor
+    glowColor: key.legendGlow
     filled: key.kind === "locked"
   }
 }

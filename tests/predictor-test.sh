@@ -38,7 +38,10 @@ PY
 pre=()
 suggest() {
   local list=$1; shift
-  out=$(printf '%s\n' "${pre[@]}" "${@/#/complete }" | sandboxed /usr/bin/python3 "$repo/predictor.py" "$list" 2>&1) || true
+  # No spelling dictionary unless a test names one (dicts): one installed on
+  # the machine would otherwise change what every other test gets.
+  out=$(printf '%s\n' "${pre[@]}" "${@/#/complete }" \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS="${dicts-}" /usr/bin/python3 "$repo/predictor.py" "$list" 2>&1) || true
 }
 
 words="$sandbox/en.msgpack.gz"
@@ -51,7 +54,7 @@ make_words() {
 completions_by_rank() {
   make_words
   suggest "$words" hel
-  assert_contains "$out" "ready 14"
+  assert_contains "$out" "ready 15"
   # her is a far slip (see below), so it comes after every completion.
   assert_contains "$out" 'suggest ["help", "held", "hell", "hello", "helm", "helpful", "her"]'
 }
@@ -304,6 +307,313 @@ PY
   assert_lacks "$out" '"garcon"'
 }
 
+# ---- Word forms ---------------------------------------------------------------
+
+form_words() {
+  wordlist "$words" 200:sum 300:sums 320:summed 250:summer 210:try 260:tried 270:trying \
+    290:tries 590:tri 150:go 230:went 240:going 280:goes 300:gone 400:child 420:children \
+    590:childs 380:happy 450:happier 470:happiest 330:stop 360:stopped 370:stopping 380:stops
+}
+
+# forms_of <word ...>: one "forms" line each.
+forms_of() {
+  pre=()
+  for w in "$@"; do pre+=("forms $w"); done
+  suggest "$words"
+}
+
+forms_both_ways() {
+  form_words
+  forms_of sum summed stop
+  assert_contains "$out" 'forms ["sums", "summed"]'
+  assert_contains "$out" 'forms ["sum", "sums"]'
+  assert_contains "$out" 'forms ["stopped", "stopping", "stops"]'
+}
+
+# summer is in the list and is sum with -er, but it is not a form of sum:
+# -er and -est count only as a pair, which an adjective has.
+comparatives_only_as_a_pair() {
+  form_words
+  forms_of sum happy
+  assert_lacks "$out" "summer"
+  assert_contains "$out" 'forms ["happier", "happiest"]'
+}
+
+# tried could undo to tri, which the list has; the commoner root wins.
+the_commonest_root() {
+  form_words
+  forms_of tried
+  assert_contains "$out" 'forms ["try", "trying", "tries"]'
+  assert_lacks "$out" "tri\""
+}
+
+irregular_forms() {
+  form_words
+  forms_of went child
+  assert_contains "$out" 'forms ["go", "going", "goes", "gone"]'
+  assert_contains "$out" 'forms ["children"]'
+  assert_lacks "$out" "childs"
+}
+
+# ly and us are in wordfreq, as a fragment and a pronoun, and the rules made
+# lying and using of them. Two-letter words get only their irregular forms.
+no_rules_on_two_letters() {
+  form_words
+  wordlist "$words" 563:ly 420:lying 200:us 300:uses 280:using 290:used 150:go 230:went 240:going
+  forms_of ly us go
+  [[ $(grep -c '^forms \[\]$' <<<"$out") -eq 2 ]] || fail "ly and us should have no forms: $out"
+  assert_contains "$out" 'forms ["went", "going"]'
+}
+
+forms_follow_capitals() {
+  form_words
+  forms_of Stop
+  assert_contains "$out" 'forms ["Stopped", "Stopping", "Stops"]'
+}
+
+# ---- Terminals -----------------------------------------------------------------
+
+# term <line ...>: one "termsuggest" line each, for a made-up folder.
+term() {
+  local cwd="$sandbox/home/project"
+  mkdir -p "$cwd/src/sub" "$cwd/my docs" "$cwd/.hidden"
+  touch "$cwd/src/main.py" "$cwd/README.md"
+  pre=()
+  for l in "$@"; do pre+=("term $(jq -cn --arg c "$cwd" --arg l "$l" '{cwd: $c, line: $l}')"); done
+  wordlist "$words" 127:the
+  suggest "$words"
+  out=$(grep '^termsuggest' <<<"$out" | sed 's/^termsuggest //' | jq -c '[.[] | .text]')
+}
+
+commands_at_the_start() {
+  term gre "sudo pac" "git log | gre" "echo hi && gre"
+  assert_equal "$(sed -n 1p <<<"$out" | jq -r '.[0]')" grep "first word"
+  assert_equal "$(sed -n 2p <<<"$out" | jq -r '.[0]')" pacman "after sudo"
+  assert_equal "$(sed -n 3p <<<"$out" | jq -r '.[0]')" grep "after a pipe"
+  assert_equal "$(sed -n 4p <<<"$out" | jq -r '.[0]')" grep "after &&"
+}
+
+files_after_it() {
+  term "cat R" "cat sr" "cat src/" "cat src/ma" "ls ." "cat "
+  assert_equal "$out" '["README.md"]
+["src/"]
+["src/sub/","src/main.py"]
+["src/main.py"]
+[".hidden/"]
+[]'
+}
+
+# A name with a space is offered escaped, and completed when typed so.
+escaped_names() {
+  term "cd m" "cat my\\ d" "cat 'my d"
+  assert_equal "$out" '["my\\ docs/"]
+["my\\ docs/"]
+[]'
+}
+
+# A quoted name, closed or partly so, is completed as one escaped word: no
+# quote is left open, and the folder part and a leading ~ still work.
+quoted_names() {
+  term 'cat "RE"' "cat 'my d'o" 'cat "src"/ma' 'cat src/"ma"' "cd 'my docs'/"
+  assert_equal "$out" '["README.md"]
+["my\\ docs/"]
+["\"src\"/main.py"]
+["src/main.py"]
+[]'
+}
+
+# A name with a newline would split the helper's line and, typed, press
+# Enter; one with any control character is not offered.
+control_characters_are_not_offered() {
+  local cwd="$sandbox/home/project"
+  mkdir -p "$cwd"
+  touch "$cwd/prefix"$'\n'"quit"$'\n'"suffix" "$cwd/pre"$'\t'"tab" "$cwd/prelude"
+  term "cat pre"
+  assert_equal "$out" '["prelude"]'
+}
+
+cd_offers_folders() {
+  term "cd " "cd s"
+  assert_equal "$out" '["my\\ docs/","src/"]
+["src/"]'
+}
+
+flags_are_not_guessed() {
+  term "ls -" "grep --"
+  assert_equal "$out" '[]
+[]'
+}
+
+# ---- Two words that were one ---------------------------------------------------
+
+join_words() {
+  wordlist "$words" 480:inter 400:active 490:interactive 300:may 220:be 350:maybe \
+    160:a 340:lot 500:alot 300:well 360:known 330:every 310:day 450:everyday
+}
+
+# join_of <"a b" ...>: one "join" line each.
+join_of() {
+  pre=()
+  for p in "$@"; do pre+=("join $p"); done
+  suggest "$words"
+}
+
+# A rare piece makes the space likely a slip, so the offer leads.
+a_rare_piece_joins_strongly() {
+  join_words
+  join_of "inter active" "Inter active"
+  assert_contains "$out" 'join {"word": "interactive", "strong": true}'
+  assert_contains "$out" 'join {"word": "Interactive", "strong": true}'
+}
+
+# Both right either way, so it is offered only quietly.
+common_pieces_join_weakly() {
+  join_words
+  join_of "may be" "every day"
+  assert_contains "$out" 'join {"word": "maybe", "strong": false}'
+  assert_contains "$out" 'join {"word": "everyday", "strong": false}'
+}
+
+# alot is in wordfreq because people write it, and well known has no
+# one-word form: neither is offered.
+no_join_into_a_mistake() {
+  join_words
+  join_of "a lot" "well known" "inter 2"
+  assert_lacks "$out" 'alot'
+  [[ $(grep -c '^join {}$' <<<"$out") -eq 3 ]] || fail "expected three empty joins: $out"
+}
+
+# ---- Spelling dictionaries (optional) -------------------------------------------
+
+# A dictionary of a few words, in Hunspell's own format: sluggish takes -ly,
+# manger takes three endings, and alot is not in it.
+make_dictionary() {
+  dicts="$sandbox/dicts"
+  mkdir -p "$dicts"
+  printf 'SET UTF-8\n\nSFX Y Y 1\nSFX Y 0 ly .\n\nSFX A Y 3\nSFX A er e er\nSFX A er eais er\nSFX A er ez er\n' >"$dicts/$1.aff"
+  printf '5\nstoreroom\nsluggish/Y\nstore\nroom\nmanger/A\n' >"$dicts/$1.dic"
+}
+
+# With a dictionary, it says what joins: storeroom and sluggishly, which the
+# list lacks, and never alot, which the list has.
+a_dictionary_decides_joins() {
+  wordlist "$words" 300:store 300:room 575:sluggish 563:ly 160:a 340:lot 507:alot
+  make_dictionary en_US
+  join_of "store room" "sluggish ly" "a lot"
+  assert_contains "$out" 'join {"word": "storeroom", "strong": false}'
+  assert_contains "$out" 'join {"word": "sluggishly", "strong": true}'
+  [[ $(grep -c '^join {}$' <<<"$out") -eq 1 ]] || fail "a lot should not join: $out"
+}
+
+# A language with no rules for forms gets them from the dictionary's stems,
+# once its index is built, in the background.
+forms_from_stems() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/fr"
+  wordlist "$dir/fr/small_fr.msgpack.gz" 300:manger 320:mange 350:mangeais 360:mangez 200:room
+  make_dictionary fr_FR
+  out=$( { echo "lang fr"; sleep 2; echo "forms mangeais"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS="$dicts" /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  assert_contains "$out" "dictionary fr fr_FR"
+  assert_contains "$out" 'forms ["manger", "mange", "mangez"]'
+}
+
+# None installed is the usual case, and changes nothing.
+no_dictionary_no_change() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/fr"
+  wordlist "$dir/fr/small_fr.msgpack.gz" 300:manger 320:mange 350:mangeais
+  out=$( { echo "lang fr"; echo "forms mangeais"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  assert_contains "$out" "dictionary fr -"
+  assert_contains "$out" 'forms []'
+}
+
+# ---- The next word ------------------------------------------------------------
+
+# pairs_file <file> <line ...>: a pairs file as bench/pairs.py writes one,
+# "word<TAB>follower count ...", a line each.
+pairs_file() { local f=$1; shift; printf '%s\n' "$@" | gzip >"$f"; }
+
+next_words_and_context() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/en"
+  wordlist "$dir/en/small_en.msgpack.gz" 160:to 150:the 170:you 200:i 300:going 320:thank 330:tom 400:toast
+  pairs_file "$dir/en/pairs_en.tsv.gz" $'<s>\ti 50 the 30' $'thank\tyou 90 the 1' $'going\tto 80 i 5' $'<capitals>\ti'
+  out=$( { echo "lang en"; echo "after"; echo "after thank"; echo "after going"; echo "complete t";
+           echo "after -"; echo "complete t"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  # At a sentence's start there is no word to go on, so nothing is guessed,
+  # though the pairs know what sentences start with.
+  [[ $(grep '^next ' <<<"$out" | head -1) == 'next []' ]] || fail "a sentence's start offered words: $out"
+  assert_contains "$out" 'next ["you", "the"]'
+  # With I written as it always is.
+  assert_contains "$out" 'next ["to", "I"]'
+  # After going, to leads what t could be; with no word before, the does.
+  assert_contains "$out" 'suggest ["to", "the"'
+  assert_contains "$out" 'next []'
+  [[ $(grep -c '^suggest \["the", "to"' <<<"$out") -eq 1 ]] || fail "without context the should lead: $out"
+}
+
+# English is in the repository: a machine that has fetched nothing still
+# has it, pairs and all.
+the_bundled_copy_is_read() {
+  local bundled="$sandbox/bundled"
+  mkdir -p "$bundled/en"
+  wordlist "$bundled/en/small_en.msgpack.gz" 170:you 320:thank
+  pairs_file "$bundled/en/pairs_en.tsv.gz" $'thank\tyou 9'
+  out=$( { echo "lang en"; echo "after thank"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" \
+        "$sandbox/nothing-fetched" "$bundled" 2>&1) || true
+  assert_contains "$out" "ready en 3"
+  assert_contains "$out" 'next ["you"]'
+}
+
+# The word before steers a swipe, as it does a completion, where the path
+# cannot: to and too are the same stops, and too is what follows me. A clear
+# path still wins over it (world is not word after hello, its l not drawn).
+a_swipe_follows_the_word_before() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/en"
+  wordlist "$dir/en/small_en.msgpack.gz" 127:the 150:to 230:her 300:too 310:me 400:top
+  pairs_file "$dir/en/pairs_en.tsv.gz" $'me\ttoo 50 to 10'
+  mapfile -t lines < <(swipes to)
+  out=$( { echo "lang en"; echo "${lines[0]}"; echo "${lines[1]}"; echo "after me"; echo "${lines[1]}"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" \
+    "to too " "the swipe alone, then after me"
+}
+
+omarchy_is_available_for_typing_and_swiping() {
+  # Use the shipped English corpus too: a synthetic list alone would not
+  # establish whether Omarchy competes successfully with actual vocabulary.
+  local corpus="$repo/words/en/small_en.msgpack.gz"
+  pre=('after')
+  local prefix
+  for prefix in omar Omarch omarhcy; do
+    suggest "$corpus" "$prefix"
+    assert_contains "$out" 'next []' 'no context-free starters'
+    assert_contains "$out" 'suggest ["Omarchy"' 'proper name from prefix and typo'
+  done
+  suggest "$corpus" OMARCH
+  assert_contains "$out" 'suggest ["OMARCHY"' 'explicit uppercase preserved'
+  mapfile -t pre < <(swipes omarchy)
+  suggest "$corpus"
+  assert_contains "$out" 'swiped ["Omarchy"' 'realistic swipe finds the name'
+  mapfile -t pre < <(swipes omarchy | sed '2s/^swipe /peek /')
+  suggest "$corpus"
+  assert_contains "$out" 'peeked ["Omarchy"' 'in-progress swipe uses proper case'
+  # Loading a pairs file must not discard the built-in proper name, and
+  # changing the prediction language must not lose the shared vocabulary.
+  make_languages
+  pairs_file "$langs/en/pairs_en.tsv.gz" $'<capitals>\ti'
+  pre=('lang en' 'complete omarch' 'lang fr' 'complete omarch')
+  suggest "$langs"
+  assert_equal "$(grep -c '^suggest \["Omarchy"' <<<"$out")" 2 'name in English with pairs and French'
+}
+
+run_test "predictor: Omarchy completes and swipes with its proper name, without starter guesses" omarchy_is_available_for_typing_and_swiping
+
 run_test "predictor: completions come most common first" completions_by_rank
 run_test "predictor: suggestions take the typed word's capitals" case_follows_the_typing
 run_test "predictor: a word typed with one slip is corrected" one_slip_is_corrected
@@ -327,4 +637,26 @@ run_test "predictor: an accent that was typed is kept to" a_typed_accent_is_kept
 run_test "predictor: after an elision the rest is completed, the elision kept" elisions_complete_the_rest
 run_test "predictor: each language keeps its own list" switching_back_keeps_each_list
 run_test "predictor: a swipe without accents finds the accented word" a_swipe_needs_no_accents
+run_test "predictor: a word's forms, from its root and back to it" forms_both_ways
+run_test "predictor: -er and -est are forms only as a pair, so summer is not sum's" comparatives_only_as_a_pair
+run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root
+run_test "predictor: irregular forms, and no rule-made misspellings beside them" irregular_forms
+run_test "predictor: forms take the word's capitals" forms_follow_capitals
+run_test "predictor: no rule-made forms on two letters, so ly is not lying's" no_rules_on_two_letters
+run_test "predictor: a rare piece joins, and leads the strip" a_rare_piece_joins_strongly
+run_test "predictor: common pieces join only quietly, maybe for may be" common_pieces_join_weakly
+run_test "predictor: no join into a misspelling, or where there is no word" no_join_into_a_mistake
+run_test "predictor: with a dictionary, it decides what joins" a_dictionary_decides_joins
+run_test "predictor: forms from a dictionary's stems, for a language without rules" forms_from_stems
+run_test "predictor: no dictionary, no change" no_dictionary_no_change
+run_test "predictor: next words, and completions ranked by the word before" next_words_and_context
+run_test "predictor: the bundled copy is read when nothing was fetched" the_bundled_copy_is_read
+run_test "predictor: the word before steers a swipe" a_swipe_follows_the_word_before
+run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
+run_test "predictor: then files and folders from the terminal's folder" files_after_it
+run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names
+run_test "predictor: a quoted name is completed as one escaped word" quoted_names
+run_test "predictor: a name with a newline or other control character is never offered" control_characters_are_not_offered
+run_test "predictor: after cd, folders only" cd_offers_folders
+run_test "predictor: flags are not guessed" flags_are_not_guessed
 finish

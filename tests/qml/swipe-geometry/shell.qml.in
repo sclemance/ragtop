@@ -1,0 +1,47 @@
+import QtQuick
+import Quickshell
+ShellRoot {
+  id: root
+  Harness { id: t }
+  QtObject {
+    id: predictorProc
+    property bool running: true
+    property var sent: []
+    function write(line) { sent.push(line) }
+  }
+  property bool swipeActive: true
+  property bool swipeDrawing: true
+  property var peekPath: null
+  property bool peekPending: false
+  property int fieldGeneration: 1
+  property var swipesAsked: []
+  // FROM SOURCE: swipeKeys sentSwipeGeometry setSwipeKeys flushSwipeKeys sendPeek swipe
+  function geometry(x) { return { unit: 10, keys: { a: [x, 10], b: [20, 10] } } }
+  Component.onCompleted: t.run([
+    [0, function() {
+      setSwipeKeys(geometry(0)); setSwipeKeys(geometry(1)); setSwipeKeys(geometry(2))
+      t.equal(predictorProc.sent.length, 0, "geometry notifications deferred")
+    }],
+    [10, function() {
+      t.equal(predictorProc.sent.length, 1, "only final geometry sent")
+      t.equal(JSON.parse(predictorProc.sent[0].slice(5)).keys.a[0], 2, "latest layout wins")
+      setSwipeKeys(geometry(2))
+    }],
+    [10, function() {
+      t.equal(predictorProc.sent.length, 1, "returning to unchanged letters sends nothing")
+      setSwipeKeys(geometry(3)); peekPath = [[1, 2], [3, 4]]; sendPeek()
+      t.ok(predictorProc.sent[1].startsWith("keys "), "pending geometry precedes peek")
+      t.ok(predictorProc.sent[2].startsWith("peek "), "peek follows geometry")
+      setSwipeKeys(geometry(4)); swipe([[1, 2], [3, 4]], false)
+      t.ok(predictorProc.sent[3].startsWith("keys "), "pending geometry precedes final swipe")
+      t.ok(predictorProc.sent[4].startsWith("swipe "), "final swipe follows geometry")
+      flushSwipeKeys(true)
+      t.equal(predictorProc.sent.length, 6, "ready explicitly restores geometry")
+      predictorProc.running = false; setSwipeKeys(geometry(5)); flushSwipeKeys()
+      t.equal(predictorProc.sent.length, 6, "stopped helper receives nothing")
+      sentSwipeGeometry = ""; predictorProc.running = true; flushSwipeKeys()
+      t.equal(predictorProc.sent.length, 7, "restarted helper receives current layout")
+    }],
+    [10, function() { t.equal(predictorProc.sent.length, 7, "deferred flush does not duplicate forced send") }]
+  ])
+}

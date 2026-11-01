@@ -4,14 +4,18 @@
 # install.sh if anything is printed.
 
 dir="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+# Its reasons are read by a person, in the language Omarchy is set to.
+repo=$dir
+source "$repo/i18n.sh"
 state="$HOME/.local/state/ragtop"
 conf="$state/install.conf"
 
 if [[ ! -f $conf ]]; then
-  # Protocol, not prose. Service.qml matches this sentence to decide whether
-  # to open setup outright rather than describe what is missing, so rewording
-  # it here silently turns that into an ordinary notification.
-  echo "The installer hasn't been run yet."
+  # Protocol, not prose, and so never translated: Service.qml opens setup
+  # outright on this word rather than describing what is missing, and nobody
+  # reads it. It was an English sentence once, matched as one, which a
+  # translation would have quietly broken.
+  echo "not-installed"
   exit 0
 fi
 
@@ -22,20 +26,20 @@ command -v git >/dev/null || missing+=(git)
 command -v monitor-sensor >/dev/null || missing+=(iio-sensor-proxy)
 /usr/bin/python3 -c "import pywayland" 2>/dev/null || missing+=(python-pywayland)
 /usr/bin/python3 -c "import gi" 2>/dev/null || missing+=(python-gobject)
-(( ${#missing[@]} )) && echo "Missing packages. Run: omarchy pkg add ${missing[*]}"
+(( ${#missing[@]} )) && t check.missing "omarchy pkg add ${missing[*]}"
 
 grep -qsF "// Ragtop: tablet settings." "$HOME/.config/omarchy/extensions/omarchy-menu.jsonc" ||
-  echo "Ragtop's settings aren't in the Omarchy menu."
+  t check.noMenu
 
 # Only the overlays the installer was asked to patch.
 overlays=$(sed -n 's/^overlays=//p' "$conf")
 for overlay in $overlays; do
   grep -qs "id: ragtopMode" "$HOME/.config/omarchy/plugins/$USER.$overlay"/*.qml ||
-    echo "The $overlay overlay isn't patched for touch."
+    t check.unpatched "$(t "overlay.name.$overlay")"
 done
 
 switch=$("$dir/find-tablet-switch.py" 2>/dev/null)
 if [[ -n $switch && ! -r ${switch%%$'\t'*} ]]; then
-  echo "Can't read the tablet-mode switch. The installer can fix this."
+  t check.switch
 fi
 exit 0

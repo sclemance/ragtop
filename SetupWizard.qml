@@ -26,8 +26,15 @@ Item {
   required property var service
   signal finished()
 
+  // Setup › Tablet › System Overlays opens this on the overlays alone: what
+  // is on now, ticked; as many changes as you like, none of them made yet;
+  // and one Apply for all of them, since each one made restarts the shell.
+  // Closing it without applying changes nothing.
+  property bool overlaysOnly: false
+
   property int step: 0
-  readonly property var steps: ["Welcome", "Dependencies", "Switch access", "Overlays", "Finish"]
+  readonly property var steps: root.overlaysOnly ? ["setup.step.overlays"]
+    : ["setup.step.welcome", "setup.step.deps", "setup.step.switch", "setup.step.overlays", "setup.step.finish"]
 
   function script(name) {
     return Qt.resolvedUrl(name).toString().replace(/^file:\/\//, "")
@@ -38,10 +45,10 @@ Item {
   // Each package, what it's for, and whether it's here. Ragtop runs without
   // any of them. It just does less, and the wording says exactly what less.
   property var deps: [
-    { pkg: "iio-sensor-proxy", need: "Rotation. Without it the screen won't follow the device.", ok: false },
-    { pkg: "python-pywayland", need: "The on-screen keyboard. Without it no keys are sent.", ok: false },
-    { pkg: "python-gobject", need: "Noticing text fields, so the keyboard can come up by itself.", ok: false },
-    { pkg: "git", need: "Cloning Omarchy's overlays, if you turn any on below.", ok: false }
+    { pkg: "iio-sensor-proxy", need: "setup.need.sensor", ok: false },
+    { pkg: "python-pywayland", need: "setup.need.pywayland", ok: false },
+    { pkg: "python-gobject", need: "setup.need.gobject", ok: false },
+    { pkg: "git", need: "setup.need.git", ok: false }
   ]
   readonly property var missingDeps: deps.filter(function(d) { return !d.ok })
   property bool checkingDeps: false
@@ -124,18 +131,21 @@ Item {
   // ---- Omarchy's overlays -----------------------------------------------
 
   property var overlays: [
-    { id: "menu", label: "Omarchy Menu", detail: "Type to search it by touch.", on: false },
-    { id: "emojis", label: "Emoji Picker", detail: "Search emoji by touch.", on: false },
-    { id: "clipboard", label: "Clipboard Picker", detail: "Search your clipboard history by touch.", on: false },
-    { id: "polkit", label: "Password Prompt", detail: "Type your password when something asks for it.", on: false },
-    { id: "image-picker", label: "Image Picker", detail: "Arrows and a Select button for the theme and background pickers.", on: false },
-    { id: "lock", label: "Lock Screen", detail: "A keyboard of its own, to unlock without a keyboard.", on: false }
+    { id: "menu", label: "setup.overlayName.menu", detail: "setup.overlay.menu", on: false },
+    { id: "emojis", label: "setup.overlayName.emojis", detail: "setup.overlay.emojis", on: false },
+    { id: "clipboard", label: "setup.overlayName.clipboard", detail: "setup.overlay.clipboard", on: false },
+    { id: "polkit", label: "setup.overlayName.polkit", detail: "setup.overlay.polkit", on: false },
+    { id: "image-picker", label: "setup.overlayName.image-picker", detail: "setup.overlay.image-picker", on: false },
+    { id: "lock", label: "setup.overlayName.lock", detail: "setup.overlay.lock", on: false }
   ]
   readonly property var chosenOverlays: overlays.filter(function(o) { return o.on })
   readonly property bool allOverlays: chosenOverlays.length === overlays.length
   // What is on the machine now, so setup can be run again to change it
-  // rather than only to establish it.
+  // rather than only to establish it. Until it has been read, every toggle
+  // shows off, and applying then would take every overlay away: nothing is
+  // applied before it has (overlaysRead).
   property var installedOverlays: []
+  property bool overlaysRead: false
 
   Process {
     id: overlayStatusProc
@@ -146,6 +156,7 @@ Item {
           .filter(function(l) { return l.indexOf(": installed") !== -1 })
           .map(function(l) { return l.slice(0, l.indexOf(":")) })
         root.installedOverlays = on
+        root.overlaysRead = true
         root.overlays = root.overlays.map(function(o) {
           return { id: o.id, label: o.label, detail: o.detail, on: on.indexOf(o.id) !== -1 }
         })
@@ -190,7 +201,13 @@ Item {
   // So the work goes to `systemd-run --user`, which outlives the shell
   // entirely, and it reports for itself when it is done rather than relying
   // on a window that may no longer exist.
+  // Whether Apply has anything to do. The full setup always does: it writes
+  // the menu rows and the record even with no overlay changing.
+  readonly property bool canApply: root.overlaysRead && !root.applying
+    && (!root.overlaysOnly || root.overlaysChange)
+
   function apply() {
+    if (!root.canApply) return
     root.applying = true
     root.applyError = ""
     var ids = function(list) { return list.map(function(o) { return o.id }).join(" ") }
@@ -262,7 +279,7 @@ Item {
           // image named in an img tag.
           textFormat: Text.PlainText
           id: title
-          text: "Ragtop setup"
+          text: root.overlaysOnly ? root.service.t("setup.overlays.title") : root.service.t("setup.title")
           color: Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.title
@@ -275,7 +292,8 @@ Item {
           textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.verticalCenter: title.verticalCenter
-          text: "Step " + (root.step + 1) + " of " + root.steps.length + " · " + root.steps[root.step]
+          visible: !root.overlaysOnly
+          text: root.service.t("setup.stepOf", root.step + 1, root.steps.length, root.service.t(root.steps[root.step]))
           color: Color.popups.text
           opacity: 0.6
           font.family: Style.font.family
@@ -310,7 +328,8 @@ Item {
         spacing: Style.space(8)
 
         Button {
-          text: root.step === 0 ? "Not now" : "Back"
+          text: root.overlaysOnly ? root.service.t("setup.cancel")
+            : root.step === 0 ? root.service.t("setup.notNow") : root.service.t("setup.back")
           bordered: true
           foreground: Color.popups.text
           onClicked: {
@@ -319,13 +338,16 @@ Item {
           }
         }
         Button {
-          text: root.step === root.steps.length - 1
-            ? (root.applying ? "Applying…" : "Apply") : "Next"
+          readonly property bool last: root.step === root.steps.length - 1
+          text: last
+            ? (root.applying ? root.service.t("setup.applying") : root.service.t("setup.apply")) : root.service.t("setup.next")
           bordered: true
-          foreground: root.step === root.steps.length - 1 ? Color.accent : Color.popups.text
+          enabled: !last || root.canApply
+          opacity: enabled ? 1 : 0.5
+          foreground: last ? Color.accent : Color.popups.text
           onClicked: {
-            if (root.step < root.steps.length - 1) root.step = root.step + 1
-            else if (!root.applying) root.apply()
+            if (!last) root.step = root.step + 1
+            else root.apply()
           }
         }
       }
@@ -378,22 +400,15 @@ Item {
 
       Body {
         width: parent.width
-        text: "Ragtop makes this machine work as a tablet: the screen follows the device, "
-          + "an on-screen keyboard comes up when you need one, and the things that normally "
-          + "want a keyboard or a mouse can be done by touch."
+        text: root.service.t("setup.welcome.body")
       }
       Body {
         width: parent.width
-        text: "Setup touches three things outside Ragtop's own folder. Each is optional, "
-          + "each is reversible, and nothing happens until the last step."
+        text: root.service.t("setup.welcome.touches")
       }
       Note {
         width: parent.width
-        text: "• Settings rows in your Omarchy menu, written as a marked block in "
-          + "~/.config/omarchy/extensions/omarchy-menu.jsonc\n"
-          + "• Read access to the tablet-mode switch, through a udev rule that needs your password\n"
-          + "• Patched copies of Omarchy's own overlays, if you want to type into them by touch\n\n"
-          + "It will not install packages for you, and it changes nothing else."
+        text: root.service.t("setup.welcome.list")
       }
     }
   }
@@ -406,8 +421,8 @@ Item {
       Body {
         width: parent.width
         text: root.missingDeps.length === 0
-          ? "Everything Ragtop needs is installed."
-          : "Ragtop needs these from Arch's own repositories. It works without them, it just does less."
+          ? root.service.t("setup.deps.allHere")
+          : root.service.t("setup.deps.missing")
       }
 
       Repeater {
@@ -433,7 +448,7 @@ Item {
             width: parent.width - Style.space(28)
             spacing: 0
             Body { width: parent.width; text: modelData.pkg }
-            Note { width: parent.width; text: modelData.need }
+            Note { width: parent.width; text: root.service.t(modelData.need) }
           }
         }
       }
@@ -441,7 +456,7 @@ Item {
       Note {
         width: parent.width
         visible: root.missingDeps.length > 0
-        text: "Install them in a terminal, then come back and check again:"
+        text: root.service.t("setup.deps.how")
       }
       Mono {
         width: parent.width
@@ -451,21 +466,21 @@ Item {
       Row {
         spacing: Style.space(8)
         Button {
-          text: root.checkingDeps ? "Checking…" : "Check again"
+          text: root.checkingDeps ? root.service.t("setup.deps.checking") : root.service.t("setup.deps.checkAgain")
           bordered: true
           foreground: Color.popups.text
           onClicked: root.checkDeps()
         }
         Button {
           visible: root.missingDeps.length > 0
-          text: "Install in a terminal"
+          text: root.service.t("setup.deps.terminal")
           bordered: true
           foreground: Color.accent
           onClicked: root.installInTerminal()
         }
         Button {
           visible: root.missingDeps.length > 0
-          text: "Copy command"
+          text: root.service.t("setup.deps.copy")
           bordered: true
           foreground: Color.popups.text
           onClicked: copyProc.running = true
@@ -486,21 +501,13 @@ Item {
       Body {
         width: parent.width
         text: parent.noSwitch
-          ? "Ragtop can notice a screen being folded back, or a keyboard coming off, by "
-            + "reading a tablet-mode "
-            + "switch, an input device the kernel exposes, like a keyboard or a mouse. "
-            + "This machine reports none."
-          : "Ragtop knows the screen has been folded back, or the keyboard taken off, by "
-            + "reading the tablet-mode "
-            + "switch, an input device the kernel exposes, like a keyboard or a mouse."
+          ? root.service.t("setup.switch.none")
+          : root.service.t("setup.switch.what")
       }
       Body {
         width: parent.width
         visible: parent.offering
-        text: "Only root can read it here. This rule tags switch devices, tablet mode, the "
-          + "lid and the headphone jack, so whoever is logged in at the machine can read them. "
-          + "Keyboards are excluded, which is the difference between this and joining the "
-          + "input group."
+        text: root.service.t("setup.switch.rule")
       }
       Mono {
         width: parent.width
@@ -509,7 +516,7 @@ Item {
       }
       Button {
         visible: parent.offering
-        text: root.installingRule ? "Waiting for your password…" : "Install the rule"
+        text: root.installingRule ? root.service.t("setup.switch.waiting") : root.service.t("setup.switch.install")
         bordered: true
         foreground: Color.accent
         onClicked: {
@@ -520,13 +527,13 @@ Item {
       Note {
         width: parent.width
         visible: parent.offering
-        text: "Omarchy's password prompt will ask for your password (polkit, not sudo)."
+        text: root.service.t("setup.switch.polkit")
       }
 
       Body {
         width: parent.width
         visible: root.switchState === "readable"
-        text: "The switch is readable already, so there is nothing to do here."
+        text: root.service.t("setup.switch.readable")
       }
 
       // A slate has no hinge to report, and a convertible whose switch stays
@@ -537,26 +544,21 @@ Item {
         width: parent.width
         visible: parent.noSwitch || parent.offering
         text: parent.noSwitch
-          ? "That is ordinary on a tablet with no keyboard, since there is nothing to fold or "
-            + "detach, so nothing to report. "
-            + "Tell Ragtop to stay in tablet mode and it will, for good."
-          : "You can also skip it. The rule buys one thing: noticing the fold, or the "
-            + "detach, by itself. "
-            + "Rotation, the keyboard and everything else work without it. Set the mode by "
-            + "hand instead."
+          ? root.service.t("setup.switch.tablet")
+          : root.service.t("setup.switch.skip")
       }
       Row {
         spacing: Style.space(8)
         visible: parent.noSwitch || parent.offering
 
         Button {
-          text: root.manualMode === "on" ? "Tablet mode: always on ✓" : "Stay in tablet mode"
+          text: root.manualMode === "on" ? root.service.t("setup.switch.alwaysOn") : root.service.t("setup.switch.stayTablet")
           bordered: true
           foreground: root.manualMode === "on" ? Color.accent : Color.popups.text
           onClicked: root.setManualMode("on")
         }
         Button {
-          text: root.manualMode === "off" ? "Tablet mode: always off ✓" : "Stay in laptop mode"
+          text: root.manualMode === "off" ? root.service.t("setup.switch.alwaysOff") : root.service.t("setup.switch.stayLaptop")
           bordered: true
           foreground: root.manualMode === "off" ? Color.accent : Color.popups.text
           onClicked: root.setManualMode("off")
@@ -565,9 +567,7 @@ Item {
       Note {
         width: parent.width
         visible: parent.noSwitch || parent.offering
-        text: "Either way it is a setting, not a decision: Setup › Tablet › Tablet Mode "
-          + "changes it whenever you like. A detachable that reports a switch when its "
-          + "keyboard comes off will be picked up on its own."
+        text: root.service.t("setup.switch.either")
       }
     }
   }
@@ -579,21 +579,17 @@ Item {
 
       Body {
         width: parent.width
-        text: "Omarchy's menu, its pickers, its password prompt and its lock screen can't be "
-          + "typed into by touch as they ship. Ragtop can run patched copies of them instead."
+        text: root.service.t("setup.overlays.why")
       }
       Note {
         width: parent.width
-        text: "A copy is Omarchy's own code, the password prompt and lock screen included, "
-          + "living in your config where anything running as you can change it, and no longer "
-          + "taking Omarchy's updates directly (a hook re-copies them after each update). "
-          + "Leave them off if in doubt. They can be turned on one at a time later."
+        text: root.service.t("setup.overlays.catch")
       }
 
       Toggle {
         width: parent.width
-        label: "Turn them all on"
-        description: "Every overlay below"
+        label: root.service.t("setup.overlays.all")
+        description: root.service.t("setup.overlays.allDetail")
         checked: root.allOverlays
         foreground: Color.popups.text
         onClicked: root.setAllOverlays(!root.allOverlays)
@@ -607,12 +603,36 @@ Item {
         Toggle {
           required property var modelData
           width: parent.width
-          label: modelData.label
-          description: modelData.detail
+          label: root.service.t(modelData.label)
+          description: root.service.t(modelData.detail)
           checked: modelData.on
           foreground: Color.popups.text
           onClicked: root.setOverlay(modelData.id, !modelData.on)
         }
+      }
+
+      // On its own, this is also the last page: what Apply will do, before
+      // anything is done.
+      PanelSeparator { visible: root.overlaysOnly; width: parent.width; foreground: Color.popups.text }
+      Note {
+        visible: root.overlaysOnly
+        width: parent.width
+        text: !root.overlaysRead ? root.service.t("setup.overlays.reading")
+          : !root.overlaysChange ? root.service.t("setup.overlays.unchanged")
+          : root.service.t("setup.overlays.will") + "\n"
+            + (root.overlaysToAdd.length > 0
+               ? "• " + root.service.t("setup.finish.add", root.overlaysToAdd.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
+               : "")
+            + (root.overlaysToDrop.length > 0
+               ? "• " + root.service.t("setup.finish.drop", root.overlaysToDrop.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
+               : "")
+            + "• " + root.service.t("setup.finish.restart")
+      }
+      Body {
+        width: parent.width
+        visible: root.overlaysOnly && root.applyError !== ""
+        color: Color.urgent
+        text: root.applyError
       }
     }
   }
@@ -622,26 +642,23 @@ Item {
     Column {
       spacing: Style.space(10)
 
-      Body { width: parent.width; text: "Ready. Applying will:" }
+      Body { width: parent.width; text: root.service.t("setup.finish.ready") }
       Note {
         width: parent.width
-        text: "• add Ragtop's settings to your Omarchy menu, under Setup › Tablet\n"
+        // A line each, whole sentences with the overlays' names put in.
+        text: "• " + root.service.t("setup.finish.menu") + "\n"
           + (root.overlaysToAdd.length > 0
-             ? "• make patched copies of: " + root.overlaysToAdd.map(function(o) { return o.label }).join(", ") + "\n"
+             ? "• " + root.service.t("setup.finish.add", root.overlaysToAdd.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
              : "")
           + (root.overlaysToDrop.length > 0
-             ? "• put back Omarchy's own: " + root.overlaysToDrop.map(function(o) { return o.label }).join(", ") + "\n"
+             ? "• " + root.service.t("setup.finish.drop", root.overlaysToDrop.map(function(o) { return root.service.t(o.label) }).join(", ")) + "\n"
              : "")
-          + (root.overlaysChange
-             ? "• restart the Omarchy shell, which is when copies are picked up"
-             : "• leave Omarchy's overlays as they are")
+          + "• " + (root.overlaysChange ? root.service.t("setup.finish.restart") : root.service.t("setup.finish.leave"))
       }
       Body {
         width: parent.width
         visible: root.missingDeps.length > 0
-        text: "Still missing: " + root.missingDeps.map(function(d) { return d.pkg }).join(", ")
-          + ". Setup will finish without them. Install them whenever you like and Ragtop "
-          + "will pick them up."
+        text: root.service.t("setup.finish.missing", root.missingDeps.map(function(d) { return d.pkg }).join(", "))
       }
       Body {
         width: parent.width
@@ -653,9 +670,10 @@ Item {
   }
 
   Component.onCompleted: {
+    overlayStatusProc.running = true
+    if (root.overlaysOnly) return
     root.checkDeps()
     switchStatusProc.running = true
     ruleTextProc.running = true
-    overlayStatusProc.running = true
   }
 }

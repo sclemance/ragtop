@@ -31,8 +31,14 @@ skip_udev=0
 # "ask", or "on"/"off" from --overlays/--no-overlays.
 overlays_choice=ask
 overlays_enabled=0
+overlays_failed=0
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
+# What the installer says, in the language Omarchy is set to (i18n.sh):
+# tell prints a catalog string as an indented paragraph, wrapped to fit,
+# since a translation is rarely the length of the English.
+source "$repo/i18n.sh"
+tell() { t "$@" | fold -s -w 74 | sed 's/^/   /'; }
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -51,7 +57,7 @@ plugin_discovered() {
 }
 
 check_deps() {
-  say "Checking dependencies"
+  say "$(t install.checking)"
   local missing=() hints=()
   command -v monitor-sensor >/dev/null || { missing+=(monitor-sensor); hints+=(iio-sensor-proxy); }
   command -v git >/dev/null || { missing+=(git); hints+=(git); }
@@ -67,31 +73,30 @@ check_deps() {
     # A list of package names is a task, and a command is an answer.
     # Name the packages, not the commands that are missing: "monitor-sensor"
     # is not something anybody can install.
-    warn "missing: ${hints[*]}"
-    echo "   Install them with Omarchy's own helper, which checks each one landed:"
+    warn "$(t install.missing "${hints[*]}")"
+    tell install.missingHow
     echo
     echo "     omarchy pkg add ${hints[*]}"
     echo
-    die "then run this again."
+    die "$(t install.thenAgain)"
   fi
-  echo "   all present"
+  tell install.allPresent
 }
 
 check_switch() {
-  say "Looking for a tablet-mode switch"
+  say "$(t install.switch)"
   local device
   device=$("$repo/find-tablet-switch.py")
   if [[ -z $device ]]; then
-    warn "no device reports a tablet-mode switch. Ragtop will keep looking (a detachable's keyboard may add one),"
-    warn "but tablet mode won't be detected until one appears. See 'Tablet-mode detection' in the README."
+    warn "$(t install.noSwitch)"
     return
   fi
   local path="${device%%$'\t'*}"
-  echo "   found ${device#*$'\t'} at $path"
+  tell install.found "${device#*$'\t'}" "$path"
   [[ -r $path ]] && return
-  warn "$path isn't readable by $USER, so tablet mode can't be detected."
+  warn "$(t install.unreadable "$path" "$USER")"
   offer_udev_rule && return
-  warn "Alternatively, join its group and log in again (this also exposes your keyboards):"
+  warn "$(t install.joinGroup)"
   warn "  sudo usermod -aG $(stat -c %G "$path") $USER"
 }
 
@@ -100,36 +105,36 @@ check_switch() {
 offer_udev_rule() {
   local rule
   rule=$("$repo/udev-rule.sh" rule)
-  echo "   Ragtop can install a udev rule giving the logged-in user read access"
-  echo "   to switch devices only (tablet mode, lid and headphone jack, never keyboards):"
+  tell install.ruleOffer
   # Quoted and split on newlines only: `rule` prints the file and the rule on
   # a line each, and unquoted the rule fell apart at every space.
   local line
   while IFS= read -r line; do printf '     %s\n' "$line"; done <<<"$rule"
   if (( skip_udev )); then
-    echo "   left alone (--no-udev)"
+    tell install.ruleSkipped
     return 1
   fi
   if (( ! assume_yes )); then
     if [[ ! -t 0 ]]; then
-      warn "not running in a terminal, so not asking. Re-run install.sh in one, or pass --yes."
+      warn "$(t install.noTerminal)"
       return 1
     fi
     local answer
-    read -r -p "   Install it now? You'll be asked for your password. [y/N] " answer
+    # [y/N] is what the answer is read against, so every language keeps it.
+    read -r -p "   $(t install.ruleAsk) " answer
     [[ $answer == [yY]* ]] || return 1
   fi
   if "$repo/udev-rule.sh" install >/dev/null; then
-    echo "   installed, and the switch is readable now"
+    tell install.ruleInstalled
   else
-    warn "couldn't install the rule."
+    warn "$(t install.ruleFailed)"
     return 1
   fi
 }
 
 remove_udev_rule() {
   if (( skip_udev )); then
-    echo "   left alone (--no-udev)"
+    tell install.ruleSkipped
     return 0
   fi
   # The first line `rule` prints is where the rule lives. Only ask for a
@@ -137,10 +142,10 @@ remove_udev_rule() {
   local rule_file
   rule_file=$("$repo/udev-rule.sh" rule | head -n 1)
   if [[ ! -e $rule_file ]]; then
-    echo "   not installed, nothing to remove"
+    tell uninstall.ruleNone
     return 0
   fi
-  echo "   removing the switch access rule needs your password"
+  tell uninstall.rulePassword
   "$repo/udev-rule.sh" remove >/dev/null && echo "   removed" || warn "couldn't remove it."
 }
 
@@ -149,49 +154,66 @@ remove_udev_rule() {
 # changes Omarchy itself: offered once, off unless taken, and changeable per
 # overlay afterwards in Setup › Tablet › System Overlays.
 offer_overlays() {
-  say "Touch typing in Omarchy's overlays"
+  say "$(t install.overlays)"
   local on
   on=$("$repo/overlay-clones.sh" status | sed -n 's/^\([a-z-]*\): installed.*/\1/p' | tr '\n' ' ')
   on="${on% }"
   if [[ -n $on ]]; then
-    echo "   already on for: $on"
-    echo "   Change it per overlay in Setup › Tablet › System Overlays."
+    tell install.overlaysOn "$on"
+    tell install.overlaysChange
+    # Already on, but perhaps without the hooks, after a run that could not
+    # write them or a hand that deleted them. Restored here rather than left
+    # to the next shell start, which --no-restart puts off.
+    if ! "$repo/overlay-clones.sh" hooks; then
+      warn "$(t overlays.hookFailed)"
+      overlays_failed=1
+    fi
     return
   fi
 
-  echo "   Omarchy's menu, its pickers, its password prompt and its lock screen can't"
-  echo "   be worked by touch as they ship. Ragtop can run patched clones of them"
-  echo "   instead: touch typing in each, a keyboard on the lock screen, and arrows"
-  echo "   and a Select button for the theme and background pickers."
-  echo "   The catch: a clone is Omarchy's own code, the password prompt and lock"
-  echo "   screen included, copied from its root-owned folder into your config,"
-  echo "   where anything running as you can rewrite it, and it stops taking"
-  echo "   Omarchy's updates directly (a hook re-clones it after each update)."
-  echo "   Leave this off if in doubt: you can turn each overlay on later in"
-  echo "   Setup › Tablet › System Overlays. See 'Omarchy's overlays' in the README."
+  tell install.overlaysWhy
+  tell install.overlaysCatch
 
   case "$overlays_choice" in
     on) echo "   turning all of them on (--overlays)" ;;
     off) echo "   left off (--no-overlays)"; return ;;
     *)
       if (( assume_yes )); then
-        echo "   left off. Pass --overlays to turn them all on without asking"
+        tell install.overlaysSkipped
         return
       fi
       if [[ ! -t 0 ]]; then
-        echo "   left off, since this is not running in a terminal"
+        tell install.overlaysNoTerminal
         return
       fi
       local answer
-      read -r -p "   Turn all of them on now? [y/N] " answer
+      read -r -p "   $(t install.overlaysAsk) " answer
       if [[ $answer != [yY]* ]]; then
-        echo "   left off"
+        tell install.overlaysLeftOff
         return
       fi
       ;;
   esac
 
-  "$repo/overlay-clones.sh" install | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
+  # The overlays are optional, so a failure here is no reason to leave the
+  # install half-finished: Ragtop is linked and enabled by now, and the
+  # restart and the closing message still matter. The selection is all or
+  # nothing, so nothing was changed, and this asks again on the next run.
+  local rc=0
+  "$repo/overlay-clones.sh" apply "menu emojis clipboard polkit image-picker lock" "" || rc=$?
+  if (( rc == 3 )); then
+    # On, but without the hooks that keep them in step and clean them up.
+    overlays_enabled=1
+    record_overlays
+    warn "$(t overlays.hookFailed)"
+    overlays_failed=1
+    return
+  elif (( rc )); then
+    record_overlays
+    warn "$(t install.overlaysFailed)"
+    overlays_failed=1
+    return
+  fi
   overlays_enabled=1
   record_overlays
 }
@@ -213,25 +235,25 @@ record_overlays() {
 }
 
 link_plugin() {
-  say "Installing the plugin"
+  say "$(t install.plugin)"
   if [[ $(realpath "$plugin_dir" 2>/dev/null) == "$repo" ]]; then
-    echo "   ${plugin_dir/#$HOME/\~} is this checkout"
+    tell install.isCheckout "${plugin_dir/#$HOME/\~}"
   elif [[ -e $plugin_dir || -L $plugin_dir ]]; then
-    die "${plugin_dir/#$HOME/\~} already exists and isn't this checkout. Remove it first."
+    die "$(t install.exists "${plugin_dir/#$HOME/\~}")"
   else
     mkdir -p "$plugins_dir"
     ln -s "$repo" "$plugin_dir"
-    echo "   linked ${plugin_dir/#$HOME/\~} -> $repo"
+    tell install.linked "${plugin_dir/#$HOME/\~}" "$repo"
   fi
 
   omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
   for (( i = 0; i < 40; i++ )); do plugin_discovered && break; sleep 0.1; done
   plugin_discovered || die "Omarchy didn't discover $id. Check ${plugin_dir/#$HOME/\~}/manifest.json."
   if plugin_enabled; then
-    echo "   already enabled"
+    tell install.alreadyEnabled
   else
     omarchy plugin enable "$id" --section right >/dev/null
-    echo "   enabled in the bar's right section"
+    tell install.enabled
   fi
 }
 
@@ -251,7 +273,7 @@ remove_files() {
 }
 
 restart_shell() {
-  say "Restarting the Omarchy shell"
+  say "$(t install.restart)"
   omarchy-restart-shell
 }
 
@@ -272,7 +294,7 @@ install() {
   check_switch
   link_plugin
 
-  say "Adding Ragtop's settings to the Omarchy menu (Setup › Tablet)"
+  say "$(t install.menu)"
   menu_block add || warn "couldn't edit ${menu_file/#$HOME/\~}; Ragtop's settings won't be in the menu."
 
   mkdir -p "$state_dir"
@@ -282,9 +304,11 @@ install() {
   if (( restart )); then
     restart_shell
   elif (( overlays_enabled )); then
-    warn "the clones load when the shell restarts: omarchy-restart-shell"
+    warn "$(t install.restartForClones)"
   fi
-  say "Done. Ragtop's icons appear in the bar in tablet mode."
+  say "$(t install.done)"
+  # Still a failure to whoever asked for the overlays, --overlays included.
+  if (( overlays_failed )); then exit 1; fi
 }
 
 uninstall() {
@@ -301,24 +325,30 @@ uninstall() {
   # The password prompt comes first, because the polkit agent that shows it
   # may be one of the clones about to be removed: taking those away first
   # leaves pkexec with nothing to ask with, and the rule stays behind.
-  say "Removing the switch access rule"
+  say "$(t uninstall.rule)"
   remove_udev_rule
 
-  say "Removing overlay clones"
-  "$repo/overlay-clones.sh" remove | grep -v "omarchy-restart-shell" | sed 's/^/   /' || true
+  say "$(t uninstall.overlays)"
+  # 3: the clones are gone and only Ragtop's hook files stayed. Those do
+  # nothing once Ragtop is gone, so this is no reason to stop.
+  local rc=0
+  "$repo/overlay-clones.sh" apply "" "menu emojis clipboard polkit image-picker lock" || rc=$?
+  if (( rc != 0 && rc != 3 )); then
+    die "$(t uninstall.overlaysFailed)"
+  fi
 
-  say "Removing Ragtop's settings from the Omarchy menu"
+  say "$(t uninstall.menu)"
   menu_block remove
 
-  say "Removing generated files"
+  say "$(t uninstall.files)"
   remove_files
 
-  say "Removing the plugin"
+  say "$(t uninstall.plugin)"
   if plugin_enabled; then omarchy plugin disable "$id" >/dev/null && echo "   disabled"; fi
   if [[ -L $plugin_dir ]]; then
     rm "$plugin_dir" && echo "   unlinked ${plugin_dir/#$HOME/\~}"
   elif [[ -d $plugin_dir ]]; then
-    echo "   left ${plugin_dir/#$HOME/\~} in place (remove it with: omarchy plugin remove $id)"
+    tell uninstall.leftPlugin "${plugin_dir/#$HOME/\~}" "$id"
   fi
 
   if (( restart )); then
@@ -327,9 +357,9 @@ uninstall() {
     remove_files
   fi
   if [[ -d $config_dir ]]; then
-    echo "   kept your own themes in ${config_dir/#$HOME/\~} (delete it if you don't want them)"
+    tell uninstall.keptThemes "${config_dir/#$HOME/\~}"
   fi
-  say "Ragtop removed."
+  say "$(t uninstall.done)"
 }
 
 case "${1:-}" in

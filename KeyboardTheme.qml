@@ -1,5 +1,7 @@
 import QtQuick
 import qs.Commons
+import "KeyContrast.js" as KeyContrast
+import "GlowColors.js" as GlowColors
 
 // Everything about how Ragtop's keyboard looks, in one place, so a style can
 // change it without touching the keyboard's logic.
@@ -13,11 +15,9 @@ import qs.Commons
 QtObject {
   id: theme
 
-  // Background opacity, from Setup › Tablet › Transparency (0 = fully clear).
-  property real backgroundOpacity: 1
   // The keyboard's look, from Setup › Tablet (see Service.qml's `look`).
-  property var look: ({ shape: "omarchy", relief: "flat", fill: "solid", size: "normal", background: "tint",
-                        keyTransparency: "opaque", edge: "none", labels: "normal", depth: 4, chamfer: 8, edgeFade: 8,
+  property var look: ({ shape: "omarchy", relief: "flat", fill: "solid", size: "normal",
+                        keyTransparency: "opaque", labels: "normal", depth: 4, chamfer: 8,
                         keyColor: "", labelColor: "", keyFillAlpha: "auto",
                         borderWidth: "auto", radius: "auto", corners: "auto" })
 
@@ -37,6 +37,26 @@ QtObject {
   readonly property string density: keyScale < 0.95 ? "compact"
     : keyScale > 1.08 ? "roomy" : "normal"
   readonly property string labels: look.labels
+  readonly property bool strongContrast: look.contrast === "strong"
+  readonly property bool backlit: look.backlight === "accent"
+  readonly property bool ripple: backlit && look.animateBacklight === true && look.backlightMotion === "ripple"
+  readonly property bool sculpted: look.keycapProfile === "sculpted" && raised && cornersAllRound
+  readonly property bool pudding: (backlit || sculpted) && look.keycapMaterial === "pudding" && raised && cornersAllRound
+  readonly property bool transparentCap: sculpted && (look.keycapMaterial === "frosted" || look.keycapMaterial === "translucent")
+  readonly property bool shineThrough: backlit && look.shineThrough !== false && !transparentCap
+  readonly property real wallOpacity: look.wallOpacity === undefined ? 0.5 : look.wallOpacity / 100
+  property var glowPalette: ({})
+  readonly property var glowColors: GlowColors.choose(glowPalette, accent, Color.foreground, Color.background)
+  readonly property color glowColor: glowColors.base
+  readonly property color rippleColor: role(look.backlightPressColor, glowColors.press)
+  readonly property real rippleWhiteMix: GlowColors.waveWhiteMix(glowColor, rippleColor, glowColors.dark)
+  readonly property real hintOpacity: strongContrast ? 1 : 0.5
+
+  function readableText(preferred, face) {
+    return KeyContrast.readableText(preferred, Qt.tint(solidBase, face))
+  }
+
+  function pressFill(base) { return KeyContrast.pressedFill(base, pressedOverlay) }
 
   // A look's off-theme colour: a palette role or a hex colour, "" to follow
   // the theme.
@@ -53,51 +73,19 @@ QtObject {
 
   // The keyboard is a popup-like surface, so it takes Omarchy's popup
   // colours, and the keys are controls, so they take its control states.
+  // There is no background behind the keys, ever: the keyboard reserves its
+  // own room, so what is behind it is the wallpaper, and a panel over that
+  // did nothing but hide it. `surface` is still the colour the keys are
+  // measured against, lighter or darker, as the panel's would have been.
   property color surface: Color.popups.background
   property color text: role(look.labelColor, Color.popups.text)
   property color accent: Color.accent
   property color accentText: Color.background
 
-  // "tint" (a flat colour), "blur" (the same, with what's behind blurred by
-  // Hyprland) or "gradient" (towards the accent colour at the top).
-  property string backgroundStyle: look.background
-  property color background: Qt.rgba(surface.r, surface.g, surface.b, surface.a * backgroundOpacity)
-  property color gradientTop: Qt.tint(surface, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18))
-  property color backgroundTop: backgroundStyle === "gradient"
-    ? Qt.rgba(gradientTop.r, gradientTop.g, gradientTop.b, surface.a * backgroundOpacity)
-    : background
 
-  // How the keyboard's top edge meets the desktop (Setup › Tablet › Edge):
-  // "border" (Omarchy's own active window border), "fade" (the background
-  // fading out over the style's edgeFade pixels) or "none" (a hard edge).
-  readonly property string edgeStyle: look.edge
-  property var borderSpec: Border.hyprlandActiveSpec(Color.accent, 2)
-  property color borderColor: Border.color(borderSpec)
-  // Two or more colours when the theme's border is a gradient.
-  //
-  // Faded with the background rather than held at full strength. The edge is
-  // part of the panel, not a thing sitting on top of it, so a keyboard turned
-  // see-through that kept a solid line along its top read as a stray rule
-  // across the screen with nothing under it.
-  property var borderColors: {
-    var base = borderSpec.gradient && borderSpec.gradient.enabled
-      ? borderSpec.gradient.colors : [borderColor]
-    var a = backgroundOpacity
-    return base.map(function (c) { return Qt.rgba(c.r, c.g, c.b, c.a * a) })
-  }
-  property real edgeFade: edgeStyle === "fade" ? look.edgeFade : 0
-  property real edgeBorder: edgeStyle === "border" ? Math.max(0, Border.top(borderSpec)) : 0
-  property color backgroundClear: Qt.rgba(backgroundTop.r, backgroundTop.g, backgroundTop.b, 0)
-
-  // Whether the background is actually drawn. Fully clear (Setup › Tablet ›
-  // BG Transparency › Full) hides nothing, so taps off the keys can reach
-  // what is behind the keyboard. Any visible background does hide it, and
-  // then the keyboard keeps those taps to itself.
-  readonly property bool backgroundVisible: Math.max(background.a, backgroundTop.a) > 0.01
-
-  // How see-through the keys are, as the theme asked. What shows through is
-  // the keyboard's own background, so the desktop only shows if that is
-  // see-through too, or gone because the bar is.
+  // How see-through the keys are, as the theme asked: the wallpaper shows
+  // through, blurred if the theme asks for blur (Service.qml, applyBlur,
+  // which blurs only what is at least partly opaque, so only the keys).
   readonly property real keyOpacity: 1 - look.keyTransparency / 100
   function seeThrough(c) { return Qt.rgba(c.r, c.g, c.b, c.a * keyOpacity) }
 
@@ -135,9 +123,11 @@ QtObject {
     ? Util.alpha(role(look.keyColor, text), look.keyFillAlpha)
     : keyFill === "outline" ? "transparent"
     : Qt.tint(role(look.keyColor, keyFill === "dark" ? darkKey
+                                : keyFill === "surface" ? solidBase
                                 : keyFill === "light" ? lightKey : autoKey), themeKey)
   property color key: seeThrough(keyBase)
-  property color pressedKey: Style.pressedFillFor(text, Color.accent, Color.urgent)
+  readonly property color pressedOverlay: Style.pressedFillFor(text, Color.accent, Color.urgent)
+  property color pressedKey: pressFill(key)
   property color latchedKey: seeThrough(Qt.tint(specialBase, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.45)))
   property color lockedKey: seeThrough(Color.accent)
   // A key that produces no character sits a step further from the panel than
@@ -182,7 +172,7 @@ QtObject {
   }
   // Keys that aren't characters (Esc, Shift, ?123…) carry a quieter label.
   property color specialKey: seeThrough(specialBase)
-  property color specialText: Util.alpha(text, 0.66)
+  property color specialText: strongContrast ? text : Util.alpha(text, 0.66)
 
   // A raised key's side is part of the key, not a wash over the background:
   // the face's own colour in shadow, with a little accent so it reads as an
@@ -215,11 +205,12 @@ QtObject {
 
   // Key borders, from the same control states.
   property var keyBorderSpec: Border.controlSpec("normal", text, Color.accent, Color.urgent)
-  property color keyBorder: Border.color(keyBorderSpec)
-  property real keyBorderWidth: look.borderWidth !== "auto" ? Style.space(look.borderWidth)
-    // An outline key is its edge, so it always keeps one.
-    : keyFill === "outline" ? Math.max(1, Border.top(keyBorderSpec))
-    : Border.top(keyBorderSpec)
+  property color keyBorder: strongContrast ? Util.alpha(text, 0.8) : Border.color(keyBorderSpec)
+  property real keyBorderWidth: keyFill === "outline" ? Math.max(1, keyBorderWidthAsked) : keyBorderWidthAsked
+  // An outline key is its edge, so it always keeps one, whatever width
+  // the theme asked for: zero included.
+  property real keyBorderWidthAsked: look.borderWidth !== "auto"
+    ? Style.space(look.borderWidth) : Border.top(keyBorderSpec)
   // The Outline shape's edges, which carry the key on their own.
   property color outline: Util.alpha(text, 0.45)
 
@@ -259,13 +250,20 @@ QtObject {
   // A side can't take more than this much of the key, or the face has
   // nowhere left to sit. Pressing sinks the face most of the way into it.
   property real maxDepthFraction: 0.25
-  property real pressSink: 0.6
+  property real pressSink: sculpted ? 0.55 : backlit && !pudding ? 1 : 0.6
   property real keyChamfer: Style.space(look.chamfer)
 
   // Density steps through Omarchy's spacing tokens and scales the keys.
   property int gap: density === "compact" ? Style.spacing.sm : density === "roomy" ? Style.spacing.lg : Style.spacing.md
   property int padding: density === "compact" ? Style.spacing.md : density === "roomy" ? Style.spacing.xl : Style.spacing.lg
   property real keyScale: Math.max(0.6, Math.min(1.6, look.size / 100 * sizeNudge))
+
+  // Visual room for underlighting inside an unchanged touch slot. Sculpted
+  // already has a skirt around its inset face, so it needs much less here.
+  function capInsetFor(w, h) {
+    return sculpted ? Math.min(0.75 * keyScale, w * 0.02, h * 0.02)
+      : backlit ? Math.min(2.5, w * 0.07, h * 0.07) : 0
+  }
 
   property string fontFamily: Style.font.family
   // Labels step on Omarchy's type scale, a character reading large, a word

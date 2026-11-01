@@ -1,0 +1,109 @@
+import QtQuick
+import Quickshell
+ShellRoot {
+  id: root
+  Harness { id: t }
+  property bool predicting: true
+  property string wordLanguage: "en"
+  property string currentWord: "h"
+  property int fieldGeneration: 0
+  property string context: "the"
+  function contextNow() { return context }
+  function updateContext() { predictorProc.write("after " + context + "\n") }
+  property var displayed: null
+  function setSuggestions(source, value) { displayed = value }
+  QtObject { id: predictorProc; property bool running: true; property var sent: []
+    function write(line) { sent.push(line) } }
+  QtObject { id: terminalProc; property bool running: true; property var sent: []
+    property int resets: 0
+    function write(line) {
+      var message = JSON.parse(line)
+      if (message.reset) resets++
+      else sent.push(message)
+    } }
+  QtObject { id: terminalRestart; function stop() {} }
+  property bool terminalReady: true
+  property bool wantTerminal: true
+  property string termLine: "g"
+  property string termCwd: "/tmp"
+  property string termShell: "bash"
+  // FROM SOURCE: asked pendingCompletion cancelCompletions completionCurrent queueCompletion flushCompletion completionAnswer
+  // FROM SOURCE: terminalStarted terminalSequence termPending termInFlight termLatest clearTerminalRequests cancelTerminal terminalCurrent askTerm flushTerminal termAnswer
+  // FROM SOURCE: onFieldGenerationChanged
+  function answer(id, text, update) { termAnswer({id: id, items: [{text: text}], update: update}) }
+  Component.onCompleted: t.run([
+    [0, function() {
+      queueCompletion(); flushCompletion()
+      currentWord = "he"; queueCompletion(); currentWord = "hel"; queueCompletion()
+      t.equal(predictorProc.sent.length, 2, "one in-flight completion after its context")
+      t.equal(asked.length, 1, "completion backlog bounded")
+      t.equal(pendingCompletion.word, "hel", "only latest pending prefix retained")
+      completionAnswer(["old"])
+      t.equal(displayed, null, "obsolete prefix not displayed")
+    }],
+    [10, function() {
+      t.equal(predictorProc.sent[3], "complete hel\n", "only latest prefix computed next")
+      completionAnswer(["hello"])
+      t.equal(displayed.items[0].text, "hello", "current result displayed")
+      queueCompletion(); flushCompletion(); currentWord = "help"; queueCompletion()
+      fieldGeneration++
+      t.equal(pendingCompletion, null, "field change clears queued plaintext")
+      t.equal(asked[0], undefined, "field change drops in-flight plaintext")
+      displayed = null; completionAnswer(["stale"])
+      t.equal(displayed, null, "field reply cannot leak into new field")
+      queueCompletion(); flushCompletion(); wordLanguage = "fr"
+      completionAnswer(["old-language"])
+      t.equal(displayed, null, "language mismatch rejected")
+      queueCompletion(); flushCompletion(); context = "different"
+      completionAnswer(["old-context"])
+      t.equal(displayed, null, "context mismatch rejected")
+      predictorProc.running = false; queueCompletion(); flushCompletion()
+      t.equal(asked.length, 0, "stopped predictor receives no work")
+      cancelCompletions(); predictorProc.running = true
+      terminalReady = true; askTerm(); flushTerminal()
+      termLine = "gi"; askTerm(); termLine = "git"; askTerm()
+      t.equal(terminalProc.sent.length, 1, "only one terminal lookup in flight")
+      t.equal(termPending.line, "git", "terminal keeps only latest pending line")
+      answer(terminalProc.sent[0].id, "obsolete", false)
+      t.equal(displayed, null, "outdated terminal result rejected")
+    }],
+    [10, function() {
+      t.equal(terminalProc.sent.length, 2, "latest terminal lookup follows response")
+      t.equal(terminalProc.sent[1].line, "git", "intermediate terminal prefix skipped")
+      var id = terminalProc.sent[1].id
+      answer(id, "git", false); answer(id, "git with notes", true)
+      t.equal(displayed.items[0].text, "git with notes", "current description update accepted")
+      termLine = "grep"; askTerm(); displayed = null
+      answer(id, "old notes", true)
+      t.equal(displayed, null, "old description update rejected immediately")
+      flushTerminal(); var old = termInFlight.id
+      fieldGeneration++
+      t.equal(termPending, null, "field change clears terminal pending line")
+      t.equal(JSON.stringify(termInFlight), JSON.stringify({id: old}), "field change keeps only in-flight id")
+      t.equal(termLatest, null, "field change clears description request")
+      t.equal(terminalStarted, true, "field change keeps terminal helper warm")
+      var count = terminalProc.sent.length
+      termLine = "ech"; askTerm(); flushTerminal()
+      fieldGeneration++; termLine = "pw"; askTerm(); flushTerminal()
+      t.equal(terminalProc.sent.length, count, "focus churn cannot queue work behind stale lookup")
+      answer(old, "secret", false)
+      t.equal(displayed, null, "cancelled terminal answer rejected")
+      flushTerminal()
+      t.equal(terminalProc.sent.length, count + 1, "latest field lookup follows stale acknowledgment")
+      t.equal(terminalProc.sent[count].line, "pw", "only latest field line sent")
+      answer(old, "stale notes", true)
+      t.equal(displayed, null, "old field notes cannot replace new lookup")
+      answer(termInFlight.id, "pwd", false); displayed = null
+      terminalReady = true; askTerm(); flushTerminal(); termShell = "fish"
+      answer(termInFlight.id, "old shell", false)
+      t.equal(displayed, null, "shell mismatch rejected")
+      askTerm(); flushTerminal(); termCwd = "/"
+      answer(termInFlight.id, "old directory", false)
+      t.equal(displayed, null, "directory mismatch rejected")
+      wantTerminal = false; cancelTerminal(); askTerm()
+      t.equal(termPending, null, "disabled feature retains no pending text")
+      t.equal(termInFlight, null, "shutdown drops protocol barrier")
+      t.ok(terminalProc.resets > 0, "field cancellation clears worker's pending metadata update")
+    }]
+  ])
+}

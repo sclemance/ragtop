@@ -1,0 +1,16 @@
+name = "Chiclet"
+
+# Familiar rectangular keycaps: small round corners, a visible side and
+# darker modifiers. The face sinks into the side when pressed; normal-size
+# legends leave space around the lettering and secondary hints.
+shape = "rounded"
+radius = 4
+relief = "raised"
+depth = 6
+fill = "auto"
+size = 100
+key-transparency = 0
+border-width = 1
+labels = "normal"
+special-keys = "darker"
+blur = false

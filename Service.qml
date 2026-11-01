@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import "typed-record.js" as Record
 
 // Singleton: the shell creates one of these per session, whereas the
 // bar widget is created once per monitor. Owning the daemons here means there
@@ -139,14 +140,14 @@ Item {
   // what it is and the rest take their maker's name, with the connector kept
   // wherever the label would not be unique or there is nothing better.
   function monitorLabel(m) {
-    if (/^(eDP|DSI|LVDS)-/.test(m.name)) return "Built-in"
+    if (/^(eDP|DSI|LVDS)-/.test(m.name)) return root.t("display.builtIn")
     var make = String(m.make || "").trim().split(/\s+/)[0]
     // A maker that is blank, or a hex blob, is worse than the connector.
     if (!make || /^0x/i.test(make)) return m.name
     return make
   }
   readonly property var displayOptions: {
-    var out = [{ value: "auto", label: "Auto-detect" }]
+    var out = [{ value: "auto", label: root.t("display.auto") }]
     var monitors = Hyprland.monitors.values
     var counts = {}
     monitors.forEach(function(m) {
@@ -164,16 +165,54 @@ Item {
   readonly property int monitorCount: Hyprland.monitors.values.length
 
   function setDisplay(name) {
-    if (displayProc.running) return
+    if (displayProc.running || root.displaySaving !== "") return
+    if (!root.displayOptions.some(function(o) { return o.value === name })) return
+    root.displayPreview = name
+    root.displaySeconds = 15
+    displayPreviewTimer.restart()
+  }
+  property string displayPreview: ""
+  property string displaySaving: ""
+  property int displaySeconds: 0
+  function revertDisplay() {
+    if (root.displaySaving !== "") return
+    displayPreviewTimer.stop()
+    root.displayPreview = ""
+    root.displaySeconds = 0
+  }
+  function keepDisplay() {
+    if (root.displayPreview === "" || root.displaySaving !== "") return
+    displayPreviewTimer.stop()
+    root.displaySaving = root.displayPreview
     displayProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                           "display", "set", name]
+                           "display", "set", root.displaySaving]
     displayProc.running = true
   }
-  Process { id: displayProc }
+  function displayFinished(code) {
+    // The write has committed; avoid jumping to the old display while the
+    // settings watcher catches up with its atomic rename.
+    if (code === 0) root.settings = Object.assign({}, root.settings, { display: root.displaySaving })
+    root.displaySaving = ""
+    root.revertDisplay()
+    if (code !== 0) root.preferenceFailed = true
+  }
+  Timer {
+    id: displayPreviewTimer
+    interval: 1000
+    repeat: true
+    onTriggered: {
+      root.displaySeconds--
+      if (root.displaySeconds <= 0) root.revertDisplay()
+    }
+  }
+  Process {
+    id: displayProc
+    onExited: function(code) { root.displayFinished(code) }
+  }
 
   readonly property var keyboardLayoutOptions: [
-    { value: "auto", label: "Auto-select" },
-    { value: "mobile", label: "Mobile" },
+    { value: "auto", label: root.t("layout.auto") },
+    { value: "mobile", label: root.t("layout.mobile") },
     { value: "60", label: "60%" },
     { value: "75", label: "75%" },
     { value: "80", label: "80%" }
@@ -181,15 +220,15 @@ Item {
   readonly property var keyboardLayouts:
     root.keyboardLayoutOptions.map(function(o) { return o.value })
   readonly property string keyboardLayout:
-    root.keyboardLayouts.indexOf(root.settings["keyboard-layout"]) !== -1
-      ? root.settings["keyboard-layout"] : "auto"
+    root.previewLayout !== "" ? root.previewLayout
+      : root.keyboardLayouts.indexOf(root.settings["keyboard-layout"]) !== -1
+        ? root.settings["keyboard-layout"] : "auto"
+  // A board the tour is showing, never written. Empty when it is not.
+  property string previewLayout: ""
   function setKeyboardLayout(name) {
-    if (root.keyboardLayouts.indexOf(name) === -1 || keyboardLayoutProc.running) return
-    keyboardLayoutProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                  "keyboard-layout", "set", name]
-    keyboardLayoutProc.running = true
+    if (root.keyboardLayouts.indexOf(name) !== -1)
+      root.queuePreference(["keyboard-layout", "set", name])
   }
-  Process { id: keyboardLayoutProc }
 
   // Whether the on-screen keyboard is on offer at all: the "keyboard"
   // setting, cycled from the bar button and Setup › Tablet › Keyboard.
@@ -199,9 +238,8 @@ Item {
   //           nothing or someone who wants touch keys at a desk
   //   off      never, for a machine with a keyboard attached for good
   //
-  // Only the keyboard reads this. Tablet mode itself still decides tiling
-  // mode, the overlay clones and whether rotation follows the sensor, because
-  // turning the keys off is not the same as saying this is a laptop.
+  // Overlay focus follows keyboard availability too. Rotation continues to
+  // follow tablet mode independently.
   readonly property var keyboardModes: ["sensor", "on", "off"]
   readonly property string keyboardMode:
     ["on", "off"].indexOf(root.settings["keyboard"]) !== -1 ? root.settings["keyboard"] : "sensor"
@@ -211,12 +249,9 @@ Item {
   onKeyboardAvailableChanged: if (!root.keyboardAvailable) root.setOskVisible(false)
 
   function setKeyboardMode(mode) {
-    if (root.keyboardModes.indexOf(mode) === -1 || keyboardModeProc.running) return
-    keyboardModeProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                "keyboard", "set", mode]
-    keyboardModeProc.running = true
+    if (root.keyboardModes.indexOf(mode) !== -1)
+      root.queuePreference(["keyboard", "set", mode])
   }
-  Process { id: keyboardModeProc }
 
   function toggleOsk() {
     setOskVisible(!root.oskVisible)
@@ -232,6 +267,12 @@ Item {
   // bottom bar keeps the edge with the handle above it, and the keyboard
   // opens above the handle, leaving the handle where it was.
   readonly property int handleHeight: 24
+  // Whether the handle is up on the keyboard's screen, which the overlay also
+  // needs to know: the keyboard sits on it when it is, and on the screen's
+  // edge when it is not.
+  readonly property bool handleShown: root.keyboardAvailable && root.layerRulesReady
+    && (!root.pickerOpen || root.pickerPatched)
+    && root.screensaverAddress === ""
 
   Variants {
     model: Quickshell.screens
@@ -246,28 +287,21 @@ Item {
       // Only on the screen the keyboard itself uses. One per screen is how
       // Variants works, and a handle on a monitor the keyboard will never
       // appear on is a switch wired to another room.
-      visible: modelData === root.keyboardScreen
-        && root.keyboardAvailable && root.layerRulesReady
-        && (!root.pickerOpen || root.pickerPatched)
-        && root.screensaverAddress === ""
+      visible: modelData === root.keyboardScreen && root.handleShown
 
-      // Under an open keyboard the handle takes the keyboard's background
-      // and text colours, so the two read as one panel with the handle as
-      // its tab, and otherwise it matches the bar. Only on the keyboard's screen.
-      readonly property bool underKeyboard: root.oskVisible && modelData === keyboardWindow.screen
-      readonly property color fill: underKeyboard ? keyboardTheme.background
-        : root.barTransparent ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
+      // The bar's, keyboard up or down: the handle is part of the screen's
+      // frame, as the bar is, and the keyboard has no panel to match.
+      readonly property color fill: root.barTransparent
+        ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
         : Color.bar.background
-      readonly property color line: underKeyboard ? keyboardTheme.text : Color.bar.text
+      readonly property color line: Color.bar.text
 
       WlrLayershell.namespace: "ragtop-keyboard-handle"
       WlrLayershell.layer: WlrLayer.Top
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Auto
       anchors { bottom: true; left: true; right: true }
-      // The bar says how much room it needs, since a narrow screen puts it
-      // on two rows and a wide one does not.
-      implicitHeight: root.tilingOpen ? tilingBar.neededHeight : root.handleHeight
+      implicitHeight: root.handleHeight
       color: "transparent"
 
       Rectangle {
@@ -280,26 +314,13 @@ Item {
       // target reads touch instead of a mouse event synthesised from it.
       TapHandler {
         id: handleTap
-        // Only a handle when it is a handle. While tiling, the bar's own
-        // controls take the taps and a miss between them should do nothing
-        // rather than drop you out of the mode.
-        enabled: !root.tilingOpen
         onTapped: root.toggleOsk()
-      }
-
-      // While tiling, the strip is the controls.
-      TilingBar {
-        id: tilingBar
-        anchors.fill: parent
-        visible: root.tilingOpen
-        service: root
       }
 
       // A wide ^ while the keyboard is hidden, a wide v while it's showing.
       Shape {
         id: chevron
         anchors.centerIn: parent
-        visible: !root.tilingOpen
         width: 56
         height: 8
         opacity: handleTap.pressed ? 0.5 : 1
@@ -314,9 +335,9 @@ Item {
           capStyle: ShapePath.RoundCap
           joinStyle: ShapePath.RoundJoin
           startX: 0
-          startY: root.oskVisible ? 0 : 8
-          PathLine { x: 28; y: root.oskVisible ? 8 : 0 }
-          PathLine { x: 56; y: root.oskVisible ? 0 : 8 }
+          startY: root.keysShown ? 0 : 8
+          PathLine { x: 28; y: root.keysShown ? 8 : 0 }
+          PathLine { x: 56; y: root.keysShown ? 0 : 8 }
         }
       }
     }
@@ -485,28 +506,15 @@ Item {
   // that recovers goes unremarked. Two in a row means the first wait of
   // fifteen seconds did not help, and a keyboard that has not typed for
   // fifteen seconds has earned an explanation.
-  readonly property var retryTrouble: ({
-    "keyboard": ["The on-screen keyboard is not typing",
-                 "Ragtop's key sender keeps stopping. Check that python-pywayland "
-                 + "is installed. Setup › Tablet › Diagnostics has the rest."],
-    "autoshow": ["The keyboard is not coming up by itself",
-                 "The watcher that notices text fields keeps stopping. Tap the handle "
-                 + "at the bottom to raise the keyboard by hand."],
-    "switch": ["Tablet mode is not being noticed",
-               "The tablet-mode switch watcher keeps stopping, so folding will not "
-               + "register. Setup › Tablet › Tablet Mode sets it by hand."],
-    "predict": ["Word suggestions have stopped",
-                "Ragtop's word suggester keeps stopping. `ragtop words install` "
-                + "fetches the word list again."]
-  })
+  // Each a title and a body, in the catalog under trouble.<name>.
+  readonly property var retryTrouble: ({ "keyboard": true, "autoshow": true, "switch": true, "predict": true })
   function retryTell(name) {
     var s = root.retryFor(name)
     if (s.told || s.failures < 2 || retryNotifyProc.running) return
-    var words = root.retryTrouble[name]
-    if (!words) return
+    if (!root.retryTrouble[name]) return
     s.told = true
     retryNotifyProc.command = ["omarchy-notification-send", "-g", "󰌌",
-                               words[0], words[1]]
+                               root.t("trouble." + name), root.t("trouble." + name + ".body")]
     retryNotifyProc.running = true
   }
   Process { id: retryNotifyProc }
@@ -527,10 +535,8 @@ Item {
     root.sensorStuckReported = true
     sensorNotifyProc.command = [
       "omarchy-notification-send", "-g", "󰌌",
-      "Rotation is not working",
-      "iio-sensor-proxy is not answering, so the screen will not follow the "
-        + "device. Restarting it usually clears this:\n"
-        + "systemctl restart iio-sensor-proxy"
+      root.t("trouble.rotation"),
+      root.t("trouble.rotation.body", "systemctl restart iio-sensor-proxy")
     ]
     sensorNotifyProc.running = true
   }
@@ -601,15 +607,15 @@ Item {
 
   // The built-in panel, which is the one with the accelerometer.
   // Which display Ragtop puts itself on. Every one of its surfaces asks this,
-  // so the keyboard, its handle, the controls, the picker strip, setup and
-  // tiling mode can never end up on different screens.
+  // so the keyboard, its handle, the controls, the picker strip and setup
+  // can never end up on different screens.
   //
   //   the "display" setting, when it names a monitor that is actually there
   //   the monitor the compositor binds the touchscreen to, if the user has
   //     bound one (input:touchdevice:output, which reads [[Auto]] unset)
   //   the built-in panel, which on a convertible is the touchscreen
   //   whatever is first, so there is always an answer
-  readonly property string displaySetting: String(root.settings["display"] || "auto")
+  readonly property string displaySetting: root.displayPreview || String(root.settings["display"] || "auto")
   property string touchOutput: ""
   readonly property string keyboardMonitorName: {
     var monitors = Hyprland.monitors.values
@@ -623,13 +629,6 @@ Item {
   readonly property var keyboardScreen:
     Quickshell.screens.find(function(s) { return s.name === root.keyboardMonitorName })
       || Quickshell.screens[0]
-  // The same monitor as Hyprland knows it, for its origin and its workspace.
-  readonly property var keyboardMonitor: {
-    var monitors = Hyprland.monitors.values
-    for (var i = 0; i < monitors.length; i++)
-      if (monitors[i].name === root.keyboardMonitorName) return monitors[i]
-    return Hyprland.focusedMonitor
-  }
 
   // Asked at startup and whenever the monitors change. Unset it reads
   // "[[Auto]]", which is not a monitor name and so falls through.
@@ -653,10 +652,8 @@ Item {
   }
 
   // What the monitors say about themselves is read off them rather than
-  // tracked, so it has to be read again when they change. Not gated on
-  // tiling mode, unlike the other rawEvent handler: which screen Ragtop
-  // belongs on and how many pixels it has to the millimetre matter whether
-  // or not anything is open.
+  // tracked, so it has to be read again when they change: which screen
+  // Ragtop belongs on and how many pixels it has to the millimetre.
   Connections {
     target: Hyprland
     function onRawEvent(event) {
@@ -758,14 +755,6 @@ Item {
 
   Process {
     id: rotateManualProc
-    // Same as the sensor's own apply: turning the screen moves every window
-    // on it and Hyprland says nothing per window, so the outlines are told.
-    onExited: {
-      if (root.tilingOpen) {
-        tilingIdle.restart()
-        tilingSettle.restart()
-      }
-    }
   }
 
   function rotateNow(orientation) {
@@ -779,18 +768,7 @@ Item {
     rotateApplyProc.running = true
     root.appliedOrientation = orientation
   }
-  Process {
-    id: rotateApplyProc
-    // Turning the screen moves and resizes every window on it, and Hyprland
-    // says nothing per window about that, so the outlines would keep the
-    // shape the screen had before. Same trap as the keyboard's exclusive
-    // zone. Read the geometry back once the transform has landed.
-    onExited: {
-      if (!root.tilingOpen) return
-      tilingSettle.again = 2
-      tilingSettle.restart()
-    }
-  }
+  Process { id: rotateApplyProc }
   // The interval is set by wantSensor, from the deadline.
   Timer {
     id: rotationRestart
@@ -802,6 +780,19 @@ Item {
   // Omarchy menu), as key=value lines. A missing key keeps its default.
   property var settings: ({})
   property bool settingsLoaded: false
+  // A theme the tour is showing, as `ragtop theme show` prints it: the look
+  // it would write, laid over the settings and never written. An empty value
+  // is a key the theme leaves out, so its default shows, the same as when
+  // the theme is applied. Empty when nothing is being shown.
+  property var previewSettings: ({})
+  readonly property var lookSettings: {
+    var out = Object.assign({}, root.settings)
+    for (var key in root.previewSettings) {
+      if (root.previewSettings[key] === "") delete out[key]
+      else out[key] = root.previewSettings[key]
+    }
+    return out
+  }
 
   // Whether Omarchy's bar is transparent (Style › Bar › Transparency), passed
   // on by the bar widget. The keyboard handle and, by default, the keyboard's
@@ -879,13 +870,10 @@ Item {
   // setOskVisible rather than through the bridge.
   //
   // Not while the picker is up, because the keyboard covers the preview the
-  // picker exists to show. Not while tiling, because the keyboard coming
-  // back ends the mode, and the bar's own buttons change which window has
-  // focus, so a window with a text field would close the mode out from
-  // under the button just tapped. Not while the screensaver is up, because
+  // picker exists to show. Not while the screensaver is up, because
   // nothing should be drawn over it.
   readonly property bool autoShowAllowed: root.keyboardAvailable && root.autoShowEnabled
-    && !root.pickerOpen && !root.tilingOpen && root.screensaverAddress === ""
+    && !root.pickerOpen && root.screensaverAddress === ""
   onWantFocusBridgeChanged: {
     focusBridgeRestart.stop()
     focusBridgeProc.running = root.wantFocusBridge
@@ -897,11 +885,15 @@ Item {
     stdout: SplitParser {
       onRead: function(line) {
         if (line === "hide") {
-          if (Date.now() - root.lastKeysAt > root.ownHideWithin) root.finishWord()
+          root.fieldHidden()
+          // Not another keyboard: Ragtop's own keys cause one too, and so
+          // does focus settling into a field, which comes with a show.
+          if (Date.now() - root.lastKeysAt > root.ownHideWithin
+              && Date.now() - root.freshFieldAt > 500) root.finishWord()
           return
         }
         if (line === "show") {
-          root.currentWord = ""
+          root.fieldShown()
           root.autoShows++
           if (root.autoShowAllowed && !root.oskVisible) root.setOskVisible(true)
           return
@@ -911,6 +903,7 @@ Item {
         var value
         try { value = JSON.parse(line.slice(space + 1)) } catch (e) { return }
         if (kind === "engine") root.imeEngine = value
+        else if (kind === "field") root.fieldReported(value)
         else if (kind === "engines") root.imeEngines = Array.isArray(value) ? value : []
         else if (kind === "candidates") root.setSuggestions("fcitx", value)
       }
@@ -921,6 +914,7 @@ Item {
       } else {
         // Whatever it last said went with it.
         root.imeEngine = null
+        root.fieldInfo = null
         root.imeEngines = []
         root.setSuggestions("fcitx", null)
       }
@@ -938,14 +932,6 @@ Item {
     onTriggered: focusBridgeProc.running = root.wantFocusBridge
   }
 
-  // Whether the keyboard has a background at all is Omarchy's call, not a
-  // setting of ours: double-tapping the bar makes it transparent, and the
-  // keyboard's background goes with it, so the keys float over the desktop
-  // the way the bar does. With the bar solid, the background is whatever the
-  // theme asked for.
-  readonly property real backgroundOpacity: root.barTransparent
-    ? 0 : 1 - root.look.transparency / 100
-
   Process { id: modeWriteProc }
 
   // A plugin added with `omarchy plugin add` runs without install.sh having
@@ -955,16 +941,17 @@ Item {
   function offerSetup(problems) {
     if (problems.length === 0) return
     // Never set up on this machine: open setup rather than describe it.
-    if (problems.indexOf("The installer hasn't been run yet.") !== -1) {
+    // setup-check.sh's word for it, protocol and not prose (LOCALIZATION.md).
+    if (problems.indexOf("not-installed") !== -1) {
       root.openSetup()
       return
     }
     var shown = problems.slice(0, 3)
-    if (problems.length > 3) shown.push("…and " + (problems.length - 3) + " more.")
+    if (problems.length > 3) shown.push(root.tn("setup.more", problems.length - 3))
     setupNotifyProc.command = [
       "omarchy-notification-send", "-g", "󰌌",
-      "Ragtop needs setup",
-      shown.join("\n") + "\nClick to fix it.",
+      root.t("setup.needed"),
+      root.t("setup.needed.body", shown.join("\n")),
       "--exec", "omarchy-shell", "ragtop", "openSetup"
     ]
     setupNotifyProc.running = true
@@ -1007,6 +994,14 @@ Item {
     running: true
     onTriggered: overlaySyncProc.running = true
   }
+  // Omarchy's Remove unloads a plugin and then deletes its folder, and tells
+  // no one. If Ragtop's folder is gone moments after this, the copy of
+  // overlay-clones.sh kept outside it takes the overlays away (orphaned). A
+  // restart or a disable leaves the folder, and the check ends having done
+  // nothing. Through systemd-run, as this plugin's own processes die with it.
+  Component.onDestruction: Quickshell.execDetached([
+    "systemd-run", "--user", "--quiet", "--collect", "--unit", "ragtop-overlay-check-" + Date.now(),
+    "bash", "-c", 'k="${XDG_DATA_HOME:-$HOME/.local/share}/ragtop/keeper/overlay-clones.sh"; [ -f "$k" ] && exec bash "$k" orphaned --wait; exit 0'])
 
   // Namespaces of the overlays a touch can get past to the keyboard: the
   // ones patched by overlay-clones.sh, and Omarchy's own where it has
@@ -1084,8 +1079,10 @@ Item {
       }
       if (layoutChanged) root.sendKeys("reload")
       if (name === "configreloaded") {
-        // A reload drops runtime rules, and the surfaces re-map with it.
-        root.layerRulesReady = false
+        // A reload drops runtime rules. Restore them on the existing
+        // surfaces: clearing readiness here unmaps the keyboard/handle,
+        // then makes Hyprland animate them back in after a theme change.
+        // Only initial startup needs to wait before mapping the surfaces.
         root.applyLayerRules()
         if (root.blurKeyboard) root.applyBlur()
         // It drops the rotation with them: the transform is a runtime value,
@@ -1267,11 +1264,19 @@ Item {
   // One command per line. See keyboard-helper.py. Everything typed passes
   // here, which is what makes it the place to follow the word being typed.
   function sendKeys(command) {
+    // A space after a word finishes it (finished); anything else typed
+    // means the moment for its forms has passed.
+    if (/^(type|key|down) /.test(command)) {
+      var word = command === "key space" ? root.currentWord : ""
+      root.followOn(command)
+      root.setFinished(word, " ", false)
+      if (root.suggestions.source === "forms") root.setSuggestions("forms", null)
+    }
     // BackSpace straight after a swipe takes the whole word back, and the
     // space after it, as on a phone: a wrong swipe is undone in one tap.
     // The space a swipe put in front stays, ready for the next one. The
     // key's release, when it comes, is swallowed: it was never pressed.
-    if (command === "down BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
+    if (command === "key BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
       var out = ""
       for (var i = root.swipeLead.length; i < root.swipedWord.length; i++) out += "key BackSpace\n"
       root.writeKeys(out)
@@ -1286,6 +1291,25 @@ Item {
       root.swallowBackSpaceUp = false
       return
     }
+    // A space straight after punctuation that Ragtop already spaced, "test"
+    // taken from the strip and then a full stop, is swallowed, as on a
+    // phone: the space is there, and a second one would also use up the
+    // capital waiting for the next word.
+    if (command === "key space" && root.autoSpaced && root.assistsActive
+        && /[.,!?;:] $/.test(root.beforeCursor)) {
+      root.autoSpaced = false
+      return
+    }
+    // A second space soon after a word is a full stop, as on a phone: the
+    // first space goes back and ". " goes in, and the next word starts a
+    // sentence (capitalNext).
+    if (command === "key space" && root.assistsActive && keyboardHelper.running
+        && Date.now() - root.lastKeysAt < root.doubleSpaceWithin && root.endsWordThenSpace()) {
+      root.trackWord(command)
+      root.writeKeys("key BackSpace\ntype . \n")
+      root.autoSpaced = false
+      return
+    }
     // Punctuation straight after a space Ragtop put in itself goes before
     // that space, as on a phone: a swiped "test" then a comma is "test, ",
     // not "test ,". A space typed by hand is never moved.
@@ -1297,20 +1321,429 @@ Item {
       root.autoSpaced = true
       return
     }
+    // A hyphen straight after a space Ragtop put in itself joins: it takes
+    // that space's place and leaves none after, so the next word, typed or
+    // swiped, is joined on. A swiped super, then -, then speed is
+    // super-speed, not super -speed. A space tapped straight after it says
+    // it was a dash between words after all, and puts the space back:
+    // super - speed.
+    if (command === "type -" && root.autoSpaced && keyboardHelper.running) {
+      root.trackWord(command)
+      root.writeKeys("key BackSpace\ntype -\n")
+      root.autoSpaced = false
+      root.hyphenJoined = true
+      return
+    }
+    if (command === "key space" && root.hyphenJoined && keyboardHelper.running
+        && /\S-$/.test(root.beforeCursor)) {
+      root.trackWord(command)
+      root.writeKeys("key BackSpace\ntype  - \n")
+      root.autoSpaced = true
+      return
+    }
     root.trackWord(command)
     // Only something typed counts. A release, a held modifier or a change of
     // route between a word and its full stop types nothing.
     if (/^(type|key|down) /.test(command)) root.autoSpaced = false
     if (keyboardHelper.running) root.writeKeys(command + "\n")
+    if (/^(key|down|up) BackSpace$/.test(command)) root.wordFromRecord()
+  }
+
+  // ---- Language ------------------------------------------------------------
+
+  // Ragtop speaks the language Omarchy is set to (Setup › Language, or
+  // `omarchy language <code>`), which Omarchy keeps in
+  // ~/.config/omarchy/language; no file, as on Omarchy before 4.5, is
+  // English. Omarchy's own catalogs are for Omarchy, and it has no way for
+  // a plugin to add to them, so Ragtop keeps its own beside it, in the same
+  // form (i18n/<code>/shell.json, and cli.json and menu.json for the
+  // `ragtop` command and the menu rows): flat keys, %1-style placeholders,
+  // {"one", "other"} for plurals, English the fallback for any key a
+  // language lacks. See LOCALIZATION.md.
+  property string language: "en"
+  property var englishStrings: ({})
+  property var languageStrings: ({})
+  function setLanguage(raw) {
+    var code = String(raw || "").trim()
+    if (!/^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(code)) code = "en"
+    if (root.language !== code) root.language = code
+  }
+  FileView {
+    path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/omarchy/language"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.setLanguage(text())
+    onLoadFailed: root.setLanguage("en")
+  }
+  function readCatalog(raw) {
+    try {
+      var parsed = JSON.parse(raw || "{}")
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({})
+    } catch (e) {
+      return ({})
+    }
+  }
+  // Both catalogs are read before anything else goes on, as Omarchy's own
+  // are: a few kilobytes, and a string asked for before they arrived would
+  // show its key. The setup wizard copies some into its lists when it opens.
+  FileView {
+    path: Qt.resolvedUrl("i18n/en/shell.json").toString().replace(/^file:\/\//, "")
+    blockLoading: true
+    printErrors: false
+    onLoaded: root.englishStrings = root.readCatalog(text())
+  }
+  FileView {
+    path: root.language === "en" ? ""
+      : Qt.resolvedUrl("i18n/" + root.language + "/shell.json").toString().replace(/^file:\/\//, "")
+    blockLoading: true
+    printErrors: false
+    onLoaded: root.languageStrings = root.readCatalog(text())
+    onLoadFailed: root.languageStrings = ({})
+  }
+  onLanguageChanged: {
+    if (root.language === "en") root.languageStrings = ({})
+    // The menu rows are written into Omarchy's menu, so they are written
+    // again in the new language.
+    menuLanguageProc.running = true
+  }
+  Process {
+    id: menuLanguageProc
+    command: ["bash", Qt.resolvedUrl("menu-block.sh").toString().replace(/^file:\/\//, ""), "refresh"]
+  }
+
+  // A language's name, in the language Ragtop is speaking (language.<code>),
+  // or the name the CLI's table gives it.
+  function languageName(code, fallback) {
+    var v = root.languageStrings["language." + code] || root.englishStrings["language." + code]
+    return typeof v === "string" && v !== "" ? v : fallback
+  }
+
+  // A string in the current language: its English where the language has
+  // none, and the key itself where neither has it, which a test rules out.
+  // %1, %2 ... are the arguments after the key, so a translation can put
+  // them where its grammar wants them.
+  function t(key) {
+    var value = root.languageStrings[key]
+    if (typeof value !== "string" || value === "") value = root.englishStrings[key]
+    if (typeof value !== "string" || value === "") value = key
+    return root.fill(value, Array.prototype.slice.call(arguments, 1))
+  }
+  // The form of a plural entry ({"one": ..., "other": ...}) for count, by
+  // the language's rule; count is %1.
+  function tn(key, count) {
+    var form = root.pluralForm(count)
+    function pick(entry) {
+      if (!entry || typeof entry !== "object") return ""
+      return entry[form] || entry.other || ""
+    }
+    var value = pick(root.languageStrings[key]) || pick(root.englishStrings[key]) || key
+    return root.fill(value, [count].concat(Array.prototype.slice.call(arguments, 2)))
+  }
+  function fill(text, args) {
+    return text.replace(/%(\d+)/g, function(m, n) {
+      var v = args[Number(n) - 1]
+      return v === undefined ? m : String(v)
+    })
+  }
+  // Which plural form a count takes, for the languages Ragtop speaks:
+  // French and Brazilian Portuguese count 0 and 1 as one, the others only 1.
+  // A language with more forms falls back to "other" until its rule is here.
+  function pluralForm(count) {
+    var n = Math.abs(Number(count))
+    if (root.language === "fr" || root.language === "pt-BR") return n < 2 ? "one" : "other"
+    return n === 1 ? "one" : "other"
+  }
+
+  // ---- Tracing touches -------------------------------------------------------
+
+  // `ragtop touch-trace on` keeps the keyboard's last minute of touches in
+  // memory, for laying against what the touchscreen itself reported
+  // (bench/touch-trace.py): a tap the screen saw and Ragtop never acted on is
+  // a fault to find, one the screen never saw is the panel's. Off unless
+  // asked for, never written anywhere by Ragtop, gone when turned off or the
+  // shell restarts, and never a character: a key is kept as its kind
+  // (Keyboard.qml, touchOutcome). Not while a secret field has focus.
+  property bool touchTrace: false
+  property var touchLog: []
+  readonly property int touchTraceFor: 60000
+  onTouchTraceChanged: if (!root.touchTrace) root.touchLog = []
+  // A heartbeat on the shell's thread while tracing: a touch arrives on the
+  // same thread, so if the thread was busy, the press is handled late, where
+  // the finger has moved to by then. A gap over 100 ms is logged as a stall.
+  property real beatAt: 0
+  Timer {
+    interval: 20
+    repeat: true
+    running: root.touchTrace
+    onRunningChanged: root.beatAt = Date.now()
+    onTriggered: {
+      var now = Date.now()
+      var gap = now - root.beatAt
+      root.beatAt = now
+      if (gap > 100)
+        root.traceTouch({ t: now - gap, ev: "stall", id: -1, x: 0, y: 0, what: "Ragtop was busy for " + gap + " ms" })
+    }
+  }
+  function traceTouch(entry) {
+    if (!root.touchTrace || root.secretField) return
+    // Screen height, for the touch's place on it: the keyboard sits on the
+    // handle at the bottom of its screen.
+    var screenH = overlayWindow.height
+    entry.y = screenH > 0 ? (overlayWindow.keysBottom - keyboard.height + entry.y) / screenH : -1
+    var keep = root.touchLog.filter(function(e) { return entry.t - e.t < root.touchTraceFor })
+    keep.push(entry)
+    root.touchLog = keep
+  }
+
+  // ---- Deleting whole words ---------------------------------------------------
+
+  // The words before the cursor, nearest first, each with the spaces after
+  // it, as far as what Ragtop typed tells (typedTail). A word that reaches
+  // back to where the record starts is left out unless the record starts at
+  // the start of the field: it may be the end of a word typed before Ragtop
+  // was watching.
+  function wordsBefore(most) {
+    if (!root.keepContext) return []
+    var t = root.beforeCursor
+    var out = []
+    var end = t.length
+    while (end > 0 && out.length < most) {
+      var i = end
+      while (i > 0 && /\s/.test(t[i - 1])) i--
+      while (i > 0 && !/\s/.test(t[i - 1])) i--
+      if (i === 0 && !root.typedFromStart) break
+      out.push(t.slice(i, end))
+      end = i
+    }
+    return out
+  }
+  // What the typed record is like, for touch-trace, never what it holds:
+  // why a word to delete could not be named.
+  function recordState() {
+    if (root.secretField) return "secret field"
+    if (!root.keepAnything) return root.fieldKnown ? "nothing kept here" : "which field has focus is not known yet"
+    if (!root.keepContext) return "typing memory: " + root.typingMemory
+    if (!root.predicting && root.typedTail === "") return "nothing kept here"
+    if (root.typedTail === "") return root.typedFromStart ? "empty field" : "nothing typed since the record was lost"
+    var words = root.beforeCursor.split(/\s+/).filter(function(w) { return w !== "" }).length
+    return words + " words before the cursor, " + (root.typedFromStart ? "from the field's start" : "not from the field's start")
+      + (root.typedCursor < root.typedTail.length ? ", cursor moved back" : "")
+  }
+
+  // Deletes n words back from the cursor: by BackSpaces for the ones Ragtop
+  // typed, which it knows to the letter and which work in any application,
+  // and by the application's own delete-a-word for any further back, which
+  // it never saw: Ctrl+BackSpace, or Ctrl+W at a terminal, where
+  // Ctrl+BackSpace is only BackSpace.
+  function eraseWords(n) {
+    if (n <= 0 || !keyboardHelper.running) return
+    var known = root.secretField ? [] : root.wordsBefore(n)
+    var out = ""
+    known.forEach(function(w) { for (var i = 0; i < w.length; i++) out += "key BackSpace\n" })
+    for (var k = known.length; k < n; k++)
+      out += root.inTerminal ? "key w ctrl\n" : "key BackSpace ctrl\n"
+    root.writeKeys(out)
+    root.swipedWord = ""
+    root.autoSpaced = false
+    root.joinFirst = null
+    root.setFinished("", "", false)
+    if (["swipe", "forms"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+    root.currentWord = ""
+    root.wordFromRecord()
+  }
+
+  // BackSpace back into a word that was finished, typed, swiped or taken
+  // from the strip, makes it the word being typed again, as the terminal's
+  // line does: the letters just before the cursor in what Ragtop typed
+  // (typedTail), so its suggestions come back and the next BackSpace walks
+  // on through it. Only at the end of what was typed: with text after the
+  // cursor, a suggestion put in place would add a space before it.
+  function wordFromRecord() {
+    if (root.secretField || !root.predicting) return
+    if (root.typedCursor < root.typedTail.length) return
+    var m = /([^\s\d.,!?;:"()\[\]{}<>\/\\|@#$%^&*+=_~`-]+)$/.exec(root.beforeCursor)
+    var word = m ? m[1] : ""
+    // Letters and apostrophes only, the same as trackWord counts a word.
+    for (var i = 0; i < word.length; i++)
+      if (word[i] !== "'" && word[i].toLowerCase() === word[i].toUpperCase()) word = ""
+    if (word !== root.currentWord) root.currentWord = word
   }
   readonly property string closingMarks: ".,!?;:"
 
+  // How a held key repeats, Hyprland's own setting, for the keyboard, which
+  // repeats its keys itself (Keyboard.qml, keyRepeat). Its defaults until read.
+  property int repeatDelay: 600
+  property int repeatInterval: 40
+  Process {
+    id: repeatProc
+    command: ["bash", "-c", 'hyprctl getoption input:repeat_delay -j; hyprctl getoption input:repeat_rate -j']
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var all = JSON.parse("[" + text.replace(/}\s*{/g, "},{") + "]")
+          var delay = all[0].int, rate = all[1].int
+          if (delay > 0) root.repeatDelay = delay
+          if (rate > 0) root.repeatInterval = Math.max(10, Math.round(1000 / rate))
+        } catch (e) {}
+      }
+    }
+  }
+
   // Every key Ragtop sends goes through here, so it knows when it last
-  // typed: see finishWord.
+  // typed (see finishWord) and what (typedTail).
   property real lastKeysAt: 0
+  // Whether the last thing typed was a hyphen that took the place of a space
+  // Ragtop added (sendKeys), which a space typed next turns back into a dash
+  // between words. Anything else typed lets it go.
+  property bool hyphenJoined: false
   function writeKeys(text) {
+    root.hyphenJoined = false
     root.lastKeysAt = Date.now()
+    text.split("\n").forEach(root.noteTyped)
     keyboardHelper.write(text)
+    // Once whoever typed this has settled what the word is (currentWord,
+    // finished), the word before the next one may have changed.
+    Qt.callLater(root.updateContext)
+  }
+
+  // ---- Typing assists ------------------------------------------------------
+
+  // A capital at the start of a sentence, and a full stop for a double
+  // space, as on a phone. Ragtop sees only the keys it sends, so it keeps
+  // what it typed in this field (typedTail) and decides from that, and
+  // where it cannot know, after an arrow or a tap in the text, it does
+  // nothing rather than guess.
+  //
+  // All of it, not the last few characters: BackSpace uncovers what came
+  // before, and keeping four meant deleting a short word after a full stop
+  // left nothing to say the full stop was there. On unless turned off; never in a terminal,
+  // where "ls" is not the start of a sentence, nor in a password prompt or
+  // while a CJK engine composes.
+  readonly property bool assistsEnabled: root.settings["assists"] !== "off"
+  readonly property bool assistsActive: root.assistsEnabled && !root.inTerminal
+    && !root.secretField && !root.imeComposing && !(root.fieldInfo && root.fieldInfo.noCapitals)
+  readonly property bool capitalNext: root.assistsActive && root.sentenceStart
+  readonly property int doubleSpaceWithin: 1500
+  property string typedTail: ""
+  // Where in typedTail the cursor is, which ← → Home End move and which
+  // typing and deleting happen at, as in a line editor; past its end when
+  // typedTail has been emptied, which reads as its end.
+  property int typedCursor: 0
+  readonly property string beforeCursor: root.typedTail.slice(0, Math.min(root.typedCursor, root.typedTail.length))
+  // Whether typedTail reaches back to the start of the field, so that all of
+  // it deleted is the start of the field again rather than unknown.
+  property bool typedFromStart: false
+  property bool sentenceStart: false
+  function isWordChar(c) { return Record.isWordChar(c) }
+  function endsWordThenSpace() {
+    var t = root.beforeCursor
+    return t.length >= 2 && t[t.length - 1] === " " && root.isWordChar(t[t.length - 2])
+  }
+  // One command as sent, for typedTail and sentenceStart, kept as the
+  // typing-memory setting allows (typed-record.js). Everything that cannot
+  // be followed, ↑ ↓, Tab, a shortcut, leaves it unknown, and unknown never
+  // capitalises or suggests. Nothing at all is kept in a password field, or
+  // while which field has focus is not yet known: what was typed there is
+  // not known either, so the record is unknown after it.
+  function noteTyped(line) {
+    if (line === "") return
+    if (!root.keepAnything) {
+      if (/^(type|key|down) /.test(line)) root.dropTyped(false)
+      return
+    }
+    if (root.fieldPending) {
+      // Nothing must not retain plaintext even in the short focus-check
+      // queue. Its sentence state starts afresh once focus is confirmed.
+      if (root.typingMemory === "none") root.dropTyped(false)
+      else root.pendingTyped.push(line)
+      return
+    }
+    var next = Record.note({ tail: root.typedTail, cursor: root.typedCursor,
+                             fromStart: root.typedFromStart },
+                           line, root.typingMemory, root.atPrompt)
+    if (next === null) return
+    root.typedTail = next.tail
+    root.typedCursor = next.cursor
+    root.typedFromStart = next.fromStart
+    root.sentenceStart = next.sentenceStart
+  }
+  // A field just focused is the start of something, and another keyboard
+  // having typed is anywhere at all.
+  function freshField() {
+    root.fieldGeneration++
+    root.typedTail = ""
+    root.typedFromStart = true
+    root.sentenceStart = true
+    root.freshFieldAt = Date.now()
+    Qt.callLater(root.updateContext)
+  }
+  property real freshFieldAt: 0
+  // Counts fields: a reply asked for in one is not typed into the next.
+  property int fieldGeneration: 0
+  onFieldGenerationChanged: {
+    root.cancelCompletions()
+    root.clearTerminalRequests()
+  }
+
+  // Which application has focus, by class, for inTerminal.
+  property string activeClass: ""
+  readonly property var terminalClasses: ["foot", "footclient", "alacritty", "kitty", "ghostty",
+    "com.mitchellh.ghostty", "org.wezfurlong.wezterm", "wezterm", "xterm", "urxvt", "st",
+    "st-256color", "konsole", "org.kde.konsole", "org.gnome.console", "gnome-terminal-server",
+    "org.gnome.terminal", "tilix", "com.gexperts.tilix", "terminator", "rio", "contour",
+    "warp", "dev.warp.warp", "blackbox", "com.raggesilver.blackbox", "ptyxis", "org.gnome.ptyxis"]
+  // And the one Omarchy is set to open, which is a terminal by fact rather
+  // than by the list: `omarchy-default-terminal` names Omarchy's four, and
+  // gives any other's desktop id, which is its window class.
+  property string defaultTerminalClass: ""
+  readonly property var omarchyTerminals: ({ alacritty: "alacritty", foot: "foot",
+                                             ghostty: "com.mitchellh.ghostty", kitty: "kitty" })
+  Process {
+    id: defaultTerminalProc
+    command: ["omarchy-default-terminal"]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var t = text.trim()
+        root.defaultTerminalClass = (root.omarchyTerminals[t] || t.replace(/\.desktop$/, "")).toLowerCase()
+      }
+    }
+  }
+  readonly property bool inTerminal: {
+    if (root.fieldInfo && root.fieldInfo.terminal) return true
+    var c = root.activeClass.toLowerCase()
+    return c !== "" && (c === root.defaultTerminalClass || root.terminalClasses.indexOf(c) !== -1)
+  }
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (String(event && event.name ? event.name : "") !== "activewindow") return
+      var data = String(event.data || "")
+      root.activeClass = data.slice(0, data.indexOf(",") < 0 ? data.length : data.indexOf(","))
+      root.termJustFocused = true
+      Qt.callLater(root.readTermPlace)
+      // A new window is a new place to type, and where in it is unknown,
+      // unless fcitx5 has just said a text field took focus: the two come
+      // together when a window is tapped into, the window's often second,
+      // and it undid the field's fresh start.
+      if (Date.now() - root.freshFieldAt < 500) return
+      root.typedTail = ""
+      root.typedFromStart = false
+      root.sentenceStart = false
+    }
+  }
+  Process {
+    id: activeClassProc
+    command: ["hyprctl", "-j", "activewindow"]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.activeClass = String(JSON.parse(text).class || "") } catch (e) {}
+      }
+    }
   }
 
   // The word in progress is over, by a route Ragtop cannot see: another
@@ -1324,6 +1757,10 @@ Item {
   // else's.
   readonly property int ownHideWithin: 250
   function finishWord() {
+    root.setFinished("", "", false)
+    root.typedTail = ""
+    root.typedFromStart = false
+    root.sentenceStart = false
     root.currentWord = ""
     root.swipedWord = ""
     root.autoSpaced = false
@@ -1371,6 +1808,9 @@ Item {
   readonly property var noSuggestions: ({ source: "", items: [], prev: false, next: false, cursor: -1 })
   property var suggestions: root.noSuggestions
   function setSuggestions(source, value) {
+    // The tour's strip is the tour's: whatever the field behind it would
+    // offer stays out until it ends, so its steps start on an empty strip.
+    if (root.tourActive && source !== "tour") return
     // Nothing from a source clears only what that source put there. The
     // bridge says "no candidates" after every key on a plain layout, and
     // without this it wiped the word suggestions a moment after each one
@@ -1382,16 +1822,42 @@ Item {
     root.suggestions = { source: source, items: value.items, prev: !!value.prev,
                          next: !!value.next, cursor: value.cursor | 0 }
   }
-  // Whether the strip has a place on the keyboard at all. It holds its place
-  // while an engine is on, or suggestions are, items or not, so the keyboard
-  // keeps one height through a sentence rather than jumping at every word.
-  readonly property bool suggestionsShown: root.imeComposing || root.predicting || root.swipeActive
-    || root.offerLanguage !== ""
+  // Whether the strip has a place on the keyboard. Only while it has
+  // something in it, since an empty band is screen given up for nothing, and
+  // for a moment after (stripLingers), so that the gap between two words
+  // does not move the windows above. A second: four felt like the keyboard
+  // had forgotten to give the room back, and with next words in it after
+  // every space the strip is rarely empty mid-sentence anyway.
+  readonly property bool suggestionsSource: root.imeComposing || root.predicting || root.swipeActive
+    || root.offerLanguage !== "" || root.terminalSuggesting || root.tourActive
+  readonly property bool suggestionsShown: root.suggestionsSource
+    && (root.suggestions.items.length > 0 || root.stripLingers)
+  property bool stripLingers: false
+  onSuggestionsChanged: {
+    if (root.suggestions.items.length > 0) {
+      root.stripLingers = true
+      stripLinger.stop()
+    } else {
+      stripLinger.restart()
+    }
+  }
+  Timer { id: stripLinger; interval: 1000; onTriggered: root.stripLingers = false }
+  // Whether a strip could appear at all, for the keyboard to choose a board
+  // that has room for it either way.
+  readonly property bool stripPossible: root.predictionsEnabled
+    || (root.inputMethodsEnabled && root.imeEngines.length > 0) || root.tourActive
   function chooseSuggestion(index) {
     if (root.suggestions.source === "fcitx") root.sendBridge("select " + index)
     else if (root.suggestions.source === "predict") root.takeWord(index)
     else if (root.suggestions.source === "swipe") root.swapSwiped(index)
     else if (root.suggestions.source === "offer") root.answerOffer(index)
+    else if (root.suggestions.source === "next") root.takeNext(index)
+    else if (root.suggestions.source === "term") root.takeTerm(index)
+    else if (root.suggestions.source === "forms") {
+      var item = root.suggestions.items[index]
+      if (item && item.join) root.joinFinished(item.text, index)
+      else if (item) root.replaceFinished(item.text, index)
+    }
   }
   function pageSuggestions(forward) {
     if (root.suggestions.source === "fcitx") root.sendBridge(forward ? "next" : "prev")
@@ -1400,9 +1866,9 @@ Item {
   // ---- Word suggestions --------------------------------------------------
 
   // What the word being typed could be, from predictor.py and wordfreq's
-  // lists. Off unless turned on: Ragtop cannot tell a password field in an
-  // application from any other, and the strip would show what one is being
-  // typed into.
+  // lists. Off unless turned on: a field that does not say it is a password
+  // field is a password field Ragtop cannot see (see secretField), and the
+  // strip would show what is being typed into it.
   //
   // off; layout, in the language of the layout being typed on (Ragtop
   // deciding by its xkb name: English on us, French on fr); or all, English
@@ -1457,9 +1923,16 @@ Item {
     var lang = root.languageOfLayout(root.keyLabels.code || "", root.keyLabels.variant || "")
     return lang in root.wordLanguages ? lang : ""
   }
-  onWordLanguageChanged: root.sendLanguage()
+  onWordLanguageChanged: {
+    root.cancelCompletions()
+    root.sendLanguage()
+  }
   // The language whose list the predictor has open, "" until it says.
   property string wordsLoaded: ""
+  // The spelling dictionary the predictor found for the language in use,
+  // en_US or fr_FR, or "" for none. Optional: it widens joins and gives
+  // forms to languages with no rules of their own (predictor.py).
+  property string dictionaryName: ""
   readonly property bool wordsReady: root.wordLanguage !== "" && root.wordsLoaded === root.wordLanguage
   function sendLanguage() {
     if (predictorProc.running && root.wordLanguage !== "")
@@ -1469,16 +1942,19 @@ Item {
   // A language Ragtop has a list for and has not fetched is offered in the
   // strip, where its words would go, one tap to fetch it: the only way a
   // list is downloaded without being asked for by name. "Not now" is kept,
-  // and the CLI can fetch it any time.
+  // and the controls panel or CLI can fetch it any time.
   property bool wordsFetching: false
   readonly property string offerLanguage: {
     var lang = root.wordLanguage
     var info = root.wordLanguages[lang]
     return lang !== "" && info && !info.installed && !info.declined
-      && !root.imeComposing && !root.passwordOpen ? lang : ""
+      && !root.imeComposing && !root.secretField ? lang : ""
   }
   onOfferLanguageChanged: root.showOffer()
   onWordsFetchingChanged: root.showOffer()
+  // Its words are translated when it is built, so it is built again once a
+  // new language's catalog has arrived, not when the language changes.
+  onLanguageStringsChanged: if (root.offerLanguage !== "") root.showOffer()
   function showOffer() {
     var lang = root.offerLanguage
     if (lang === "") {
@@ -1487,13 +1963,20 @@ Item {
     }
     var info = root.wordLanguages[lang]
     root.setSuggestions("offer", { items: root.wordsFetching
-      ? [{ text: "Fetching " + info.name + " words\u2026", note: "" }]
-      : [{ text: "Add " + info.name + " word suggestions", note: info.size + " KB" },
-         { text: "Not now", note: "" }], prev: false, next: false, cursor: -1 })
+      ? [{ text: root.t("offer.fetching", root.languageName(lang, info.name)), note: "" }]
+      : [{ text: root.t("offer.add", root.languageName(lang, info.name)), note: root.t("offer.size", info.size) },
+         { text: root.t("offer.notNow"), note: "" }], prev: false, next: false, cursor: -1 })
+  }
+  function installWordLanguage(lang) {
+    if (!(lang in root.wordLanguages) || wordsOfferProc.running) return
+    root.wordsFetching = true
+    wordsOfferProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                              "words", "install", lang]
+    wordsOfferProc.running = true
   }
   function answerOffer(index) {
     var lang = root.offerLanguage
-    if (lang === "" || root.wordsFetching || index > 1) return
+    if (lang === "" || wordsOfferProc.running || index < 0 || index > 1) return
     wordsOfferProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
                               "words", index === 0 ? "install" : "decline", lang]
     root.wordsFetching = index === 0
@@ -1511,11 +1994,222 @@ Item {
   // The one password prompt Ragtop can see: Omarchy's polkit agent, whose
   // patched clone types with this keyboard.
   readonly property bool passwordOpen: root.openOverlays.indexOf("omarchy-polkit") !== -1
+
+  // What kind of field has focus, from fcitx5 through the bridge:
+  // { password, terminal, noCapitals }, or null when there is no telling.
+  property var fieldInfo: null
+  // A field reported by its input context's id: a different one than the
+  // last, with no "show" between, is focus that moved without fcitx5 asking
+  // for the keyboard (a click from one field into another of the same kind),
+  // and what was kept for the old field is let go. None focused is null,
+  // which keeps nothing.
+  // A field took focus, and which is not known until the bridge has asked
+  // fcitx5: nothing is kept until it says.
+  function fieldShown() {
+    root.fieldInfo = null
+    root.fieldPending = false
+    root.pendingTyped = []
+    fieldPendingLimit.stop()
+    root.currentWord = ""
+    root.freshField()
+  }
+  // Focus may have left the field, or this is Ragtop's own key: the
+  // bridge's next report says which, and until it does what is typed is
+  // held apart (fieldPending).
+  function fieldHidden() {
+    root.fieldPending = true
+    root.pendingTyped = []
+    fieldPendingLimit.restart()
+  }
+  function fieldReported(value) {
+    var was = root.fieldInfo
+    var held = root.fieldPending ? root.pendingTyped : []
+    root.fieldPending = false
+    root.pendingTyped = []
+    fieldPendingLimit.stop()
+    root.fieldInfo = value
+    if (value && was && value.id !== was.id) root.forgetField(false)
+    // The same field still: what was typed while it was in question is its.
+    else if (value && held.length > 0) held.forEach(root.noteTyped)
+  }
+  // After a hide, until the bridge's report: whether focus is still in the
+  // field is not known, so what is typed is held here, not in the record,
+  // and goes into it only once the report says the field is the same one.
+  property bool fieldPending: false
+  property var pendingTyped: []
+  // A report that never comes is a field that cannot be vouched for.
+  Timer {
+    id: fieldPendingLimit
+    interval: 1000
+    onTriggered: {
+      root.fieldPending = false
+      root.pendingTyped = []
+      root.forgetField(false)
+    }
+  }
+  // A password or sensitive field, in an application or in Omarchy's prompt.
+  // Nothing typed into one is kept: not the field's text, not the word, not a
+  // swipe, and nothing is suggested or capitalised there. What was held when
+  // it took focus is let go, and the helper forgets which characters it had
+  // to look up once it is left.
+  readonly property bool secretField: root.passwordOpen || (!!root.fieldInfo && root.fieldInfo.password)
+
+  // How much of what is typed Ragtop may keep while a field has focus
+  // (Setup › Tablet › Typing Memory, typed-record.js): "full", the text
+  // before the cursor, for deleting words by name, BackSpace back into a
+  // word and choosing the next word by the one before; "word", only the word
+  // being typed, for its suggestions and swipe; "none", no typed text at
+  // all, and no suggestions or swipe, which need the word.
+  //
+  // Whatever the setting, nothing is kept in a password or sensitive field
+  // (secretField), which is the application's own say, or while which field
+  // has focus is not known: from a field taking focus until fcitx5 has said
+  // what it is, and while the bridge that asks is not running.
+  readonly property string typingMemory: ["word", "none"].indexOf(root.settings["typing-memory"]) !== -1
+    ? root.settings["typing-memory"] : "full"
+  readonly property bool fieldKnown: !!root.fieldInfo
+  readonly property bool keepAnything: root.fieldKnown && !root.secretField
+  readonly property bool keepWord: root.keepAnything && root.typingMemory !== "none"
+  readonly property bool keepContext: root.keepAnything && root.typingMemory === "full"
+  onKeepAnythingChanged: if (!root.keepAnything) root.forgetField(root.typedFromStart)
+  onTypingMemoryChanged: root.forgetField(false)
+  // Everything kept about what was typed, let go: the record, the word, what
+  // a swipe or the strip typed, and the words still waiting on an answer,
+  // whose answers then match nothing and are dropped. fromStart: whether
+  // what comes next is still the start of the field. A swipe still being
+  // decoded belongs to the field it was drawn in (fieldGeneration).
+  function forgetField(fromStart) {
+    root.pendingTyped = []
+    root.fieldGeneration++
+    root.dropTyped(fromStart)
+    // Each answer still takes its place in the queue, and finds undefined.
+    var gone = function() { return undefined }
+    root.asked = root.asked.map(gone)
+    root.formsAsked = root.formsAsked.map(gone)
+    root.joinAsked = root.joinAsked.map(gone)
+    root.nextWords = []
+    root.sentContext = null
+    Qt.callLater(root.updateContext)
+    if (["predict", "swipe", "forms", "term", "next"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+  }
+  function dropTyped(fromStart) {
+    root.typedTail = ""
+    root.typedCursor = 0
+    root.typedFromStart = fromStart
+    root.sentenceStart = fromStart
+    root.currentWord = ""
+    root.swipedWord = ""
+    root.autoSpaced = false
+    root.hyphenJoined = false
+    root.joinFirst = null
+    root.setFinished("", "", false)
+  }
+  onSecretFieldChanged: {
+    root.fieldGeneration++
+    root.typedTail = ""
+    root.typedFromStart = false
+    root.sentenceStart = false
+    root.currentWord = ""
+    root.swipedWord = ""
+    root.autoSpaced = false
+    root.setFinished("", "", false)
+    if (["predict", "swipe", "forms"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+    if (!root.secretField && keyboardHelper.running) keyboardHelper.write("forget\n")
+  }
   readonly property bool predicting: root.predictionsEnabled && root.wordsReady
-    && !root.imeComposing && !root.passwordOpen
+    && !root.imeComposing && !root.secretField && !root.atPrompt && root.keepWord
   onPredictingChanged: {
+    root.cancelCompletions()
     root.currentWord = ""
     if (!root.predicting) root.setSuggestions("predict", null)
+    root.sentContext = null
+    Qt.callLater(root.updateContext)
+  }
+
+  // ---- The next word ---------------------------------------------------------
+
+  // Which words follow which (predictor.py, Pairs; words/NOTICE.md): after a
+  // space the strip offers the likeliest next words, as a phone does, and
+  // while a word is typed its completions are ranked by the word before it.
+  //
+  // The word before is read off what Ragtop typed (typedTail), so it holds
+  // whichever way the word got there, tapped, swiped or taken from the strip:
+  // "" at the start of a sentence or a field, "-" where it is not known (the
+  // record lost, a password field), else the word. Sent to the predictor
+  // whenever it changes ("after"), and its answer is the next words.
+  property var sentContext: null
+  property var nextWords: []
+  function contextNow() {
+    if (!root.predicting || root.secretField) return "-"
+    var t = root.beforeCursor
+    if (root.currentWord !== "" && t.slice(-root.currentWord.length) === root.currentWord)
+      t = t.slice(0, t.length - root.currentWord.length)
+    if (t.trim() === "") return root.typedFromStart ? "" : "-"
+    if (/([.!?]["')\]]*|\n)\s*$/.test(t)) return ""
+    var m = /(\S+)\s+$/.exec(t)
+    if (!m) return "-"
+    // A comma or a quote around a word does not change what came before:
+    // the pairs were counted across them too.
+    var w = m[1].replace(/^["'(\[]+/, "").replace(/[,;:"')\]]+$/, "")
+    for (var i = 0; i < w.length; i++)
+      if (w[i] !== "'" && w[i].toLowerCase() === w[i].toUpperCase()) return "-"
+    return w === "" ? "-" : w.toLowerCase()
+  }
+  function updateContext() {
+    if (!predictorProc.running) return
+    var c = root.contextNow()
+    if (c === root.sentContext) return
+    root.sentContext = c
+    root.nextAsked.push({ field: root.fieldGeneration, word: c !== "" && c !== "-" })
+    predictorProc.write(c === "" ? "after\n" : "after " + c + "\n")
+  }
+  // The predictor's answer to "after": shown while no word is being typed
+  // and nothing else holds the strip. A swipe's other guesses keep it, so a
+  // wrong swipe is still one tap from mended.
+  // What each "after" was sent for, oldest first: { field, word }. Next
+  // words worked out for a field that has lost focus since are not shown in
+  // the next, and none are shown for no word at all, a field just focused or
+  // a sentence just begun: they would be what sentences in general start
+  // with, a guess about nothing typed (predictor.py says the same, and this
+  // holds for an answer from one that did not).
+  property var nextAsked: []
+  function nextReplied(words) {
+    var asked = root.nextAsked.shift()
+    if (asked && asked.field === root.fieldGeneration) root.nextArrived(asked.word ? words : [])
+  }
+  function nextArrived(words) {
+    if (!root.keepWord) words = []
+    root.nextWords = words
+    var mine = ["", "predict", "next"].indexOf(root.suggestions.source) !== -1
+    if (!root.predicting || root.currentWord !== "" || !mine || words.length === 0) {
+      if (root.suggestions.source === "next" && (words.length === 0 || root.currentWord !== ""))
+        root.setSuggestions("next", null)
+      return
+    }
+    var cap = root.capitalNext
+    root.setSuggestions("next", { items: words.map(function(w) {
+      return { text: cap ? w.charAt(0).toUpperCase() + w.slice(1) : w, note: "" }
+    }), prev: false, next: false, cursor: -1 })
+  }
+  // A next word taken: typed with its space, or, for an elision, j', with
+  // none, and then it is the start of the word being typed.
+  function takeNext(index) {
+    var item = root.suggestions.items[index]
+    if (!item || !keyboardHelper.running) return
+    if (item.join) { root.joinFinished(item.text, index); return }
+    var elision = item.text.slice(-1) === "'"
+    root.setSuggestions("next", null)
+    root.writeKeys("type " + item.text + (elision ? "" : " ") + "\n")
+    if (elision) {
+      root.currentWord = item.text
+      root.setFinished("", "", false)
+    } else {
+      root.currentWord = ""
+      root.autoSpaced = true
+      root.setFinished(item.text, " ", false)
+    }
   }
 
   // The word being typed, as far as the keys sent say. Only a guess: a tap
@@ -1524,6 +2218,12 @@ Item {
   property string currentWord: ""
   property real backSpaceDownAt: 0
   function trackWord(command) {
+    // Followed only for suggestions, which need typing memory to allow the
+    // word, and never in a password field (predicting says both).
+    if (!root.predicting) {
+      root.currentWord = ""
+      return
+    }
     // Anything typed after a swipe makes its word final.
     if (root.swipedWord !== "") {
       root.swipedWord = ""
@@ -1550,29 +2250,467 @@ Item {
   onCurrentWordChanged: {
     if (!root.predicting) return
     if (root.currentWord === "") {
+      root.pendingCompletion = null
       root.setSuggestions("predict", null)
+      // A word begun and taken back: the next words for where the cursor
+      // is are the ones already asked for, unless the place has changed,
+      // which updateContext will say.
+      Qt.callLater(function() {
+        if (root.currentWord === "" && root.sentContext === root.contextNow())
+          root.nextArrived(root.nextWords)
+      })
     } else if (predictorProc.running) {
-      root.asked.push(root.currentWord)
-      predictorProc.write("complete " + root.currentWord + "\n")
+      root.queueCompletion()
     }
   }
-  // The words asked about, oldest first, which the answers come back in the
-  // order of. An answer for a word that has since changed is dropped: fast
-  // typing otherwise had one arrive after a space, offering words for what
-  // was no longer being typed, and taking one deleted nothing.
+  // At most one request in flight and the latest pending prefix. The
+  // placeholder survives cancellation until its reply, but retains no text.
   property var asked: []
+  property var pendingCompletion: null
+  function cancelCompletions() {
+    root.pendingCompletion = null
+    root.asked = root.asked.map(function() { return undefined })
+  }
+  function completionCurrent(ask) {
+    return !!ask && root.predicting && ask.field === root.fieldGeneration
+      && ask.language === root.wordLanguage && ask.word === root.currentWord
+      && ask.context === root.contextNow()
+  }
+  function queueCompletion() {
+    root.pendingCompletion = root.predicting && root.currentWord !== ""
+      ? { field: root.fieldGeneration, language: root.wordLanguage,
+          word: root.currentWord, context: root.contextNow() } : null
+    Qt.callLater(root.flushCompletion)
+  }
+  function flushCompletion() {
+    if (!predictorProc.running || root.asked.length > 0) return
+    var ask = root.pendingCompletion
+    root.pendingCompletion = null
+    if (!root.completionCurrent(ask)) return
+    // Context commands must stay before the completion that uses them.
+    root.updateContext()
+    root.asked = [ask]
+    predictorProc.write("complete " + ask.word + "\n")
+  }
+  function completionAnswer(words) {
+    var ask = root.asked.shift()
+    if (root.completionCurrent(ask) && Array.isArray(words))
+      root.setSuggestions("predict", { items: words.map(function(w) { return { text: w, note: "" } }),
+                                      prev: false, next: false, cursor: -1 })
+    Qt.callLater(root.flushCompletion)
+  }
 
   // Swaps the word typed so far for the one chosen, and a space after it,
   // the way a phone keyboard does.
   function takeWord(index) {
     var item = root.suggestions.items[index]
+    if (item) root.typeInPlace(item.text)
+  }
+  function typeInPlace(text) {
     // No word in progress means these were for one already finished.
-    if (!item || !keyboardHelper.running || root.currentWord === "") return
+    if (!keyboardHelper.running || root.currentWord === "") return
     var out = ""
     for (var i = 0; i < root.currentWord.length; i++) out += "key BackSpace\n"
-    root.writeKeys(out + "type " + item.text + " \n")
+    root.writeKeys(out + "type " + text + " \n")
     root.currentWord = ""
     root.autoSpaced = true
+    root.setFinished(text, " ", false)
+  }
+
+  // A word's other forms, for a hold on it in the strip: summed and sums
+  // for sum. The answer comes as formsArrived, for the keyboard to offer.
+  signal formsArrived(string word, var forms)
+  property var formsAsked: []
+  function askForms(word) {
+    if (!predictorProc.running || word === "") return
+    root.formsAsked.push(word)
+    predictorProc.write("forms " + word + "\n")
+  }
+  // One taken from the card, in the place of whatever the strip was
+  // offering for: the word being typed, the word a swipe typed, or the word
+  // just finished.
+  function takeForm(text) {
+    if (root.suggestions.source === "predict") root.typeInPlace(text)
+    else if (root.suggestions.source === "swipe") root.swapTo(text, -1)
+    else if (root.suggestions.source === "forms") root.replaceFinished(text, -1)
+  }
+
+  // ---- Terminals ------------------------------------------------------------
+
+  // In a terminal the strip offers a command line's parts rather than
+  // English (predictor.py, Terminal): commands, then files and folders from
+  // the terminal's folder. Only for a line Ragtop typed all of since the last
+  // Enter, which typedTail holds, since it cannot see one recalled with Up or
+  // typed on the physical keyboard, and offers nothing rather than guess.
+  // Part of word suggestions, and never in a password field.
+  //
+  // Only at the shell's prompt, though: a terminal is often running
+  // something else, Claude Code, vim, less, where what is typed is that
+  // program's and mostly prose, and English and swipe stay. Which program
+  // holds the terminal is the kernel's to say (the shell's foreground
+  // process group), and it can change with no focus change at all, so it is
+  // read again every moment the keyboard is up in a terminal. Not known yet
+  // counts as not the prompt.
+  property string termForeground: ""
+  readonly property bool atPrompt: root.inTerminal && root.termForeground !== ""
+    && root.termForeground === root.termShell
+  readonly property bool terminalSuggesting: root.predictionsEnabled && root.atPrompt
+    && !root.secretField && !root.imeComposing && root.keepContext
+  // The command line as Ragtop typed it, or null when it does not know it.
+  readonly property var termLine: {
+    if (!root.keepContext) return null
+    var t = root.beforeCursor
+    var nl = t.lastIndexOf("\n")
+    return nl >= 0 ? t.slice(nl + 1) : root.typedFromStart ? t : null
+  }
+  // The terminal's folder and shell, from Omarchy's own way of finding the
+  // folder (omarchy-cmd-terminal-cwd) and the same shell process's name.
+  property string termCwd: ""
+  property string termShell: "bash"
+  function readTermPlace() {
+    if (root.inTerminal && !termPlaceProc.running) termPlaceProc.running = true
+  }
+  Process {
+    id: termPlaceProc
+    command: ["bash", "-c", 'cwd=$(omarchy-cmd-terminal-cwd 2>/dev/null); '
+      + 'pid=$(hyprctl activewindow 2>/dev/null | awk \'/pid:/ {print $2}\'); '
+      + 'sp=$(pgrep -P "$pid" | tail -n1); '
+      + 'shell=$(basename "$(readlink -f /proc/$sp/exe 2>/dev/null)" 2>/dev/null); '
+      + 'fg=$(cat /proc/$(awk \'{print $8}\' /proc/$sp/stat 2>/dev/null)/comm 2>/dev/null); '
+      + 'printf "%s\\t%s\\t%s\\n" "$cwd" "${shell:-bash}" "$fg"']
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var f = text.replace(/\n$/, "").split("\t")
+        if (f.length === 3 && f[0].charAt(0) === "/") {
+          var moved = f[0] !== root.termCwd
+          root.termCwd = f[0]
+          root.termShell = f[1] || "bash"
+          root.termForeground = f[2]
+          // A terminal just focused, at its shell's prompt, is taken to be at
+          // an empty line, which is what a prompt mostly is. Otherwise its
+          // line is unknown until an Enter, and the strip offered nothing at
+          // all. A half-typed line left in it makes a first suggestion wrong,
+          // and nothing happens without a tap.
+          if (root.termJustFocused) {
+            root.termJustFocused = false
+            if (root.atPrompt && root.typedTail === "" && !root.typedFromStart) {
+              root.typedFromStart = true
+              root.typedCursor = 0
+              moved = true
+            }
+          }
+          if (moved) root.askTerm()
+        }
+      }
+    }
+  }
+  Timer {
+    interval: 1500
+    repeat: true
+    running: root.inTerminal && root.oskVisible && root.predictionsEnabled
+    onTriggered: root.readTermPlace()
+  }
+  onAtPromptChanged: {
+    root.setSuggestions("term", null)
+    root.askTerm()
+  }
+  onInTerminalChanged: {
+    root.setSuggestions("term", null)
+    root.termForeground = ""
+    root.readTermPlace()
+  }
+  // Set on every window focus, two terminals of one class included, which a
+  // change of class would miss (the activewindow handler).
+  property bool termJustFocused: false
+  // Keep command metadata warm across focus changes and keyboard hiding.
+  // Only visible, known prompts may send requests or display their replies.
+  readonly property bool terminalAllowed: root.keyboardAvailable && root.predictionsEnabled
+    && root.typingMemory === "full" && !root.secretField
+  readonly property bool wantTerminal: root.terminalAllowed && root.oskVisible && root.terminalSuggesting
+  property bool terminalStarted: false
+  property bool terminalReady: false
+  property int terminalSequence: 0
+  property var termPending: null
+  property var termInFlight: null
+  property var termLatest: null
+  function clearTerminalRequests() {
+    root.termPending = null
+    // Retain only the protocol barrier, not the old field's command/path.
+    // Dropping it would allow a new request behind every focus change.
+    if (root.termInFlight) root.termInFlight = { id: root.termInFlight.id }
+    root.termLatest = null
+    if (terminalProc.running && root.terminalReady)
+      terminalProc.write('{"reset":true}\n')
+    root.setSuggestions("term", null)
+  }
+  function cancelTerminal() {
+    terminalRestart.stop()
+    root.clearTerminalRequests()
+    root.termInFlight = null
+    root.terminalStarted = false
+    root.terminalReady = false
+  }
+  onTerminalAllowedChanged: {
+    if (!root.terminalAllowed) root.cancelTerminal()
+    else Qt.callLater(root.askTerm)
+  }
+  onWantTerminalChanged: {
+    if (!root.wantTerminal) root.clearTerminalRequests()
+    else Qt.callLater(root.askTerm)
+  }
+  function terminalCurrent(ask) {
+    return !!ask && root.wantTerminal && ask.field === root.fieldGeneration
+      && ask.line === root.termLine && ask.cwd === root.termCwd && ask.shell === root.termShell
+  }
+  function askTerm() {
+    root.termLatest = null
+    var line = root.termLine
+    if (!root.wantTerminal || line === null || root.termCwd === "" || line === "") {
+      root.clearTerminalRequests()
+      return
+    }
+    root.termPending = { id: ++root.terminalSequence, field: root.fieldGeneration,
+                         cwd: root.termCwd, line: line, shell: root.termShell }
+    root.terminalStarted = true
+    Qt.callLater(root.flushTerminal)
+  }
+  function flushTerminal() {
+    if (!terminalProc.running || !root.terminalReady || root.termInFlight) return
+    var ask = root.termPending
+    root.termPending = null
+    if (!root.terminalCurrent(ask)) return
+    root.termInFlight = ask
+    terminalProc.write(JSON.stringify(ask) + "\n")
+  }
+  onTermLineChanged: {
+    root.askTerm()
+    // An Enter may have run cd.
+    if (root.termLine === "") root.readTermPlace()
+  }
+  onTermCwdChanged: root.askTerm()
+  onTermShellChanged: root.askTerm()
+  function termAnswer(reply) {
+    if (!reply || !Array.isArray(reply.items)) return
+    var ask = reply.update ? root.termLatest : root.termInFlight
+    if (!ask || reply.id !== ask.id) return
+    if (!reply.update) {
+      root.termInFlight = null
+      root.termLatest = root.terminalCurrent(ask) && !root.termPending ? ask : null
+      Qt.callLater(root.flushTerminal)
+    }
+    if (!root.terminalCurrent(ask) || root.termPending) return
+    root.setSuggestions("term", { items: reply.items, prev: false, next: false, cursor: -1 })
+  }
+  Process {
+    id: terminalProc
+    command: ["/usr/bin/python3", Qt.resolvedUrl("terminal-helper.py").toString().replace(/^file:\/\//, "")]
+    running: root.terminalAllowed && root.terminalStarted
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        try {
+          var reply = JSON.parse(line)
+          if (reply.ready === true) {
+            terminalRestart.stop()
+            root.terminalReady = true
+            root.flushTerminal()
+          } else root.termAnswer(reply)
+        } catch (e) {}
+      }
+    }
+    onRunningChanged: {
+      root.termInFlight = null
+      root.termLatest = null
+      if (!running) {
+        root.terminalReady = false
+        root.setSuggestions("term", null)
+      }
+    }
+    onExited: {
+      if (root.terminalAllowed && root.terminalStarted && !terminalProc.running)
+        terminalRestart.restart()
+    }
+  }
+  Timer {
+    id: terminalRestart
+    interval: 5000
+    onTriggered: {
+      // A late exit/retry must never stop a replacement that is already up.
+      if (!root.terminalAllowed || !root.terminalStarted || terminalProc.running) return
+      root.terminalStarted = false
+      root.askTerm()
+    }
+  }
+  // A suggestion in place of the word being typed: a command or file with a
+  // space after it, a folder without, to go on into.
+  function takeTerm(index) {
+    var item = root.suggestions.items[index]
+    if (!item || !keyboardHelper.running || root.termLine === null) return
+    // A control character would end the helper's line mid-name; the
+    // predictor never offers one, and this holds even if it did.
+    if (/[\x00-\x1f\x7f-\x9f]/.test(item.text)) return
+    var out = ""
+    for (var i = 0; i < (item.back | 0); i++) out += "key BackSpace\n"
+    root.writeKeys(out + "type " + item.text + (item.kind === "dir" ? "" : " ") + "\n")
+  }
+
+  // ---- The word just finished --------------------------------------------
+
+  // The almost-right word is usually noticed just after it is done: sum,
+  // and a space, when summed was meant. So a word just finished, typed and
+  // spaced, taken from the strip, or swiped, is remembered with what
+  // followed it, and when nothing more is typed for a moment the strip
+  // offers its other forms, a swipe's runners-up first. A tap swaps the
+  // word for one in place. Anything typed after it lets it go. In the
+  // strip, so nothing covers a key at the moment someone may be about to
+  // tap one, which a card would.
+  property var finished: null       // { word, tail, swiped }
+  readonly property int formsAfter: 1000
+  property bool finishedFormsAsked: false
+  function setFinished(word, tail, swiped) {
+    // A finished word outlives its space, so only full typing memory keeps it.
+    if (root.secretField || !root.keepContext) word = ""
+    // A word finished takes the one it followed (joinFirst) as its pair. A
+    // key that finishes nothing, every letter of the next word among them,
+    // leaves joinFirst to followOn.
+    root.joinPair = word !== "" && root.joinFirst ? { first: root.joinFirst.word,
+                                                      between: root.joinFirst.tail } : null
+    if (word !== "") root.joinFirst = null
+    root.joinOffer = null
+    root.finished = word !== "" ? { word: word, tail: tail, swiped: swiped } : null
+    root.finishedFormsAsked = false
+    if (root.finished && root.predicting) finishedPause.restart()
+    else finishedPause.stop()
+  }
+  Timer {
+    id: finishedPause
+    interval: root.formsAfter
+    onTriggered: {
+      if (!root.finished || !root.predicting) return
+      root.finishedFormsAsked = true
+      // Asked first, so its answer is in by the time the forms come.
+      if (root.joinPair && predictorProc.running) {
+        root.joinAsked.push(root.joinPair.first + " " + root.finished.word)
+        predictorProc.write("join " + root.joinPair.first + " " + root.finished.word + "\n")
+      }
+      root.askForms(root.finished.word)
+    }
+  }
+  function finishedForms(word, forms) {
+    var f = root.finished
+    if (!root.finishedFormsAsked || !f || word !== f.word || !root.predicting) return
+    root.finishedFormsAsked = false
+    // Next words already showing keep the strip: the finished word's forms
+    // are a hold on it or a BackSpace into it away. Only a strong join, a
+    // space that was likely a slip, goes in front of them.
+    if (root.suggestions.source === "next") {
+      var jn = root.joinOffer
+      if (jn && jn.strong && root.joinPair)
+        root.setSuggestions("next", { items: [{ text: jn.word, note: "", join: true }]
+                                        .concat(root.suggestions.items.filter(function(i) { return !i.join })),
+                                      prev: false, next: false, cursor: -1 })
+      return
+    }
+    // The word itself leads, filled as the one typed, so it can still be held
+    // for its forms: without it, a swiped fun that vanished from the strip
+    // left nothing to hold. A tap on it does nothing (replaceFinished).
+    var items = [{ text: f.word, note: "" }]
+    // A swipe's runners-up next: a wrong word is likelier than a wrong form of
+    // the right one.
+    if (f.swiped && root.suggestions.source === "swipe")
+      items = items.concat(root.suggestions.items.filter(function(i) { return i.text !== f.word }))
+    forms.forEach(function(w) {
+      if (!items.some(function(i) { return i.text === w })) items.push({ text: w, note: "" })
+    })
+    // The two words as one: first when the space looks like a slip, and
+    // otherwise only at the end of forms that were being offered anyway, so
+    // "may be" typed on purpose never brings up a strip of its own for maybe.
+    var j = root.joinOffer
+    if (j && root.joinPair) {
+      var item = { text: j.word, note: "", join: true }
+      if (j.strong) items.splice(1, 0, item)
+      else if (items.length > 1) items.push(item)
+    }
+    // Only when there is something besides the word: the word alone is no
+    // offer, and a strip of one word that is already typed is noise.
+    if (items.length > 1)
+      root.setSuggestions("forms", { items: items, prev: false, next: false, cursor: 0 })
+  }
+  // The finished word swapped for `text`, keeping what followed it.
+  function replaceFinished(text, index) {
+    var f = root.finished
+    if (!f || !keyboardHelper.running) return
+    if (text === f.word) {
+      if (index >= 0) root.setSuggestions("forms", { items: root.suggestions.items, prev: false,
+                                                     next: false, cursor: index })
+      return
+    }
+    var out = ""
+    for (var i = 0; i < f.word.length + f.tail.length; i++) out += "key BackSpace\n"
+    root.writeKeys(out + "type " + text + f.tail + "\n")
+    if (f.swiped) root.swipedWord = root.swipeLead + text + f.tail
+    root.finished = { word: text, tail: f.tail, swiped: f.swiped }
+    root.autoSpaced = true
+    if (index >= 0) root.setSuggestions("forms", { items: root.suggestions.items, prev: false,
+                                                   next: false, cursor: index })
+  }
+
+  // ---- Two words that were one --------------------------------------------
+
+  // "inter active", "broad way": a space where none was meant, from a thumb
+  // on the space bar or a swipe that split a long word. When a finished word
+  // followed another with nothing but its space between them, the strip's
+  // offer for it (finishedForms) includes the two as one, if that is a word
+  // (predictor.py, join). Only ever offered: most such pairs are right both
+  // ways, every day and everyday, and only the sentence knows which.
+  //
+  // joinFirst is the finished word the one being typed follows directly,
+  // from its first letter until it is finished; joinPair is that word once
+  // the second one is finished; joinOffer is the predictor's answer for them.
+  property var joinFirst: null      // { word, tail }
+  property var joinPair: null       // { first, between }
+  property var joinOffer: null      // { word, strong }
+  property var joinAsked: []
+  // Called for every key sent, before setFinished. A word's first letter
+  // straight after a finished word and its space starts a pair; more letters
+  // keep it; the space that finishes the word hands it on. Anything else, a
+  // BackSpace or a full stop, and the two are not simply side by side.
+  function followOn(command) {
+    var arg = command.indexOf("type ") === 0 ? command.slice(5) : ""
+    var letter = arg.length > 0
+    for (var i = 0; i < arg.length; i++)
+      if (arg[i] !== "'" && arg[i].toLowerCase() === arg[i].toUpperCase()) letter = false
+    if (letter && root.currentWord === "")
+      root.joinFirst = root.finished && root.finished.tail === " " && !root.secretField
+        ? { word: root.finished.word, tail: root.finished.tail } : null
+    else if (!(letter || command === "key space") || root.currentWord === "")
+      root.joinFirst = null
+  }
+  function joinArrived(pair, found) {
+    var f = root.finished
+    if (!f || !root.joinPair || pair !== root.joinPair.first + " " + f.word || !found.word) return
+    root.joinOffer = { word: found.word, strong: !!found.strong }
+  }
+  // The two words, the space between them and what followed, swapped for
+  // the one word and what followed.
+  function joinFinished(text, index) {
+    var f = root.finished, p = root.joinPair
+    if (!f || !p || !keyboardHelper.running) return
+    var out = ""
+    var back = p.first.length + p.between.length + f.word.length + f.tail.length
+    for (var i = 0; i < back; i++) out += "key BackSpace\n"
+    root.writeKeys(out + "type " + text + f.tail + "\n")
+    // A BackSpace now is an ordinary one: undoing the swipe would take the
+    // first word with it.
+    root.swipedWord = ""
+    root.finished = { word: text, tail: f.tail, swiped: false }
+    root.joinPair = null
+    root.joinOffer = null
+    root.autoSpaced = true
+    // From the next-word strip, the strip is the joined word's next words,
+    // which updateContext asks for; from the forms, it marks the one taken.
+    if (root.suggestions.source === "next") root.setSuggestions("next", null)
+    else root.setSuggestions("forms", { items: root.suggestions.items, prev: false, next: false, cursor: index })
   }
 
   // ---- Swipes ------------------------------------------------------------
@@ -1586,9 +2724,19 @@ Item {
   readonly property bool swipeActive: root.swipeEnabled && root.predicting
   onSwipeActiveChanged: if (!root.swipeActive) root.setSuggestions("swipe", null)
   property var swipeKeys: null
+  property string sentSwipeGeometry: ""
   function setSwipeKeys(value) {
     root.swipeKeys = value
-    if (predictorProc.running) predictorProc.write("keys " + JSON.stringify(value) + "\n")
+    // Layout bindings can settle several times in one event-loop turn.
+    Qt.callLater(root.flushSwipeKeys)
+  }
+  function flushSwipeKeys(force) {
+    if (!predictorProc.running || !root.swipeKeys) return
+    var geometry = JSON.stringify(root.swipeKeys)
+    if (force === true || geometry !== root.sentSwipeGeometry) {
+      predictorProc.write("keys " + geometry + "\n")
+      root.sentSwipeGeometry = geometry
+    }
   }
   // The word the last swipe typed, with its spaces, so a tap on one of the
   // others can take it back; and whether it began with a capital.
@@ -1608,6 +2756,12 @@ Item {
   property var peekPath: null
   function swipeDrawn(points) {
     if (!root.swipeActive || !predictorProc.running) return
+    // The strip comes up as the swipe starts, before there is a guess to
+    // put in it, so the guess lands somewhere already there.
+    if (!root.swipeDrawing) {
+      root.stripLingers = true
+      stripLinger.restart()
+    }
     root.swipeDrawing = true
     root.peekPath = points
     if (!root.peekPending) root.sendPeek()
@@ -1616,6 +2770,7 @@ Item {
     var path = root.peekPath
     root.peekPath = null
     if (!path) return
+    root.flushSwipeKeys()
     root.peekPending = true
     predictorProc.write("peek " + JSON.stringify(path.map(function(p) {
       return [Math.round(p[0]), Math.round(p[1])]
@@ -1643,7 +2798,8 @@ Item {
     root.swipeDrawing = false
     root.peekPath = null
     if (!root.swipeActive || !predictorProc.running) return
-    root.swipeShifted = shifted
+    root.flushSwipeKeys()
+    root.swipesAsked.push({ field: root.fieldGeneration, shifted: shifted })
     predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
       return [Math.round(p[0]), Math.round(p[1])]
     })) + "\n")
@@ -1651,45 +2807,148 @@ Item {
   function capitalised(word) {
     return root.swipeShifted ? word.charAt(0).toUpperCase() + word.slice(1) : word
   }
-  function typeSwiped(words) {
+  // Each swipe sent, oldest first, with the field it was drawn in and
+  // whether Shift was on: the answers come back in the order asked.
+  property var swipesAsked: []
+  function typeSwiped(words, ask) {
+    // touch-trace: whether the swipe came to a word, never which.
+    if (root.touchTrace)
+      root.traceTouch({ t: Date.now(), ev: "read", id: -1, x: 0, y: 0,
+                        what: words.length > 0 ? "swipe read as a word" : "nothing: no word fits the swipe" })
     if (!root.swipeActive || !keyboardHelper.running) return
+    // Drawn in a field that has since lost focus: the word was for there.
+    if (ask.field !== root.fieldGeneration) {
+      if (root.suggestions.source === "swipe" && root.swipedWord === "") root.setSuggestions("swipe", null)
+      return
+    }
+    root.swipeShifted = ask.shifted
+    // Open question (R008, 2026-10-27): a key tapped while this answer was
+    // on its way still gets the word typed after it, a space between. Kept
+    // on purpose for now, since dropping it would lose words when swiping
+    // and tapping fast; to be reviewed.
     if (words.length === 0) {
       // Nothing it could spell: the guesses shown while drawing go too.
       if (root.suggestions.source === "swipe") root.setSuggestions("swipe", null)
       return
     }
     root.swipeLead = root.currentWord !== "" ? " " : ""
+    // Straight after a finished word and its space, the two may be one word
+    // the swipe split, or the word before it typed short.
+    root.joinFirst = root.swipeLead === "" && root.finished && root.finished.tail === " "
+      ? { word: root.finished.word, tail: root.finished.tail } : null
     var word = root.swipeLead + root.capitalised(words[0]) + " "
     root.writeKeys("type " + word + "\n")
     root.currentWord = ""
     root.swipedWord = word
     root.autoSpaced = true
+    root.setFinished(root.capitalised(words[0]), " ", true)
     root.setSuggestions("swipe", { items: words.map(function(w) { return { text: root.capitalised(w), note: "" } }),
                                    prev: false, next: false, cursor: 0 })
   }
   function swapSwiped(index) {
     var item = root.suggestions.items[index]
-    if (!item || !keyboardHelper.running || root.swipedWord === "") return
+    if (item) root.swapTo(item.text, index)
+  }
+  // Swaps the swiped word for `text`, and marks `index` in the strip as the
+  // one now typed (-1 for a word from elsewhere, a form off the card).
+  function swapTo(text, index) {
+    if (!keyboardHelper.running || root.swipedWord === "") return
     var out = ""
     for (var i = 0; i < root.swipedWord.length; i++) out += "key BackSpace\n"
-    var word = root.swipeLead + item.text + " "
+    var word = root.swipeLead + text + " "
     root.writeKeys(out + "type " + word + "\n")
     root.swipedWord = word
     root.autoSpaced = true
+    // Still the word after the same one: another of the swipe's guesses
+    // can join it too.
+    var p = root.joinPair
+    root.joinFirst = p ? { word: p.first, tail: p.between } : null
+    root.setFinished(text, " ", true)
     root.setSuggestions("swipe", { items: root.suggestions.items, prev: false, next: false, cursor: index })
   }
 
   readonly property bool wantPredictor: root.keyboardAvailable && root.predictionsEnabled
 
+  // ---- Updates ----------------------------------------------------------
+
+  // Checked only when someone taps Check for updates on the controls panel:
+  // Ragtop starts no network traffic of its own accord. The CLI asks the
+  // repository what is on main, which is what an update installs, and the
+  // answer is "" (not asked), checking, current, available, dev (a working
+  // copy, updated with git) or failed.
+  property string updateState: ""
+  property string updateInstalled: ""
+  // The version installed, from the manifest, for the panel before any check.
+  Process {
+    command: ["jq", "-r", ".version", Qt.resolvedUrl("manifest.json").toString().replace(/^file:\/\//, "")]
+    running: true
+    stdout: StdioCollector {
+      onStreamFinished: if (root.updateInstalled === "") root.updateInstalled = text.trim()
+    }
+  }
+  property string updateLatest: ""
+  function checkForUpdates() {
+    if (updateCheckProc.running) return
+    root.updateState = "checking"
+    updateCheckProc.running = true
+  }
+  Process {
+    id: updateCheckProc
+    command: ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""), "update", "check"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var f = text.trim().split(" ")
+        var known = ["current", "available", "dev", "failed"]
+        root.updateState = known.indexOf(f[0]) !== -1 ? f[0] : "failed"
+        root.updateInstalled = f[1] || ""
+        root.updateLatest = f[2] && f[2] !== "-" ? f[2] : ""
+      }
+    }
+    onExited: if (root.updateState === "checking") root.updateState = "failed"
+  }
+  // Omarchy's own updater, in a terminal, which shows the changes and asks.
+  function runUpdate() {
+    Quickshell.execDetached(["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                             "update", "run"])
+    root.toolsOpen = false
+    root.updateState = ""
+  }
+
   // The controls panel's switches. Through the CLI, which is what fetches
   // the word list when it is missing and says so.
-  function toggleSetting(name) {
-    if (settingToggleProc.running) return   // a second tap mid-write would be lost
-    settingToggleProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                 name, "toggle"]
-    settingToggleProc.running = true
+  // Serialize preference commands so rapid taps reach the CLI in order.
+  property var preferenceQueue: []
+  property bool preferenceBusy: false
+  property bool preferenceFailed: false
+  function queuePreference(args) {
+    if (!root.preferenceBusy) root.preferenceFailed = false
+    root.preferenceQueue = root.preferenceQueue.concat([args])
+    root.flushPreferences()
   }
-  Process { id: settingToggleProc }
+  function flushPreferences() {
+    if (root.preferenceBusy || root.preferenceQueue.length === 0) return
+    var args = root.preferenceQueue[0]
+    root.preferenceQueue = root.preferenceQueue.slice(1)
+    root.preferenceBusy = true
+    preferenceProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, "")].concat(args)
+    preferenceProc.running = true
+  }
+  function preferenceFinished(code) {
+    root.preferenceBusy = false
+    if (code !== 0) root.preferenceFailed = true
+    Qt.callLater(root.flushPreferences)
+  }
+  Process {
+    id: preferenceProc
+    onExited: function(code) { root.preferenceFinished(code) }
+  }
+
+  function toggleSetting(name) {
+    root.queuePreference([name, "toggle"])
+  }
+  function setMechanicalMaterial(material) {
+    root.queuePreference(["mechanical-material", "set", material])
+  }
   onWantPredictorChanged: {
     predictorRestart.stop()
     predictorProc.running = root.wantPredictor
@@ -1697,38 +2956,67 @@ Item {
   Process {
     id: predictorProc
     command: ["/usr/bin/python3", Qt.resolvedUrl("predictor.py").toString().replace(/^file:\/\//, ""),
-              root.wordsRoot]
+              root.wordsRoot,
+              // Ragtop's own copy (words/en), read where nothing was fetched.
+              Qt.resolvedUrl("words").toString().replace(/^file:\/\//, "")]
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
         if (line.startsWith("ready ")) {
           root.wordsLoaded = line.split(" ")[1]
           root.sendRows()
-          if (root.swipeKeys) predictorProc.write("keys " + JSON.stringify(root.swipeKeys) + "\n")
+          // A new list: tell it the word before, and get its next words.
+          root.sentContext = null
+          Qt.callLater(root.updateContext)
+          root.flushSwipeKeys(true)
+        } else if (line.startsWith("dictionary ")) {
+          var parts = line.split(" ")
+          root.dictionaryName = parts[2] && parts[2] !== "-" ? parts[2] : ""
         } else if (line.startsWith("missing ")) {
           root.wordsLoaded = ""
           // The CLI may know better by now: a list removed by hand.
           root.readWordLanguages()
+        } else if (line.startsWith("next ")) {
+          var upcoming
+          try { upcoming = JSON.parse(line.slice(5)) } catch (e) { root.nextAsked.shift(); return }
+          root.nextReplied(upcoming)
+        } else if (line.startsWith("join ")) {
+          var forPair = root.joinAsked.shift()
+          var joined
+          try { joined = JSON.parse(line.slice(5)) } catch (e) { return }
+          if (forPair !== undefined) root.joinArrived(forPair, joined)
+        } else if (line.startsWith("forms ")) {
+          var forWhat = root.formsAsked.shift()
+          var forms
+          try { forms = JSON.parse(line.slice(6)) } catch (e) { return }
+          if (forWhat === undefined) return
+          root.finishedForms(forWhat, forms)
+          root.formsArrived(forWhat, forms)
         } else if (line.startsWith("peeked ")) {
           var guess
           try { guess = JSON.parse(line.slice(7)) } catch (e) { root.peekPending = false; return }
           root.peeked(guess)
         } else if (line.startsWith("swiped ")) {
           var found
+          var forSwipe = root.swipesAsked.shift()
           try { found = JSON.parse(line.slice(7)) } catch (e) { return }
-          root.typeSwiped(found)
+          if (forSwipe !== undefined) root.typeSwiped(found, forSwipe)
         } else if (line.startsWith("suggest ")) {
-          var forWord = root.asked.shift()
-          if (!root.predicting || forWord !== root.currentWord) return
-          var words
-          try { words = JSON.parse(line.slice(8)) } catch (e) { return }
-          root.setSuggestions("predict", { items: words.map(function(w) { return { text: w, note: "" } }),
-                                           prev: false, next: false, cursor: -1 })
+          var words = null
+          try { words = JSON.parse(line.slice(8)) } catch (e) {}
+          root.completionAnswer(words)
         }
       }
     }
     onRunningChanged: {
+      root.swipesAsked = []
+      root.sentSwipeGeometry = ""
+      root.nextAsked = []
       root.asked = []
+      root.pendingCompletion = null
+      root.formsAsked = []
+      root.joinAsked = []
+      root.sentContext = null
       root.peekPending = false
       root.wordsLoaded = ""
       if (running) {
@@ -1772,211 +3060,46 @@ Item {
   // with it, so they can never be left floating over nothing.
   property bool toolsOpen: false
 
-  // ---- window management -------------------------------------------------
+  // ---- The tour (Tour.qml) ----------------------------------------------------
 
-  // What the keyboard's windows page can do, by name. The keyboard asks for
-  // a name and this looks it up, so a name is the only thing that ever
-  // crosses into a command line and an unknown one does nothing. These are
-  // the same dispatches the bar's popup used to run, which is where they
-  // came from.
-  readonly property var windowActions: ({
-    // True fullscreen is deliberately not here. It covers the whole monitor,
-    // reserved space and all, so the keyboard and the bar both go under it
-    // and the only two ways back are invisible. On a machine that is folded
-    // shut there is no third way, and the toggle that would undo it is the
-    // key you can no longer see. Maximized gets the same "make this big"
-    // without taking the way out with it.
-    "wide": 'hl.dsp.window.fullscreen({ mode = "maximized" })',
-    // Omarchy's own SUPER + CTRL + F. The window keeps its place in the
-    // layout and only the client is told it is fullscreen, so an app drops
-    // its chrome while the bar and the keyboard stay exactly where they are.
-    // This is the fullscreen a machine with no other keyboard can afford.
-    "tiled": 'hl.dsp.exec_cmd("omarchy-hyprland-window-tiled-fullscreen-toggle")',
-    "float": 'hl.dsp.window.float({ action = "toggle" })',
-    "split": 'hl.dsp.layout("togglesplit")',
-    "scratch": 'hl.dsp.workspace.toggle_special("scratchpad")',
-    "toscratch": 'hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })'
-  })
-  // One process per tap, so quick repeated taps are not dropped.
-  property Component windowActionProc: Component { Process { onExited: destroy() } }
-  // How the workspace arranges its windows, which Hyprland keeps as
-  // general:layout. Read rather than assumed, because Omarchy ships dwindle
-  // and a user may already be on something else.
-  //
-  // This is Hyprland's global layout, not one workspace's. Nothing in
-  // Hyprland lets a workspace carry its own without a rule written ahead of
-  // time, so the button says what it does and does not pretend otherwise.
-  property string workspaceLayout: ""
-  // What to go back to. Coming off scrolling on a machine set up for master
-  // should give master back rather than quietly converting it to dwindle,
-  // which is what a plain two way toggle would have done.
-  property string layoutBefore: ""
-  readonly property bool scrollingLayout: root.workspaceLayout === "scrolling"
-
-  Process {
-    id: layoutReadProc
-    command: ["hyprctl", "getoption", "general:layout", "-j"]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        try {
-          var v = JSON.parse(text)
-          if (v && typeof v.str === "string") root.workspaceLayout = v.str.trim()
-        } catch (e) {}
-      }
-    }
+  property bool tourActive: false
+  // The tour's handle step lowers and raises the keys to show what the handle
+  // does, by drawing alone: the keyboard stays up, so the windows above keep
+  // their place and the tour keeps its keyboard.
+  property bool tourLowered: false
+  readonly property bool keysShown: root.oskVisible && !root.tourLowered
+  // Answered for this session, either way, so the offer does not come back
+  // before the setting it wrote has been read.
+  property bool tourAnswered: false
+  // Offered once: the first time the keyboard is up with nothing else over it,
+  // until it is taken or turned down (the `tour` setting).
+  readonly property bool tourOffered: root.settingsLoaded && !root.settings["tour"]
+    && !root.tourAnswered && root.oskVisible && !root.toolsOpen && !root.tourActive
+  function startTour() {
+    root.toolsOpen = false
+    root.tourAnswered = true
+    root.setOskVisible(true)
+    if (!root.oskVisible) return
+    root.suggestions = root.noSuggestions
+    root.tourActive = true
   }
-
-  function toggleWorkspaceLayout() {
-    if (layoutSetProc.running) return
-    var next
-    if (root.scrollingLayout) {
-      next = root.layoutBefore !== "" ? root.layoutBefore : "dwindle"
-    } else {
-      root.layoutBefore = root.workspaceLayout
-      next = "scrolling"
-    }
-    layoutSetProc.command = ["hyprctl", "eval",
-      "hl.config({ general = { layout = \"" + next + "\" } })"]
-    layoutSetProc.running = true
+  // finished: written as taken, so it is not offered again. Skip counts.
+  function endTour(finished) {
+    root.tourActive = false
+    root.tourLowered = false
+    root.previewSettings = ({})
+    root.previewLayout = ""
+    root.setSuggestions("tour", null)
+    keyboard.demoClear()
+    if (finished !== false) root.tourSetting("done")
   }
-
-  Process {
-    id: layoutSetProc
-    onExited: {
-      // Read it back rather than assuming it took. A layout Hyprland does not
-      // have would leave the button lit for something that never happened.
-      layoutReadProc.running = true
-      // Changing the layout rearranges every window, and Hyprland sends no
-      // event for it, so the outlines have to be told to catch up.
-      if (root.tilingOpen) {
-        tilingIdle.restart()
-        tilingSettle.restart()
-      }
-    }
+  function declineTour() {
+    root.tourAnswered = true
+    root.tourSetting("declined")
   }
-
-  function runWindowAction(name) {
-    var lua = root.windowActions[name]
-    if (!lua) return
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval", "hl.dispatch(" + lua + ")"] })
-    if (proc) proc.running = true
-    // The bar's own buttons land here. Two things follow from that.
-    //
-    // Whatever this dispatched moved or resized something, and only some of
-    // them emit an event saying so. togglesplit emits nothing at all, which
-    // is why Split left the outlines drawn around the old shape while the
-    // windows underneath had already changed. Say so rather than depending
-    // on which dispatch happens to be noisy.
-    //
-    // And a tap on the bar is someone using the mode, so it is not idle.
-    // Without this the ninety second timeout ran while you were working.
-    if (root.tilingOpen) {
-      // Read twice for the two that change a window's fullscreen state.
-      // What the bar shows there is fullscreenClient, which is Hyprland's
-      // record of what it last told the window rather than anything the
-      // window has confirmed, and the application repaints on its own
-      // schedule. One read 260ms later can land between the two and latch a
-      // value that is already wrong. A second read a beat behind costs one
-      // hyprctl call and catches it.
-      if (name === "tiled" || name === "wide") tilingSettle.again = 1
-      tilingSettle.restart()
-      tilingIdle.restart()
-    }
-  }
-
-  // Which workspaces the strip offers, by Omarchy's own rule: always 1 to 5,
-  // plus any other that exists up to 10. Copied from its Workspaces widget
-  // so the keyboard and the bar never disagree about what there is.
-  readonly property var workspaceIds: {
-    var ids = [1, 2, 3, 4, 5]
-    var values = Hyprland.workspaces.values
-    for (var i = 0; i < values.length; i++) {
-      var id = values[i].id
-      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
-    }
-    ids.sort(function(a, b) { return a - b })
-    return ids
-  }
-  readonly property int focusedWorkspace: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
-  // The workspace tiling mode is about, which is the one on Ragtop's own
-  // screen and not the one with keyboard focus. The outlines already came
-  // from here. The strip did not, so with focus on another monitor it lit
-  // the number of a workspace whose windows were nowhere on screen. Falls
-  // back to the focused one, which is the right answer on one monitor and
-  // the only answer before Hyprland has reported a monitor at all.
-  readonly property int tilingWorkspace: {
-    var m = root.keyboardMonitor
-    return m && m.activeWorkspace ? m.activeWorkspace.id : root.focusedWorkspace
-  }
-
-  // A number rather than a name, checked against the range Hyprland has, so
-  // the only thing that reaches a command line is a digit this decided on.
-  function workspaceLua(id, send) {
-    var n = parseInt(id, 10)
-    if (!(n >= 1 && n <= 10)) return ""
-    return send ? 'hl.dsp.window.move({ workspace = "' + n + '" })'
-                : 'hl.dsp.focus({ workspace = "' + n + '" })'
-  }
-  // Hyprland switches the workspace on whichever monitor has focus, so a tap
-  // on the strip used to change a screen you were not looking at while the
-  // outlines beside it stayed where they were. Ragtop's own monitor is taken
-  // first, which is a no-op on one screen and names the right one on more.
-  // Only for going to a workspace: sending a window somewhere follows the
-  // window, which is already on this screen.
-  function runWorkspace(id, send) {
-    var lua = root.workspaceLua(id, send)
-    if (lua === "") return
-    var name = root.keyboardMonitorName
-    var pre = (!send && name !== "")
-      ? "hl.dispatch(hl.dsp.focus({ monitor = '" + name + "' })) " : ""
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval", pre + "hl.dispatch(" + lua + ")"] })
-    if (proc) proc.running = true
-    // The bar's own buttons land here. Two things follow from that.
-    //
-    // Whatever this dispatched moved or resized something, and only some of
-    // them emit an event saying so. togglesplit emits nothing at all, which
-    // is why Split left the outlines drawn around the old shape while the
-    // windows underneath had already changed. Say so rather than depending
-    // on which dispatch happens to be noisy.
-    //
-    // And a tap on the bar is someone using the mode, so it is not idle.
-    // Without this the ninety second timeout ran while you were working.
-    if (root.tilingOpen) {
-      tilingSettle.restart()
-      tilingIdle.restart()
-    }
-  }
-
-  // ---- tiling mode -------------------------------------------------------
-
-  // A transparent layer over the real windows, for rearranging them by hand.
-  // It draws outlines and nothing solid: the whole reason to do this over the
-  // windows instead of over a map is that their content is visible and
-  // reflows as you work, and a panel on top of a window is a panel you cannot
-  // judge a split through.
-  //
-  // Phase one only shows where the windows are and gets out of the way again.
-  // Nothing here moves or resizes anything yet. What it does prove is the
-  // geometry matching, the timing around the keyboard's exclusive zone, and
-  // every way back out.
-  // The Send latch, which used to live on the keyboard's windows page. Off,
-  // then armed for the next workspace, then locked, then off, the same
-  // ladder Shift climbs and the same one Omarchy spells as SUPER versus
-  // SUPER + SHIFT.
-  property string sendMod: "off"
-  function stepSendMod() {
-    root.sendMod = root.sendMod === "off" ? "latched"
-      : root.sendMod === "latched" ? "locked" : "off"
-  }
-  function takeWorkspace(id) {
-    root.runWorkspace(id, root.sendMod !== "off")
-    if (root.sendMod === "latched") root.sendMod = "off"
-  }
-  function takeScratchpad() {
-    root.runWindowAction(root.sendMod !== "off" ? "toscratch" : "scratch")
-    if (root.sendMod === "latched") root.sendMod = "off"
+  function tourSetting(value) {
+    Quickshell.execDetached(["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
+                             "tour", value])
   }
 
   // How many times the focus bridge has asked for the keyboard. Zero after a
@@ -1984,377 +3107,16 @@ Item {
   // reports healthy and nothing ever comes up.
   property int autoShows: 0
 
-  // Whether a special workspace is showing on Ragtop's screen. The scratchpad
-  // is not the focused workspace while it is up: it is an overlay, and it
-  // lives in the monitor's own specialWorkspace rather than in
-  // focusedWorkspace, so asking the usual place says no every time.
-  property bool specialShown: false
-
-  property bool tilingOpen: false
-  property var tilingWindows: []
-  // The window the shape buttons act on, so the bar can say what is already
-  // true rather than offering a toggle with no state on it.
-  readonly property var tilingFocused: {
-    for (var i = 0; i < root.tilingWindows.length; i++)
-      if (root.tilingWindows[i].focused) return root.tilingWindows[i]
-    return null
-  }
-
-  function openTiling() {
-    // The keyboard's strip is reserved, so hiding it first lets the windows
-    // reflow to the full screen. The list is read after that settles, or the
-    // outlines would be drawn around where the windows used to be.
-    root.setOskVisible(false)
-    root.tilingOpen = true
-    layoutReadProc.running = true
-    specialReadProc.running = true
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-  // Done came from the keyboard, so it goes back to it. A timeout or tablet
-  // mode ending did not, and putting a keyboard up for nobody would only
-  // shrink the windows again.
-  function closeTiling(restore) {
-    // Cleared before the keyboard is asked for, or the rule below would see
-    // it come up and call this a second time.
-    root.tilingOpen = false
-    root.sendMod = "off"
-    tilingIdle.stop()
-    tilingSettle.stop()
-    if (restore) root.setOskVisible(true)
-  }
-
-  // The keyboard and this mode are exclusive: entering hides the keyboard,
-  // and the keyboard coming back by any route ends the mode. That is the
-  // handle, auto-show on a text field, and the bar's own button.
-  //
-  // It is also the fix for a real fault. The keyboard's exclusive zone
-  // changing relayouts every window, and Hyprland emits no resizewindow for
-  // that, so the event-driven refresh never fired and the outlines sat over
-  // a keyboard, around windows that had already shrunk away from them.
-  // Focus a window by its address. Checked against the shape Hyprland gives
-  // them before it goes anywhere, so the only thing that reaches a command
-  // line is an address this recognised.
-  function focusWindow(address) {
-    if (!/^0x[0-9a-f]+$/.test(address)) return
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval",
-                  "hl.dispatch(hl.dsp.focus({ window = \"address:" + address + "\" }))"] })
-    if (proc) proc.running = true
-    tilingIdle.restart()
-  }
-
-  // Resize by a relative delta, as fast as a finger can ask for it.
-  //
-  // One hyprctl at a time: a drag asks far more often than a process can
-  // answer, so the newest ask is held while one is in flight and sent when
-  // it finishes, adding up anything that arrived meanwhile. Nothing is
-  // dropped and nothing queues up behind the finger. The size slider learnt
-  // this the same way.
-  property var resizeHeld: null
-  property bool resizeBusy: false
-
-  function resizeWindow(address, dx, dy) {
-    if (!/^0x[0-9a-f]+$/.test(address)) return
-    if (dx === 0 && dy === 0) return
-    if (root.resizeBusy) {
-      if (root.resizeHeld && root.resizeHeld.address === address) {
-        root.resizeHeld.dx += dx
-        root.resizeHeld.dy += dy
-      } else {
-        root.resizeHeld = { address: address, dx: dx, dy: dy }
-      }
-      return
-    }
-    root.sendResize(address, dx, dy)
-  }
-
-  function sendResize(address, dx, dy) {
-    root.resizeBusy = true
-    resizeProc.command = ["hyprctl", "eval",
-      "hl.dispatch(hl.dsp.window.resize({ window = \"address:" + address
-      + "\", x = " + Math.round(dx) + ", y = " + Math.round(dy)
-      + ", relative = true }))"]
-    resizeProc.running = true
-    // Hyprland emits no geometry event for a resize asked for this way, and
-    // an outline drawn where a window used to be is not only wrong to look
-    // at: windowAt reads these same rectangles to decide what a drag lands
-    // on, so a stale one picks the wrong window to swap with.
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-
-  Process {
-    id: resizeProc
-    onExited: {
-      root.resizeBusy = false
-      var held = root.resizeHeld
-      root.resizeHeld = null
-      if (held) {
-        root.sendResize(held.address, held.dx, held.dy)
-        return
-      }
-      // Read the geometry back the moment the resize lands, so the outlines
-      // keep up with the windows. Resizing a tile moves its neighbour as
-      // well, so guessing the new shape locally would draw one of them
-      // right and the other wrong. This rides the resize rate, which is
-      // already limited to one at a time.
-      if (root.tilingOpen && !tilingClientsProc.running)
-        tilingClientsProc.running = true
-    }
-  }
-
-  // A floating window has no splits, and a relative resize grows it from
-  // the centre, which can never move one edge on its own. So its rectangle
-  // is set outright instead: position and size in one dispatch, latest ask
-  // wins, no deltas to accumulate and nothing to drift.
-  property var geomHeld: null
-  property bool geomBusy: false
-
-  function setWindowGeom(address, x, y, w, h) {
-    if (!/^0x[0-9a-f]+$/.test(address)) return
-    if (root.geomBusy) {
-      root.geomHeld = { address: address, x: x, y: y, w: w, h: h }
-      return
-    }
-    root.sendGeom(address, x, y, w, h)
-  }
-
-  function sendGeom(address, x, y, w, h) {
-    root.geomBusy = true
-    var win = "\"address:" + address + "\""
-    geomProc.command = ["hyprctl", "eval",
-      "hl.dispatch(hl.dsp.window.resize({ window = " + win
-        + ", x = " + Math.round(w) + ", y = " + Math.round(h) + " })) "
-      + "hl.dispatch(hl.dsp.window.move({ window = " + win
-        + ", x = " + Math.round(x) + ", y = " + Math.round(y) + " }))"]
-    geomProc.running = true
-    // As above. Setting a floating window's geometry moves it with no event
-    // to say so.
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-
-  Process {
-    id: geomProc
-    onExited: {
-      root.geomBusy = false
-      var held = root.geomHeld
-      root.geomHeld = null
-      if (held) {
-        root.sendGeom(held.address, held.x, held.y, held.w, held.h)
-        return
-      }
-      if (root.tilingOpen && !tilingClientsProc.running)
-        tilingClientsProc.running = true
-    }
-  }
-
-  // Swap two windows by address. A tile has no free position, so dropping
-  // one on another is an exchange rather than a move, and Hyprland takes
-  // both addresses for it, which means no guessing a direction from the
-  // drag.
-  function swapWindows(from, to) {
-    if (from === to) return
-    if (!/^0x[0-9a-f]+$/.test(from) || !/^0x[0-9a-f]+$/.test(to)) return
-    var proc = root.windowActionProc.createObject(root,
-      { command: ["hyprctl", "eval",
-                  "hl.dispatch(hl.dsp.window.swap({ window = \"address:" + from
-                  + "\", target = \"address:" + to + "\" }))"] })
-    if (proc) proc.running = true
-    // Measured on the socket: a swap emits no movewindow and no resizewindow,
-    // and it does not change focus either, so nothing arrives to notice it
-    // by. Tapping a window first happened to fix it only because focusing
-    // does emit activewindow. Say so directly instead.
-    tilingIdle.restart()
-    tilingSettle.restart()
-  }
-
-  // Read on the way in, because the scratchpad may already be up, and again
-  // on every activespecial event.
-  Process {
-    id: specialReadProc
-    command: ["hyprctl", "-j", "monitors"]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        try {
-          var any = false
-          JSON.parse(text).forEach(function(m) {
-            // Only this screen's. A scratchpad up on another monitor put its
-            // windows in the layer here, drawn at coordinates belonging to a
-            // display Ragtop is not on.
-            if (m.name !== root.keyboardMonitorName) return
-            if (m.specialWorkspace && m.specialWorkspace.id !== 0) any = true
-          })
-          root.specialShown = any
-        } catch (e) {}
-      }
-    }
-  }
-
-  Timer {
-    id: tilingSettle
-    interval: 260
-    // Twice, a beat apart: a rotation is still settling when the first read
-    // happens, and one stale set of outlines is worth a second look.
-    property int again: 0
-    onTriggered: {
-      tilingClientsProc.running = true
-      if (again > 0) {
-        again--
-        tilingSettle.restart()
-      }
-    }
-  }
-  Timer {
-    id: tilingIdle
-    interval: 90000
-    onTriggered: root.closeTiling()
-  }
-  // Tablet mode ending takes the mode with it, along with everything else
-  // that only makes sense with a screen you are holding.
-  onTabletModeChanged: {
-    if (root.tabletMode) return
-    root.closeTiling()
-    // Out of tablet mode the physical keyboard is back, and what it types
-    // Ragtop does not see (finishWord).
-    root.finishWord()
-  }
-
-  Process {
-    id: tilingClientsProc
-    command: ["hyprctl", "clients", "-j"]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        if (!root.tilingOpen) return
-        // The monitor this surface is actually on, not whichever one has
-        // focus. Hyprland reports a window at its place across the whole
-        // desktop, so the origin subtracted here has to belong to the screen
-        // the outlines are drawn on. Taking the focused monitor's origin drew
-        // another screen's windows onto this one, at that screen's
-        // coordinates: the handles appeared over the wrong display, and
-        // dragging them resized windows you were not looking at.
-        var monitor = root.keyboardMonitor
-        var ox = monitor ? monitor.x : 0
-        var oy = monitor ? monitor.y : 0
-        // And its workspace, for the same reason. The focused workspace is on
-        // whichever monitor has focus, which need not be this one.
-        var ws = root.tilingWorkspace
-        var out = []
-        try {
-          JSON.parse(text).forEach(function(c) {
-            if (!c.mapped || c.hidden) return
-            // A special workspace is drawn over the normal one, so while it
-            // is up its windows are on screen and belong in the layer too.
-            if (!c.workspace) return
-            if (c.workspace.id !== ws
-                && !(root.specialShown && c.workspace.id < 0)) return
-            if (c.size[0] <= 0 || c.size[1] <= 0) return
-            out.push({ address: c.address, x: c.at[0] - ox, y: c.at[1] - oy,
-                       w: c.size[0], h: c.size[1],
-                       name: c.title || c["class"] || "", floating: !!c.floating,
-                       // What the bar's shape buttons light from. `fullscreen`
-                       // is the internal state, which maximized sets, and
-                       // `fullscreenClient` is the one Omarchy's tiled toggle
-                       // reads and writes, where 2 means it is on.
-                       full: Number(c.fullscreen) || 0,
-                       fullClient: Number(c.fullscreenClient) || 0,
-                       // A key shared by every member of a group, and "" for
-                       // a window in none. Sorted, so the members agree on it
-                       // whichever one is being read.
-                       group: Array.isArray(c.grouped) && c.grouped.length > 1
-                         ? c.grouped.slice().sort().join(",") : "",
-                       order: Number(c.focusHistoryID),
-                       focused: c.focusHistoryID === 0 })
-          })
-        } catch (e) {
-          return
-        }
-        // One row per group, not one per window in it.
-        //
-        // Grouped windows are tabs sharing a tile, and Hyprland reports
-        // every member at the same geometry with hidden false on all of
-        // them. Left alone that is N outlines, N chips and N sets of
-        // handles stacked exactly on top of each other, and a tap resolves
-        // by whatever the tiebreak happens to pick, possibly a tab you
-        // cannot see.
-        //
-        // Any member will do as the handle. Measured: swapping one member
-        // with another tile moves the whole group and leaves it intact, so
-        // a group is a tile as far as the tree is concerned and the members
-        // are interchangeable for every action here.
-        //
-        // The one kept is the most recently focused, which is almost always
-        // the visible tab, so the title chip usually matches. It is only the
-        // chip: the group's own tab bar sits above this outline and is what
-        // actually says which window is on top.
-        var byGroup = {}
-        out = out.filter(function(w) {
-          if (!w.group) return true
-          var seen = byGroup[w.group]
-          if (seen === undefined || w.order < seen) {
-            byGroup[w.group] = w.order
-            return true
-          }
-          return false
-        }).filter(function(w) {
-          return !w.group || byGroup[w.group] === w.order
-        })
-
-        // A stable order, so the model's rows never reshuffle when focus
-        // or stacking changes. Reordering rebuilds every delegate, which
-        // kills whatever gesture is in flight. What is drawn on top is
-        // decided in the layer instead.
-        out.sort(function(a, b) { return a.address < b.address ? -1 : 1 })
-        root.tilingWindows = out
-      }
-    }
-  }
-  // Anything that moves a window moves an outline with it.
-  Connections {
-    target: Hyprland
-    function onRawEvent(event) {
-      if (!root.tilingOpen) return
-      var n = event.name
-      if (n === "activespecial" && !specialReadProc.running) {
-        // Asked rather than parsed out of the event. The event carries
-        // "workspacename,monitorname" and this only cares about one monitor,
-        // so reading the monitors back is both shorter and the authority on
-        // which screen the scratchpad landed on. It fires on a scratchpad
-        // toggle and nowhere near as often as the client reads do.
-        specialReadProc.running = true
-      }
-      // The monitor ones matter because a rotation from anywhere else, the
-      // bar's button or a keybinding, has to be noticed too.
-      if (n === "openwindow" || n === "closewindow" || n === "movewindow"
-          || n === "resizewindow" || n === "activewindow" || n === "changefloatingmode"
-          || n === "fullscreen" || n === "monitorlayoutchanged"
-          || n === "monitoradded" || n === "monitorremoved"
-          || n === "configreloaded" || n === "activespecial") {
-        tilingSettle.restart()
-      }
-    }
-  }
-
-  // What the bar's window button does, and the socket below with it: one
-  // way in and out of tiling, so both agree about what a second tap
-  // means.
-  function toggleTilingMode() {
-    if (root.tilingOpen) root.closeTiling(true)
-    else root.openTiling()
-  }
+  // Out of tablet mode the physical keyboard is back, and what it types
+  // Ragtop does not see (finishWord).
+  onTabletModeChanged: if (!root.tabletMode) root.finishWord()
   onOskVisibleChanged: {
     // A keyboard put away is the end of whatever word it was typing.
     root.currentWord = ""
     if (!root.oskVisible) root.toolsOpen = false
-    // The keyboard and tiling mode are exclusive: entering hides the
-    // keyboard, and the keyboard coming back by any route ends the mode.
-    // That covers the handle, auto-show on a text field, and the bar's own
-    // button, and it is also the fix for a real fault: the keyboard's
-    // exclusive zone changing relayouts every window, Hyprland emits no
-    // resizewindow for that, so the outlines used to sit over a keyboard,
-    // drawn around windows that had already shrunk away from them.
-    if (root.oskVisible && root.tilingOpen) root.closeTiling()
+    // A tour of a keyboard that is not there is over, and puts back what it
+    // was showing. Not marked as taken: it was not finished.
+    if (!root.oskVisible && root.tourActive) root.endTour(false)
   }
 
 
@@ -2363,12 +3125,9 @@ Item {
   // to own this on its own shell.json entry, which meant the tile, the IPC
   // and the bar button all did nothing on a bar with no Ragtop widget on it.
   function setRotationMode(mode) {
-    if (root.rotationModes.indexOf(mode) === -1 || rotationModeProc.running) return
-    rotationModeProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                                "rotation", "set", mode]
-    rotationModeProc.running = true
+    if (root.rotationModes.indexOf(mode) !== -1)
+      root.queuePreference(["rotation", "set", mode])
   }
-  Process { id: rotationModeProc }
 
   // Key size against whatever the theme asked for, stepped rather than set,
   // so the keyboard needs no argument-taking IPC to offer it.
@@ -2469,7 +3228,7 @@ Item {
     var scale = root.targetKeyMm * density / (84 * dpr)
     // Expressed against the theme's own size, so Auto lands on the target
     // whatever a theme asked for rather than being multiplied by it.
-    var themeSize = Number(root.settings["size"]) || 100
+    var themeSize = Number(root.lookSettings["size"]) || 100
     var pct = scale / (themeSize / 100) * 100
     return Math.max(root.sizeMin, Math.min(root.sizeMax, Math.round(pct)))
   }
@@ -2522,12 +3281,8 @@ Item {
   // moment you want it off is the moment it has just appeared over what you
   // were reading.
   function toggleAutoShow() {
-    if (autoShowProc.running) return   // a second tap mid-write would be lost
-    autoShowProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                            "auto-show", "toggle"]
-    autoShowProc.running = true
+    root.queuePreference(["auto-show", "toggle"])
   }
-  Process { id: autoShowProc }
 
   // The themes there are to step through, by slug. Read once, since a theme
   // arriving in the folder mid-session is not worth watching a directory for,
@@ -2543,18 +3298,8 @@ Item {
     }
   }
   function stepTheme(by) {
-    // Until the write lands, currentTheme still names the old one, so a
-    // second tap would both compute the same answer and be dropped for
-    // reassigning a running process. Two taps would move one theme, or none.
-    if (root.themeList.length === 0 || themeApplyProc.running) return
-    var at = root.themeList.indexOf(root.currentTheme)
-    var count = root.themeList.length
-    var next = root.themeList[(((at < 0 ? 0 : at) + by) % count + count) % count]
-    themeApplyProc.command = ["bash", Qt.resolvedUrl("ragtop").toString().replace(/^file:\/\//, ""),
-                              "theme", "apply", next]
-    themeApplyProc.running = true
+    if (by === 1 || by === -1) root.queuePreference(["theme", "step", String(by)])
   }
-  Process { id: themeApplyProc }
 
   // A machine that upgraded in place still has the previous version's
   // settings and menu rows. Nothing else runs on an update: the only hook
@@ -2570,19 +3315,36 @@ Item {
   // Switch to one of the layouts Hyprland has configured, by its index.
   // Hyprland owns the layout, so this asks rather than imposes: nothing is
   // written to anyone's config, and the switch is the same one a keybinding
-  // would do. It emits activelayout, which is already what tells the helper
-  // to re-read the keymap, so the keys and their labels follow on their own.
+  // would do. Refresh after the command as well as on activelayout: the
+  // shell's event connection can close while hyprctl still works.
+  property int pendingLayout: -1
   function switchLayout(index) {
-    if (switchLayoutProc.running) return
+    if (switchLayoutProc.running) {
+      root.pendingLayout = index
+      return
+    }
+    root.pendingLayout = -1
     switchLayoutProc.command = ["hyprctl", "switchxkblayout", "all", String(index)]
     switchLayoutProc.running = true
   }
-  Process { id: switchLayoutProc }
+  function layoutSwitchFinished(exitCode) {
+    if (root.pendingLayout >= 0) {
+      root.switchLayout(root.pendingLayout)
+      return
+    }
+    if (exitCode === 0) root.sendKeys("reload")
+  }
+  Process {
+    id: switchLayoutProc
+    onExited: function(exitCode, exitStatus) { root.layoutSwitchFinished(exitCode) }
+  }
+
+  GlowPalette { id: desktopGlowPalette }
 
   KeyboardTheme {
     id: keyboardTheme
-    backgroundOpacity: root.backgroundOpacity
     look: root.look
+    glowPalette: desktopGlowPalette.colors
   }
 
   // ---- The keyboard's look ---------------------------------------------
@@ -2593,14 +3355,14 @@ Item {
   // settings.conf is a plain file anyone can edit.
   readonly property var look: {
     function pick(key, allowed, fallback) {
-      return allowed.indexOf(root.settings[key]) !== -1 ? root.settings[key] : fallback
+      return allowed.indexOf(root.lookSettings[key]) !== -1 ? root.lookSettings[key] : fallback
     }
     function num(key, low, high, fallback) {
-      var value = Number(root.settings[key])
+      var value = Number(root.lookSettings[key])
       return isFinite(value) ? Math.min(high, Math.max(low, value)) : fallback
     }
     function color(key) {
-      var value = String(root.settings[key] || "")
+      var value = String(root.lookSettings[key] || "")
       return ["foreground", "background", "accent", "urgent"].indexOf(value) !== -1
         || /^#[0-9a-fA-F]{6,8}$/.test(value) ? value : ""
     }
@@ -2608,7 +3370,7 @@ Item {
     // silhouette none of the names cover. Anything that is not four known
     // words falls back to the shape's own corners rather than half-applying.
     function cornerSpec() {
-      var raw = String(root.settings["corners"] || "auto").trim().toLowerCase()
+      var raw = String(root.lookSettings["corners"] || "auto").trim().toLowerCase()
       if (raw === "" || raw === "auto") return "auto"
       var parts = raw.split(/\s+/)
       if (parts.length !== 4) return "auto"
@@ -2616,16 +3378,30 @@ Item {
         if (["round", "cut", "square"].indexOf(parts[i]) === -1) return "auto"
       return parts.join(" ")
     }
+    var mechanical = root.lookSettings["theme"] === "mechanical"
+      && Object.keys(root.previewSettings).length === 0
+    var material = mechanical ? pick("mechanical-material",
+      ["plain", "pudding", "frosted", "translucent"], "plain")
+      : pick("keycap-material", ["solid", "pudding", "frosted", "translucent"], "solid")
     return {
       shape: pick("shape", ["omarchy", "rounded", "pill", "angular", "bevel"], "omarchy"),
       corners: cornerSpec(),
       // How see-through the keys are over the keyboard's background, and the
       // background over the desktop. 0 is solid and 100 is gone.
       keyTransparency: num("key-transparency", 0, 100, 0),
-      transparency: num("transparency", 0, 100, 0),
       // Raised keys stand on a side, like a keycap, and flat ones don't.
       relief: pick("relief", ["flat", "raised"], "flat"),
-      fill: pick("fill", ["auto", "dark", "light", "outline"], "light"),
+      fill: pick("fill", ["auto", "dark", "light", "surface", "outline"], "light"),
+      contrast: pick("contrast", ["normal", "strong"], "normal"),
+      backlight: mechanical ? (root.lookSettings["mechanical-backlight"] === "off" ? "off" : "accent")
+        : pick("backlight", ["off", "accent"], "off"),
+      shineThrough: !mechanical || root.lookSettings["mechanical-shine-through"] !== "off",
+      backlightMotion: pick("backlight-motion", ["off", "ripple"], "ripple"),
+      animateBacklight: root.settings["backlight-animation"] === "on",
+      backlightPressColor: color("backlight-press-color"),
+      keycapMaterial: material === "plain" ? "solid" : material,
+      keycapProfile: pick("keycap-profile", ["standard", "sculpted"], "standard"),
+      wallOpacity: num("wall-opacity", 0, 100, 50),
       // The theme's key size, as a percentage of the usual, and the nudge on
       // top of it that is the user's alone. A theme cannot write size-adjust,
       // so how big the keys are for these eyes survives changing theme.
@@ -2637,20 +3413,17 @@ Item {
       sizeAdjust: String(root.settings["size-adjust"] || "regular").trim(),
       sizeNudge: (root.sizeAuto ? root.autoSizePercent
         : root.sizePercent(root.settings["size-adjust"])) / 100,
-      background: pick("background", ["tint", "gradient"], "tint"),
-      edge: pick("edge", ["border", "fade", "none"], "none"),
       labels: pick("labels", ["small", "normal", "large"], "normal"),
       // How far the keys that produce no character sit from the letters.
       specialKeys: pick("special-keys", ["off", "darker", "lighter"], "darker"),
       depth: num("depth", 0, 10, 4),
       chamfer: num("chamfer", 0, 20, 8),
-      edgeFade: num("edge-fade", 0, 24, 8),
       // Off-theme: set, and that part stops following the Omarchy theme.
       keyColor: color("key-color"),
       labelColor: color("label-color"),
-      keyFillAlpha: root.settings["key-fill-alpha"] === undefined ? "auto" : num("key-fill-alpha", 0, 1, "auto"),
-      borderWidth: root.settings["border-width"] === undefined ? "auto" : num("border-width", 0, 4, "auto"),
-      radius: root.settings["radius"] === undefined ? "auto" : num("radius", 0, 30, "auto")
+      keyFillAlpha: root.lookSettings["key-fill-alpha"] === undefined ? "auto" : num("key-fill-alpha", 0, 1, "auto"),
+      borderWidth: root.lookSettings["border-width"] === undefined ? "auto" : num("border-width", 0, 4, "auto"),
+      radius: root.lookSettings["radius"] === undefined ? "auto" : num("radius", 0, 30, "auto")
     }
   }
 
@@ -2659,7 +3432,10 @@ Item {
   // see-through windows too, so when Ragtop turns it on it also tells
   // Hyprland to leave every window alone, and only the keyboard blurs.
   // Nothing is written to the Hyprland config: `hyprctl reload` clears it.
-  readonly property bool blurKeyboard: root.settings["blur"] === "on"
+  readonly property bool blurKeyboard: root.lookSettings["blur"] === "on"
+    || root.look.keycapMaterial === "frosted"
+    || (root.look.keycapMaterial === "pudding"
+        && (root.look.backlight === "accent" || root.look.keycapProfile === "sculpted"))
   // Whether Hyprland's global blur was already on, i.e. the user's own
   // choice, which Ragtop leaves alone.
   property bool globalBlurWasOn: false
@@ -2691,7 +3467,10 @@ Item {
       "hl.layer_rule({ match = { namespace = '^ragtop-tools$' }, order = 1 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard-handle$' }, order = -1 }) "
       + "hl.layer_rule({ match = { namespace = '^ragtop-picker-nav$' }, order = -2 }) "
-      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -3 })"]
+      + "hl.layer_rule({ match = { namespace = '^ragtop-keyboard$' }, order = -3 }) "
+      // Order is also how one layer draws over another, the lowest on top,
+      // and the overlay has to be over the keys: the tour dims them.
+      + "hl.layer_rule({ match = { namespace = '^ragtop-overlay$' }, order = -4 })"]
     layerRulesProc.running = true
   }
   Process {
@@ -2714,14 +3493,14 @@ Item {
   }
   Process { id: blurProc }
 
-  // The look, for the lock screen's keyboard, which can't reach this
-  // service and takes only the shape and measurements from it.
+  // The lock keyboard always uses Omarchy styling. Export only the user's
+  // size adjustment; the lock reader also ignores all legacy theme fields.
   onLookChanged: root.writeStyleForLock()
   function writeStyleForLock() {
     styleWriteProc.command = [
       "sh", "-c",
       'd="${XDG_RUNTIME_DIR:-}" && [ -n "$d" ] && printf "%s\\n" "$1" > "$d/ragtop-style.json.tmp" && mv -f "$d/ragtop-style.json.tmp" "$d/ragtop-style.json"',
-      "--", JSON.stringify(root.look)
+      "--", JSON.stringify({sizeNudge: root.look.sizeNudge})
     ]
     styleWriteProc.running = true
   }
@@ -2736,13 +3515,8 @@ Item {
   // when the screensaver starts. The catcher next door covers the screen
   // and swallows the touch, so the keyboard was never doing anything there,
   // it was only sitting on top of a screensaver looking like a fault.
-  //
-  // Tiling ends rather than pausing. Coming back to a tiling layer
-  // drawn around windows that may have moved while the screen was off is
-  // worse than coming back to the desktop.
   onScreensaverAddressChanged: {
     if (root.screensaverAddress !== "") {
-      if (root.tilingOpen) root.closeTiling(true)
       if (root.oskVisible) {
         root.oskHiddenForScreensaver = true
         root.setOskVisible(false)
@@ -2858,57 +3632,36 @@ Item {
     }
   }
 
-  // Tiling mode's surface. Top rather than Overlay, and ordered below the
-  // bar and the keyboard's handle, so both of those stay tappable the whole
-  // time it is up. The screensaver catcher next door is Overlay because it
-  // has to cover everything. This one must not: a full-screen layer that
-  // swallows every touch is the worst thing to get stuck on a machine that
-  // is folded shut, and those two surfaces are two more ways back out.
-  PanelWindow {
-    screen: keyboardWindow.screen
-    visible: root.tilingOpen && root.layerRulesReady
-
-    WlrLayershell.namespace: "ragtop-tiling"
-    WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    exclusionMode: ExclusionMode.Ignore
-    anchors { top: true; bottom: true; left: true; right: true }
-    color: "transparent"
-
-    // The surface covers the screen so the outlines can be drawn at the
-    // windows' own coordinates, but it only takes touches where it has
-    // something to take them with. Everything else falls through, which is
-    // how the bar and the keyboard's handle stay usable underneath it
-    // without depending on layer ordering to arrange that. Layer order was
-    // the first attempt and it put this on top of both.
-    mask: Region { item: tilingLayer.touchArea }
-
-    TilingLayer {
-      id: tilingLayer
-      anchors.fill: parent
-      service: root
-      windows: root.tilingWindows
-    }
-  }
-
   // On the built-in screen, reserving its space so windows move up out of
   // its way. It never takes keyboard focus, so typing goes to the window
-  // underneath. Created when shown, so it stacks above the handle.
+  // underneath. Kept mapped while there is a keyboard, so the handle never
+  // moves (see `visible` below); its layer rule stacks it above the handle.
   PanelWindow {
     id: keyboardWindow
     screen: root.keyboardScreen
-    visible: root.oskVisible && root.layerRulesReady
+    // Mapped for as long as there is a keyboard to have, and hidden by
+    // drawing nothing, taking no touch and reserving nothing, rather than
+    // by unmapping. Hyprland places a newly mapped layer at the screen's
+    // edge before its layer rules put it in order, so every show pushed the
+    // handle up above the keyboard for a moment and dropped it back: the
+    // handle slid at every show. A surface that stays never arrives.
+    visible: root.keyboardAvailable && root.layerRulesReady
 
-    // Where the keyboard takes touches (see Keyboard's touchArea): the whole
-    // surface while it draws a background, and only the keys' own extent
-    // when that background is fully clear, so a tap can reach the window
-    // underneath exactly where the keyboard doesn't cover it.
-    mask: Region { item: keyboard.touchArea }
+    // Where the keyboard takes touches (see Keyboard's touchArea): the keys'
+    // own extent, and nowhere while it is hidden.
+    mask: Region { item: root.oskVisible ? keyboard.touchArea : noTouch }
+    Item { id: noTouch; width: 0; height: 0 }
 
     WlrLayershell.namespace: "ragtop-keyboard"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    exclusionMode: ExclusionMode.Auto
+    // Reserves what can be seen, which a hidden suggestion strip's room is
+    // not: the surface keeps one height and only the reservation changes,
+    // so the keys never move (Keyboard.qml, stripSlot).
+    exclusionMode: ExclusionMode.Normal
+    // What the keyboard has settled on reserving, which changes only between
+    // touches (Keyboard.qml, reservedHeight).
+    exclusiveZone: root.oskVisible ? keyboard.reservedHeight : 0
     anchors { bottom: true; left: true; right: true }
     implicitHeight: keyboard.implicitHeight
     color: "transparent"
@@ -2916,6 +3669,10 @@ Item {
     Keyboard {
       id: keyboard
       anchors.fill: parent
+      // A short fade in and out, which unmapping used to leave to Hyprland.
+      opacity: root.keysShown ? 1 : 0
+      visible: opacity > 0
+      Behavior on opacity { NumberAnimation { duration: 120 } }
       service: root
       theme: keyboardTheme
       // How much of the screen the keyboard may take when it is choosing a
@@ -2923,6 +3680,91 @@ Item {
       // at least the other half. A form factor asked for by name ignores
       // this: asking for it is asking for the height it needs.
       maxHeight: keyboardWindow.screen ? keyboardWindow.screen.height / 2 : 0
+    }
+  }
+
+  // Ragtop's overlay: one full-screen layer above the keys, for what has to
+  // be drawn over everything, the dim behind the controls and the tour
+  // (Tour.qml). Its mask decides what it takes touches on, and most of the
+  // time that is nothing.
+  //
+  // While the controls are up, the whole screen is dimmed, as Omarchy dims
+  // behind its own menus, but for the controls and the keys: the keys are
+  // the live preview of what the controls change. This layer dims all of it
+  // but the keyboard, which it leaves a hole for (and which dims the room
+  // between its own keys, Keyboard.qml, dimmed), and a tap on it puts the
+  // controls away and goes no further, so nothing that could not be seen
+  // properly is ever clicked. A tap on the keys closes them too.
+  //
+  // On the Top layer, ordered above the bar, the handle and the keys; the
+  // controls are on Overlay, always above it, so it can never take a touch meant for them,
+  // which an earlier sheet behind the tile did (see below).
+  //
+  // Mapped for as long as the keyboard is, and shown by fading in, never by
+  // mapping: Hyprland fades a newly mapped layer in by itself, so the dim
+  // around the keys arrived a beat after the keyboard's own dim between
+  // them. Both fade together now, by `dimmed` and the same duration.
+  readonly property color scrimColor: Color.menu.scrim
+  readonly property int dimFade: 150
+  readonly property bool dimmed: root.oskVisible && root.toolsOpen
+  PanelWindow {
+    id: overlayWindow
+    screen: keyboardWindow.screen
+    visible: root.keyboardAvailable && root.layerRulesReady
+    WlrLayershell.namespace: "ragtop-overlay"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
+
+    // Where the keys are, in this window: the keyboard sits on the handle,
+    // which sits on the screen's bottom edge.
+    readonly property real keysBottom: height - (root.handleShown ? root.handleHeight : 0)
+    readonly property real keysTop: keysBottom - keyboard.visibleHeight
+
+    Item {
+      anchors.fill: parent
+      opacity: root.dimmed ? 1 : 0
+      Behavior on opacity { NumberAnimation { duration: root.dimFade } }
+
+      Rectangle { id: dimAbove; width: overlayWindow.width; height: overlayWindow.keysTop; color: root.scrimColor }
+      Rectangle {
+        id: dimBelow
+        y: overlayWindow.keysBottom
+        width: overlayWindow.width
+        height: overlayWindow.height - overlayWindow.keysBottom
+        color: root.scrimColor
+      }
+    }
+    // Taking touches only while it dims; otherwise every one passes through.
+    // The tour takes all of them, so nothing it shows types; its offer takes
+    // only its own card, so the keyboard under it still does.
+    mask: root.tourActive ? tourRegion
+      : tour.offering ? offerRegion
+      : root.dimmed ? dimRegion : noDimRegion
+    Region {
+      id: dimRegion
+      Region { item: dimAbove }
+      Region { item: dimBelow }
+    }
+    Region { id: noDimRegion; item: noDim }
+    Item { id: noDim; width: 0; height: 0 }
+    Region { id: tourRegion; item: tour }
+    Region { id: offerRegion; item: tour.card }
+
+    TapHandler {
+      onTapped: if (!root.tourActive) root.toolsOpen = false
+    }
+
+    Tour {
+      id: tour
+      anchors.fill: parent
+      service: root
+      keyboard: keyboard
+      keyboardTop: overlayWindow.keysBottom - keyboard.height
+      handleRect: root.handleShown
+        ? Qt.rect(0, overlayWindow.keysBottom, overlayWindow.width, root.handleHeight) : null
     }
   }
 
@@ -2999,7 +3841,7 @@ Item {
   PanelWindow {
     id: pickerNavWindow
     screen: root.keyboardScreen
-    visible: root.tabletMode && root.pickerOpen && root.pickerPatched && root.layerRulesReady
+    visible: root.keyboardAvailable && root.pickerOpen && root.pickerPatched && root.layerRulesReady
 
     WlrLayershell.namespace: "ragtop-picker-nav"
     WlrLayershell.layer: WlrLayer.Top
@@ -3023,7 +3865,21 @@ Item {
   // by `ragtop setup`, by the setup notification, and by itself the first
   // time Ragtop runs on a machine the installer has never been run on.
   property bool setupOpen: false
-  function openSetup() { root.setupOpen = true }
+  function openSetup() { root.openSetupAs(false) }
+  // The same window on its overlays page alone (SetupWizard, overlaysOnly).
+  property bool setupOverlaysOnly: false
+  function openOverlays() { root.openSetupAs(true) }
+  // Open in the other way it is closed first and made again, a moment later,
+  // rather than changing its pages under whoever is on one.
+  function openSetupAs(overlaysOnly) {
+    if (root.setupOpen && root.setupOverlaysOnly !== overlaysOnly) {
+      root.setupOpen = false
+      Qt.callLater(function() { root.openSetupAs(overlaysOnly) })
+      return
+    }
+    root.setupOverlaysOnly = overlaysOnly
+    root.setupOpen = true
+  }
 
   // Run something in Omarchy's floating terminal with setup out of the way,
   // and bring setup back when it finishes. Setup cannot simply sit there: it
@@ -3064,6 +3920,7 @@ Item {
       active: root.setupOpen
       sourceComponent: SetupWizard {
         service: root
+        overlaysOnly: root.setupOverlaysOnly
         onFinished: root.setupOpen = false
       }
     }
@@ -3087,22 +3944,40 @@ Item {
     function toggleKeyboard(): string { root.toggleOsk(); return "ok" }
     function keyboardVisible(): string { return root.oskVisible ? "true" : "false" }
     function openSetup(): string { root.openSetup(); return "ok" }
+    function openOverlays(): string { root.openOverlays(); return "ok" }
+    function startTour(): string { root.startTour(); return root.tourActive ? "ok" : "no keyboard" }
+    // ragtop touch-trace: see traceTouch.
+    function touchTraceOn(): string { root.touchTrace = true; return "on" }
+    function touchTraceOff(): string { root.touchTrace = false; return "off" }
+    // The touches, and where the keyboard's visible top is as a share of the
+    // screen, so a touch the screen reported above it is not counted as one
+    // the keyboard missed; and how the screen is turned, since the
+    // touchscreen's own report is not.
+    function touchTraceLog(): string {
+      var h = overlayWindow.height
+      return JSON.stringify({ touches: root.touchLog,
+                              keyboardTop: h > 0 ? (overlayWindow.keysBottom - keyboard.visibleHeight) / h : 0,
+                              orientation: root.appliedOrientation || "normal" })
+    }
     // The things worth binding a key to, and every one of them takes no
     // argument, so nothing on this socket can be handed a value to act on.
+    function openControls(): string {
+      root.setOskVisible(true)
+      root.toolsOpen = root.oskVisible
+      return root.toolsOpen ? "ok" : "keyboard-off"
+    }
     function toggleControls(): string {
       if (!root.oskVisible) root.setOskVisible(true)
       root.toolsOpen = !root.toolsOpen
       return "ok"
     }
     function cycleRotation(): string {
-      var order = root.rotationModes
-      root.setRotationMode(order[(order.indexOf(root.rotationMode) + 1) % order.length])
+      root.queuePreference(["rotation", "cycle"])
       return root.rotationMode
     }
     // Sensor, then on, then off, the same three the bar button cycles.
     function cycleKeyboardMode(): string {
-      var order = root.keyboardModes
-      root.setKeyboardMode(order[(order.indexOf(root.keyboardMode) + 1) % order.length])
+      root.queuePreference(["keyboard", "cycle"])
       return root.keyboardMode
     }
     function keyboardModeState(): string { return root.keyboardMode }
@@ -3120,9 +3995,14 @@ Item {
         inputMethod: !root.inputMethodsEnabled ? "off"
           : root.imeEngine ? root.imeEngine.name : "layout",
         words: root.wordLanguage,
-        swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : !root.wordsReady ? "nowords"
+        dictionary: root.dictionaryName || "none",
+        assists: !root.assistsEnabled ? "off" : root.inTerminal ? "terminal" : root.assistsActive ? "on" : "idle",
+        field: !root.fieldInfo ? "unknown" : root.fieldInfo.password ? "password"
+          : root.fieldInfo.terminal ? "terminal" : root.fieldInfo.noCapitals ? "nocapitals" : "plain",
+        swipe: !root.swipeEnabled || !root.predictionsEnabled ? "off" : root.typingMemory === "none" ? "memory-off" : !root.wordsReady ? "nowords"
           : root.swipeActive ? "on" : "idle",
-        predictions: !root.predictionsEnabled ? "off"
+        predictions: !root.predictionsEnabled ? "off" : root.typingMemory === "none" ? "memory-off"
+          : root.terminalSuggesting ? "prompt"
           : !predictorProc.running ? root.retryHealth("predict", false)
           : !root.wordsReady ? "nowords"
           : root.predicting ? "on" : "idle",
@@ -3139,10 +4019,6 @@ Item {
       })
     }
     function closeSetup(): string { root.setupOpen = false; return "ok" }
-    function toggleTiling(): string {
-      root.toggleTilingMode()
-      return root.tilingOpen ? "open" : "closed"
-    }
     // What the keyboard and the picker are doing, for scripts and for a bug
     // report. Read-only, and no key that was typed appears in either.
     function keyboardState(): string {

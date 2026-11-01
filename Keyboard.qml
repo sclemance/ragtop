@@ -1,4 +1,5 @@
 import QtQuick
+import "GlowWave.js" as GlowWave
 
 // Ragtop's on-screen keyboard. It draws the keys and decides what each tap
 // means. keyboard-helper.py, run by the service, turns that into key events.
@@ -12,6 +13,7 @@ Item {
   // Service.qml: sendKeys(command), openSettings(), keyLabels.
   required property var service
   required property var theme
+  property SupportingTheme supportTheme: SupportingTheme { keyboardScale: root.theme.keyScale }
 
   property string page: "letters"
 
@@ -33,7 +35,7 @@ Item {
   // On a plain US layout there is nothing to reach, so the key would do
   // nothing and the row is better without it.
   readonly property var topRow: ["esc", "tab", "ctrl", "alt"]
-    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"], ["windows"])
+    .concat(root.hasLevel3 ? ["altgr"] : [], ["left", "up", "down", "right"], ["gear"])
   readonly property var fallbackRows: [
     [["q","Q"],["w","W"],["e","E"],["r","R"],["t","T"],["y","Y"],["u","U"],["i","I"],["o","O"],["p","P"]],
     [["a","A"],["s","S"],["d","D"],["f","F"],["g","G"],["h","H"],["j","J"],["k","K"],["l","L"]],
@@ -138,12 +140,12 @@ Item {
     // second set of keys the board already draws would only take them away.
     if (root.form === "75")
       return ({ "delete": "insert", "home": "prtsc", "pgup": "scrlk", "pgdn": "pause",
-                "windows": "menu" })
-    // Tiling mode is the tap and the context menu is behind Fn, not the other
-    // way round. A tablet has no right click, so Menu is worth having at all,
-    // but arranging windows by touch is something you do constantly and Menu
-    // does nothing whatever in a terminal.
-    var map = ({ "BKSP": "delete", "windows": "menu" })
+                "gear": "menu" })
+    // Ragtop's controls are the tap and the context menu is behind Fn, not
+    // the other way round. A tablet has no right click, so Menu is worth
+    // having at all, but the controls are reached for far more often, and
+    // Menu does nothing whatever in a terminal.
+    var map = ({ "BKSP": "delete", "gear": "menu" })
     // The number row carries the function keys, as it does on every board
     // with no row of its own for them.
     for (var i = 1; i <= 12; i++) map["AE" + (i < 10 ? "0" + i : "" + i)] = "f" + i
@@ -303,7 +305,7 @@ Item {
     "left": "", "up": "", "down": "", "right": "",
     "shift": "", "backspace": "", "enter": "", "space": "",
     "symbols": "?123", "more": "#+=", "letters": root.lettersLabel, "settings": "",
-    "windows": "", "caps": "Caps", "menu": "Menu",
+    "gear": "", "caps": "Caps", "menu": "Menu",
     "fn": "Fn", "delete": "Del", "home": "Home", "end": "End",
     "pgup": "PgUp", "pgdn": "PgDn", "insert": "Ins",
     "prtsc": "PrtSc", "scrlk": "ScrLk", "pause": "Pause"
@@ -338,17 +340,25 @@ Item {
   // Keys Ragtop draws an icon for (KeyIcon.qml) instead of a label, so they
   // don't depend on the font carrying a glyph and scale with the keys.
   readonly property var iconKeys: ["left", "up", "down", "right", "shift", "backspace",
-                                   "enter", "settings", "windows"]
+                                   "enter", "settings"]
   // The focus arrows are the same four arrows, drawn under another name.
   readonly property var iconNames: ({
     // Super carries the system's mark, the way it does on a keyboard you
     // can touch.
-    "super": "omarchy"
+    "super": "omarchy",
+    // The gear key is Ragtop's controls, drawn as the gear they are.
+    "gear": "settings"
   })
   function iconFor(key) {
     var role = root.roleOf(root.effectiveKey(key))
     if (role in root.iconNames) return root.iconNames[role]
     return root.iconKeys.indexOf(role) !== -1 ? role : ""
+  }
+  // What a key's corner draws for what its hold reaches. Menu is a mark there
+  // and a word on a key of its own, where there is room to say it.
+  function hintIconFor(key) {
+    var opens = root.holdOpenFor(key)
+    return opens === "menu" ? "menu" : root.iconFor(opens)
   }
   function labelKind(key) {
     if (root.iconFor(key) !== "") return "drawn"
@@ -365,17 +375,20 @@ Item {
   // This is the same reason a key with variants types on release. That one
   // waits so a hold can become a popup, this one waits so the finger has
   // somewhere to lift from.
-  readonly property var liftKeys: ["windows"]
+  //
+  // The gear key opens Ragtop's controls over the keyboard rather than
+  // taking it away, and still waits: a panel that comes up under a finger
+  // still down is no better a place for that finger to lift.
+  readonly property var liftKeys: ["gear"]
 
   // Keys that repeat while held: pressed and released with the finger.
   readonly property var holdable: ["backspace", "left", "up", "down", "right",
                                    "delete", "pgup", "pgdn"]
 
   // Keys whose hold reaches something that is not a character, drawn small in
-  // the key's corner the way a cap prints what AltGr types on it. Super holds
-  // the gear: Ragtop's controls used to have a key of their own beside the
-  // space bar, and Super took that place, so the gear moved into Super's
-  // corner rather than onto a row that has no room to spare.
+  // the key's corner the way a cap prints what AltGr types on it. Super used
+  // to hold the gear, while Ragtop's controls had no key of their own; the
+  // gear key is that key now, and Super is plain Super again.
   //
   // A key here acts on release rather than on the way down, for the same
   // reason every character key does: the hold needs room to become the other
@@ -383,15 +396,12 @@ Item {
   // another finger arriving settles the hold as the tap it was. Hold Super,
   // tap B, and the browser opens with Super latched by commitPending.
   // Keyed by the drawn key where a board has more than one of something, and
-  // by role otherwise. Tiling mode briefly lived on a hold on the right
-  // Super, which was a use found for a key that had no business existing:
-  // that position is Fn now, and tiling is on the layer where it can be
-  // labelled.
-  // The tiling key holds the context menu. A 75% has no room for a Menu key
+  // by role otherwise.
+  // The gear key holds the context menu. A 75% has no room for a Menu key
   // and a tablet has no right click, so the one board that would otherwise
   // lose it keeps it, and the others gain a second way to it for nothing.
-  readonly property var holdOpensByKey: ({ "LWIN": "settings", "windows": "menu" })
-  readonly property var holdOpensByRole: ({ "super": "settings" })
+  readonly property var holdOpensByKey: ({ "gear": "menu" })
+  readonly property var holdOpensByRole: ({})
   function holdOpenFor(key) {
     if (key in root.holdOpensByKey) return root.holdOpensByKey[key]
     return root.holdOpensByRole[root.roleOf(key)] || ""
@@ -679,8 +689,8 @@ Item {
   // guessed: layout names are proportional text and vary a lot in length.
   TextMetrics {
     id: wordMetrics
-    font.family: root.theme.fontFamily
-    font.pixelSize: root.theme.wordSize
+    font.family: root.supportTheme.fontFamily
+    font.pixelSize: root.supportTheme.wordSize
   }
   function wordCell(items) {
     var widest = 0
@@ -760,7 +770,12 @@ Item {
     var rows = root.rowHeightsOf(form)
     var h = 0
     rows.forEach(function(f) { h += Math.round(root.keyHeightUncapped * f) })
-    var strip = root.stripShown ? Math.round(root.keyHeightUncapped * root.stripFraction) + root.theme.gap : 0
+    // Counted whenever a strip could appear, shown or not: a board chosen by
+    // height that changed with the strip would swap boards mid-sentence.
+    // At its compact height always: the board is chosen first, and only then
+    // is the strip given more room if there is some (stripFraction).
+    var strip = root.service.stripPossible ? Math.round(root.keyHeightUncapped * root.stripCompact) + root.theme.gap : 0
+    // (The same room stripSlot keeps, measured by the uncapped height.)
     return root.topPadding + strip + h + (rows.length - 1) * root.theme.gap + root.theme.padding
   }
 
@@ -803,22 +818,100 @@ Item {
   // affects which key a touch means.
   // A soft or bordered top edge (Setup › Tablet › Edge) gets its own space
   // above the keys, so it's clear of the first row.
-  readonly property real topPadding: root.theme.padding + root.theme.edgeFade + root.theme.edgeBorder
+  readonly property real topPadding: root.theme.padding
 
   // The suggestion strip, between the top edge and the first row, while
-  // there is something to fill it (Service.qml, suggestionsShown). As tall as
-  // the short extra row, give or take: it is read and tapped, not typed on.
-  readonly property bool stripShown: root.service.suggestionsShown === true
-  readonly property real stripFraction: 0.7
-  readonly property real stripHeight: root.stripShown ? Math.round(root.keyHeight * root.stripFraction) : 0
-  // Where the keys begin.
-  readonly property real keysTop: root.topPadding + (root.stripShown ? root.stripHeight + root.theme.gap : 0)
+  // there is something to fill it (Service.qml, suggestionsShown). Half a
+  // row, or a whole one where there is room (stripFraction): it is read and
+  // tapped, not typed on, and it is screen given up.
+  //
+  // It goes only while no finger is down, and comes whenever it is wanted.
+  // Its room above the keys is kept either way (stripSlot), so appearing
+  // moves no key, and a swipe brings it up the moment it starts, for the
+  // guess to show in while the finger is still drawing. It used to wait for
+  // the fingers to lift, from when appearing pushed every key down by its
+  // height and would have moved them out from under a touch. Without room
+  // kept, which is when no strip is possible at all, that still holds.
+  readonly property bool stripWanted: root.service.suggestionsShown === true
+  property bool stripShown: false
+  property real demoStripProgress: 1
+  readonly property bool touching: Object.keys(root.held).length > 0 || root.swipe !== null
+    || root.popup !== null || root.stripTouch !== null || root.pendingPoint !== -1
+  function syncStrip() {
+    if (root.stripShown === root.stripWanted) return
+    if (!root.touching || (root.stripWanted && root.stripSlot > 0)) root.stripShown = root.stripWanted
+  }
+  onStripWantedChanged: root.syncStrip()
+  onTouchingChanged: {
+    root.lastTouchAt = Date.now()
+    root.syncStrip()
+    root.syncReserved()
+  }
+  onReservedHeightChanged: if (root.service.touchTrace)
+    root.service.traceTouch({ t: Date.now(), ev: "room", id: -1, x: 0, y: 0,
+                              what: "space reserved: " + Math.round(root.reservedHeight) + " px" })
+  // Half a row where the screen is short of room, and a full row, a bigger
+  // target, where the board the screen would choose fits within the height
+  // budget (maxHeight, half the screen) even with a full row of strip. The
+  // board is chosen with the compact strip counted, so a taller strip never
+  // costs a layout, and nothing here changes while typing: the form, the
+  // uncapped height and the budget are all that it asks about.
+  readonly property real stripCompact: 0.5
+  readonly property real stripFraction: root.maxHeight > 0 && root.formHeightOf(root.form)
+      + Math.round(root.keyHeightUncapped * (1 - root.stripCompact)) < root.maxHeight
+    ? 1 : root.stripCompact
+  //
+  // Its room is kept above the keys whenever a strip could appear, shown or
+  // not, so the keyboard's surface never changes height as it comes and goes:
+  // the compositor places a resized layer surface a frame late, and the keys
+  // jumped. Hidden, that room is clear and lets touches through, and only the
+  // visible part is drawn, taken for touches and reserved (visibleHeight).
+  readonly property real stripSlot: root.service.stripPossible
+    ? Math.round(root.keyHeight * root.stripFraction) + root.theme.gap : 0
+  readonly property real stripHeight: Math.max(0, root.stripSlot - root.theme.gap)
+  // Where the keys begin, the same whether the strip is shown or not.
+  readonly property real keysTop: root.topPadding + root.stripSlot
+  // How much of the keyboard is there to see, from the bottom.
+  readonly property real visibleHeight: root.implicitHeight
+    - (root.stripShown || root.service.tourActive === true ? 0 : root.stripSlot)
+  // What the keyboard reserves on screen, which the windows above make room
+  // for. It follows visibleHeight, but only while no finger is down: making
+  // room resizes every window above, the compositor holds the keyboard's
+  // frames while they redraw, and a strip coming up as a swipe started
+  // left the key and the trail undrawn for most of a second, so the swipe
+  // seemed to start further along. The strip may still show at once, over
+  // the bottom of the window above until the finger lifts.
+  //
+  // Room is given back only once the fingers have rested a moment
+  // (giveBackAfter), not as soon as the strip empties: a strip that went
+  // between a hyphen and the swipe after it resized the windows as the
+  // swipe began, and the swipe was read from partway along. Taking more
+  // room is not held back, since it only ever follows a strip that is
+  // already showing.
+  property real reservedHeight: 0
+  readonly property int giveBackAfter: 1000
+  property real lastTouchAt: 0
+  function syncReserved() {
+    if (root.touching || root.reservedHeight === root.visibleHeight) return
+    var rested = Date.now() - root.lastTouchAt
+    if (root.visibleHeight > root.reservedHeight || rested >= root.giveBackAfter)
+      root.reservedHeight = root.visibleHeight
+    else
+      giveBack.restart()
+  }
+  Timer {
+    id: giveBack
+    interval: root.giveBackAfter
+    onTriggered: root.syncReserved()
+  }
+  onVisibleHeightChanged: root.syncReserved()
+  Component.onCompleted: root.reservedHeight = root.visibleHeight
 
   // Keys that hold a width of their own on the top row, whatever else is
-  // sharing it. The windows toggle keeps one place and one size on every
+  // sharing it. The gear keeps one place and one size on every
   // page, which is what makes it read as a switch rather than another key,
   // the way Super does on the row below.
-  readonly property var topRowFixed: ({ "windows": 1 })
+  readonly property var topRowFixed: ({ "gear": 1 })
 
   // A row that comes up short is stretched to the keyboard's width by its
   // own stretchy keys, rather than floating in the middle with a gap at
@@ -909,7 +1002,7 @@ Item {
         // second Super is there so a touch typist can hit one without
         // leaving home position, and nobody touch types on this.
         [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-          key("RALT", 1.25), key("FN", 1.25), key("windows", 1.25), key("RCTL", 1.25)], []]
+          key("RALT", 1.25), key("FN", 1.25), key("gear", 1.25), key("RCTL", 1.25)], []]
       ]
     } else if (form === "75") {
       // Compressed: the extra column sits hard against the main block with
@@ -917,9 +1010,9 @@ Item {
       // across the block rather than grouped in fours, for the same reason
       // and because a bigger key is worth more here than a familiar gap, but
       // it stops where the block stops so Del sits over the column below it.
-      // There is no room for a Menu key, so the tiling key holds it. Right
+      // There is no room for a Menu key, so the gear key holds it. Right
       // of the space bar is three keys of one unit, right Alt, Fn and then
-      // the key that would be the right Ctrl, which is the tiling key here
+      // the key that would be the right Ctrl, which is the gear key here
       // as it is on every board. That is the bottom row a physical 75% has,
       // and it leaves the space bar the 6.25 units a keycap set makes it.
       var fRow = ["ESC"].concat(root.positions("FK", 1, 12))
@@ -930,7 +1023,7 @@ Item {
         [mainRows[2], [key("pgdn")]],
         [shift.concat([key("RTSH", 1.75), key("up")]), [key("end")]],
         [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-          key("RALT"), key("FN"), key("windows"), key("left"), key("down")],
+          key("RALT"), key("FN"), key("gear"), key("left"), key("down")],
          [key("right")]]
       ]
     } else {
@@ -947,10 +1040,10 @@ Item {
         [mainRows[1], [gap(0.25), key("delete"), key("end"), key("pgdn")]],
         [mainRows[2], [gap(3.25)]],
         [shift.concat([key("RTSH", 2.75)]), [gap(1.25), key("up"), gap(1)]],
-        // The right Super gives way to tiling here as it does everywhere
+        // The right Super gives way to the gear here as it does everywhere
         // else, and this board has the room to keep its Menu key as well.
         [[key("LCTL", 1.25), key("LWIN", 1.25), key("LALT", 1.25), key("SPCE", 6.25),
-          key("RALT", 1.25), key("windows", 1.25), key("menu", 1.25), key("RCTL", 1.25)],
+          key("RALT", 1.25), key("gear", 1.25), key("menu", 1.25), key("RCTL", 1.25)],
          [gap(0.25), key("left"), key("down"), key("right")]]
       ]
     }
@@ -980,8 +1073,8 @@ Item {
   }
 
   // The mobile layout: an extra row of desktop keys over the page's own rows.
-  // The extra row spreads over the full width, less whatever the windows
-  // toggle holds at the end of it, and the page rows take their widths from
+  // The extra row spreads over the full width, less whatever the gear holds
+  // at the end of it, and the page rows take their widths from
   // the table and then stretch to reach the edges.
   function mobileRows(page) {
     var fixed = 0, sharers = 0
@@ -1040,16 +1133,14 @@ Item {
     id: keysBounds
     x: Math.max(0, root.keysLeft - root.theme.gap)
     width: Math.min(root.width - x, root.keysRight - root.keysLeft + 2 * root.theme.gap)
-    y: 0
-    height: root.height
+    y: root.height - root.visibleHeight
+    height: root.visibleHeight
   }
-  // What the surface takes touches on (the service masks it to this): you
-  // can only touch through the keyboard where it isn't there. With a drawn
-  // background the whole surface takes them, so a tap in the margins does
-  // nothing rather than reaching a window the background hides. When the
-  // background is fully clear there is nothing to hide, and the margins
-  // pass taps through, so tapping away from a menu closes it.
-  readonly property Item touchArea: root.theme.backgroundVisible ? root : keysBounds
+  // What the surface takes touches on (the service masks it to this): the
+  // keys' own extent and the strip's while it shows. There is no background
+  // to hide anything, so the margins beside the keys pass taps through to
+  // what is behind them, and tapping away from a menu closes it.
+  readonly property Item touchArea: keysBounds
 
   implicitHeight: slotsBottom + theme.padding
 
@@ -1136,6 +1227,9 @@ Item {
         : mods["super"] === "latched" ? "latched" : "accent"
     if (role in mods) return mods[role] === "locked" ? "locked" : mods[role] === "latched" ? "latched" : "special"
     if (role === "enter") return "accent"
+    // The gear is drawn as an active Shift is while the controls it opened
+    // are up, so it says what tapping it again will put away.
+    if (role === "gear") return root.service.toolsOpen ? "latched" : "special"
     // The space bar goes with them rather than with the letters, though it
     // does type a character: it is part of the frame around the letters, it
     // carries the layout's name instead of a legend, and no one hunts for it.
@@ -1154,6 +1248,38 @@ Item {
     return names
   }
 
+  // A capital due at the start of a sentence (Service.qml, capitalNext)
+  // latches Shift for the next key, shown as latched, as on a phone. Only a
+  // Shift that is off is latched this way, and only one latched this way is
+  // let go again when the capital stops being due: a Shift set by hand is
+  // the hand's.
+  //
+  // Applied once the key that caused it is done, not at once: the space
+  // after a full stop is what makes a capital due, and that space's own
+  // afterKey lets go of a latched Shift, so latching it straight away had it
+  // let go again in the same instant.
+  property bool autoShifted: false
+  readonly property bool capitalNext: root.service.capitalNext === true
+  onCapitalNextChanged: Qt.callLater(root.applyCapital)
+  function applyCapital() {
+    if (root.capitalNext && root.mods.shift === "off") {
+      root.setMod("shift", "latched")
+      root.autoShifted = true
+    } else if (!root.capitalNext && root.autoShifted) {
+      if (root.mods.shift === "latched") root.setMod("shift", "off")
+      root.autoShifted = false
+    }
+  }
+
+  // The modifiers for a key that is not a character, Enter, Tab, an arrow.
+  // A Shift the keyboard latched itself for a capital is for the next
+  // letter and goes with none of these: Enter after a full stop went out as
+  // Shift+Enter, which editors take for another kind of line break.
+  function namedKeyMods() {
+    var m = activeMods(true)
+    return root.autoShifted ? m.filter(function(x) { return x !== "shift" }) : m
+  }
+
   function setMod(name, state) {
     var next = Object.assign({}, mods)
     next[name] = state
@@ -1162,9 +1288,13 @@ Item {
 
   // Latched modifiers are used up by the next key.
   function afterKey() {
+    root.autoShifted = false
     var next = Object.assign({}, mods)
     for (var m in next) if (next[m] === "latched") next[m] = "off"
     mods = next
+    // A capital may still be due after this key, a space swallowed after a
+    // full stop Ragtop spaced itself, with nothing changing to say so.
+    Qt.callLater(root.applyCapital)
   }
 
   // Off, then latched for the next key, then locked, then off again. The
@@ -1181,6 +1311,13 @@ Item {
   // key, off. A tap while it is locked still lets go: that lock can only
   // have come over from the mobile board, which locks Shift by a second tap.
   function tapModifier(name) {
+    // A Shift the keyboard latched itself for a capital is put away by a
+    // tap, as on a phone: the tap says no capital, not caps lock.
+    if (name === "shift" && root.autoShifted) {
+      root.autoShifted = false
+      setMod("shift", "off")
+      return
+    }
     var state = mods[name]
     if (state === "off") {
       setMod(name, "latched")
@@ -1203,12 +1340,12 @@ Item {
       return
     }
     if (role in mods) { tapModifier(role); return }
-    if (role === "windows") {
-      // Straight into tiling, rather than to a page of keys that say the
-      // same things. It waits for the finger to lift because it takes the
-      // keyboard off the screen: see liftKeys.
+    if (role === "gear") {
+      // Ragtop's controls, over the keyboard, so the keys stay under them
+      // while you change how they look. A tap anywhere on the keys puts them
+      // away again.
       root.afterKey()
-      root.service.openTiling()
+      root.service.toolsOpen = !root.service.toolsOpen
       return
     }
     switch (role) {
@@ -1224,11 +1361,20 @@ Item {
       return
     }
     if (holdable.indexOf(role) !== -1) {
-      service.sendKeys(["down", keysyms[role]].concat(activeMods(true)).join(" "))
+      // Pressed once now and again while held, by the keyboard rather than
+      // by the application's own repeat, so every BackSpace and arrow passes
+      // through the service, which then knows what it did (noteTyped). With
+      // the application repeating, a held BackSpace took an unknown number
+      // of characters and the line was lost.
+      var command = ["key", keysyms[role]].concat(namedKeyMods()).join(" ")
+      service.sendKeys(command)
+      root.repeating = command
+      keyRepeat.interval = root.service.repeatDelay
+      keyRepeat.restart()
       return
     }
     if (role in keysyms) {
-      service.sendKeys(["key", keysyms[role]].concat(activeMods(true)).join(" "))
+      service.sendKeys(["key", keysyms[role]].concat(namedKeyMods()).join(" "))
     } else {
       // A character: typed as itself unless Ctrl, Alt or Super make it a
       // shortcut, which goes by the key (Ctrl+C, not Ctrl+"C"). A real
@@ -1251,9 +1397,112 @@ Item {
       return
     }
     if (holdable.indexOf(role) !== -1) {
-      service.sendKeys("up " + keysyms[role])
+      keyRepeat.stop()
+      root.repeating = ""
       afterKey()
     }
+  }
+
+  // The key held down, as sent, repeated after Hyprland's delay at its rate.
+  property string repeating: ""
+  Timer {
+    id: keyRepeat
+    repeat: true
+    onTriggered: {
+      if (root.repeating === "") { stop(); return }
+      root.service.sendKeys(root.repeating)
+      interval = root.service.repeatInterval
+    }
+  }
+
+  // ---- Swiping words away ---------------------------------------------------
+
+  // BackSpace is a tap, a hold or a slide, and the last two are the same
+  // thing: choosing whole words to delete, named in a label over the key.
+  // A tap deletes a letter, when the finger lifts, as every character key
+  // answers on the way up, so a hold has room to be one. Held still, the
+  // label comes up naming the nearest word (eraseHold); slid left, it names
+  // one more for every stretch, held or not; slid back right past where the
+  // finger landed, it names none, and lifting deletes nothing. Lifting with
+  // words named deletes them. Holding never repeats: the arrows do, and a
+  // sentence goes faster as its words.
+  // { pointId, x, count, started, words }, or null.
+  property var erase: null
+  readonly property real eraseStart: root.unit * 0.5
+  readonly property real eraseStep: root.unit * 0.6
+  // Back past where the finger landed by this much is none.
+  readonly property real eraseCancel: root.unit * 0.4
+  // The most it will select. The label's width is the usual limit
+  // (eraseFits); this only bounds the asking.
+  readonly property int eraseMost: 40
+  Timer {
+    id: eraseHold
+    interval: 420
+    onTriggered: {
+      var e = root.erase
+      if (e && !e.started) root.setErase(e, 1, true)
+    }
+  }
+  function setErase(e, count, started) {
+    var words = count > 0 ? root.service.wordsBefore(count) : []
+    // No further than the label can show.
+    while (count > Math.max(1, e.count) && !root.eraseFits(root.eraseLabelFor(count, words))) {
+      count--
+      words = words.slice(0, count)
+    }
+    if (count === e.count && started === e.started) return
+    root.erase = { pointId: e.pointId, x: e.x, y: e.y, count: count, started: started, words: words }
+    // ragtop touch-trace: how many it could name, never which.
+    if (root.service.touchTrace && count > 0)
+      root.service.traceTouch({ t: Date.now(), ev: "words", id: e.pointId, x: 0, y: 0,
+                                what: "delete " + count + ", named " + words.length
+                                  + (words.length < count ? " (" + root.service.recordState() + ")" : "") })
+  }
+  // A tap on BackSpace: one, with whatever modifiers are on, Ctrl+BackSpace
+  // being the application's own delete-a-word.
+  function tapBackSpace() {
+    root.service.sendKeys(["key", "BackSpace"].concat(root.namedKeyMods()).join(" "))
+    root.afterKey()
+  }
+  function eraseMoved(p) {
+    var e = root.erase
+    var dx = e.x - p.x
+    // A finger on BackSpace that sets off anywhere means words: nothing
+    // starts a swipe from BackSpace, so the list comes up as soon as it
+    // moves, held or not, without waiting for the hold or a slide left.
+    // A third of a key, past the wobble of a tap, which must stay a letter.
+    var moving = Math.hypot(dx, p.y - (e.y === undefined ? p.y : e.y)) > root.unit / 3
+    var count
+    if (dx >= root.eraseStart)
+      count = Math.min(root.eraseMost, 1 + Math.floor((dx - root.eraseStart) / root.eraseStep))
+    else if (e.started || moving)
+      count = dx <= -root.eraseCancel ? 0 : 1
+    else
+      count = 0
+    var started = e.started || count > 0
+    if (started && !e.started) eraseHold.stop()
+    if (count === e.count && started === e.started) return
+    root.setErase(e, count, started)
+  }
+  // What the label says: every word it will delete, as far as Ragtop typed
+  // them, and a count for any it cannot name. Never cut short: what goes
+  // must be seen going, so a selection that would not fit across the
+  // keyboard stops growing instead (setErase), and the rest is a second
+  // hold away.
+  function eraseLabelFor(count, words) {
+    if (count === 0) return ""
+    var named = words.slice().reverse().join("").trim()
+    var more = count - words.length
+    if (named === "") return root.service.tn("erase.words", count)
+    return more > 0 ? root.service.tn("erase.wordsAnd", more, named) : named
+  }
+  readonly property string eraseLabel: root.erase ? root.eraseLabelFor(root.erase.count, root.erase.words) : ""
+  FontMetrics { id: eraseMetrics; font.family: root.theme.fontFamily; font.pixelSize: root.eraseFontSize }
+  readonly property int eraseFontSize: Math.round(root.keyHeight * 0.4)
+  // Whether a label fits across the keyboard, over the card it is drawn on.
+  function eraseFits(text) {
+    var w = eraseMetrics.advanceWidth("\u232b " + text) + 2 * root.theme.padding + 2 * root.theme.gap
+    return w <= root.width - 2 * root.theme.padding
   }
 
   // A hold in progress: the finger that started it and the key under it,
@@ -1307,6 +1556,8 @@ Item {
   // again. The pending hold goes with it, since the key it belongs to is
   // somewhere else now too.
   function cancelTouches() {
+    root.erase = null
+    eraseHold.stop()
     if (root.swipe !== null) {
       root.swipe = null
       trail.requestPaint()
@@ -1315,19 +1566,18 @@ Item {
     if (root.stripTouch !== null) {
       root.stripTouch = null
       strip.pressedIndex = -1
+      formsHold.stop()
     }
     if (root.popup === null && root.pendingPoint === -1) return
     root.popup = null
     holdTimer.stop()
     root.pendingPoint = -1
     root.pendingKey = ""
-    var was = root.held
     root.held = ({})
-    // A key sent down has to be sent up whatever else happens, or it
-    // repeats for as long as the shell is running.
-    for (var id in was)
-      if (root.holdable.indexOf(was[id]) !== -1)
-        root.service.sendKeys("up " + root.keysyms[was[id]])
+    // A held key stops repeating whatever else happens, or it repeats for as
+    // long as the shell is running.
+    keyRepeat.stop()
+    root.repeating = ""
   }
   onWidthChanged: root.cancelTouches()
   onHeightChanged: root.cancelTouches()
@@ -1358,12 +1608,18 @@ Item {
     var key = root.pendingKey
     // One thing behind a key is not a card. A card of a single cell would ask
     // for a slide onto it and give nothing back for the trouble, so this acts
-    // straight away and the finger has nothing left to do. endHold is what
-    // stops the lift also counting as a tap: with no hold pending and no card
-    // open, the finger falls through to release(), which Super ignores.
+    // straight away and the finger has nothing left to do. The finger is
+    // let go of here as well as the hold: a key that acts on release, as the
+    // gear does, would otherwise take the lift for its tap, and Menu was
+    // followed by the controls opening. Super never showed this only because
+    // it does nothing on release.
     var opens = root.holdOpenFor(key)
     if (opens !== "") {
+      var point = root.pendingPoint
       root.endHold()
+      var held = Object.assign({}, root.held)
+      delete held[point]
+      root.held = held
       root.press(opens)
       return
     }
@@ -1425,17 +1681,17 @@ Item {
 
   // Which cell the finger is on. Sliding well below the popup takes
   // nothing, the way letting go somewhere else cancels on a phone.
-  function selectAt(x, y) {
-    var p = root.popup
-    if (!p) return
-    var index = -1
+  // Whether (x, y) is on the open card, as far as choosing from it goes.
+  // One test for choosing (selectAt) and for leaving it for a swipe
+  // (cardToSwipe), so the two can never disagree about where the card is.
+  function onCard(p, x, y) {
     // Nothing is chosen until the finger is on the card, for either kind.
     // Resting on the key it came down on is not a choice: that is the slow
     // tap choosePopup types the plain key for. Characters get a little
     // grace above, where a finger reaching up can overshoot, and down to
     // the gap between the card and the key, so there is no dead band at
     // the edge the finger arrives through.
-    var within = p.kind === "layouts"
+    var within = p.kind !== "chars"
       ? (y >= p.y && y <= p.y + p.cellHeight)
       : (y >= p.y - p.cellHeight / 2 && y <= p.y + p.cellHeight + root.theme.gap)
     // A card beside its key shares a row with it, so being level with the
@@ -1443,13 +1699,60 @@ Item {
     // the card's end, and that must stay no choice at all rather than be
     // rounded to the nearest cell.
     if (within && p.beside && (x < p.x || x > p.x + p.items.length * p.cellWidth)) within = false
-    if (within) {
+    return within
+  }
+
+  function selectAt(x, y) {
+    var p = root.popup
+    if (!p) return
+    var index = -1
+    if (root.onCard(p, x, y)) {
       index = Math.max(0, Math.min(p.items.length - 1, Math.floor((x - p.x) / p.cellWidth)))
     }
     if (index === p.index) return
     var next = Object.assign({}, p)
     next.index = index
     root.popup = next
+  }
+
+  // A hold that opened a letter's card and then sets off across the keys was
+  // a swipe that paused before it started, to find the next letter: the card
+  // closes and the finger draws from where it landed. Only away from the
+  // card, a key or more from that place and onto another letter, so a finger
+  // reaching up to the card, or drifting on its key, still chooses from it.
+  function cardToSwipe(point) {
+    var p = root.popup
+    var w = root.swipe
+    if (!p || p.kind !== "chars" || !w || w.pointId !== point.pointId || w.swiping) return false
+    if (root.onCard(p, point.x, point.y)) return false
+    var start = w.points[0]
+    if (root.headingFor(p, start, point)) return false
+    if (Math.hypot(point.x - start[0], point.y - start[1]) < root.unit) return false
+    var over = root.keyAt(point.x, point.y)
+    if (over === null || over === w.key || !root.isLetterKey(over)) return false
+    root.popup = null
+    root.popupTravelled = false
+    root.endHold()
+    w.points.push([point.x, point.y])
+    w.swiping = true
+    trail.requestPaint()
+    root.service.swipeDrawn(w.points.slice())
+    return true
+  }
+
+  // Whether a finger is on its way to the card: rising, and on a line from
+  // where it landed that reaches the card's row within the card's ends, give
+  // or take half a key. The straight way to a far cell, ę at the end of e's
+  // card, slants up across the letters beside the key before it reaches the
+  // card's row, and those letters must not make it a swipe. A card beside
+  // its key needs none of this: the way to it runs over the card itself.
+  function headingFor(p, start, point) {
+    if (p.beside) return false
+    var rise = start[1] - point.y
+    if (rise < root.unit * 0.15) return false
+    var cardY = p.y + p.cellHeight / 2
+    var x = start[0] + (point.x - start[0]) * (start[1] - cardY) / rise
+    return x >= p.x - root.unit / 2 && x <= p.x + p.items.length * p.cellWidth + root.unit / 2
   }
 
   function choosePopup() {
@@ -1459,6 +1762,10 @@ Item {
     root.popup = null
     root.endHold()
     if (!p) return
+    if (p.kind === "forms") {
+      if (p.index >= 0) root.service.takeForm(p.items[p.index])
+      return
+    }
     if (p.index < 0) {
       // A finger that never went anywhere was a slow tap on the key, and
       // types it. The space bar has already typed by the time its hold
@@ -1473,7 +1780,9 @@ Item {
         return
       }
       if (root.service.imeEngine) root.service.leaveEngine()
-      if (p.index !== root.activeLayout) root.service.switchLayout(p.index)
+      // Labels can lag behind Hyprland (or its event connection can drop).
+      // An explicit selection must still reach the compositor.
+      root.service.switchLayout(p.index)
       return
     }
     root.service.sendKeys("type " + p.items[p.index])
@@ -1488,43 +1797,130 @@ Item {
     return keys
   }
 
-  // The background and top edge, shared with the picker nav strip.
-  KeyboardSurface {
-    anchors.fill: parent
-    theme: root.theme
+  // While the controls are up, the room between the keys is dimmed as the
+  // rest of the screen is (Service.qml, toolsScrim), so the keys stand out
+  // of one dim whole rather than the dimming stopping at the keyboard's edge.
+  Rectangle {
+    id: dimmed
+    opacity: root.service.dimmed === true ? 1 : 0
+    visible: opacity > 0
+    Behavior on opacity { NumberAnimation { duration: root.service.dimFade } }
+    y: root.height - root.visibleHeight
+    width: root.width
+    height: root.visibleHeight
+    color: root.service.scrimColor
+  }
+
+  // Everything the keyboard draws and takes touches on, laid out from the
+  // bottom: the strip, the keys, their cards, a swipe's trail and the touch
+  // layer, which all share these coordinates. The window is anchored to the
+  // bottom of the screen and the compositor applies a new height a frame or
+  // two after it is asked for, so laid out from the top, the keys jumped
+  // down as the strip came and back as the window caught up. From the
+  // bottom, only the top edge moves.
+  Item {
+    id: board
+    x: 0
+    y: root.height - root.implicitHeight
+    width: root.width
+    height: root.implicitHeight
   }
 
   SuggestionStrip {
     id: strip
+    parent: board
+    keyKind: "accent"
     visible: root.stripShown
-    theme: root.theme
+    theme: root.supportTheme
     x: Math.max(root.theme.padding, root.keysLeft)
     y: root.topPadding
     width: Math.min(root.width - root.theme.padding, root.keysRight) - x
     height: root.stripHeight
-    items: root.service.suggestions.items
-    cursor: root.service.suggestions.cursor
-    hasPrev: root.service.suggestions.prev
-    hasNext: root.service.suggestions.next
+    textHeight: Math.round(root.keyHeight * root.stripCompact)
+    entranceProgress: root.demoStripProgress
+    items: root.stripModel.items
+    cursor: root.stripModel.cursor
+    hasPrev: root.stripModel.prev
+    hasNext: root.stripModel.next
     idleText: root.service.imeEngine ? root.engineName(root.service.imeEngine) : ""
   }
 
-  // A finger on the strip: { pointId, x, scroll, cell, scrolled }, or null.
-  // It scrolls once it has travelled, and chooses what it landed on if it
-  // lifts without having.
+  // A finger on the strip: { pointId, x, scroll, cell, scrolled, shown,
+  // field }, or null. It scrolls once it has travelled, and chooses what it
+  // landed on if it lifts without having.
+  //
+  // What the strip showed when the finger came down (shown) stays drawn
+  // until it lifts: suggestions arrive whenever the suggester answers, and
+  // one that came mid-tap used to put a different word under the finger,
+  // which the lift then took. If they have changed underneath by the lift,
+  // or another field has taken focus, the tap takes nothing (stripStill)
+  // rather than a word that was never there to be seen.
   property var stripTouch: null
+  readonly property var stripModel: root.stripTouch !== null ? root.stripTouch.shown : root.service.suggestions
+  function stripStill(t) {
+    var now = root.service.suggestions, then = t.shown
+    if (root.service.fieldGeneration !== t.field) return false
+    return now === then || (now.source === then.source && now.cursor === then.cursor
+      && now.prev === then.prev && now.next === then.next
+      && JSON.stringify(now.items) === JSON.stringify(then.items))
+  }
 
   function stripPressed(p) {
     var x = p.x - strip.x
     root.stripTouch = { pointId: p.pointId, x: p.x, scroll: strip.scroll,
-                        cell: strip.cellAt(x), scrolled: false }
+                        cell: strip.cellAt(x), scrolled: false,
+                        shown: root.service.suggestions, field: root.service.fieldGeneration }
     strip.pressedIndex = root.stripTouch.cell
+    // A hold on a word offers its other forms (formsHold).
+    if (root.stripTouch.cell >= 0 && root.stripTouch.shown.source !== "offer") formsHold.restart()
+  }
+
+  // ---- A word's other forms ------------------------------------------------
+
+  // A hold on a word in the strip asks for its forms, summed and sums for
+  // sum, and they come up on a card below the strip, which the finger slides
+  // down onto and lifts from, as on a key's card. Nothing to offer, or a
+  // finger that lifts first, and the hold was a tap on the word.
+  Timer { id: formsHold; interval: 420; onTriggered: root.askForms() }
+  property string formsWord: ""
+  function askForms() {
+    var t = root.stripTouch
+    if (!t || t.scrolled || t.cell < 0 || !root.stripStill(t)) return
+    var item = t.shown.items[t.cell]
+    if (!item) return
+    root.formsWord = item.text
+    root.service.askForms(item.text)
+  }
+  Connections {
+    target: root.service
+    function onFormsArrived(word, forms) {
+      var t = root.stripTouch
+      if (!t || t.scrolled || word !== root.formsWord || forms.length === 0) return
+      root.openForms(t, forms)
+    }
+  }
+  function openForms(t, forms) {
+    var c = strip.cells[t.cell]
+    var room = root.width - 2 * root.theme.padding
+    var cell = Math.min(root.wordCell(forms), room / forms.length)
+    var total = cell * forms.length
+    // Centred on the word held, kept on the keyboard.
+    var middle = strip.x + strip.listLeft + c.x - strip.scroll + c.width / 2
+    var x = Math.min(Math.max(middle - total / 2, root.theme.padding), root.width - root.theme.padding - total)
+    root.popupTravelled = false
+    root.popup = { key: "", kind: "forms", items: forms, pointId: t.pointId, index: -1, preset: -1,
+                   x: x, y: root.keysTop, beside: false, cellWidth: cell,
+                   cellHeight: Math.round(root.keyHeight * 0.8) }
+    // The finger is the card's now.
+    root.stripTouch = null
+    strip.pressedIndex = -1
   }
 
   function stripMoved(p) {
     var t = root.stripTouch
     if (!t.scrolled && Math.abs(p.x - t.x) < root.unit * 0.3) return
     t.scrolled = true
+    formsHold.stop()
     strip.pressedIndex = -1
     strip.scrollTo(t.scroll - (p.x - t.x))
   }
@@ -1583,6 +1979,9 @@ Item {
     if (Math.hypot(p.x - last[0], p.y - last[1]) < root.unit * 0.1) return w.swiping
     w.points.push([p.x, p.y])
     if (!w.swiping) {
+      // Most of a key from where it landed, and onto another letter. A full
+      // key was tried, for a thumb's drift, and made every swipe feel late
+      // to start: drift now cancels nothing anyway (moved).
       var gone = Math.hypot(p.x - w.points[0][0], p.y - w.points[0][1]) > root.unit * 0.75
       var over = root.keyAt(p.x, p.y)
       if (!gone || over === null || over === w.key || !root.isLetterKey(over)) return false
@@ -1613,6 +2012,7 @@ Item {
   // The path being drawn, so the finger can see where it has been.
   Canvas {
     id: trail
+    parent: board
     anchors.fill: parent
     z: 9
     onPaint: {
@@ -1632,26 +2032,214 @@ Item {
     }
   }
 
+  // ---- The tour's demonstrations ---------------------------------------------
+
+  // The tour (Tour.qml) points at keys and shows what they do without a
+  // finger: a card opened as a hold would open it, modifiers set as taps
+  // would set them, a trail drawn as a swipe would draw it. Nothing here
+  // types. The tour's layer takes every touch while it runs, so no real
+  // finger ever meets these, and demoClear puts all of it back.
+
+  // A touch point id no finger has, for the cards the tour opens.
+  readonly property int demoPoint: 1000000
+
+  // Where a key is, in this item: the first one with that role ("super",
+  // "gear", "space", "shift", "fn", "altgr"), or the key that types that
+  // letter. null when this board has none.
+  function demoSlot(name) {
+    for (var i = 0; i < root.slots.length; i++) {
+      var s = root.slots[i]
+      var lv = root.grid[s.key]
+      var c = lv ? lv[0] : s.key
+      if (root.roleOf(s.key) === name || (name.length === 1 && c === name)) return s
+    }
+    return null
+  }
+  function demoRect(name) {
+    var r = name === "strip" ? (root.stripShown || root.service.tourActive === true ? strip : null)
+      : name === "popup" ? (root.popup ? popupLayer : null)
+      : name === "erase" ? (erasePreview.visible ? erasePreview : null)
+      // The keys, and the strip's room wherever there is one, shown or not,
+      // so a strip arriving does not change what is lit.
+      : name === "keys" ? { x: root.keysLeft, y: root.stripSlot > 0 ? root.topPadding : root.keysTop,
+                            width: root.keysRight - root.keysLeft,
+                            height: root.slotsBottom - (root.stripSlot > 0 ? root.topPadding : root.keysTop) }
+      : root.demoSlot(name)
+    if (!r) return null
+    return { x: r.x, y: board.y + r.y, width: r.width, height: r.height }
+  }
+
+  // That key down under a finger, and nothing more yet: the moment before a
+  // hold opens its card. False when this board has no such key.
+  function demoPress(name) {
+    root.cancelTouches()
+    var s = root.demoSlot(name)
+    if (!s) return false
+    var held = {}
+    held[root.demoPoint] = s.key
+    root.held = held
+    return true
+  }
+  // The card a hold on that key opens, false when it has none.
+  function demoHold(name) {
+    root.cancelTouches()
+    var s = root.demoSlot(name)
+    if (!s) return false
+    root.pendingPoint = root.demoPoint
+    root.pendingKey = s.key
+    // Down under its finger, as a held key is.
+    var held = {}
+    held[root.demoPoint] = s.key
+    root.held = held
+    root.pendingX = s.x + s.width / 2
+    root.pendingY = s.y + s.height / 2
+    root.openPopup()
+    holdTimer.stop()
+    if (root.popup === null) { root.endHold(); root.held = ({}) }
+    return root.popup !== null
+  }
+  // Which cell of the open card looks chosen, -1 for none.
+  function demoChoose(index) {
+    if (root.popup === null) return
+    var next = Object.assign({}, root.popup)
+    next.index = index < next.items.length ? index : -1
+    root.popup = next
+  }
+  // The forms card for the strip's word at that index.
+  function demoForms(index, forms) {
+    root.cancelTouches()
+    if (!root.stripShown || !strip.cells[index]) return
+    root.openForms({ pointId: root.demoPoint, cell: index }, forms)
+  }
+
+  // A swipe through the letters of word, drawn as far as progress (0 to 1)
+  // along it. Letters this layout does not have are left out of the path.
+  // A finger turns in curves and never quite hits a key's centre, so the
+  // path is a Catmull-Rom curve through points a little off each centre,
+  // and a doubled letter is one stop, as it is for a real swipe.
+  function demoSwipe(word, progress) {
+    var centres = root.letterCentres.keys
+    var stops = []
+    for (var i = 0; i < word.length; i++) {
+      var c = centres[word[i]]
+      if (!c || (i > 0 && word[i] === word[i - 1])) continue
+      // Off centre by a fixed amount per letter, so it is the same each time.
+      var wobble = ((word.charCodeAt(i) * 37) % 21 - 10) / 10
+      stops.push([c[0] + wobble * root.unit * 0.12, c[1] - wobble * root.unit * 0.08])
+    }
+    if (stops.length < 2 || progress <= 0) {
+      if (root.swipe !== null) { root.swipe = null; trail.requestPaint() }
+      if (root.demoPoint in root.held) root.held = ({})
+      return
+    }
+    // The key the finger came down on stays down for the whole swipe, as it
+    // does under a real one.
+    var first = root.demoSlot(word[0])
+    if (first && root.held[root.demoPoint] !== first.key) {
+      var held = {}
+      held[root.demoPoint] = first.key
+      root.held = held
+    }
+    var steps = 24
+    var points = []
+    for (var j = 0; j < stops.length - 1; j++) {
+      var p0 = stops[Math.max(0, j - 1)], p1 = stops[j], p2 = stops[j + 1]
+      var p3 = stops[Math.min(stops.length - 1, j + 2)]
+      for (var k = 0; k < steps; k++) {
+        var t = k / steps, t2 = t * t, t3 = t2 * t
+        points.push([0, 1].map(function(a) {
+          return 0.5 * (2 * p1[a] + (p2[a] - p0[a]) * t
+                        + (2 * p0[a] - 5 * p1[a] + 4 * p2[a] - p3[a]) * t2
+                        + (3 * p1[a] - p0[a] - 3 * p2[a] + p3[a]) * t3)
+        }))
+      }
+    }
+    points.push(stops[stops.length - 1])
+    // Cut by distance along the curve, not by point count: the curve's
+    // points crowd on short stretches and spread on long ones, so counting
+    // them made the tip rush and stall from letter to letter. By distance,
+    // it is one movement, eased only at its start and finish.
+    var lengths = [0]
+    for (var m = 1; m < points.length; m++)
+      lengths.push(lengths[m - 1] + Math.hypot(points[m][0] - points[m - 1][0], points[m][1] - points[m - 1][1]))
+    var eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2
+    var reach = eased * lengths[lengths.length - 1]
+    var cut = [points[0]]
+    for (var n = 1; n < points.length; n++) {
+      if (lengths[n] <= reach) { cut.push(points[n]); continue }
+      // The tip, between two points of the curve.
+      var f = (reach - lengths[n - 1]) / Math.max(1e-6, lengths[n] - lengths[n - 1])
+      cut.push([points[n - 1][0] + (points[n][0] - points[n - 1][0]) * f,
+                points[n - 1][1] + (points[n][1] - points[n - 1][1]) * f])
+      break
+    }
+    points = cut.length > 1 ? cut : [points[0], points[0]]
+    root.swipe = { pointId: root.demoPoint, key: "", points: points, swiping: true }
+    trail.requestPaint()
+  }
+
+  // A slide left from BackSpace, as far as `count` words, nearest first in
+  // `words`: BackSpace down and the label over it naming them. 0 lifts it.
+  function demoErase(words, count) {
+    var s = root.demoSlot("backspace")
+    if (!s || count <= 0) {
+      root.erase = null
+      if (root.demoPoint in root.held) root.held = ({})
+      return
+    }
+    var held = {}
+    held[root.demoPoint] = s.key
+    root.held = held
+    root.erase = { pointId: root.demoPoint, x: 0, count: count, started: true, words: words.slice(0, count) }
+  }
+
+  // Everything the tour showed, gone: cards, trail, modifiers.
+  function demoClear() {
+    root.cancelTouches()
+    if (root.swipe !== null) { root.swipe = null; trail.requestPaint() }
+    if (root.demoPoint in root.held) root.held = ({})
+    var next = Object.assign({}, root.mods)
+    for (var m in next) next[m] = "off"
+    root.mods = next
+    root.autoShifted = false
+  }
+
   function stripLifted(p) {
     var t = root.stripTouch
+    formsHold.stop()
     root.stripTouch = null
     strip.pressedIndex = -1
     if (t.scrolled || t.cell === -1) return
-    if (t.cell === strip.prevCell) root.service.pageSuggestions(false)
+    if (t.cell === strip.scrollLeftCell) strip.scrollBy(-1)
+    else if (t.cell === strip.scrollRightCell) strip.scrollBy(1)
+    else if (!root.stripStill(t)) return
+    else if (t.cell === strip.prevCell) root.service.pageSuggestions(false)
     else if (t.cell === strip.nextCell) root.service.pageSuggestions(true)
     else root.service.chooseSuggestion(t.cell)
   }
 
   Repeater {
+    id: keyCaps
+    parent: board
     model: root.slots
 
     KeyboardKey {
+      id: cap
       required property var modelData
+      // Make room for light around the cap without shrinking its touch
+      // slot, changing row spacing or making the whole keyboard taller.
+      readonly property real capInset: root.theme.capInsetFor(modelData.width, modelData.height)
       theme: root.theme
-      x: modelData.x
-      y: modelData.y
-      width: modelData.width
-      height: modelData.height
+      x: modelData.x + capInset
+      y: modelData.y + capInset
+      width: modelData.width - 2 * capInset
+      height: modelData.height - 2 * capInset
+      glowGap: root.theme.gap + 2 * capInset
+      rippleEnabled: root.theme.ripple === true && root.visible
+      onPressedChanged: {
+        if (pressed && rippleEnabled)
+          GlowWave.spread(keyCaps, cap, root.unit, root.keyHeight + root.theme.gap)
+      }
       label: root.label(modelData.key)
       hint: root.hintFor(modelData.key)
       // Only on the letters page, where the symbol pages are somewhere
@@ -1659,9 +2247,9 @@ Item {
       // label, and saying so twice would be noise.
       hintLeft: root.form === "mobile" && root.page === "letters"
         ? (root.symbolOf[modelData.key] || "") : ""
-      // What a hold reaches, drawn rather than written: the gear is an icon
-      // and there is no character that says "settings".
-      hintIcon: root.iconFor(root.holdOpenFor(modelData.key))
+      // What a hold reaches, drawn rather than written: the gear's hold is
+      // Menu, drawn as a pointer on a bar (hintIconFor).
+      hintIcon: root.hintIconFor(modelData.key)
       kind: root.kind(modelData.key)
       labelKind: root.labelKind(modelData.key)
       icon: root.iconFor(modelData.key)
@@ -1674,6 +2262,7 @@ Item {
   // touch layer, which follows it (see selectAt).
   Item {
     id: popupLayer
+    parent: board
     visible: root.popup !== null
     z: 10
     x: root.popup ? root.popup.x : 0
@@ -1687,10 +2276,10 @@ Item {
     Rectangle {
       anchors.fill: parent
       anchors.margins: -root.theme.gap
-      radius: root.theme.keyRadius + root.theme.gap / 2
-      color: root.theme.solidBase
-      border.width: Math.max(1, root.theme.keyBorderWidth)
-      border.color: root.theme.accent
+      radius: root.supportTheme.keyRadius + root.supportTheme.gap / 2
+      color: root.supportTheme.solidBase
+      border.width: Math.max(1, root.supportTheme.keyBorderWidth)
+      border.color: root.supportTheme.accent
     }
 
     Repeater {
@@ -1699,12 +2288,12 @@ Item {
       KeyboardKey {
         required property int index
         required property string modelData
-        theme: root.theme
+        theme: root.supportTheme
         x: index * (root.popup ? root.popup.cellWidth : 0) + root.theme.gap / 2
         width: (root.popup ? root.popup.cellWidth : 0) - root.theme.gap
         height: parent.height
         label: modelData
-        labelKind: root.popup && root.popup.kind === "layouts" ? "word" : "char"
+        labelKind: root.popup && root.popup.kind !== "chars" ? "word" : "char"
         // The cell under the finger is filled, not merely edged: it is
         // usually half covered by that finger. "accent" no longer fills,
         // since Enter took it and became an edge, so this takes "locked".
@@ -1716,13 +2305,52 @@ Item {
     }
   }
 
+  // Which words a slide left from BackSpace will delete, over the key, in
+  // the popup's own card.
+  Item {
+    id: erasePreview
+    parent: board
+    z: 10
+    visible: root.eraseLabel !== ""
+    readonly property var slot: {
+      for (var i = 0; i < root.slots.length; i++)
+        if (root.roleOf(root.slots[i].key) === "backspace") return root.slots[i]
+      return null
+    }
+    width: eraseText.implicitWidth + 2 * root.theme.padding + root.theme.gap * 2
+    height: slot ? slot.height : 0
+    x: slot ? Math.max(root.theme.padding, Math.min(root.width - root.theme.padding - width,
+                                                    slot.x + slot.width - width)) : 0
+    y: slot ? Math.max(root.popupTop, slot.y - slot.height - root.theme.gap) : 0
+
+    Rectangle {
+      anchors.fill: parent
+      radius: root.supportTheme.keyRadius + root.supportTheme.gap / 2
+      color: root.supportTheme.solidBase
+      border.width: Math.max(1, root.supportTheme.keyBorderWidth)
+      border.color: root.supportTheme.accent
+    }
+    Text {
+      id: eraseText
+      textFormat: Text.PlainText
+      anchors.centerIn: parent
+      text: "\u232b " + root.eraseLabel
+      color: root.supportTheme.accent
+      font.family: root.supportTheme.fontFamily
+      font.pixelSize: root.eraseFontSize
+    }
+  }
+
   // One touch layer for the whole keyboard: each finger picks its key when
   // it comes down and keeps it until it lifts, however it moves. Several
   // fingers can be down at once, e.g. the next key tapped before the last
   // is released.
   MultiPointTouchArea {
+    parent: board
     anchors.fill: parent
     onPressed: function(points) {
+      // ragtop touch-trace: each finger as it lands, and what came of it.
+      if (root.service.touchTrace) points.forEach(function(p) { root.traceTouch("down", p, root.touchOutcome(p)) })
       // While the controls are up, a touch on the keyboard puts them away
       // rather than typing. That is the tap-outside-to-dismiss, done from the
       // surface the finger is already on instead of a sheet over everything,
@@ -1770,24 +2398,75 @@ Item {
         if (role === "space" || root.isCharacter(eff) || deep)
           root.startHold(p, key)
         if (role !== "space") root.swipeStart(p, key)
-        if (root.liftKeys.indexOf(role) === -1 && !deep
+        if (role === "backspace" && root.erase === null) {
+          root.erase = { pointId: p.pointId, x: p.x, y: p.y, count: 0, started: false, words: [] }
+          eraseHold.restart()
+        }
+        if (root.liftKeys.indexOf(role) === -1 && !deep && role !== "backspace"
             && (role === "space" || !root.isCharacter(eff))) pressed.push(key)
       })
       root.held = next
       pressed.forEach(root.press)
     }
     onUpdated: function(points) { points.forEach(root.moved) }
-    onReleased: function(points) { root.lift(points) }
-    onCanceled: function(points) { root.lift(points) }
+    onReleased: function(points) {
+      if (root.service.touchTrace) points.forEach(function(p) { root.traceTouch("up", p, root.liftOutcome(p)) })
+      root.lift(points)
+    }
+    onCanceled: function(points) {
+      if (root.service.touchTrace) points.forEach(function(p) { root.traceTouch("cancel", p, "") })
+      root.lift(points)
+    }
+  }
+
+  // ---- Tracing touches (ragtop touch-trace) ---------------------------------
+
+  // What a finger landing will come to, by the same tests onPressed makes,
+  // asked before it makes them. Named by kind of key, never by the
+  // character, so a trace never holds what was typed.
+  function touchOutcome(p) {
+    if (root.service.toolsOpen) return "closes the controls"
+    if (root.popup !== null) return "ignored: a card is open"
+    if (root.stripShown && root.stripTouch === null && p.y < root.keysTop - root.theme.gap / 2)
+      return "strip"
+    var key = root.keyAt(p.x, p.y)
+    if (key === null) return "ignored: no key near"
+    var role = root.roleOf(root.effectiveKey(key))
+    return root.isCharacter(root.effectiveKey(key)) ? "character" : role
+  }
+  // What a finger lifting will come to, by the same tests lift makes.
+  function liftOutcome(p) {
+    if (root.erase !== null && p.pointId === root.erase.pointId)
+      return !root.erase.started ? "BackSpace"
+        : root.erase.count > 0 ? "deletes words" : "nothing: word delete undone"
+    if (root.stripTouch !== null && p.pointId === root.stripTouch.pointId) return "strip"
+    if (root.swipe !== null && p.pointId === root.swipe.pointId && root.swipe.swiping)
+      return "swipe, sent to be read"
+    if (root.popup !== null && p.pointId === root.popup.pointId)
+      return root.popup.index >= 0 ? "card: chosen" : (root.popupTravelled ? "nothing: card left" : "card: the key itself")
+    if (p.pointId === root.pendingPoint) return "tap"
+    if (p.pointId in root.held) return "key released"
+    return "nothing: no key under it"
+  }
+  function traceTouch(kind, p, what) {
+    // Where, as a share of the keyboard's width and of the screen's height,
+    // which is what the touchscreen's own report can be laid against.
+    root.service.traceTouch({ t: Date.now(), ev: kind, id: p.pointId,
+                              x: p.x / Math.max(1, root.width), y: board.y + p.y, what: what })
   }
 
   function moved(point) {
+    if (root.erase !== null && point.pointId === root.erase.pointId) {
+      root.eraseMoved(point)
+      return
+    }
     if (root.stripTouch !== null && point.pointId === root.stripTouch.pointId) {
       root.stripMoved(point)
       return
     }
     if (root.swipeMoved(point)) return
     if (root.popup !== null && point.pointId === root.popup.pointId) {
+      if (root.cardToSwipe(point)) return
       if (root.travelled(point)) root.popupTravelled = true
       // A cell chosen for the finger stays chosen until the finger goes
       // somewhere: it is resting on the key below the card, which selectAt
@@ -1796,16 +2475,29 @@ Item {
       root.selectAt(point.x, point.y)
       return
     }
-    // A finger that wanders off the key it came down on was never holding
-    // it: the key still types when it lifts, as it always has.
-    if (point.pointId !== root.pendingPoint) return
-    if (root.travelled(point)) holdTimer.stop()
+    // A finger held on a key means one of two things, its card or a swipe,
+    // and a key that repeats (BackSpace, the arrows) is no letter and never
+    // gets here. So drifting decides nothing: a finger that reaches another
+    // letter is a swipe (swipeMoved, or cardToSwipe once the card is up),
+    // and one that has not by the time the hold is up gets its card,
+    // however much it wandered on the way. It used to be that drifting
+    // four tenths of a key cancelled the card, which a thumb resting on a
+    // key for ? did without meaning to, and the card never came.
   }
 
   function lift(points) {
     var next = Object.assign({}, root.held)
     var lifted = []
     points.forEach(function(p) {
+      if (root.erase !== null && p.pointId === root.erase.pointId) {
+        var e = root.erase
+        root.erase = null
+        eraseHold.stop()
+        if (e.started) root.service.eraseWords(e.count)
+        else root.tapBackSpace()
+        delete next[p.pointId]
+        return
+      }
       if (root.stripTouch !== null && p.pointId === root.stripTouch.pointId) {
         root.stripLifted(p)
       } else if (root.swipeLifted(p)) {

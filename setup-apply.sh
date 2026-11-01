@@ -13,6 +13,8 @@
 set -uo pipefail
 
 here="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+repo="$here"
+source "$repo/i18n.sh"
 add="${1:-}"
 drop="${2:-}"
 chosen="${3:-}"
@@ -28,12 +30,22 @@ notify() {
 # record is written before any overlay is touched: a service that reloads
 # mid-way should find a machine that is set up, not offer setup again from
 # the beginning.
-"$here/menu-block.sh" add
+menu_ok=true
+"$here/menu-block.sh" add || menu_ok=false
 mkdir -p "$state"
 printf 'overlays=%s\n' "$chosen" >"$state/install.conf"
 
-[[ -n $add ]] && "$here/overlay-clones.sh" install $add
-[[ -n $drop ]] && "$here/overlay-clones.sh" remove $drop
+# Which are there now, to know afterwards whether anything changed.
+before=""
+for o in $overlays; do
+  "$here/overlay-clones.sh" installed "$o" && before="$before $o"
+done
+
+apply_ok=true hooks_ok=true
+apply_rc=0
+"$here/overlay-clones.sh" apply "$add" "$drop" || apply_rc=$?
+# 3 is the selection applied, but not the hooks that follow it.
+case $apply_rc in 0) ;; 3) hooks_ok=false ;; *) apply_ok=false ;; esac
 
 # However the copies went, the record describes the machine as it is.
 on=""
@@ -42,17 +54,33 @@ for o in $overlays; do
 done
 printf 'overlays=%s\n' "${on# }" >"$state/install.conf"
 
-# Say how it went, since the window that asked may be gone by now.
-missing=""
+# Say how it went, since the window that asked may be gone by now: checked
+# against the machine, so a copy that is still there after it was to go
+# (one with edits of its own is kept on purpose) is reported, not missed.
+names() {
+  local o out=""
+  for o in "$@"; do out="$out, $(t "overlay.name.$o")"; done
+  echo "${out#, }"
+}
+missing=() kept=()
 for o in $add; do
-  "$here/overlay-clones.sh" installed "$o" || missing="$missing $o"
+  "$here/overlay-clones.sh" installed "$o" || missing+=("$o")
 done
-if [[ -n $missing ]]; then
-  notify "Ragtop setup" "Set up, but these overlays could not be copied:$missing. Run Setup again to retry."
+for o in $drop; do
+  "$here/overlay-clones.sh" installed "$o" && kept+=("$o")
+done
+problems=()
+$apply_ok || problems+=("$(t setup.overlaysFailed)")
+$hooks_ok || problems+=("$(t overlays.hookFailed)")
+$menu_ok || problems+=("$(t setup.noMenu)")
+((${#missing[@]})) && problems+=("$(t setup.notCopied "$(names "${missing[@]}")")")
+((${#kept[@]})) && problems+=("$(t setup.notRemoved "$(names "${kept[@]}")")")
+if ((${#problems[@]})); then
+  notify "$(t setup.title)" "${problems[*]}"
 else
-  notify "Ragtop" "Setup is done."
+  notify "Ragtop" "$(t setup.done)"
 fi
 
-# Copies are only picked up when the shell starts.
-[[ -n $add || -n $drop ]] && omarchy-restart-shell
-exit 0
+# The completed directory/config batch is noticed by Omarchy's debounced
+# plugin watcher. Do not restart the whole shell after its single reload.
+((${#problems[@]} == 0))

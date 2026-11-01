@@ -1,0 +1,129 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+ShellRoot {
+  id: root
+  Harness { id: t }
+  property bool keyboardAvailable: true
+  property bool predictionsEnabled: true
+  property string typingMemory: "full"
+  property var fieldInfo: ({})
+  property bool secretField: false
+  property bool oskVisible: true
+  property bool atPrompt: true
+  property bool imeComposing: false
+  property int fieldGeneration: 0
+  property string termLine: ""
+  property string termCwd: "/tmp"
+  property string termShell: "bash"
+  property var displayed: null
+  property var warmPid: null
+  function readTermPlace() {}
+  function setSuggestions(source, value) { displayed = value }
+  function cancelCompletions() {}
+  // FROM SOURCE: fieldKnown keepAnything keepContext terminalSuggesting
+  // FROM SOURCE: terminalAllowed wantTerminal terminalStarted terminalReady terminalSequence termPending termInFlight termLatest clearTerminalRequests cancelTerminal terminalCurrent askTerm flushTerminal termAnswer
+  // FROM SOURCE: onTermLineChanged onTermCwdChanged onTermShellChanged onTerminalAllowedChanged onWantTerminalChanged onFieldGenerationChanged terminalProc terminalRestart
+  Component.onCompleted: t.run([
+    [0, function() {
+      t.equal(terminalProc.running, false, "worker is lazy while terminal is empty")
+      termLine = "ech"
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "first terminal query starts worker")
+      t.ok(displayed && displayed.items.some(function(i) { return i.text === "echo" }), "real worker returns builtin completion")
+      warmPid = terminalProc.processId
+      fieldGeneration++
+      t.equal(termLatest, null, "field change drops retained request immediately")
+      t.equal(displayed, null, "field change drops display immediately")
+      termLine = "pw"
+    }],
+    [100, function() {
+      t.equal(terminalProc.processId, warmPid, "field change preserves worker PID")
+      t.ok(displayed && displayed.items.some(function(i) { return i.text === "pwd" }), "new field receives warm completion")
+      oskVisible = false
+    }],
+    [100, function() {
+      t.equal(terminalProc.processId, warmPid, "keyboard hide preserves worker PID")
+      t.equal(displayed, null, "hidden keyboard clears display")
+      t.equal(termLatest, null, "hidden keyboard clears request text")
+      oskVisible = true
+    }],
+    [100, function() {
+      t.equal(terminalProc.processId, warmPid, "keyboard reopen reuses worker PID")
+      t.ok(displayed && displayed.items.length > 0, "reopened keyboard gets warm results")
+      fieldInfo = null
+    }],
+    [100, function() {
+      t.equal(terminalProc.processId, warmPid, "pending focus report preserves worker PID")
+      t.equal(displayed, null, "unknown field has no terminal display")
+      t.equal(termLatest, null, "unknown field retains no request text")
+      fieldInfo = ({})
+      atPrompt = false
+    }],
+    [100, function() {
+      t.equal(terminalProc.processId, warmPid, "leaving prompt preserves worker PID")
+      t.equal(displayed, null, "non-prompt has no terminal display")
+      atPrompt = true
+      // A delayed retry must never kill a healthy replacement.
+      terminalRestart.interval = 1; terminalRestart.start()
+    }],
+    [100, function() {
+      t.equal(terminalProc.processId, warmPid, "stale retry cannot stop healthy worker")
+      t.ok(terminalReady, "stale retry leaves readiness intact")
+      secretField = true
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "secret field stops worker")
+      t.equal(termPending, null, "privacy shutdown clears pending line")
+      t.equal(termInFlight, null, "privacy shutdown clears in-flight line")
+      t.equal(termLatest, null, "privacy shutdown clears retained request")
+      t.equal(displayed, null, "privacy shutdown clears suggestions")
+      terminalRestart.start()
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "retry cannot reopen private worker")
+      secretField = false
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "worker restarts after privacy gate reopens")
+      t.ok(terminalProc.processId !== warmPid, "privacy gate discards cached worker")
+      t.ok(displayed && displayed.items.length > 0, "fresh worker returns current completion")
+      // Exercise rapid privacy close/reopen in the same event-loop turn.
+      secretField = true; secretField = false; termLine = "ech"
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "rapid gate close/reopen recovers")
+      t.ok(displayed && displayed.items.some(function(i) { return i.text === "echo" }), "rapid reopen returns current result")
+      warmPid = terminalProc.processId
+      terminalRestart.interval = 30
+      terminalProc.signal(9)
+    }],
+    [700, function() {
+      t.equal(terminalProc.running, true, "crashed worker restarts")
+      t.ok(terminalProc.processId !== warmPid, "crash creates replacement PID")
+      t.ok(displayed && displayed.items.some(function(i) { return i.text === "echo" }), "restart restores current request")
+      typingMemory = "word"
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "reduced typing memory stops worker")
+      typingMemory = "full"
+    }],
+    [700, function() {
+      t.ok(terminalReady, "full typing memory can restart worker")
+      predictionsEnabled = false
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "suggestions off stops worker")
+      predictionsEnabled = true
+    }],
+    [700, function() {
+      t.ok(terminalReady, "suggestions on can restart worker")
+      keyboardAvailable = false
+    }],
+    [100, function() {
+      t.equal(terminalProc.running, false, "unavailable keyboard stops worker")
+      t.equal(terminalRestart.running, false, "shutdown cancels retry")
+    }]
+  ])
+}

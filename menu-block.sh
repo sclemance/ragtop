@@ -3,7 +3,14 @@
 # menu extension file between two marker comments. Both the installer and the
 # in-shell setup use this, so the rows are written in exactly one place.
 #
-# Usage: menu-block.sh add|remove|check
+# Usage: menu-block.sh add|remove|check|refresh|english
+#
+# english prints every row's English label as a catalog, which is what
+# i18n/en/menu.json is, and what the test holds it to.
+#
+# refresh writes the rows again where they are already, and does nothing
+# where they are not: it is what a change of language runs (Service.qml), so
+# it must never put back rows someone took out.
 #
 # check says nothing and succeeds when the block in the file is already the
 # one this version writes. It fails when a row is missing, when an older
@@ -12,13 +19,13 @@ set -euo pipefail
 
 menu_file="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 case "${1:-}" in
-  add|remove|check) ;;
-  *) echo "Usage: $0 add|remove|check" >&2; exit 2 ;;
+  add|remove|check|refresh|english) ;;
+  *) echo "Usage: $0 add|remove|check|refresh|english" >&2; exit 2 ;;
 esac
 
-/usr/bin/python3 - "$1" "$menu_file" <<'EOF'
-import json, os, sys, tempfile, tomllib
-action, path = sys.argv[1:]
+/usr/bin/python3 - "$1" "$menu_file" "$(dirname "$(realpath "$0")")" <<'EOF'
+import json, os, re, sys, tempfile, tomllib
+action, path, repo = sys.argv[1:]
 # Protocol, not prose. This exact line is how the block is found again in the
 # user's menu file, so an installed Ragtop would stop recognising its own rows
 # if it changed: `add` would leave the old block behind and write a second one,
@@ -47,14 +54,6 @@ for d in theme_dirs:
         theme_labels[slug] = label if isinstance(label, str) and label.strip() else slug
 themes = sorted(theme_labels.items(), key=lambda row: (row[0] != "omarchy", row[0]))
 
-overlays = [
-    ("menu", "\U000f035c", "Omarchy Menu"),
-    ("emojis", "\U000f0785", "Emoji Picker"),
-    ("clipboard", "\U000f014c", "Clipboard Picker"),
-    ("polkit", "\U000f033e", "Password Prompt"),
-    ("image-picker", "\U000f056c", "Image Picker"),
-    ("lock", "\U000f0ddb", "Lock Screen"),
-]
 rows = {
     "setup.tablet": dict(icon="\U000f04f6", label="Tablet", aliases=["tablet", "ragtop"],
                         when=f'[[ -x "{cmd}" ]]'),
@@ -67,7 +66,7 @@ rows = {
     "setup.tablet.mode.off": dict(icon="\U000f0322", label="Always Off",
         checked=f'"{cmd}" tablet-mode is off', action=f'"{cmd}" tablet-mode set off'),
     # Whether there is an on-screen keyboard at all. Separate from Tablet
-    # Mode, which still decides tiling mode and the patched overlays: a
+    # Mode, which still decides sensor-driven rotation: a
     # machine can be a tablet and still not want keys, or be a laptop and
     # want them. Icons are reused from the rows above rather than picked by
     # codepoint, since a guessed Nerd Font codepoint draws the wrong thing.
@@ -107,6 +106,19 @@ rows = {
         checked=f'"{cmd}" predictions is layout', action=f'"{cmd}" predictions set layout'),
     "setup.tablet.predictions.all": dict(icon="\U000f030c", label="English, on Any Layout",
         checked=f'"{cmd}" predictions is all', action=f'"{cmd}" predictions set all'),
+    "setup.tablet.assists": dict(icon="\U000f030c", label="Capitals and Full Stops",
+        checked=f'"{cmd}" assists enabled',
+        action=f'"{cmd}" assists toggle'),
+    # How much of what is typed is kept while a field has focus. Full is
+    # what deleting words by name and next words read; none keeps nothing,
+    # and so suggests nothing.
+    "setup.tablet.typing-memory": dict(icon="\U000f033e", label="Typing Memory"),
+    "setup.tablet.typing-memory.full": dict(icon="\U000f030c", label="Full",
+        checked=f'"{cmd}" typing-memory is full', action=f'"{cmd}" typing-memory set full'),
+    "setup.tablet.typing-memory.word": dict(icon="\U000f030c", label="Current Word Only",
+        checked=f'"{cmd}" typing-memory is word', action=f'"{cmd}" typing-memory set word'),
+    "setup.tablet.typing-memory.none": dict(icon="\U000f0322", label="Nothing",
+        checked=f'"{cmd}" typing-memory is none', action=f'"{cmd}" typing-memory set none'),
     # Only offered once suggestions are on, which it needs.
     "setup.tablet.swipe": dict(icon="\U000f030c", label="Swipe Typing (beta)",
         when=f'"{cmd}" predictions enabled',
@@ -125,6 +137,9 @@ rows = {
     # The panel has a slider for this. A menu cannot slide, so the five names
     # stay as the coarse way in, and Auto joins them.
     "setup.tablet.size-adjust": dict(icon="\U000f004c", label="Key Size"),
+    "setup.tablet.size-adjust.custom": dict(icon="\U000f004c", label="Custom / Adjust…",
+        checked=f'"{cmd}" size-adjust is custom',
+        action='omarchy-shell ragtop openControls'),
     "setup.tablet.size-adjust.auto": dict(icon="\U000f006a", label="Automatic",
         checked=f'"{cmd}" size-adjust is auto', action=f'"{cmd}" size-adjust set auto'),
     **{f"setup.tablet.size-adjust.{name}": dict(icon="\U000f004c", label=label,
@@ -132,19 +147,45 @@ rows = {
        for name, label in (("smallest", "Smallest"), ("smaller", "Smaller"),
                            ("regular", "Regular"), ("larger", "Larger"),
                            ("largest", "Largest"))},
-    "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays"),
+    # Choose overlays together and publish the validated selection in one batch.
+    "setup.tablet.overlays": dict(icon="\U000f0328", label="System Overlays",
+        action=f'"{cmd}" overlays'),
     "setup.tablet.setup": dict(icon="\U000f05b7", label="Run Setup",
         action=f'"{cmd}" setup'),
     # One tap puts everything a report needs on the clipboard, so nobody has
     # to find a terminal on a machine whose keyboard is folded away.
-    "setup.tablet.diagnostics": dict(icon="\U000f085e", label="Diagnostics",
+    "setup.tablet.diagnostics": dict(icon="\U000f085e", label="Copy Diagnostics",
         action=f'"{cmd}" diagnostics copy'),
 }
-for name, icon, label in overlays:
-    rows[f"setup.tablet.overlays.{name}"] = dict(
-        icon=icon, label=label,
-        checked=f'"{cmd}" overlay enabled {name}',
-        action=f'"{cmd}" overlay toggle {name}')
+# The labels above are English, the source of truth. Written in the language
+# Omarchy is set to (~/.config/omarchy/language) where Ragtop has its rows in
+# it (i18n/<code>/menu.json, Omarchy's own menu-catalog shape, by row id):
+# Omarchy translates only its own rows, so Ragtop's are Ragtop's to write.
+# Themes keep their names. `english` prints the English catalog, for the
+# test that holds every language to its keys.
+def language():
+    config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    try:
+        code = open(os.path.join(config, "omarchy", "language")).read().strip()
+    except OSError:
+        return "en"
+    return code if re.fullmatch(r"[a-z]{2,3}(-[A-Za-z]{2})?", code) else "en"
+
+if action == "english":
+    print(json.dumps({k: {"label": v["label"]} for k, v in rows.items()
+                      if not k.startswith("setup.tablet.theme.")}, ensure_ascii=False, indent=2))
+    sys.exit(0)
+
+lang = language()
+if lang != "en":
+    try:
+        catalog = json.load(open(os.path.join(repo, "i18n", lang, "menu.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        catalog = {}
+    for key, row in rows.items():
+        label = catalog.get(key, {}).get("label") if isinstance(catalog.get(key), dict) else None
+        if isinstance(label, str) and label.strip() and not key.startswith("setup.tablet.theme."):
+            row["label"] = label
 block = [start] + [f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," for k, v in rows.items()] + [end]
 
 text = open(path).read() if os.path.exists(path) else ""
@@ -163,6 +204,11 @@ def block_end(i):
                  f"that ends them ({end.strip()}). Put it back after Ragtop's rows, "
                  f"or delete Ragtop's rows by hand, then run this again.")
 
+
+if action == "refresh":
+    if start not in lines:
+        sys.exit(0)
+    action = "add"
 
 if action == "check":
     if start not in lines:

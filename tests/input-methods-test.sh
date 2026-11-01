@@ -101,6 +101,111 @@ own_keys_are_not_reported() {
   assert_lacks "$out" "hide"
 }
 
+# What kind of field has focus, read from fcitx5's DebugInfo: a password
+# field (fcitx5's Password flag, 0x8), a terminal (Terminal, 1 << 32), and a
+# plain one. The service keeps nothing typed into the first. Read from the
+# report's real shape, copied from a session: a private fcitx5 with no
+# display puts its contexts in no group, and those it lists without their
+# flags, so a live test could not show this. Needs no fcitx5, so it runs
+# before the check for one.
+fields_are_told_apart() {
+  make_sandbox "$old_omarchy"
+  out=$(sandboxed /usr/bin/python3 - "$repo/fcitx-osk-bridge.py" <<'PY' 2>&1
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+b = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(b)
+report = """Group [wayland:] has 3 InputContext(s)
+  IC [5d2f] program:omawrite frontend:wayland_v2 cap:100000072 focus:{w}
+  IC [8911] program:KeePassXC frontend:wayland_v2 cap:{k} focus:{p}
+Group [x11::0] has 1 InputContext(s)
+  IC [5f00] program:keepassxc frontend:dbus cap:{e} focus:{x}
+Input Context without group
+  IC [d9b5] program:t frontend:dbus focus:{g}
+"""
+def show(**focus):
+    f = dict(w=0, p=0, x=0, g=0, k="72", e="72")
+    f.update(focus)
+    field = b.field_of(report.format(**f))
+    print((field["id"] + " " + (",".join(k for k in ("password", "terminal", "noCapitals") if field[k]) or "plain"))
+          if field else "null")
+show(w=1)                       # a terminal's context: Terminal, 1 << 32
+show(p=1, k="7a")               # a password field: Password, 0x8
+show(x=1, e="1000000072")       # a sensitive one: Sensitive, 1 << 36
+show(p=1, k="1072")             # a URL field: Url, 1 << 12
+show(p=1)                       # plain text
+show()                          # nothing focused
+show(g=1)                       # focused, but listed without its flags
+show(w=1, p=1)                  # two focused: no telling which
+PY
+)
+  assert_equal "$out" "5d2f terminal,noCapitals
+8911 password,noCapitals
+5f00 password,noCapitals
+8911 noCapitals
+8911 plain
+null
+null
+null"
+}
+
+# Which field has focus is asked after every show and every hide, and the
+# answers can come back in any order. One older than an answer already
+# printed is about a field that may have lost focus since, and is dropped;
+# the same field reported twice is printed once.
+field_answers_in_order() {
+  make_sandbox "$old_omarchy"
+  out=$(sandboxed /usr/bin/python3 - "$repo/fcitx-osk-bridge.py" <<'PY' 2>&1
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+b = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(b)
+pending = []
+b.call = lambda where, method, args=None, reply=None, done=None: pending.append(done)
+b.say = lambda kind, value: kind == "field" and print(kind, value["id"] if value else None)
+one = ("IC [aaaa] program:x frontend:wayland_v2 cap:72 focus:1\n",)
+two = ("IC [bbbb] program:x frontend:wayland_v2 cap:72 focus:1\n",)
+none = ("IC [aaaa] program:x frontend:wayland_v2 cap:72 focus:0\n",)
+b.ask_field(); b.ask_field(); b.ask_field()
+pending[1](two)     # the second answer first
+pending[0](one)     # older than it: dropped
+pending[2](two)     # the same field again: nothing new
+b.ask_field()
+pending[3](none)    # focus left every field
+# A field takes focus: the answer to a question asked before it is about the
+# field that had focus then, and is dropped; the answer after it is said even
+# when it is a field already said, since the service waits to hear it.
+b.arming = False
+b.ask_field()                                   # asked before the show
+b.on_call(None, "", "", "", "ShowVirtualKeyboard", None, type("I", (), {"return_value": lambda s, v: None})())
+pending[4](one)     # the earlier question: dropped
+pending[5](none)    # the show's own question
+b.on_call(None, "", "", "", "ShowVirtualKeyboard", None, type("I", (), {"return_value": lambda s, v: None})())
+pending[6](none)    # the same answer again, said again
+# A hide: an answer to a question asked before it is dropped, and the
+# hide's own is said even when nothing changed, since the service holds
+# what is typed apart until it hears.
+b.ask_field()                                   # asked before the hide
+b.on_call(None, "", "", "", "HideVirtualKeyboard", None, type("I", (), {"return_value": lambda s, v: None})())
+b.rearm_source = 1                              # no timer: there is no main loop here
+pending[7](one)     # before the hide: dropped
+pending[8](none)    # the hide's own, the same as last said: said again
+# fcitx5 goes: an answer still on its way from it is dropped.
+b.ask_field()
+b.on_fcitx_vanished(None, "")
+pending[9](one)
+PY
+)
+  assert_equal "$out" "field bbbb
+field None
+show
+field None
+show
+field None
+hide
+field None"
+}
+
 # Without the route, keys go the Wayland way and fcitx5 never hears them
 # from here. That is today's behaviour on a plain layout, and stays it.
 wayland_route_is_untouched() {
@@ -108,6 +213,9 @@ wayland_route_is_untouched() {
   assert_equal "$(grep -c '^wayland' <<<"$out")" 2 "keys sent the Wayland way"
   assert_lacks "$out" "commit"
 }
+
+run_test "input methods: a password field, a terminal and a plain field are told apart" fields_are_told_apart
+run_test "input methods: an answer about the focused field older than one printed is dropped" field_answers_in_order
 
 missing=""
 for need in fcitx5 dbus-run-session; do

@@ -15,127 +15,83 @@ is exactly why a plugin written today shouldn't make it harder to act on.
 So this is not a file about translating Ragtop. It is about not standing in
 the way of the day someone does.
 
-Ragtop is English-only, deliberately, and will stay that way until Omarchy
-decides how it wants to do this. That is not a shrug: there are things a
-plugin has to get right *before* a translation layer exists, because they are
-much harder to retrofit than to preserve. This file records where things
-stand upstream, what Ragtop already does right, and the two rules to keep
-following.
+Omarchy decided in October 2026: **"Omarchy in 50 languages"**
+([omarchy#15326](https://github.com/omacom/omarchy/pull/15326), merged into
+`quattro` on 2026-10-14, in 4.5.0-rc1). Ragtop follows it.
 
-Last checked against upstream: **2026-09-20**, Omarchy 4.0.4.
+## How Ragtop does it
 
-## Ragtop's position
+- **The language is Omarchy's.** *Setup › Language*, or
+  `omarchy language <code>`, writes `~/.config/omarchy/language`; Ragtop
+  reads the same file and watches it, so switching Omarchy's language
+  switches Ragtop's too, at once. No file, as on Omarchy before 4.5, is
+  English.
+- **The catalogs are Ragtop's, in Omarchy's form.** Omarchy's `I18n` reads
+  only Omarchy's own catalogs and has no hook for a plugin's, and its menu
+  catalog applies only to Omarchy's own rows. So Ragtop keeps its own, in
+  `i18n/<code>/`, shaped exactly as Omarchy's are, so they can move the day
+  a plugin hook appears:
+  - `shell.json`: everything drawn on screen, the controls, the tour, the
+    setup wizard, the strip's offers, the picker strip, the bar's tooltips,
+    and the service's notifications. Read by `Service.qml`, `t(key, ...)`
+    and `tn(key, count, ...)`.
+  - `cli.json`: the `ragtop` command's notifications, the installer's
+    words, the overlay clones' and the setup check's. Read by `i18n.sh`'s
+    `t`, sourced by each script, the counterpart of Omarchy's
+    `omarchy-i18n`.
+  - `menu.json`: the *Setup › Tablet* rows, in Omarchy's menu-catalog shape
+    (`{"<row id>": {"label": ...}}`). `menu-block.sh` writes the rows in the
+    language set, and the service rewrites them when it changes. Theme
+    names are names, and stay as the themes give them.
+- **Keys are dotted names** (`tour.swipe.body`), as Omarchy's are; values
+  carry `%1`, `%2` placeholders a translation may reorder, and plurals are
+  `{"one": ..., "other": ...}`. English is the source of truth and the
+  fallback for any key a language lacks; the key itself shows only where
+  neither has it, which `tests/i18n-test.sh` rules out.
+- **Terminal error messages stay English**, as Omarchy's own command-line
+  output does. What a person reads on the desktop, and the installer, is
+  translated.
+- **Languages** use Omarchy's codes (`fr`, `de`, `es-MX`, `pt-BR`...). The
+  first are English, French, German, Spanish, Italian and Portuguese (see
+  the README's language support); each needs a native speaker's review
+  before it ships.
 
-A distribution this size will end up with a localization standard, and it
-would be
-strange if it didn't. Ragtop's plan is to adopt whichever one emerges rather
-than to invent a ninth:
+## For translators
 
-- **Omarchy's own, first.** If the shell grows a translation layer, Ragtop
-  uses it, whatever shape it takes.
-- **A third-party standard only if no distro one appears**, and only once the
-  dust has settled, meaning a convention with several live implementations
-  and users, not a proposal.
-- **Until then, nothing.** No homegrown layer, no string-id scheme, no
-  half-adopted catalog format. The cost of waiting is that Ragtop reads in
-  English. The cost of guessing wrong is a rewrite plus a migration for
-  everyone who translated anything.
+Copy `i18n/en/` to `i18n/<code>/` and translate the values, not the keys.
+Keep every `%1`, `%2`; move them where your grammar wants. The one
+exception: a plural's `one` form may spell out its count ("un mot" for "%1
+mot"). Keep `[y/N]` in the installer's two questions exactly: the answer is
+read as y. Keep "Ragtop" as it is (below). Keep menu labels short, about 15
+characters, before the ✓ pushes them off the row. Then run
+`tests/i18n-test.sh`, which says what is missing, extra or mismatched.
 
-What that leaves to do now is keep the code *convertible*, which is what the
-two rules below are for.
+## The name stays Ragtop
 
-## Where Omarchy stands
+**Ragtop is never translated**, in any language: it is a name, as Omarchy is,
+and a name a person may search for. Catalogs carry it as written, and a
+translation that needs a word for "the keyboard" uses one of its own beside
+it, never in place of it.
 
-Omarchy is English by design. The installer asks for a keyboard layout and
-nothing else, so `LANG` stays `en_US.UTF-8` until someone changes it by hand.
-The shell's `qs.Commons` has no `I18n` singleton, and there is no hook for one
-plugin to reach another plugin's strings.
+What is checked instead is whether the name itself reads badly. "Ragtop" is
+English slang for a convertible with a fabric roof, from 1954, and no
+dictionary or slang source found lists it as offensive. Its nearest
+neighbours are not so clean: "rag" alone is mildly disparaging (a poor
+newspaper), and English has slurs built on "rag-" (raghead), which the name
+is not but might be heard near. Other languages have not been checked by
+anyone who speaks them, so every language's review answers one more
+question: does "Ragtop", left as it is, sound like anything offensive, crude
+or unfortunate there? Recorded in the table below before a language ships.
 
-The **manual and website are** translated, and `omacom/omarchy-site` carries
-around thirty locales under `src/i18n/`. The operating system's own interface
-is not.
-
-Everything proposed for the shell is open, and none of it has a word from a
-code owner on it:
-
-| | |
-| --- | --- |
-| [omarchy#7284](https://github.com/omacom/omarchy/issues/7284) | The feature request |
-| [omarchy#8765](https://github.com/omacom/omarchy/pull/8765) | The leading proposal: a `qs.Commons.I18n` singleton, a Qt-free model, and a Bash counterpart. Catalogs keyed by **plugin id**, entries keyed on `(msgctxt, English msgid)` as gettext does, language packs shipping **as plugins** |
-| [omarchy#10051](https://github.com/omacom/omarchy/pull/10051) | The rival: a compiled Qt translations module |
-| [omarchy#12345](https://github.com/omacom/omarchy/issues/12345) | A community adjudication with measurements. Adopts #8765 with amendments, declines #10051 on cost |
-| [omarchy#10949](https://github.com/omacom/omarchy/pull/10949), [#10955](https://github.com/omacom/omarchy/pull/10955) | Asking for a language at setup, and reading day and month names from the locale |
-
-Today the practical answer for a user who wants a translated desktop is the
-[omarchy-language](https://github.com/sbelcl/omarchy-language) plugin. It sets
-the locale, and it translates **the Omarchy menu and nothing else**, because
-the menu is the only part of the shell that is data rather than code.
-
-### What that means for Ragtop's menu rows
-
-That plugin rewrites rows read from Omarchy's own
-`default/omarchy/omarchy-menu.jsonc` into a marked
-`// >>> omarchy-language begin` block in
-`~/.config/omarchy/extensions/omarchy-menu.jsonc`, and preserves everything
-outside that block verbatim.
-
-Ragtop writes its own marked block into the same file (`install.sh`,
-`menu_block`). The two coexist: it does not read Ragtop's rows, and Ragtop
-does not touch its block. The consequence is simply that on a translated
-desktop, **Setup › Tablet stays English** while the rest of the menu does not.
-Nothing breaks. It just looks like what it is, an untranslated guest.
-
-Two details of that mechanism are worth knowing if this is ever revisited:
-
-- An override has to re-declare the **whole row**. The shell's comment
-  promises a per-key merge, but `parseMenuJsonc` normalizes each entry to a
-  full object with empty-string defaults first, so `{"label": "…"}` alone
-  produces a row with no icon and no action.
-- Its tables key on **English strings, not row ids**, so a row that uses a
-  word already in the table translates itself. Ragtop's labels (`Key Shape`,
-  `Auto Keyboard`, `System Overlays`…) are not in anyone's table.
-
-## What the rest of Linux does
-
-Arch has no framework for this, because it has no interface of its own to
-translate. It ships the plumbing and every package brings its own catalog:
-`/etc/locale.gen` → `locale-gen` → `/etc/locale.conf`, `localectl`, and
-`/usr/share/locale`. That last one is not empty on an Omarchy machine. On the
-laptop this was written on, with only `en_US.UTF-8` generated: **250 locale
-directories**, pacman translated into 43 languages, systemd 53,
-xkeyboard-config 46, GTK 117, `iso_3166-1` 159.
-
-The ecosystem's answer, in layers:
-
-1. **GNU gettext** is the standard, `.pot`/`.po`/`.mo` keyed on the English
-   source string, looked up through `LANGUAGE`/`LC_MESSAGES`. Everything
-   above uses it, and it covers **shell scripts** too (`gettext.sh`,
-   `eval_gettext`). `gettext`, `msgfmt` and `xgettext` are already installed.
-2. **Qt and QML** use `qsTr()` with `.ts`/`.qm`, built by `lupdate` and
-   `lrelease` (`qt6-tools`, not installed by default here). This is the fork
-   Omarchy is stuck at: [#12345](https://github.com/omacom/omarchy/issues/12345)
-   measured that no working gettext→Qt catalog bridge exists, which is why
-   [#8765](https://github.com/omacom/omarchy/pull/8765) builds a QML catalog
-   by hand instead of reusing the ecosystem's.
-3. **Data files** are localized by suffixed keys, not by a runtime:
-   `Name=Files` / `Name[de]=Dateien`, as `.desktop` and AppStream do. That is
-   the closest thing to a standard for a data-driven menu like Omarchy's
-   JSONC, and it needs no translation layer at all.
-4. **Names of things**, languages, countries and keyboard layouts, are already
-   translated by `iso-codes` and `xkeyboard-config`. Never retype them.
-
-Two consequences for Ragtop, one taken and one not:
-
-- **The space bar's layout name is localized** (`keyboard-helper.py`,
-  `localized_layout_name`). The keymap spells it `German`; the name goes
-  through xkeyboard-config's own catalog, so a German desktop reads
-  `Deutsch`, a French one `Allemand`, a Japanese one `ドイツ語`. No table of
-  Ragtop's own, nothing to keep up to date, and it works today whatever
-  upstream decides. With an English session it returns what it was given.
-- **Ragtop's Bash half could use gettext now**, the `ragtop` CLI's
-  notifications and the installer's prose, with no dependency on the unresolved
-  QML question. It doesn't, because a half-translated plugin is worse than an
-  English one, but that half is unblocked whenever the rest is.
+| Language | Name reviewed by | Finding |
+| --- | --- | --- |
+| English | — | no known problem (dictionaries, Green's Dictionary of Slang) |
+| French | not yet | catalogs drafted 2026-10-26, awaiting a native speaker's review of them and of the name |
+| German | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Spanish (Mexico) | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Italian | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Portuguese (Portugal) | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
+| Portuguese (Brazil) | not yet | catalogs drafted 2026-10-27, awaiting a native speaker's review of them and of the name |
 
 ## Rule 1: prose and protocol are different things
 
@@ -174,22 +130,19 @@ printing `normal` / `left-up` / `bottom-up` / `right-up`, and
 `omarchy-shell lock isLocked` answering `true`. Both would be someone else's
 regression, but Ragtop would be where it showed up.
 
-## Rule 2: key on the English string
+## Rule 2: whole sentences, never fragments
 
-If a translation layer lands, don't invent a scheme. Both live approaches key
-on the English source string, the menu tables above and #8765's
-`(msgctxt, msgid)` pairs. Ragtop's prose is already written as plain English
-sentences in one place each, so converting it later is mechanical:
-
-- **Menu labels**, in `install.sh`, in `menu_block`'s `rows` table.
-- **Notifications**, `ragtop`'s `notify` calls and `choice_notice`, plus
-  `overlay-clones.sh`'s `notify`.
-- **Installer output**, `say`, `warn` and the offer text in `install.sh`.
-- **Setup check**, `setup-check.sh`'s notification.
-- **In the interface itself**, remarkably little. See below.
-
-Keep it that way: no string built by concatenating fragments, and no prose
-that another script reads back.
+Don't invent a scheme; Ragtop's is Omarchy's (above): dotted keys, `%1`
+placeholders, English as the fallback. And every string is a whole sentence,
+or a whole label: never one built by putting a word into a sentence in code,
+"The " + name + " is on", since other languages put the word elsewhere and
+inflect it. Where a sentence has to name something, the name is a `%1`, and
+the name itself comes from the catalog too (the overlays' names, a
+language's name). Where a value is a setting rather than a word (small,
+normal, large), each value gets its own sentence. Converting Ragtop found
+five of these and turned each into whole sentences: the overlay
+notifications, the key-label notice, Shift's state and "This is ..." in the
+tour, and the setup wizard's summary.
 
 ## What is already language-agnostic
 
@@ -221,12 +174,12 @@ longer than English.
 
 ## If you want to help
 
-The useful contribution today is not a Ragtop translation, since there is
-nothing
-to plug it into. It is upstream: [omarchy#7284](https://github.com/omacom/omarchy/issues/7284)
-is where the decision will be made, and a language pack for
-[omarchy-language](https://github.com/sbelcl/omarchy-language) is what reaches
-a user's desktop this week.
+Review a language. The catalogs in `i18n/` are drafts until someone who
+speaks the language has read them, and the name check above is part of that
+reading. Or add one: copy `i18n/en/`, as under "For translators", and run
+`tests/i18n-test.sh`.
 
-When a layer does land, Ragtop's domain will be its plugin id,
-`sclemance.ragtop`.
+Ragtop follows Omarchy's language setting (`~/.config/omarchy/language`),
+so a language Omarchy offers is one Ragtop can speak once its catalogs are
+here. Ragtop's own catalogs stay in this repository, under its plugin id,
+`sclemance.ragtop`, rather than in Omarchy's.

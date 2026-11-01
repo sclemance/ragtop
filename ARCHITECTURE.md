@@ -35,23 +35,22 @@ directory is a symlink into the repo and the watcher does not follow it.
 | File | What it is |
 | --- | --- |
 | `Service.qml` | The whole service. State, child processes, every layer surface, the IPC socket. |
-| `BarWidget.qml` | The bar tile. Opens tiling mode, shows rotation lock. |
+| `BarWidget.qml` | The bar tile: the keyboard's mode and screen rotation. |
 | `Keyboard.qml` | The on-screen keyboard: layouts, pages, which key a touch means. |
 | `KeyboardKey.qml` | How one key is drawn. Nothing else. |
 | `KeyboardTheme.qml` | Reads the look settings and resolves them into colours, sizes and corners. |
-| `KeyboardSurface.qml` | The shared backdrop and top border, used by the keyboard and the picker strip. |
 | `SuggestionStrip.qml` | The band above the keys with an input method's choices. Draws, and says which item a touch means. |
 | `KeyIcon.qml` | Icons Ragtop draws itself as paths rather than taking from a font. |
 | `LockKeyboard.qml` | A second, standalone keyboard for the lock screen. See below for why it is separate. |
 | `LockKeyIcon.qml` | The same idea for the lock screen. |
-| `TilingLayer.qml` | The transparent layer over real windows. Move, swap and resize by finger. |
-| `TilingBar.qml` | The control strip along the bottom while tiling. |
+| `Tour.qml` | The guided tour, drawn on the overlay layer. Shows, never changes. |
 | `ToolsPanel.qml` | The settings panel that comes up over the keyboard. |
 | `PickerNav.qml` | A navigation strip for Omarchy's image picker. |
 | `SetupWizard.qml` | First-run setup, in the shell rather than the terminal. |
 | `keyboard-helper.py` | Types characters. A Wayland virtual keyboard. |
 | `fcitx-osk-bridge.py` | Ragtop's side of fcitx5: "an app wants text input", which input method is on, and its choices. |
-| `predictor.py` | Word suggestions and swipe decoding, against wordfreq's English list. |
+| `predictor.py` | Word suggestions and swipe decoding, against installed word lists. |
+| `terminal-helper.py` | Terminal completions, isolated from word and swipe requests. |
 | `words/NOTICE.md` | The word list's credits and licence, copied beside it on download. |
 | `tablet-switch.py` | Watches the fold switch. |
 | `find-tablet-switch.py` | Finds which device that is. |
@@ -69,11 +68,11 @@ surface. There are six.
 
 | Namespace | Layer | Exclusion | What it is |
 | --- | --- | --- | --- |
-| `ragtop-keyboard` | Top | Auto | The keyboard. Reserves its own height. |
+| `ragtop-keyboard` | Top | Normal | The keyboard. Reserves its visible height (below). |
 | `ragtop-keyboard-handle` | Top | Auto | The grab handle when the keyboard is down. |
 | `ragtop-tools` | Top | Normal | The settings panel. |
 | `ragtop-picker-nav` | Top | Auto | The image picker strip. |
-| `ragtop-tiling` | Top | Ignore | The tiling overlay. Reserves nothing. |
+| `ragtop-overlay` | Top | Ignore | Full screen and above the keys: the dim behind the controls, and the tour. Takes no touches unless one of those is up. |
 | `ragtop-screensaver-catcher` | Overlay | Ignore | Swallows the first tap that dismisses the screensaver. |
 
 Two things decide what a touch hits.
@@ -86,14 +85,46 @@ ragtop-tools            order  1
 ragtop-keyboard-handle  order -1
 ragtop-picker-nav       order -2
 ragtop-keyboard         order -3
+ragtop-overlay          order -4
 ```
+
+Within a layer, order is also drawing order, the lowest on top. The overlay
+was first ordered 2 and drew under the keys, which the controls' dim never
+showed, since it leaves a hole for the keyboard. The tour dims the keys
+themselves, so it has to be over them.
 
 **Input masks** decide where a surface takes touches at all. Every surface
 sets `mask: Region { item: ... }` pointing at whatever it actually draws.
 Outside that region touches fall through to whatever is underneath. This is
-why the tiling overlay can cover the screen and still let you reach the bar
-and the keyboard handle. Layer ordering was tried first for that and it put
-the overlay on top of both.
+why the overlay can cover the whole screen and still take nothing at all
+while neither the controls nor the tour is up.
+
+The keyboard's surface keeps one height while a suggestion strip comes and
+goes, its room kept clear when hidden, and reserves only what can be seen
+(`exclusiveZone: keyboard.visibleHeight`). Hyprland places a resized layer
+surface a frame late, which made the keys bounce; changing only the
+reservation moves the windows above and leaves the keyboard still. Its
+contents are laid out from the bottom for the same reason. And the surface
+stays mapped for as long as there is a keyboard, hidden by drawing nothing,
+masking every touch out and reserving nothing: Hyprland puts a newly mapped
+layer at the screen's edge before its layer rule orders it, so mapping it at
+each show pushed the handle up above it for a tenth of a second.
+
+There is no background behind the keys, on the keyboard or the picker strip:
+an opinionated change in 0.48.0, in line with Omarchy's design, since the
+keyboard reserves its room and what is behind it is the wallpaper. Blur, when
+a theme asks, is a Hyprland layer rule with `ignore_alpha`, so it blurs only
+behind what is at least partly opaque: the keys. The handle follows the bar.
+
+The tour (`Tour.qml`) shows rather than changes. A theme is shown by
+`ragtop theme show`, which runs the same checks as applying one and prints
+the result instead of writing it; the service lays that over the settings as
+`previewSettings`, and a board as `previewLayout`. Cards, modifiers and the
+swipe trail are the keyboard's own, set by its `demo` functions with a touch
+point id no finger has. The overlay takes every touch while the tour runs, so
+none of it can type, and ending it clears all of it. The keyboard drops every
+card when its surface changes size, which it does a moment after a board
+changes, so the hold steps open theirs again on the next beat.
 
 `ExclusionMode.Auto` means the surface reserves its height and Hyprland
 moves tiled windows out of the way. `Ignore` means it floats over them.
@@ -109,7 +140,7 @@ Two directions, two mechanisms.
 everything goes through the Lua dispatch API:
 
 ```
-hyprctl dispatch 'hl.dsp.window.swap({ window = "address:0x...", target = "address:0x..." })'
+hyprctl eval 'hl.monitor({ output = "eDP-1", transform = 1 })'
 hyprctl eval 'hl.config({ input = { kb_layout = "de" } })'
 ```
 
@@ -131,26 +162,14 @@ including `get_windows`, `get_workspace_windows`, `get_monitors`,
 `get_layers` and `is_key_down`. The JSON is well understood and works, so
 there is no reason to move, but the second route exists.
 
-**What is not available at all: the layout tree.** Dwindle is a binary tree
-and an edge between two tiles belongs to a branch rather than to either
-window, which is why resizing a boundary between two groups moves the whole
-group. Showing that to a user would need to know the tree, and nothing
-exposes it. `hyprctl` has no tree command, `clients` carries no parent,
-sibling or node field, and the Lua `HL.Window` object answers `nil` to
-`parent`, `sibling`, `node` and `children` while `w.layout` is only
-`{name = "dwindle"}`. It could be inferred from geometry, and it is
-deliberately not: an inference that is usually right reads as a bug on the
-case where it is wrong, and that case is exactly when someone is already
-confused. It needs a change in Hyprland or it stays undone.
-
-Every address that reaches a dispatch is checked against
-`/^0x[0-9a-f]+$/` first, and every workspace id is parsed as an integer and
-range checked, because these strings are being interpolated into a Lua
-expression.
+Anything that reaches a dispatch is a name Ragtop looked up or checked
+first, never a string passed through, because it is being interpolated into
+a Lua expression.
 
 **In** is Quickshell's `Hyprland` singleton and its `onRawEvent`. Ragtop
-listens for window and workspace events, `activespecial`, `configreloaded`
-and layout changes.
+listens for monitors being added, removed or laid out again, for the
+keyboard layout changing (`activelayout`), the focused window
+(`activewindow`) and `configreloaded`.
 
 Two traps worth knowing. `hyprctl` prints addresses as `0x589cf9091790` and
 Hyprland's **events** print them as `589cf9091790` with no prefix, so one
@@ -455,10 +474,81 @@ things English did not.
   offered, and after one and an apostrophe the rest is completed alone and
   offered with it.
 
+**Password fields.** fcitx5 knows what kind of field has focus, since
+applications say so through text-input (and GTK, Qt and X11 through their
+modules), and keeps it as capability flags. It does not tell an on-screen
+keyboard, but its Controller's `DebugInfo` lists every input context with
+its flags and which has focus, and the bridge reads that on every focus and
+reports `field {password, terminal, noCapitals}`. `Password` (0x8) and
+`Sensitive` (1 << 36) make `secretField`, as does Omarchy's polkit prompt,
+and while it holds, nothing typed is recorded: `trackWord`, `noteTyped` and
+`setFinished` return before keeping anything, what was held is cleared, and
+on leaving the helper is told to `forget` its cache of looked-up characters
+and the spare keys bound to them, which would say which were typed if not in
+what order. `Terminal` (1 << 32) joins the window-class check for the
+assists, and `NoAutoUpperCase`, `Email` and `Url` turn capitals off.
+DebugInfo is written for people, not programs, so it is read defensively:
+exactly one context marked `focus:1`, with a `cap:` field, or "null", which
+leaves things as they were before this. A context in no group, which is
+every one in the tests' display-less fcitx5, is listed without flags, so the
+tests check the parsing on the report's real shape instead (Brave's login
+form, tried by hand: password, then nocapitals for the e-mail field).
+
+**Terminals.** At a shell's prompt the strip offers commands, then files
+(`terminal-helper.py`, reusing `predictor.py`'s `Terminal`: PATH plus the shell's built-ins, notes from
+`apropos -l`, files from the folder `omarchy-cmd-terminal-cwd` gives, the
+line split as the shell splits it, and each suggestion carrying how many
+characters it replaces). "At the prompt" is the kernel's answer, not a
+guess: the terminal's shell's foreground process group (`/proc/<shell>/stat`
+field 8) is the shell itself, read again every 1.5 s while the keyboard is up
+in a terminal, since starting or leaving a program changes it with no focus
+change. Anything else in front, Claude Code, vim, gets English. The line is
+`typedTail` from its last Enter, which now has a cursor: ← → Home End move
+it, typing and deleting happen at it, and ↑ ↓, Tab and shortcuts make it
+unknown. Held keys are repeated by the keyboard (`keyRepeat`), at Hyprland's
+`repeat_delay` and `repeat_rate`, rather than by the application, so each
+repeat passes through the record; with the application repeating, a held
+BackSpace lost the line. A terminal newly focused at its prompt is taken to
+be at an empty line (`termJustFocused`, set on every focus event, since two
+terminals share a class).
+
+**Typing assists.** Capitals and double-space full stops decide from
+`typedTail`, everything Ragtop typed in the field (up to 400 characters),
+kept in `writeKeys` with `typedFromStart`, whether it reaches back to the
+start of the field. A field's focus (the bridge's `show`) starts it; an
+arrow, Tab, a shortcut, a held BackSpace, another keyboard or another window
+make it unknown, and unknown never capitalises. Found on the Yoga, each a
+bug first: the last four characters were not enough, since BackSpace
+uncovers what is before them; the window's focus event, arriving just after
+the field's, undid the fresh start, and so did the hide fcitx5 sends as
+focus settles, so neither counts within half a second of a `show`; a space
+straight after punctuation Ragtop already spaced is swallowed; and the
+keyboard latches Shift with `Qt.callLater`, after the key that made the
+capital due, since that key's own `afterKey` lets go of a latched Shift.
+Off in a terminal: a list of classes, plus whatever `omarchy-default-terminal`
+names.
+
+**The word just finished.** A word typed and spaced, taken from the strip,
+or swiped is kept as `finished`, with what followed it, and a second without
+typing offers its forms in the strip (a swipe's runners-up first); a tap
+swaps it in place, keeping the space. Anything typed lets it go.
+
+**Word forms.** A hold on a word in the strip sends `forms <word>`, and the
+answer opens a card below the strip. The forms come from rules, not from a
+list of every form: English's inflections run both ways, sum to summed and
+summed back to sum, and the result is kept only where the word list has it,
+so a rule may make words nobody writes and nothing comes of them. Three
+guards keep the families clean: -er and -est count only as a pair, which an
+adjective has (summer is not more sum); a word comes from its commonest root
+(tried from try, not tri); and beside an irregular family, from a table of
+about 150, a rule-made form far rarer than the root is dropped (childs). The
+rules and table are about 6 KB, and other languages are expected at 10 to 25
+KB each, French's conjugations the largest.
+
 **What turns them off.** A layout whose xkb name is not English (the helper
 now reports `code` in its labels, since the name is translated), unless the
 setting is `all`, the override for that derived decision; a CJK engine; and
-Omarchy's polkit prompt, the one password field Ragtop can see. The setting
+a password field, which turns off more than these (below). The setting
 is `predictions=off|english|all` (`on` from before is read as english), and
 `predictions-on` remembers which of the two a toggle brings back. Swipe is
 only active with suggestions (`swipeActive` requires `predicting`), and its
@@ -480,7 +570,19 @@ from Gimbal (MIT).
 
 A clone stops receiving Omarchy's updates, so `sync` re-clones and re-patches
 any whose built-in has changed, and `install` registers it as an Omarchy
-post-update hook. The polkit and lock clones keep their authentication
+post-update hook.
+
+Omarchy has no removal hook, and its Remove deletes a marketplace checkout
+outright, but the clones are plugins of their own and outlive it. So while
+any overlay is on, `install_hook` keeps a copy of `overlay-clones.sh`,
+`overlay-publish.py` and the catalogs in `~/.local/share/ragtop/keeper`, and
+`overlay-clones.sh orphaned` runs from there once `sclemance.ragtop` is gone.
+Three things trigger it: the service's `Component.onDestruction`, through
+`systemd-run` and waiting up to ten seconds for the folder to go; a
+`post-boot` hook; and the `post-update` hook. It removes only clones that
+`clone_is_ours`, through the same `apply_selection` as Setup, and then the
+hooks and the copy. Startup sync rewrites the hooks and refreshes the copy,
+so an existing install picks this up without a reinstall. The polkit and lock clones keep their authentication
 capability because Omarchy stamps a clone with its source's capabilities via
 `clonedFrom`.
 
@@ -579,7 +681,7 @@ nothing on the socket can be handed a value to act on:
 showKeyboard  hideKeyboard  toggleKeyboard  keyboardVisible
 toggleControls  growKeyboard  shrinkKeyboard
 cycleRotation  rotationState
-toggleTiling  openSetup  closeSetup  health
+startTour  openSetup  closeSetup  health
 ```
 
 A temporary probe function is the standard way to test something that needs
@@ -652,31 +754,121 @@ whose shared window stayed mapped between opens. Omarchy dropped that design
 ten days later (#14458) and no release ever carried it, so its fixture and
 the code for it are gone.
 
+## Benchmarks
+
+`bench/bench.py` measures prediction speed and quality per language and per
+word list, on held-out text (a Project Gutenberg novel per language), so a
+change of data or engine is decided by numbers rather than by feel.
+`bench/bench.py fetch` puts its data in `~/.cache/ragtop-bench`, outside the
+repository, since none of it is ours to commit; `compare <lang> small large`
+prints a table. It reports load time and memory, coverage, keystrokes saved,
+correction top-1/top-3, swipe top-1/top-3 on wobbled synthetic paths, and
+latency medians and 95th percentiles for each. Random choices are seeded.
+
+What it has settled so far (2026-10-24):
+
+- **wordfreq's large lists are not worth it.** Ten times the words gave
+  under one point more keystrokes saved, made swipe less accurate (82 → 78%
+  first in English, 70 → 55% in French) and everything about ten times
+  slower, with 115 MB of memory. Ragtop stays on the small lists.
+- **Speed.** Folding and counting accents for the same words on every
+  keystroke was nine tenths of a suggestion's cost; they are worked out once
+  per list (`Predictor.folds`), for list words only, never typed text.
+  Swipe decoding scores candidates on a cheap floor first (frequency, ends,
+  length) and stops before shaping words that cannot make the shortlist,
+  which gives identical answers (checked on 1,000 swipes). The 95th
+  percentile went from 62 to 6 ms a keystroke and from 258 to 72 ms a swipe
+  in English, and from 95 to 6 ms and 429 to 77 ms in French, for about
+  100 ms more at load and 5 MB more memory.
+- **Swipe is judged on words as they are written.** Picking distinct words
+  evenly, the first measure, made French look like 70% right first and
+  English 82%, but that is mostly rare words; as written, it was 88% and
+  94%. Read the other way, weighing frequency less looked like a win. Both
+  are reported now, the written one first.
+- **Swipe weights were tuned** (2026-10-26) on held-out words, both
+  languages, three amounts of wobble: shape 1 → 1.5, frequency 1/300 →
+  1/400, length 0.15 → 0.1, ends 0.5 → 0.75. French as written 88 → 91%
+  first (99% in the first three), rare words 69 → 76%; English 94 → 96%,
+  rare 76 → 83%. The tuner wanted shape at 3; that was left alone because
+  the paths are simulated and smoother than a finger. The 95th percentile
+  of a swipe rose to about 95 ms, since a lighter frequency term makes the
+  floor in decode prune less. What remains in French is mostly words the
+  path cannot tell apart, commencé and commence, which needs context.
+
+**The next word** is a bigram model with backoff, no AI: `bench/pairs.py`
+counts which words follow which in Tatoeba's sentences (nine tenths for
+measuring, all for release), keeps each word's 32 commonest followers seen
+twice or more, leaves out names Tatoeba overuses (capitalised mid-sentence
+80% of the time and ten times commoner there than in wordfreq: Tom, Mary),
+and lists the words always written with a capital (I, Paris), all read from
+the data rather than written per language. The predictor holds the word
+before ("after"), answers next words, and ranks completions by the share of
+that word's followers each one is, in centibels, or by its own frequency 40
+centibels worse (CONTEXT_BACKOFF; 0 to 100 measured within 0.2%). Measured on
+held-out sentences: keystrokes saved 24 → 37% English, 24 → 36% French; on a
+nineteenth-century novel 23 → 30% and 21 → 27%. The service reads the word
+before off the typed record (contextNow), so tapped, swiped and taken words
+all count. Swipe decoding takes the word before too (Swipes.decode,
+before): its frequency term is the same context-aware commonness, so the
+floor that prunes candidates stays exact. Measured with every word of
+held-out sentences swiped in order (bench/pairs.py, measure_swipe): right
+first 94.8 → 95.8% English and 93.1 → 93.8% French at typical wobble, 89.4 →
+91.6% and 87.6 → 89.9% sloppy, about a fifth fewer wrong swipes; mostly words
+the path cannot tell apart, to and too. A heavier frequency weight did worse
+with context or without (1/300, 1/220), so it stays 1/400.
+
+Data layout: `words/en/` is in the repository (wordfreq's list, unmodified,
+and the English pairs, about 0.8 MB together) so English needs nothing
+fetched; other languages are assets of the `data-v1` release, pinned by hash
+in the CLI's `words_table`. The predictor reads a language's files from the
+downloads folder first, then `words/`. Pairs builds are reproducible (sorted
+keys, gzip with no timestamp); words/NOTICE.md records the Tatoeba export
+each was built from.
+
+Hunspell is used when a dictionary is installed, never required
+(predictor.py, Spelling dictionaries), through libhunspell by ctypes. Its
+validity check answers joins in any language (storeroom yes, alot no) at
+about 4 µs; its stemmer gives languages without rules of their own their
+word forms, from a stem index of the list's words built in a background
+thread with a Hunspell handle of its own (handles are not thread-safe),
+closed when done, and cached in `~/.cache/ragtop/stems` keyed on the list
+and dictionary. Costs measured: 5 MB and 14 ms to open English's, 11 MB and
+39 ms for French's, 1.5 s once to build French's index and 17 ms to read it
+back. The English dictionary is too shallow for forms (summed and went are
+entries of their own), so English keeps its rules. Completions are not
+filtered by it: it rejects lower-case names and newer words the list rightly
+has. `RAGTOP_DICTIONARY_DIRS` replaces the search path, empty for none,
+which the tests use.
+
+## Tracing touches
+
+`ragtop touch-trace on` keeps the keyboard's last minute of touches in
+memory: when, where, what each came to (a kind of key, never the
+character), stalls of the shell's thread over 100 ms, and every change in
+reserved space. `sudo bench/touch-trace.py` records what the touchscreen
+itself reports, from the kernel, and `ragtop touch-trace compare` lays the
+two together. It settled two things (2026-10-26). Touches reach Ragtop
+within a couple of milliseconds; a "missed" press was the keyboard's frames
+being held while the windows above resized, which a strip appearing or
+going mid-swipe caused. So the reserved space (Keyboard.qml, reservedHeight)
+changes only between touches, and is given back only after a second with
+none. And a held finger means a card or a swipe and nothing else, so drift
+cancels nothing, and a card left across the letters hands over to a swipe
+unless the finger is heading for the card (cardToSwipe, headingFor).
+
 ## What shaped the design
 
 Five things that came out of building it, worth holding on to.
 
 **State changes with no event to notice it by.** The keyboard's exclusive
-zone relayouts every window and Hyprland says nothing. Tiling mode's own
-resizes move the windows it is drawing over. Screen rotation moves
-everything. Special workspaces did have an event, `activespecial`, and the
-bug was not listening for it.
-
-Two more turned up after this file was first written, and both were
-Hyprland dispatches that change geometry silently. Measured on the event
-socket, `window.swap` emits no `movewindow` and no `resizewindow`, and it
-does not change focus either. `layout("togglesplit")` emits nothing at all.
-The first made tiling mode swap the wrong window, because `windowAt` reads
-the same rectangles the outlines are drawn from, so a stale one resolves a
-drop to whichever window used to be in that spot. The second left the
-outlines around the old shape.
+zone relayouts every window and Hyprland says nothing. Screen rotation moves
+everything. Several dispatches change geometry silently too: measured on the
+event socket, `window.swap` emits no `movewindow` and no `resizewindow`, and
+`layout("togglesplit")` emits nothing at all.
 
 The rule that comes out of it: **an action that moves something says so
-itself**, rather than waiting for an event that may not come. Every one of
-these was fixed by having the dispatching function trigger the re-read.
-Where an action seemed to work, it was usually relying on a side effect,
-tapping a window refreshed the model only because focusing emits
-`activewindow`.
+itself**, rather than waiting for an event that may not come. Where an action
+seemed to work, it was usually relying on a side effect.
 
 To find out whether a dispatch is silent, watch `.socket2.sock` through it:
 
@@ -690,33 +882,53 @@ Filter for `movewindow` and `resizewindow`. Ignore `windowtitle` and
 Anything reading geometry needs a settle pass, not a single read.
 
 **One rule, one place.** Where a rule was written twice it drifted, and the
-drift was always invisible until something specific broke. Hit testing and
-paint order ranked windows differently, so a floating window inside a
-focused tile could not be tapped at all. Three theme whitelists had to agree
+drift was always invisible until something specific broke. Three theme
+whitelists had to agree
 and two of them knew about a new value. A settings key added beside a table
 instead of into it was never cleared. Prefer one function both callers use
 over two that happen to match today.
 
-**A group is one tile.** Omarchy tabs windows together with SUPER+G, and
-Hyprland then reports every member at the same geometry with `hidden` false
-on all of them. Anything drawing per window draws them stacked. Measured:
-swapping one member with another tile moves the whole group intact, so the
-members are interchangeable as handles and the fix is to keep one row per
-group rather than to work out which tab is visible. Nothing exposes which
-tab that is, so the one kept is the most recently focused, which only
-affects a label.
-
 **Touches go by the slot, not by what is drawn.** A key's touch area is its
 rectangle whatever shape the theme draws in it, so a shape can never make a
-key harder to hit. Tiling mode inverts this deliberately: there the windows
-themselves are the controls, so what you touch has to be what you get, and
-nothing reaches past what is on top.
+key harder to hit.
 
-**Validate before dispatching.** Addresses and workspace ids are
-interpolated into Lua. They are checked by pattern and by range first, every
-time.
+**Validate before dispatching.** Whatever is interpolated into Lua is
+checked first, every time.
 
 **Measure it.** Sign conventions, whether a dispatcher accepts a floating
 window, how long a hung D-Bus call takes to recover. Several assumptions in
 this file were wrong the first time and were only settled by running the
 thing and reading the numbers.
+
+### Completion scheduling
+
+Ordinary word completion and terminal completion each allow one request in
+flight and one latest pending request. Intermediate prefixes are replaced
+before computation. Word replies are checked against field, language, word
+and preceding context; context commands remain ordered before completions.
+
+Terminal completion runs in a separate, lazy process, first started when the
+visible keyboard needs suggestions at a known, non-sensitive terminal prompt
+with full typing memory. The worker announces readiness before Service sends a request.
+Its JSON replies echo an opaque request id. Command names arrive before manual
+descriptions, which are read asynchronously with a five-second timeout and an
+8 MiB output bound. A later description update is accepted only for the current
+request. PATH and directory scans can delay terminal results but cannot occupy
+the word/swipe predictor.
+
+Field changes, unknown focus, leaving the prompt and keyboard hiding clear
+pending and retained request text, but preserve the worker's command index and
+manual descriptions. An outstanding request keeps only its id until acknowledged,
+so focus churn cannot queue additional lookups behind it. A reset message drops
+the worker's pending description update without discarding command metadata.
+An already executing filesystem lookup finishes before the worker reads that reset;
+its obsolete reply cannot display. No new typed-text persistence or diagnostics
+are introduced.
+
+Disabling suggestions, reducing typing memory below Full, entering a secret field
+or making the keyboard unavailable stops the worker and discards its cache. Its
+metadata subprocess is reaped on EOF or SIGTERM. A crash retries for a visible,
+eligible prompt; otherwise the next eligible request starts it again. A delayed
+retry never stops a worker that is already running. The legacy predictor `term`
+command remains for direct protocol clients and parser regression tests; Service
+uses only the isolated worker. Empty prompts produce no suggestions in either path.

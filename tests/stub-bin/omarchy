@@ -10,8 +10,16 @@
 #           clonedFrom) and refuses a target that already exists
 #   remove  moves the plugin to a hidden timestamped backup beside it
 #
+# Where $HOME/.config/omarchy/shell.json exists, a clone also changes it as
+# the shell's enable does for a clone (PluginRegistry.qml, setEnabled): the
+# clone takes the built-in's place in the bar, or is added to plugins[], and
+# the built-in is switched off, to be switched back on when the clone goes.
+#
 # STUB_FAIL_CLONE and STUB_FAIL_REMOVE name an overlay whose clone or removal
-# should fail, and STUB_LOG is a file every call is appended to.
+# should fail. STUB_LOSE_REPLY names one whose clone does all of that and then
+# fails as an enable answered too late does: Omarchy's clone deletes the
+# directory and leaves the settings. STUB_LOG is a file every call is
+# appended to, with the IPC timeout the call was given.
 set -euo pipefail
 
 plugins_dir="$HOME/.config/omarchy/plugins"
@@ -50,6 +58,26 @@ clone)
   mv "$stage/manifest.json.tmp" "$stage/manifest.json"
   mv "$stage" "$target_dir"
   [[ -z ${STUB_LOG:-} ]] || echo "clone $source_id" >>"$STUB_LOG"
+  [[ -z ${STUB_LOG:-} ]] || echo "ipc-timeout ${OMARCHY_SHELL_IPC_TIMEOUT:-}" >>"$STUB_LOG"
+  config="$HOME/.config/omarchy/shell.json"
+  if [[ -f $config ]]; then
+    jq --arg id "$new_id" --arg source "$source_id" '
+        def eid: if type == "object" then .id else . end;
+        (.bar.layout // {}) as $layout
+        | ([$layout | to_entries[] | .value[]? | eid] | index($source)) as $inBar
+        | if $inBar != null then
+            .bar.layout |= with_entries(.value |= map(if eid == $source then (if type == "object" then .id = $id else {id: $id} end) else . end))
+          else .plugins = ((.plugins // []) + [{id: $id}]) end
+        | .disabledPlugins = (((.disabledPlugins // []) - [$source]) + [$source])
+        | .cloneSourceRestores = (((.cloneSourceRestores // []) - [$id]) + [$id])
+      ' "$config" >"$config.tmp"
+    mv "$config.tmp" "$config"
+  fi
+  if [[ ${STUB_LOSE_REPLY:-} == "$name" ]]; then
+    rm -rf "$target_dir"
+    echo "omarchy-shell is not responding" >&2
+    exit 1
+  fi
   echo "Cloned $source_id to $target_dir and switched to $new_id"
   ;;
 remove)

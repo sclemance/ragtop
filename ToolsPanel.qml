@@ -30,13 +30,14 @@ Item {
   required property var service
 
   signal dismissed()
+  readonly property var languageInfo: panel.service.wordLanguages[panel.service.wordLanguage] || ({})
 
   implicitWidth: card.implicitWidth
   implicitHeight: card.implicitHeight
 
   readonly property string themeName: {
     var name = panel.service.currentTheme
-    return name.charAt(0).toUpperCase() + name.slice(1)
+    return name.split("-").map(function(word) { return word.charAt(0).toUpperCase() + word.slice(1) }).join(" ")
   }
 
   // A note that outlived the code it explained, because the trap has not gone
@@ -86,10 +87,66 @@ Item {
         width: scroller.width
         spacing: Style.space(8)
 
+        // Whether there is a newer Ragtop, asked only when this is tapped:
+        // nothing else in Ragtop starts network traffic. With one to have,
+        // the button becomes the way to it, through Omarchy's own updater.
+        Item {
+          width: parent.width
+          height: updateButton.implicitHeight
+
+          Button {
+            id: updateButton
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property string state: panel.service.updateState
+            text: state === "checking" ? panel.service.t("tools.update.checking")
+              : state === "available" ? panel.service.t("tools.update.to", panel.service.updateLatest)
+              : panel.service.t("tools.update.check")
+            enabled: state !== "checking"
+            bordered: true
+            foreground: Color.popups.text
+            onClicked: {
+              if (state === "available") panel.service.runUpdate()
+              else panel.service.checkForUpdates()
+            }
+          }
+          Text {
+            textFormat: Text.PlainText
+            anchors.left: updateButton.right
+            anchors.leftMargin: Style.spacing.controlGap
+            anchors.right: tourButton.left
+            anchors.rightMargin: Style.spacing.controlGap
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property string state: panel.service.updateState
+            text: state === "current" ? panel.service.t("tools.update.current", panel.service.updateInstalled)
+              : state === "available" ? panel.service.t("tools.update.youHave", panel.service.updateInstalled)
+              : state === "dev" ? panel.service.t("tools.update.dev")
+              : state === "failed" ? panel.service.t("tools.update.failed")
+              : panel.service.t("tools.update.version", panel.service.updateInstalled)
+            color: Color.popups.text
+            opacity: 0.7
+            elide: Text.ElideRight
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+          }
+          // The tour (Tour.qml), which closes this panel and shows the keys.
+          Button {
+            id: tourButton
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: panel.service.t("tools.tour")
+            bordered: true
+            foreground: Color.popups.text
+            onClicked: panel.service.startTour()
+          }
+        }
+
+        PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+
         // The theme, stepped rather than listed: the keyboard behind redraws
         // as you go, which is a better way to choose one than reading names.
         PanelSectionHeader {
-          text: "Keyboard theme"
+          text: panel.service.t("tools.theme")
           foreground: Color.popups.text
         }
 
@@ -149,18 +206,104 @@ Item {
 
         PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
 
+        Toggle {
+          visible: panel.service.currentTheme !== "mechanical" && panel.service.look.backlight === "accent"
+          width: parent.width
+          label: panel.service.t("tools.backlight.animation")
+          description: panel.service.t("tools.backlight.animation.description")
+          checked: panel.service.look.animateBacklight
+          foreground: Color.popups.text
+          accent: Color.accent
+          onClicked: panel.service.toggleSetting("backlight-animation")
+        }
+
+        Column {
+          visible: panel.service.currentTheme === "mechanical"
+          width: parent.width
+          spacing: Style.space(8)
+
+          Toggle {
+            width: parent.width
+            label: panel.service.t("tools.mechanical.backlight")
+            checked: panel.service.look.backlight === "accent"
+            foreground: Color.popups.text
+            accent: Color.accent
+            onClicked: panel.service.toggleSetting("mechanical-backlight")
+          }
+
+          PanelSectionHeader {
+            text: panel.service.t("tools.mechanical.material")
+            foreground: Color.popups.text
+          }
+
+          Flow {
+            width: parent.width
+            spacing: Style.spacing.md
+            Repeater {
+              model: ["plain", "pudding", "frosted", "translucent"]
+              delegate: Button {
+                required property string modelData
+                width: (parent.width - Style.spacing.md) / 2
+                text: panel.service.t("tools.mechanical." + modelData)
+                selected: panel.service.look.keycapMaterial === (modelData === "plain" ? "solid" : modelData)
+                bordered: true
+                foreground: Color.popups.text
+                background: Color.popups.background
+                accent: Color.accent
+                onClicked: panel.service.setMechanicalMaterial(modelData)
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            text: panel.service.t("tools.mechanical." + (panel.service.look.keycapMaterial === "solid"
+              ? "plain" : panel.service.look.keycapMaterial) + ".description")
+            color: Color.popups.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          Toggle {
+            width: parent.width
+            enabled: panel.service.look.backlight === "accent"
+              && ["solid", "pudding"].indexOf(panel.service.look.keycapMaterial) !== -1
+            opacity: enabled ? 1 : 0.5
+            label: panel.service.t("tools.mechanical.shine")
+            description: panel.service.t("tools.mechanical.shine.description")
+            checked: enabled && panel.service.look.shineThrough
+            foreground: Color.popups.text
+            accent: Color.accent
+            onClicked: panel.service.toggleSetting("mechanical-shine-through")
+          }
+
+          Toggle {
+            width: parent.width
+            enabled: panel.service.look.backlight === "accent"
+            opacity: enabled ? 1 : 0.5
+            label: panel.service.t("tools.mechanical.effects")
+            description: panel.service.t("tools.backlight.animation.description")
+            checked: enabled && panel.service.look.animateBacklight
+            foreground: Color.popups.text
+            accent: Color.accent
+            onClicked: panel.service.toggleSetting("backlight-animation")
+          }
+        }
+
         // Screen rotation, named rather than implied. Automatic follows the
         // machine: it turns in tablet mode and holds still in laptop mode.
         // Three exclusive states, which is what a ButtonGroup is for.
         PanelSectionHeader {
-          text: "Screen rotation"
+          text: panel.service.t("tools.rotation")
           foreground: Color.popups.text
         }
 
         ButtonGroup {
-          options: [{ value: "auto", label: "Auto-rotate" },
-                    { value: "locked", label: "Locked" },
-                    { value: "unlocked", label: "Unlocked" }]
+          options: [{ value: "auto", label: panel.service.t("tools.rotation.auto") },
+                    { value: "locked", label: panel.service.t("tools.rotation.locked") },
+                    { value: "unlocked", label: panel.service.t("tools.rotation.unlocked") }]
           value: panel.service.rotationMode
           foreground: Color.popups.text
           background: Color.popups.background
@@ -206,7 +349,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "Rotate left"
+                text: panel.service.t("tools.rotation.left")
                 color: turnLeft.foreground
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
@@ -233,7 +376,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: "Rotate right"
+                text: panel.service.t("tools.rotation.right")
                 color: turnRight.foreground
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
@@ -249,7 +392,7 @@ Item {
         // since a row offering a single screen is a row saying nothing.
         PanelSectionHeader {
           visible: panel.service.monitorCount > 1
-          text: "Display"
+          text: panel.service.t("tools.display")
           foreground: Color.popups.text
         }
 
@@ -261,7 +404,34 @@ Item {
           background: Color.popups.background
           accent: Color.accent
           focusable: false
+          enabled: panel.service.displaySaving === ""
           onChanged: function(name) { panel.service.setDisplay(name) }
+        }
+        Text {
+          width: parent.width
+          visible: panel.service.displayPreview !== ""
+          text: panel.service.t("tools.display.revertIn", panel.service.displaySeconds)
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+        Row {
+          visible: panel.service.displayPreview !== ""
+          enabled: panel.service.displaySaving === ""
+          spacing: Style.spacing.controlGap
+          Button {
+            text: panel.service.t("tools.display.keep")
+            foreground: Color.popups.text
+            bordered: true
+            onClicked: panel.service.keepDisplay()
+          }
+          Button {
+            text: panel.service.t("tools.display.revert")
+            foreground: Color.popups.text
+            bordered: true
+            onClicked: panel.service.revertDisplay()
+          }
         }
 
         // Which board the keyboard draws. Here as well as in the menu because
@@ -270,7 +440,7 @@ Item {
         // Auto is not a board but an answer to the question, so it sits with
         // them rather than as a switch beside them.
         PanelSectionHeader {
-          text: "Keyboard layout"
+          text: panel.service.t("tools.layout")
           foreground: Color.popups.text
         }
 
@@ -298,7 +468,7 @@ Item {
         // colours are PanelSlider's, so it looks like Omarchy's sliders, but
         // the handling is the one that was measured against a thumb.
         PanelSectionHeader {
-          text: "Keyboard size"
+          text: panel.service.t("tools.size")
           foreground: Color.popups.text
         }
 
@@ -314,7 +484,7 @@ Item {
             id: autoSize
             height: Style.spacing.controlHeight
             bordered: true
-            text: "Auto-resize"
+            text: panel.service.t("tools.size.auto")
             selected: panel.service.sizeAuto
             foreground: Color.popups.text
             onClicked: panel.service.setSize("auto")
@@ -419,11 +589,37 @@ Item {
         // through to everything that does not belong on a surface you hold.
         Toggle {
           width: parent.width
-          label: "Auto-expand keyboard on text fields"
+          label: panel.service.t("tools.autoShow")
           checked: panel.service.autoShowEnabled
           foreground: Color.popups.text
           accent: Color.accent
           onClicked: panel.service.toggleAutoShow()
+        }
+
+        PanelSectionHeader {
+          text: panel.service.t("tools.memory")
+          foreground: Color.popups.text
+        }
+        ButtonGroup {
+          options: [
+            { value: "full", label: panel.service.t("tools.memory.full") },
+            { value: "word", label: panel.service.t("tools.memory.word") },
+            { value: "none", label: panel.service.t("tools.memory.none") }
+          ]
+          value: panel.service.typingMemory
+          foreground: Color.popups.text
+          background: Color.popups.background
+          accent: Color.accent
+          focusable: false
+          onChanged: function(value) { panel.service.queuePreference(["typing-memory", "set", value]) }
+        }
+        Text {
+          width: parent.width
+          text: panel.service.t("tools.memory.help")
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
         }
 
         // Word suggestions and swipe, here because whether you want them
@@ -431,24 +627,62 @@ Item {
         // waits on them, kept as it was set.
         Toggle {
           width: parent.width
-          label: panel.service.predictionsMode === "all" ? "English word suggestions, on any layout"
-            : "Word suggestions, in your layout's language"
-          checked: panel.service.predictionsEnabled
+          label: panel.service.predictionsMode === "all" ? panel.service.t("tools.predictions.all")
+            : panel.service.t("tools.predictions.layout")
+          enabled: panel.service.typingMemory !== "none"
+          opacity: enabled ? 1 : 0.4
+          checked: enabled && panel.service.predictionsEnabled
           foreground: Color.popups.text
           accent: Color.accent
           onClicked: panel.service.toggleSetting("predictions")
         }
         Toggle {
           width: parent.width
-          label: "Swipe typing"
-          enabled: panel.service.predictionsEnabled
+          label: panel.service.t("tools.assists")
+          checked: panel.service.assistsEnabled
+          foreground: Color.popups.text
+          accent: Color.accent
+          onClicked: panel.service.toggleSetting("assists")
+        }
+        Toggle {
+          width: parent.width
+          label: panel.service.t("tools.swipe")
+          enabled: panel.service.predictionsEnabled && panel.service.typingMemory !== "none"
           opacity: enabled ? 1 : 0.4
-          checked: panel.service.swipeEnabled && panel.service.predictionsEnabled
+          checked: enabled && panel.service.swipeEnabled
           foreground: Color.popups.text
           accent: Color.accent
           onClicked: panel.service.toggleSetting("swipe")
         }
 
+        Button {
+          visible: panel.service.wordLanguage !== "" && !panel.languageInfo.installed
+          enabled: !panel.service.wordsFetching
+          text: panel.service.wordsFetching
+            ? panel.service.t("offer.fetching", panel.service.languageName(panel.service.wordLanguage, panel.languageInfo.name || ""))
+            : panel.service.t("offer.add", panel.service.languageName(panel.service.wordLanguage, panel.languageInfo.name || ""))
+          foreground: Color.popups.text
+          bordered: true
+          onClicked: panel.service.installWordLanguage(panel.service.wordLanguage)
+        }
+        Text {
+          width: parent.width
+          visible: panel.service.wordLanguage !== "" && !panel.languageInfo.installed
+          text: panel.service.t("offer.size", panel.languageInfo.size || "")
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
+        Text {
+          width: parent.width
+          visible: panel.service.preferenceFailed
+          text: panel.service.t("tools.saveFailed")
+          wrapMode: Text.WordWrap
+          color: Color.popups.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
         Item {
           width: parent.width
           height: settingsButton.implicitHeight
@@ -456,7 +690,7 @@ Item {
           Button {
             id: settingsButton
             anchors.right: parent.right
-            text: "Settings"
+            text: panel.service.t("tools.settings")
             bordered: true
             foreground: Color.popups.text
             onClicked: { panel.dismissed(); panel.service.openSettings() }

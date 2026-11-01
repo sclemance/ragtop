@@ -1,0 +1,16 @@
+import QtQuick
+import Quickshell.Io
+Item {
+  id: root
+  property int reloads: 0
+  property string imeEngine: ""
+  property string selectedEngine: ""
+  function sendKeys(command) {
+    if (command !== "reload") throw new Error("Unexpected input command")
+    reloads++
+  }
+  function leaveEngine() { imeEngine = "" }
+  function switchEngine(name) { selectedEngine = name }
+  // FROM SOURCE: pendingLayout switchLayout layoutSwitchFinished
+  // SWITCH PROCESS
+}

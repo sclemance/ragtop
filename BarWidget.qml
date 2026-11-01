@@ -103,32 +103,12 @@ BarWidget {
 
   Grid {
     id: grid
-    // Three across, though only two of them are there in laptop mode: Grid
-    // leaves out an invisible child rather than leaving a hole for it, so the
-    // row closes up on its own.
-    columns: root.vertical ? 1 : 3
+    columns: root.vertical ? 1 : 2
 
-    // All drawn by KeyIcon rather than set as a Nerd Font glyph, which is
-    // what the keyboard's own keys use. That makes the button that opens
-    // tiling mode the same mark as the key that opens it, so the bar and
-    // the keyboard are visibly the same control, and it means neither one
-    // depends on the bar's font carrying an icon at all.
-    BarIconButton {
-      id: shortcutsButton
-      visible: root.tabletMode
-      bar: root.bar
-      tooltipText: "Tiling: move and resize windows"
-      active: root.service !== null && root.service.tilingOpen
-      iconComponent: Component {
-        KeyIcon {
-          name: "windows"
-          color: shortcutsButton.active && shortcutsButton.useActiveColor
-            ? shortcutsButton.activeColor : shortcutsButton.foreground
-        }
-      }
-      onPressed: if (root.service) root.service.toggleTilingMode()
-    }
-
+    // Drawn by KeyIcon rather than set as a Nerd Font glyph, which is what
+    // the keyboard's own keys use, so neither depends on the bar's font
+    // carrying an icon at all.
+    //
     // Whether there is an on-screen keyboard on offer. Always here, like the
     // rotation button and for the same reason: the one control that turns the
     // keyboard on must not itself be somewhere you need the keyboard's mode to
@@ -152,9 +132,10 @@ BarWidget {
     BarIconButton {
       id: keyboardButton
       bar: root.bar
-      tooltipText: root.keyboardMode === "on" ? "Keyboard: always on"
-        : root.keyboardMode === "off" ? "Keyboard: off"
-        : "Keyboard: on in tablet mode, follows the switch"
+      tooltipText: !root.service ? ""
+        : root.keyboardMode === "on" ? root.service.t("bar.keyboard.on")
+        : root.keyboardMode === "off" ? root.service.t("bar.keyboard.off")
+        : root.service.t("bar.keyboard.sensor")
       active: root.keyboardMode !== "sensor"
       activeColor: Color.accent
       iconComponent: Component {
@@ -196,11 +177,12 @@ BarWidget {
       id: rotationButton
       visible: !(root.accelAbsent && root.probesSettled)
       bar: root.bar
-      tooltipText: root.sensorStuck ? "Screen rotation: the sensor has stopped answering"
-        : !root.rotationAvailable ? "Screen rotation: needs iio-sensor-proxy to follow the device"
-        : root.rotationMode === "locked" ? "Screen rotation: locked, turn it by hand from the controls"
-        : root.rotationMode === "unlocked" ? "Screen rotation: unlocked, always follows the sensor"
-        : "Screen rotation: automatic, follows tablet mode"
+      tooltipText: !root.service ? ""
+        : root.sensorStuck ? root.service.t("bar.rotation.stuck")
+        : !root.rotationAvailable ? root.service.t("bar.rotation.none")
+        : root.rotationMode === "locked" ? root.service.t("bar.rotation.locked")
+        : root.rotationMode === "unlocked" ? root.service.t("bar.rotation.unlocked")
+        : root.service.t("bar.rotation.auto")
       // Urgent only for the fault. The accent for a mode other than the
       // default, which is what it means on the keyboard button too.
       active: root.sensorStuck || root.rotationMode !== "auto"
