@@ -1485,6 +1485,13 @@ Item {
         root.traceTouch({ t: now - gap, ev: "stall", id: -1, x: 0, y: 0, what: "Ragtop was busy for " + gap + " ms" })
     }
   }
+  // touch-trace: what happened to the field and the record of what was
+  // typed in it, as events, input-context ids and counts, never the text.
+  // For telling a field Ragtop dropped apart from one it never saw begin.
+  function traceField(what) {
+    if (root.touchTrace)
+      root.traceTouch({ t: Date.now(), ev: "field", id: -1, x: 0, y: 0, what: what })
+  }
   function traceTouch(entry) {
     if (!root.touchTrace || root.secretField) return
     // Screen height, for the touch's place on it: the keyboard sits on the
@@ -2006,6 +2013,7 @@ Item {
   // A field took focus, and which is not known until the bridge has asked
   // fcitx5: nothing is kept until it says.
   function fieldShown() {
+    root.traceField("shown: a new field, the record starts at its start")
     root.fieldInfo = null
     root.fieldPending = false
     root.pendingTyped = []
@@ -2017,6 +2025,7 @@ Item {
   // bridge's next report says which, and until it does what is typed is
   // held apart (fieldPending).
   function fieldHidden() {
+    root.traceField("hidden: what is typed is held until the bridge reports")
     root.fieldPending = true
     root.pendingTyped = []
     fieldPendingLimit.restart()
@@ -2028,6 +2037,12 @@ Item {
     root.pendingTyped = []
     fieldPendingLimit.stop()
     root.fieldInfo = value
+    if (root.touchTrace) {
+      var ids = (was ? was.id : "none") + " -> " + (value ? value.id : "none")
+      root.traceField(!value ? "report: no field (" + ids + ")"
+        : was && value.id !== was.id ? "report: a different field (" + ids + "), the record is dropped"
+        : "report: the same field (" + ids + "), " + held.length + " held key line(s) kept")
+    }
     if (value && was && value.id !== was.id) root.forgetField(false)
     // The same field still: what was typed while it was in question is its.
     else if (value && held.length > 0) held.forEach(root.noteTyped)
@@ -2042,6 +2057,8 @@ Item {
     id: fieldPendingLimit
     interval: 1000
     onTriggered: {
+      root.traceField("no report within a second of a hide: " + root.pendingTyped.length
+                      + " held key line(s) and the record are dropped")
       root.fieldPending = false
       root.pendingTyped = []
       root.forgetField(false)
@@ -2082,6 +2099,7 @@ Item {
     root.pendingTyped = []
     root.fieldGeneration++
     root.dropTyped(fromStart)
+    if (root.touchTrace) root.traceField("record dropped, now: " + root.recordState())
     // Each answer still takes its place in the queue, and finds undefined.
     var gone = function() { return undefined }
     root.asked = root.asked.map(gone)
@@ -2818,6 +2836,7 @@ Item {
     if (!root.swipeActive || !keyboardHelper.running) return
     // Drawn in a field that has since lost focus: the word was for there.
     if (ask.field !== root.fieldGeneration) {
+      root.traceField("a swiped word was not typed: the field changed while it was read")
       if (root.suggestions.source === "swipe" && root.swipedWord === "") root.setSuggestions("swipe", null)
       return
     }
@@ -2842,6 +2861,8 @@ Item {
     root.swipedWord = word
     root.autoSpaced = true
     root.setFinished(root.capitalised(words[0]), " ", true)
+    if (root.touchTrace) root.traceField("a swiped word was typed, " + (root.fieldPending
+      ? "held while the field is in question" : "record: " + root.recordState()))
     root.setSuggestions("swipe", { items: words.map(function(w) { return { text: root.capitalised(w), note: "" } }),
                                    prev: false, next: false, cursor: 0 })
   }

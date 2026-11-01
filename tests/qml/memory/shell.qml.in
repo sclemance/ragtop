@@ -30,6 +30,7 @@ ShellRoot {
              function write(s) { sent.push(s) } }
   QtObject { id: finishedPause; function restart() {} function stop() {} }
   function clearTerminalRequests() {}
+  property bool touchTrace: false
 
   // ---- Service.qml's own ----------------------------------------------------
   // FROM SOURCE: fieldInfo fieldShown fieldHidden fieldReported fieldPending pendingTyped fieldPendingLimit
@@ -38,6 +39,7 @@ ShellRoot {
   // FROM SOURCE: onKeepAnythingChanged onTypingMemoryChanged forgetField dropTyped
   // FROM SOURCE: typedTail typedCursor beforeCursor typedFromStart sentenceStart
   // FROM SOURCE: isWordChar noteTyped freshField freshFieldAt fieldGeneration
+  // FROM SOURCE: traceField
   // FROM SOURCE: predicting onPredictingChanged trackWord currentWord swipedWord autoSpaced hyphenJoined
   // FROM SOURCE: finished finishedFormsAsked setFinished joinFirst joinPair joinOffer
   // FROM SOURCE: asked pendingCompletion cancelCompletions onFieldGenerationChanged formsAsked joinAsked nextAsked nextWords nextReplied nextArrived
