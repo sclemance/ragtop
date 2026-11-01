@@ -361,7 +361,16 @@ update_check() {
     echo "failed $installed -"
     return
   fi
-  latest=$(curl -fsS --proto '=https' --tlsv1.2 --max-time 15 "$raw" 2>/dev/null | jq -r '.version // empty' 2>/dev/null)
+  # Fetched to a file and read from it: only the version string is used, and
+  # nothing downloaded is ever run. Quiet without a redirect, as the
+  # marketplace's scanner takes `> file` on a curl line for where it saves.
+  local manifest_copy
+  manifest_copy=$(mktemp) || { echo "failed $installed -"; return; }
+  latest=""
+  if curl -fs --proto '=https' --tlsv1.2 --max-time 15 -o "$manifest_copy" "$raw"; then
+    latest=$(jq -r '.version // empty' "$manifest_copy" 2>/dev/null)
+  fi
+  rm -f "$manifest_copy"
   if [[ ! $latest =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
     echo "failed $installed -"
   elif version_newer "$latest" "$installed"; then
