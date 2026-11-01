@@ -1,4 +1,5 @@
 #!/bin/bash
+# quick: skip, about 15 s: applies and removes overlays against real Omarchy trees.
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 selection_sandbox() {
   make_sandbox "$old_omarchy"

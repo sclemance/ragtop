@@ -1,4 +1,5 @@
 #!/bin/bash
+# quick: skip, about a minute: clones and patches whole Omarchy trees, several times over.
 # overlay-clones.sh, run for real against copies of two Omarchy trees: 4.0.4,
 # whose overlays are each a window of their own, and 7cc6a55, where four of
 # them became instances of the shared OverlayWindow.
