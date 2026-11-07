@@ -1142,14 +1142,20 @@ Item {
   // Retried while none is found, e.g. a detachable's keyboard not yet attached.
   function findSwitchDevice(devices) {
     var blocks = devices.split(/\n\s*\n/)
+    var fallback = ""
     for (var i = 0; i < blocks.length; i++) {
       var handler = /^H: Handlers=.*\b(event\d+)\b/m.exec(blocks[i])
       var sw = /^B: SW=([0-9a-fA-F ]+)$/m.exec(blocks[i])
       if (!handler || !sw) continue
       var words = sw[1].trim().split(/\s+/)
-      if (parseInt(words[words.length - 1], 16) & 2) return "/dev/input/" + handler[1]
+      if (parseInt(words[words.length - 1], 16) & 2) {
+        var candidate = "/dev/input/" + handler[1]
+        // Prefer a switch-only device; keep combined devices as a fallback.
+        if (!/^B: KEY=/m.test(blocks[i])) return candidate
+        if (!fallback) fallback = candidate
+      }
     }
-    return ""
+    return fallback
   }
 
   Process {
