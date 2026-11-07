@@ -3776,7 +3776,9 @@ Item {
       anchors.fill: parent
       // A short fade in and out, which unmapping used to leave to Hyprland.
       opacity: root.keysShown ? 1 : 0
-      visible: opacity > 0
+      // Keep the item visible while faded out. On a reported Hyprland setup,
+      // toggling its visibility as well as its opacity left the keys blank
+      // until the display was rotated. The surface stays mapped either way.
       Behavior on opacity { NumberAnimation { duration: 120 } }
       service: root
       theme: keyboardTheme
