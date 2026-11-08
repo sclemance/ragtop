@@ -34,12 +34,15 @@ sys.path.insert(0, os.path.dirname(HERE))
 import predictor as P  # noqa: E402
 
 CACHE = os.path.expanduser("~/.cache/ragtop-bench")
-TATOEBA = {"en": "eng", "fr": "fra", "de": "deu", "es": "spa", "pt": "por"}
+TATOEBA = {"en": "eng", "fr": "fra", "de": "deu", "es": "spa", "pt": "por", "it": "ita"}
 START = "<s>"
 CAPITALS = "<capitals>"
 # One sentence in ten, by its number, is kept back for testing.
 HELD_OUT = 10
 WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)*")
+# For the pairs, a trailing apostrophe is taken too, and kept only for a
+# language's apocopes (po'); anywhere else it is dropped, as it always was.
+TOKEN = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)*'?")
 
 
 def held_out(sentence_id):
@@ -51,10 +54,20 @@ def tokens(sentence, lang):
     has them (l'été is l and été, as wordfreq counts them)."""
     out = []
     elisions = P.ELISIONS.get(lang, set())
-    for w in WORD.findall(sentence.replace("’", "'").lower()):
+    # un'altra is un' and altra: an elided word kept apart from un, which
+    # un'altro never is.
+    elided = P.ELIDED.get(lang, set())
+    apocopes = P.APOCOPES.get(lang, set())
+    for w in TOKEN.findall(sentence.replace("’", "'").lower()):
+        if w.endswith("'"):
+            w = w if w[:-1] in apocopes else w[:-1]
+            if not w:
+                continue
         head, apostrophe, tail = w.partition("'")
         if apostrophe and head in elisions and tail:
             out += [head, tail]
+        elif apostrophe and head in elided and tail:
+            out += [head + "'", tail]
         else:
             out.append(w)
     return out
@@ -125,7 +138,8 @@ def build(lang, keep, min_count=2, part="train", out=None):
     for _, text in sentences(lang, part):
         prev = START
         for w in tokens(text, lang):
-            if w not in vocab:
+            # un' and po' are their words with the apostrophe kept.
+            if w not in vocab and not (w.endswith("'") and w[:-1] in vocab):
                 prev = None   # a word it does not know breaks the chain
                 continue
             if prev is not None:

@@ -117,14 +117,40 @@ MISSPELLING_GAP = 100
 # as words; after one and an apostrophe, the rest is completed on its own.
 ELISIONS = {
     "fr": {"l", "d", "j", "c", "n", "s", "m", "t", "qu", "jusqu", "lorsqu", "puisqu", "quoiqu"},
+    # dell'anno, quest'anno, c'è, anch'io: wordfreq lists some joined, which
+    # suggest prefers when one completes what was typed.
+    "it": {"l", "dell", "dall", "nell", "sull", "all", "coll", "quest", "quell", "c", "d", "m", "t",
+           "s", "v", "n", "bell", "sant", "tutt", "anch", "com", "cos", "dov"},
+}
+# Words that are elided too, but are words as they are: un'altra beside un
+# amico, nessun'altra beside nessun dubbio. Split and completed after their
+# apostrophe like an elision, and still offered on their own.
+ELIDED = {
+    "it": {"un", "nessun", "buon", "grand", "qualcun"},
+}
+# Words cut short with an apostrophe after them, and no words without it:
+# un po', mo', be'. The pairs keep the apostrophe (pairs.py), and they are
+# never offered as next words: the apostrophe ends them, and what follows
+# takes a space, which a next word ending in one would not get. Not the
+# imperatives da', fa', sta', va', di', which are words without it too and
+# whose pairs would take over theirs (found by Codex's review): those are
+# read as da, fa, sta, va and di, as they always were.
+APOCOPES = {
+    "it": {"po", "mo", "be"},
 }
 # Letters that come apart into two, which decomposition does not do.
 LIGATURES = {"œ": "oe", "æ": "ae"}
-# Letters a language gives a key of their own, as letters rather than accented
-# ones: ñ in Spanish and ç in Portuguese, each beside l. Typed, they are folded like any accent, so
-# "ano" still reaches año; but a swipe through ñ does not pass n, so on a
-# board with that key a word's path goes through it (key_letters).
-OWN_KEYS = {"es": {"ñ"}, "pt": {"ç"}}
+# Letters a language's board gives a key of their own: ñ in Spanish and ç in
+# Portuguese, each after l; è after p and ò and à after l in Italian. Typed,
+# they fold like any accent, so "ano" still reaches año; but a swipe through
+# ñ does not pass n, so on a board with that key a word's path goes through
+# it (key_letters).
+OWN_KEYS = {"es": {"ñ"}, "pt": {"ç"}, "it": {"è", "ò", "à"}}
+# Of those, the ones that are letters rather than accents, which the
+# misspelling filter keeps apart too (Predictor.spellings): campana is no
+# misspelling of campaña, faca none of faça. Italian's are accents, and citta
+# is a misspelling of città.
+SPELLED_APART = {"es": {"ñ"}, "pt": {"ç"}}
 
 
 def fold(word):
@@ -276,6 +302,11 @@ class Predictor:
     def __init__(self, ranks, lang="en"):
         self.lang = lang
         self.elisions = ELISIONS.get(lang, set())
+        # Heads that are words as well: after un' only what the pairs have
+        # seen after un' is offered, un'altra and never un'altro.
+        self.also_words = ELIDED.get(lang, set())
+        self.elided = self.elisions | self.also_words
+        self.apocopes = APOCOPES.get(lang, set())
         self.ranks = {w: r for w, r in ranks.items() if w not in self.elisions}
         for word, rank in EXTRA_WORDS.items():
             self.ranks.setdefault(word, rank)
@@ -284,11 +315,11 @@ class Predictor:
         # list's own words, never anything typed, which is not kept.
         self.folds = {w: (fold(w), accents(w)) for w in self.ranks}
         # What the misspelling filter tells words apart by: the folded
-        # letters, but keeping the language's own letters (OWN_KEYS). campana
+        # letters, but keeping the language's own letters (SPELLED_APART). campana
         # is no misspelling of campaña, however much rarer, while tambien is
         # one of también. The same whatever the board, so a word is a word on
         # any layout. Only built where it differs.
-        own = OWN_KEYS.get(lang, set())
+        own = SPELLED_APART.get(lang, set())
         self.spellings = {w: (key_letters(w, f, own), n) for w, (f, n) in self.folds.items()} \
             if own else self.folds
         # Every word under its folded form, sorted, for prefix search, and by
@@ -434,15 +465,24 @@ class Predictor:
         kept = []
         for k in range(0, len(parts) - 1, 2):
             w, c = parts[k], parts[k + 1]
-            if (w in self.ranks or w in self.elisions) and c.isdigit() and int(c) > 0:
+            if (w in self.ranks or w in self.elisions or self.marked(w)) and c.isdigit() and int(c) > 0:
                 kept.append((w, int(c)))
         total = sum(c for _, c in kept)
         return [(w, round(-100 * math.log10(c / total))) for w, c in kept] if total else []
 
+    def marked(self, w):
+        """Whether `w` is a pairs word with its apostrophe kept: an elided
+        word, un', or an apocope, po'."""
+        return w.endswith("'") and (w[:-1] in self.also_words or w[:-1] in self.apocopes)
+
     def context(self, before):
         """{word: score} of what follows `before`, a few dozen at most, for
-        ranking completions and swipes by it."""
-        return dict(self.followers(before))
+        ranking completions and swipes by it. po' ranks po, as it is typed."""
+        out = {}
+        for w, score in self.followers(before):
+            key = w[:-1] if w.endswith("'") and w[:-1] in self.apocopes else w
+            out.setdefault(key, score)
+        return out
 
     def next(self, before):
         """The words likeliest to come after `before`, START at the start of
@@ -450,7 +490,9 @@ class Predictor:
         with its apostrophe, j', since it is typed with no space after."""
         out = []
         for w, _ in self.followers(before):
-            out.append(w + "'" if w in self.elisions else self.written(w))
+            if w.endswith("'") and w[:-1] in self.apocopes:
+                continue
+            out.append(w + "'" if w in self.elisions else w if self.marked(w) else self.written(w))
             if len(out) == SHOWN:
                 break
         return out
@@ -481,8 +523,14 @@ class Predictor:
         # After an elision and its apostrophe, l'ét, the rest is a word of
         # its own: completed alone, and offered with the elision in front.
         head, apostrophe, tail = typed.rpartition("'")
-        if apostrophe and head.lower() in self.elisions and not any(self.completions(typed.lower())):
-            return [head + "'" + w for w in self.suggest(tail, head.lower())] if tail else []
+        if apostrophe and head.lower() in self.elided and not any(self.completions(typed.lower())):
+            if not tail:
+                return []
+            if head.lower() in self.also_words:
+                # un': only what is seen after un', which agrees with it.
+                seen = self.context(head.lower() + "'")
+                return [head + "'" + w for w in self.suggest(tail, head.lower() + "'") if w.lower() in seen]
+            return [head + "'" + w for w in self.suggest(tail, head.lower())]
         word = typed.lower()
         if not word:
             return []
@@ -1152,7 +1200,7 @@ class Swipes:
         if predictor is not None:
             self.spellings = predictor.spellings
         else:
-            own = OWN_KEYS.get(self.lang, set())
+            own = SPELLED_APART.get(self.lang, set())
             self.spellings = {w: (key_letters(w, f, own), n) for w, (f, n) in self.folds.items()} \
                 if own else self.folds
         self.keys = {}
@@ -1456,8 +1504,13 @@ def handle(session, terminal, source, one_list, line):
         # j'ai: the word is ai, as the pairs were counted.
         if session.before and "'" in session.before and session.predictor:
             head, _, tail = session.before.partition("'")
-            if head in session.predictor.elisions and tail:
+            if head in session.predictor.elided and tail:
                 session.before = tail
+        # po, as the service reads it off the text, is po' to the pairs: po
+        # is no word without its apostrophe (APOCOPES).
+        if session.predictor and session.before in session.predictor.apocopes \
+                and session.before + "'" in session.predictor.pair_lines:
+            session.before += "'"
         p = session.predictor
         # Nothing at a sentence's start: with no word before, what comes next
         # is only what sentences in general start with, "I the he she you",

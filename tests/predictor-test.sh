@@ -392,6 +392,37 @@ PY
   assert_contains "$(grep '^suggest' <<<"$out" | sed -n 3p)" '"forca"'
 }
 
+# Italy's board has è after p, ò and à after l: a swipe through à is città,
+# and one through ò però. Typed, "citta" still reaches città, and stays the
+# misspelling it is: Italian's are accents, not letters of their own.
+italian_accent_keys_are_on_the_path() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/it"
+  wordlist "$langs/it/small_it.msgpack.gz" 323:"città" 484:citta 330:"però" 458:pero 200:di 184:un 300:altra 310:altro 360:al
+  /usr/bin/python3 - >"$sandbox/qwerty-it" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiopè", "asdfghjklòà", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["città", "però"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang it"; cat "$sandbox/qwerty-it")
+  suggest "$langs" "citta" "un'al" "un"
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" "città però " "first word of each swipe"
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"città"'
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"citta"'
+  # Without pairs nothing is known to agree with un', so nothing is offered
+  # after it (italian_elided_words_and_apocopes has the pairs).
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 2p)" "un'altro"
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 3p)" '"un"'
+}
+
 # Typed, ñ folds like an accent: "ano" still reaches año.
 typing_n_reaches_n_tilde() {
   langs="$sandbox/words"
@@ -650,6 +681,33 @@ next_words_and_context() {
   [[ $(grep -c '^suggest \["the", "to"' <<<"$out") -eq 1 ]] || fail "without context the should lead: $out"
 }
 
+# Italian's un' takes only what agrees with it: what the pairs saw after
+# un' (un'altra, un'amica), never any word after un' (un'altro, un'amico,
+# un'cane). po' keeps its apostrophe in the pairs, and is never offered as a
+# next word, which would type it without one or without its space.
+italian_elided_words_and_apocopes() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/it"
+  wordlist "$dir/it/small_it.msgpack.gz" 184:un 300:altra 310:altro 320:amica 330:amico 340:cane 325:po \
+    350:viaggio 216:di 250:troppo 216:da 280:solo 150:il
+  pairs_file "$dir/it/pairs_it.tsv.gz" $'un\tpo\' 90 viaggio 40 altro 30 amico 20' $'un\'\taltra 50 amica 30' \
+    $'po\'\tdi 40 troppo 10' $'è\tun\' 20 un 10' $'da\tsolo 30 un 10' $'da\'\til 9' $'<capitals>\t'
+  out=$( { echo "lang it"; echo "complete un'al"; echo "complete un'am"; echo "complete un'ca";
+           echo "after un"; echo "after po"; echo "after da"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  local s1 s2 s3
+  s1=$(grep '^suggest' <<<"$out" | sed -n 1p); s2=$(grep '^suggest' <<<"$out" | sed -n 2p); s3=$(grep '^suggest' <<<"$out" | sed -n 3p)
+  assert_contains "$s1" "\"un'altra\""
+  assert_lacks "$s1" "un'altro"
+  assert_contains "$s2" "\"un'amica\""
+  assert_lacks "$s2" "un'amico"
+  assert_lacks "$s3" "un'cane"
+  assert_contains "$out" 'next ["viaggio", "altro", "amico"]'
+  assert_contains "$out" 'next ["di", "troppo"]'
+  # da is a word as it is: its own pairs, never da''s.
+  assert_contains "$out" 'next ["solo", "un"]'
+}
+
 # English is in the repository: a machine that has fetched nothing still
 # has it, pairs and all.
 the_bundled_copy_is_read() {
@@ -736,6 +794,8 @@ run_test "predictor: in Spanish a swipe through ñ is año, through n ano" a_swi
 run_test "predictor: in Spanish, typing ano still reaches año" typing_n_reaches_n_tilde
 run_test "predictor: in Spanish campana survives beside campaña; tambien still goes" n_tilde_is_no_accent_to_the_misspelling_filter
 run_test "predictor: in Portuguese ç is its own key and letter: faça and faca" c_cedilla_is_its_own_in_portuguese
+run_test "predictor: in Italian à and ò are on the swipe path, and un is a word" italian_accent_keys_are_on_the_path
+run_test "predictor: in Italian un' takes only what agrees with it, and po' is never a bare next word" italian_elided_words_and_apocopes
 run_test "predictor: a word's forms, from its root and back to it" forms_both_ways
 run_test "predictor: -er and -est are forms only as a pair, so summer is not sum's" comparatives_only_as_a_pair
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root

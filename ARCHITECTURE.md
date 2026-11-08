@@ -504,6 +504,27 @@ Gutenberg's Portuguese novels are all in the spelling before the 1911 and
 1990 reforms (Dom Casmurro, vae, titulo), so that measure (coverage 87%) is
 the weaker one here.
 
+Italian's board has keys for accented letters: è after p, ò and à after l.
+They join OWN_KEYS for the swipe path, which for the commonest words with
+each takes right first from 0% to 95% (à), 2% to 94% (ò) and 0% to 94% (è).
+They are accents, not letters of their own, so they stay out of
+SPELLED_APART: citta is the misspelling of città it looks like, and the
+filter drops 78 such words (piu, perche, citta; pero, the pear, too).
+Elisions as in French (dell'anno, quest'anno, c'è), and ELIDED for the words
+that are also elided but are words as they are (un'altra beside un amico).
+The pairs keep un' apart from un, and after un' only what they saw after
+un' is offered: un'altra and un'amica, never un'altro or un'cane (found by
+Codex's review). APOCOPES (po', mo', be', words only cut short) keep their
+apostrophe in the pairs too, and are never offered as next words, which
+would type them without it or without their space; typed, po is completed
+as any word. The imperatives da', fa', sta', va' and di' are left out: they
+are words without the apostrophe too, and taking them apart would hand da's
+pairs to da' (Codex's review again). The pairs tokenizer
+takes a trailing apostrophe only for those, so English, French, Spanish and
+Portuguese pairs build byte-identical to their pins. Held-out Tatoeba:
+keystrokes saved 24 → 38% with pairs; swipe right first 92.8 → 94.4%
+typical, 87.5 → 90.3% sloppy. Manzoni's I promessi sposi: coverage 88%.
+
 Spanish's numbers, on Galdós's Marianela (1878) and held-out Tatoeba
 sentences: coverage 92%; keystrokes saved 18% on the novel, 21 → 32% with
 pairs on the sentences; swipe right first 92.1 → 93.0% at typical wobble and
