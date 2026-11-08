@@ -1,0 +1,51 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+// The key-size controls: a step starts from the size as it is, once what was
+// last asked for has landed, and a failed write does not stick. The CLI is a
+// stub beside this file that records the value and fails when told to.
+ShellRoot {
+  id: root
+  Harness { id: t }
+  property var settings: ({ "size-adjust": "100" })
+  property var look: ({ sizeAdjust: String(root.settings["size-adjust"]) })
+  // Service.qml has onSettingsChanged: root.settleSize(); this one also
+  // keeps look in step, as the real look follows the settings.
+  onSettingsChanged: { root.look = { sizeAdjust: String(root.settings["size-adjust"]) }; root.settleSize() }
+  property int autoSizePercent: 120
+  property int sizeMin: 50
+  property int sizeMax: 200
+  function sizePercent(v) { return Number(String(v).trim()) || 100 }
+  // FROM SOURCE: stepSize pendingSize lastAskedSize setSize flushSize sizeStepProc settleSize
+  function wrote() { return root.settings["size-adjust"] }
+  // As the settings file watcher would: the setting follows a write.
+  function observe(v) { root.settings = Object.assign({}, root.settings, { "size-adjust": v }) }
+  Component.onCompleted: t.run([
+    [0, function() { root.setSize(115) }],
+    [700, function() {
+      t.equal(root.lastAskedSize, "115", "asked for 115, not yet seen in the setting")
+      root.observe("115")
+      t.equal(root.lastAskedSize, "", "seen in the setting: the ask is retired")
+      // Changed elsewhere, the menu or the CLI.
+      root.observe("80")
+      root.stepSize(1)
+    }],
+    [700, function() {
+      t.equal(root.lastAskedSize, "85", "a step after a change elsewhere starts from it: 80 to 85")
+      root.observe("85")
+      root.observe("80")
+      root.setSize(115)
+    }],
+    [700, function() {
+      t.equal(root.lastAskedSize, "115", "115 again, after the size went back to 80, is asked, not dropped as a duplicate")
+      root.observe("115")
+      Quickshell.execDetached(["touch", Quickshell.env("RAGTOP_SIZE_FAIL")])
+    }],
+    [300, function() { root.setSize(130) }],
+    [700, function() {
+      t.equal(root.lastAskedSize, "", "a failed write leaves nothing asked for")
+      root.setSize(130)
+      t.equal(root.lastAskedSize, "130", "and asking again is not taken for a duplicate")
+    }],
+  ])
+}

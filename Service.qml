@@ -3373,7 +3373,25 @@ Item {
                             "size-adjust", "set", next]
     sizeStepProc.running = true
   }
-  Process { id: sizeStepProc; onExited: root.flushSize() }
+  Process {
+    id: sizeStepProc
+    onExited: function(code) {
+      // A write that failed leaves nothing asked for: the next step starts
+      // from the setting as it is, and asking again is not a duplicate.
+      if (code !== 0 && root.pendingSize === "") root.lastAskedSize = ""
+      root.flushSize()
+      root.settleSize()
+    }
+  }
+  // What was asked for stops standing in for the setting once the setting
+  // says it, with nothing more on its way. From then on the setting is the
+  // truth, so a change made elsewhere, the menu or the CLI, is what the next
+  // step starts from.
+  function settleSize() {
+    if (root.lastAskedSize === "" || sizeStepProc.running || root.pendingSize !== "") return
+    if (String(root.settings["size-adjust"] || "").trim() === root.lastAskedSize) root.lastAskedSize = ""
+  }
+  onSettingsChanged: root.settleSize()
 
   // Whether the keyboard comes up by itself on a text field. It belongs
   // beside the other things you change while holding the machine, since the
