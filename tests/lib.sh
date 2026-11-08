@@ -13,6 +13,8 @@ new_omarchy="$tests_dir/fixtures/omarchy-7cc6a55"
 # The first release with the shared OverlayWindow, which from here on reads
 # qs.Commons to mirror itself for right-to-left languages.
 rc_omarchy="$tests_dir/fixtures/omarchy-4.5.0-rc1"
+# The 4.5.0 release: the lock has no LockFeedSurface.qml any more.
+rel_omarchy="$tests_dir/fixtures/omarchy-4.5.0"
 
 failed=0
 sandbox=""

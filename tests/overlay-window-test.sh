@@ -37,5 +37,6 @@ window_test() {
 
 window_test "$new_omarchy" 7cc6a55
 window_test "$rc_omarchy" 4.5.0-rc1
+window_test "$rel_omarchy" 4.5.0
 
 finish

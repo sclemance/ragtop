@@ -1,8 +1,8 @@
 #!/bin/bash
 # quick: skip, about a minute: clones and patches whole Omarchy trees, several times over.
-# overlay-clones.sh, run for real against copies of two Omarchy trees: 4.0.4,
-# whose overlays are each a window of their own, and 7cc6a55, where four of
-# them became instances of the shared OverlayWindow.
+# overlay-clones.sh, run for real against copies of Omarchy trees: 4.0.4,
+# whose overlays are each a window of their own; 7cc6a55, where four of them
+# became instances of the shared OverlayWindow; and 4.5.0-rc1 and 4.5.0.
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 all=(menu emojis clipboard polkit image-picker lock)
@@ -706,7 +706,7 @@ PYTHON
 # Reconstruct revision 5 entries and records using the desktop locale, then
 # verify from C. Real content edits must still prevent refresh.
 legacy_locale_and_policy_migrate() {
-  for tree in "$old_omarchy" "$new_omarchy" "$rc_omarchy"; do
+  for tree in "$old_omarchy" "$new_omarchy" "$rc_omarchy" "$rel_omarchy"; do
     make_sandbox "$tree"
     clones install
     assert_rc 0
@@ -862,6 +862,45 @@ run_test "4.5.0-rc1: sync re-clones what uses the shared OverlayWindow when Omar
 run_test "4.5.0-rc1: a clone with edits of its own is kept when the shared OverlayWindow changes" rc_edited_clone_survives
 run_test "7cc6a55 to 4.5.0-rc1: sync moves every clone over to the new window" updating_to_rc_moves_every_clone_over
 run_test "7cc6a55: remove takes the clones away, and the hook with the last" new_remove_takes_clones_and_hook_away
+
+# --- Omarchy 4.5.0: the release, with the lock's feed surface gone ---------
+
+rel_install_patches_every_overlay() { shared=$rel_omarchy new_install_patches_every_overlay; }
+rel_sync_follows_the_shared_window() { shared=$rel_omarchy new_sync_follows_the_shared_window; }
+rel_edited_clone_survives() { shared=$rel_omarchy new_edited_clone_survives_a_shared_window_change; }
+
+# The update from the release candidate to the release: the window is the
+# same, so only the four built-ins that changed are re-cloned, and the lock
+# clone loses the file 4.5.0 dropped.
+updating_rc_to_release_recloned_what_changed() {
+  make_sandbox "$rc_omarchy"
+  clones install
+  assert_rc 0
+  assert_equal "$([[ -e $(clone_of lock)/LockFeedSurface.qml ]] && echo yes)" yes "rc1 lock clone has LockFeedSurface.qml"
+  switch_omarchy "$rel_omarchy"
+  clones sync
+  assert_rc 0
+  local o
+  for o in menu emojis clipboard lock; do
+    assert_contains "$out" "Re-cloned tester.$o from the updated built-in."
+  done
+  for o in polkit image-picker; do
+    assert_contains "$out" "tester.$o matches the built-in, so nothing to sync."
+    assert_lacks "$out" "Re-cloned tester.$o"
+  done
+  assert_contains "$out" "Applied 4 overlay replacements together."
+  assert_equal "$([[ -e $(clone_of lock)/LockFeedSurface.qml ]] && echo yes)" "" "LockFeedSurface.qml left in the lock clone"
+  assert_contains "$(<"$(entry_of lock)")" 'LockKeyboard.qml'
+  clones status
+  for o in "${all[@]}"; do assert_contains "$out" "$o: installed, in sync with the built-in"; done
+  assert_lacks "$out" "edits besides"
+  assert_equal "$(progress_files)" "" "progress markers left behind"
+}
+
+run_test "4.5.0: install patches all six, and status, installed and sync agree" rel_install_patches_every_overlay
+run_test "4.5.0: sync re-clones what uses the shared OverlayWindow when Omarchy changes it" rel_sync_follows_the_shared_window
+run_test "4.5.0: a clone with edits of its own is kept when the shared OverlayWindow changes" rel_edited_clone_survives
+run_test "4.5.0-rc1 to 4.5.0: sync re-clones the four that changed, and the lock loses its feed surface" updating_rc_to_release_recloned_what_changed
 
 
 run_test "4.0.4: install patches all six, and status, installed and the hook agree" old_install_patches_every_overlay
