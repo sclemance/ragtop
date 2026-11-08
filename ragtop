@@ -657,8 +657,12 @@ theme_file() {
 themes() {
   local d
   for d in "$HOME/.config/ragtop/themes/"*/ "$repo/themes/"*/; do
-    [[ -f "$d/ragtop.toml" ]] && basename "$d"
-  done | { grep -xE '[a-z0-9-]{1,32}' || true; } | sort -u | sed '/^omarchy$/d' | sed '1i omarchy'
+    local name
+    name=$(basename "$d")
+    # The whole name, checked before it is printed: a newline in it would
+    # otherwise list two themes that are not there.
+    if [[ -f "$d/ragtop.toml" && $name =~ ^[a-z0-9-]{1,32}$ ]]; then echo "$name"; fi
+  done | sort -u | sed '/^omarchy$/d' | sed '1i omarchy'
 }
 
 # apply_theme <name>: write the theme's settings into settings.conf, so what

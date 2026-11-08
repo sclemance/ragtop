@@ -20,6 +20,7 @@ a_command_named_theme_is_never_listed() {
   user_theme 'audit$(touch MARKER)' Audit
   user_theme 'Spaced Name'
   user_theme "$(printf 'x%.0s' {1..33})"
+  user_theme "$(printf 'aaa\nzzz')"
   (cd "$sandbox/home" && sandboxed bash "$repo/menu-block.sh" add >/dev/null)
   local text
   text=$(<"$(menu)")
@@ -48,6 +49,9 @@ PY
   assert_contains "$out" 'mine'
   assert_lacks "$out" 'audit'
   assert_lacks "$out" 'Spaced'
+  assert_lacks "$out" 'aaa'
+  assert_lacks "$out" 'zzz'
+  sandboxed bash "$repo/ragtop" theme step 1 >/dev/null 2>&1 || fail "theme step failed beside an odd name"
 }
 
 # A block written before the names were checked is replaced whole by the next
