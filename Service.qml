@@ -1773,20 +1773,23 @@ Item {
     root.activeWindowAddress = data
     root.termJustFocused = true
     Qt.callLater(root.readTermPlace)
-    // A new window is a new place to type, and where in it is unknown,
-    // unless fcitx5 has just said a text field took focus: the two come
-    // together when a window is tapped into, the window's often second,
-    // and it undid the field's fresh start.
-    if (Date.now() - root.freshFieldAt < 500) return
-    // Otherwise it is a new field as much as a new window: what was typed,
-    // the word, a swipe or suggestion on its way, and the trust in the field
-    // all go, until the bridge reports the field that has focus now.
-    root.traceField("another window became active (" + root.activeClass + "): the record and the field are let go until a report")
-    root.fieldInfo = null
-    root.fieldPending = false
-    fieldPendingLimit.stop()
-    root.forgetField(false)
+    // A new window is a new field as much as a new place: what was typed,
+    // the word, a swipe or suggestion on its way all go, however soon after
+    // a field took focus (A005: time is no proof the field is this window's).
+    // Only the start is kept when fcitx5 has just said a field took focus,
+    // as the two come together when a window is tapped into, the window's
+    // often second.
+    var fresh = Date.now() - root.freshFieldAt < 500
+    root.traceField("another window became active (" + root.activeClass + "): the record is let go, and what is typed is held until the bridge, asked again, reports")
+    root.forgetField(fresh)
+    // Then the field is in question, as after a hide: what is typed is held
+    // apart until the bridge says which field has focus (fieldReported), or
+    // let go if it does not say within a second.
+    root.fieldHidden()
+    root.askField()
   }
+  // Asks the bridge to say again which field has focus, even if unchanged.
+  function askField() { if (focusBridgeProc.running) focusBridgeProc.write("field\n") }
   Process {
     id: activeClassProc
     command: ["hyprctl", "-j", "activewindow"]
