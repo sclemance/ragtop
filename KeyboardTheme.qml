@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "KeyContrast.js" as KeyContrast
 import "GlowColors.js" as GlowColors
 
@@ -46,7 +47,7 @@ QtObject {
   readonly property bool shineThrough: backlit && look.shineThrough !== false && !transparentCap
   readonly property real wallOpacity: look.wallOpacity === undefined ? 0.5 : look.wallOpacity / 100
   property var glowPalette: ({})
-  readonly property var glowColors: GlowColors.choose(glowPalette, accent, Color.foreground, Color.background)
+  readonly property var glowColors: GlowColors.choose(glowPalette, accent, Commons.Color.foreground, Commons.Color.background)
   readonly property color glowColor: glowColors.base
   readonly property color rippleColor: role(look.backlightPressColor, glowColors.press)
   readonly property real rippleWhiteMix: GlowColors.waveWhiteMix(glowColor, rippleColor, glowColors.dark)
@@ -62,10 +63,10 @@ QtObject {
   // the theme.
   function role(name, fallback) {
     switch (String(name)) {
-    case "foreground": return Color.foreground
-    case "background": return Color.background
-    case "accent": return Color.accent
-    case "urgent": return Color.urgent
+    case "foreground": return Commons.Color.foreground
+    case "background": return Commons.Color.background
+    case "accent": return Commons.Color.accent
+    case "urgent": return Commons.Color.urgent
     case "": case "auto": case "undefined": return fallback
     default: return /^#[0-9a-fA-F]{6,8}$/.test(name) ? name : fallback
     }
@@ -77,10 +78,10 @@ QtObject {
   // own room, so what is behind it is the wallpaper, and a panel over that
   // did nothing but hide it. `surface` is still the colour the keys are
   // measured against, lighter or darker, as the panel's would have been.
-  property color surface: Color.popups.background
-  property color text: role(look.labelColor, Color.popups.text)
-  property color accent: Color.accent
-  property color accentText: Color.background
+  property color surface: Commons.Color.popups.background
+  property color text: role(look.labelColor, Commons.Color.popups.text)
+  property color accent: Commons.Color.accent
+  property color accentText: Commons.Color.background
 
 
   // How see-through the keys are, as the theme asked: the wallpaper shows
@@ -97,10 +98,10 @@ QtObject {
   // when a theme leaves little headroom either way.
   function luminance(c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b }
   readonly property color solidBase: Qt.rgba(surface.r, surface.g, surface.b, 1)
-  readonly property color lighterRole: luminance(Color.foreground) > luminance(Color.background)
-    ? Color.foreground : Color.background
-  readonly property color darkerRole: luminance(Color.foreground) > luminance(Color.background)
-    ? Color.background : Color.foreground
+  readonly property color lighterRole: luminance(Commons.Color.foreground) > luminance(Commons.Color.background)
+    ? Commons.Color.foreground : Commons.Color.background
+  readonly property color darkerRole: luminance(Commons.Color.foreground) > luminance(Commons.Color.background)
+    ? Commons.Color.background : Commons.Color.foreground
 
   function stepped(role, factorColor) {
     var mixed = Qt.tint(solidBase, Util.alpha(role, 0.14))
@@ -118,7 +119,7 @@ QtObject {
 
   // Omarchy's normal control fill goes over the top, so a key still wears
   // the theme's own control tint.
-  readonly property color themeKey: Style.normalFillFor(text, Color.accent, Color.urgent)
+  readonly property color themeKey: Style.normalFillFor(text, Commons.Color.accent, Commons.Color.urgent)
   readonly property color keyBase: look.keyFillAlpha !== "auto"
     ? Util.alpha(role(look.keyColor, text), look.keyFillAlpha)
     : keyFill === "outline" ? "transparent"
@@ -126,10 +127,10 @@ QtObject {
                                 : keyFill === "surface" ? solidBase
                                 : keyFill === "light" ? lightKey : autoKey), themeKey)
   property color key: seeThrough(keyBase)
-  readonly property color pressedOverlay: Style.pressedFillFor(text, Color.accent, Color.urgent)
+  readonly property color pressedOverlay: Style.pressedFillFor(text, Commons.Color.accent, Commons.Color.urgent)
   property color pressedKey: pressFill(key)
-  property color latchedKey: seeThrough(Qt.tint(specialBase, Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.45)))
-  property color lockedKey: seeThrough(Color.accent)
+  property color latchedKey: seeThrough(Qt.tint(specialBase, Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.45)))
+  property color lockedKey: seeThrough(Commons.Color.accent)
   // A key that produces no character sits a step further from the panel than
   // the letters do, so the letters read as one block and the rest read as
   // the keys that act on them. Stepped the same way the keys themselves step
@@ -199,12 +200,12 @@ QtObject {
       ? down : Qt.tint(c, Qt.rgba(1, 1, 1, sideLift))
   }
   readonly property color sideBase: keyFill === "outline"
-    ? Util.alpha(Qt.tint(text, Util.alpha(Color.accent, outlineSideAccent)), sideStrength)
-    : Qt.tint(shaded(keyBase), Util.alpha(Color.accent, sideAccent))
+    ? Util.alpha(Qt.tint(text, Util.alpha(Commons.Color.accent, outlineSideAccent)), sideStrength)
+    : Qt.tint(shaded(keyBase), Util.alpha(Commons.Color.accent, sideAccent))
   property color keySide: seeThrough(sideBase)
 
   // Key borders, from the same control states.
-  property var keyBorderSpec: Border.controlSpec("normal", text, Color.accent, Color.urgent)
+  property var keyBorderSpec: Border.controlSpec("normal", text, Commons.Color.accent, Commons.Color.urgent)
   property color keyBorder: strongContrast ? Util.alpha(text, 0.8) : Border.color(keyBorderSpec)
   property real keyBorderWidth: keyFill === "outline" ? Math.max(1, keyBorderWidthAsked) : keyBorderWidthAsked
   // An outline key is its edge, so it always keeps one, whatever width

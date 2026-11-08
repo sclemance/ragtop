@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import "KeyContrast.js" as KeyContrast
 
 // On-screen keyboard for Omarchy's lock screen. The lock
@@ -11,7 +12,7 @@ import "KeyContrast.js" as KeyContrast
 // LockView's own signals, the path typing takes, so checking it is untouched.
 // From the service it takes only data: the active layout's letters/symbols
 // and the user's key-size adjustment, re-checked here. Appearance is always
-// Omarchy's flat keyboard in the lock screen's own palette (Color.lock).
+// Omarchy's flat keyboard in the lock screen's own palette (Commons.Color.lock).
 //
 // Deliberately separate from Keyboard.qml. It edits the password through
 // LockView's signals: no key events, helper, or modifiers other than Shift.
@@ -452,13 +453,13 @@ Item {
   onPaddingChanged: root.cancelInteraction()
 
   // Omarchy's shared control states, in the lock screen's own colours.
-  readonly property color themeKeyColor: Style.normalFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  readonly property color themeKeyColor: Style.normalFillFor(Commons.Color.lock.text, Commons.Color.lock.borderActive, Commons.Color.lock.textError)
   // A key sits darker or lighter than the lock screen's own surface. Where
   // that surface already is the theme's darkest or lightest colour, the
   // step is taken from the surface itself.
   function luminance(c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b }
-  readonly property color lockSurface: Qt.rgba(Color.lock.background.r, Color.lock.background.g, Color.lock.background.b, 1)
-  readonly property color lighterRole: luminance(Color.lock.text) > luminance(lockSurface) ? Color.lock.text : lockSurface
+  readonly property color lockSurface: Qt.rgba(Commons.Color.lock.background.r, Commons.Color.lock.background.g, Commons.Color.lock.background.b, 1)
+  readonly property color lighterRole: luminance(Commons.Color.lock.text) > luminance(lockSurface) ? Commons.Color.lock.text : lockSurface
   function stepped(role, factorColor) {
     var mixed = Qt.tint(lockSurface, Util.alpha(role, 0.14))
     return Math.abs(luminance(mixed) - luminance(lockSurface))
@@ -467,11 +468,11 @@ Item {
   readonly property color lightKeyBase: stepped(lighterRole, Qt.lighter(lockSurface, 1.3))
   readonly property color keyBase: Qt.tint(lightKeyBase, themeKeyColor)
   readonly property color keyColor: keyBase
-  readonly property color pressedOverlay: Style.pressedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  readonly property color pressedOverlay: Style.pressedFillFor(Commons.Color.lock.text, Commons.Color.lock.borderActive, Commons.Color.lock.textError)
   function pressFill(base) { return KeyContrast.pressedFill(base, pressedOverlay) }
-  readonly property color latchedKeyColor: Style.selectedFillFor(Color.lock.text, Color.lock.borderActive, Color.lock.textError)
-  readonly property color specialTextColor: Color.lock.placeholder
-  readonly property var keyBorderSpec: Border.controlSpec("normal", Color.lock.text, Color.lock.borderActive, Color.lock.textError)
+  readonly property color latchedKeyColor: Style.selectedFillFor(Commons.Color.lock.text, Commons.Color.lock.borderActive, Commons.Color.lock.textError)
+  readonly property color specialTextColor: Commons.Color.lock.placeholder
+  readonly property var keyBorderSpec: Border.controlSpec("normal", Commons.Color.lock.text, Commons.Color.lock.borderActive, Commons.Color.lock.textError)
   readonly property color keyBorder: Border.color(keyBorderSpec)
   readonly property real keyBorderWidth: Border.top(keyBorderSpec)
   readonly property real keyRadius: Style.cornerRadius
@@ -565,9 +566,9 @@ Item {
       anchors.fill: parent
       anchors.margins: -root.gap
       radius: root.keyRadius + root.gap / 2
-      color: Qt.rgba(Color.lock.background.r, Color.lock.background.g, Color.lock.background.b, 1)
+      color: Qt.rgba(Commons.Color.lock.background.r, Commons.Color.lock.background.g, Commons.Color.lock.background.b, 1)
       border.width: Math.max(1, root.keyBorderWidth)
-      border.color: Color.lock.borderActive
+      border.color: Commons.Color.lock.borderActive
     }
 
     Repeater {
@@ -582,7 +583,7 @@ Item {
         height: parent.height
         radius: root.keyRadius
         // Opaque popup keys keep alternatives legible over the keyboard.
-        color: chosen ? Color.lock.borderActive : root.keyBase
+        color: chosen ? Commons.Color.lock.borderActive : root.keyBase
         border.width: root.keyBorderWidth
         border.color: root.keyBorder
 
@@ -596,7 +597,7 @@ Item {
           horizontalAlignment: Text.AlignHCenter
           verticalAlignment: Text.AlignVCenter
           text: parent.modelData
-          color: parent.chosen ? Color.lock.background : Color.lock.text
+          color: parent.chosen ? Commons.Color.lock.background : Commons.Color.lock.text
           font.family: Style.font.family
           font.pixelSize: root.labelSize
         }
@@ -630,7 +631,7 @@ Item {
             readonly property bool accent: modelData === "enter" || (modelData === "shift" && root.capsLock)
             readonly property bool latched: modelData === "shift" && root.shift
             readonly property bool special: modelData in root.labels || modelData === "space"
-            readonly property color restingFill: accent ? Color.lock.borderActive
+            readonly property color restingFill: accent ? Commons.Color.lock.borderActive
               : latched ? root.latchedKeyColor : root.keyColor
             readonly property color fill: area.pressed ? root.pressFill(restingFill) : restingFill
             readonly property real faceY: 0
@@ -648,9 +649,9 @@ Item {
 
             // The label's size on Omarchy's scales, kept inside the key.
             readonly property string kind: root.labelKind(modelData)
-            readonly property color preferredLabelColor: accent ? Color.background
+            readonly property color preferredLabelColor: accent ? Commons.Color.background
               : special ? root.specialTextColor
-              : Color.lock.text
+              : Commons.Color.lock.text
             readonly property color labelColor: preferredLabelColor
             readonly property int labelPixelSize: Math.min(
               kind === "drawn" ? root.iconSize : kind === "word" ? root.wordSize : root.labelSize,

@@ -1,15 +1,16 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 Item {
  id: board
  width:1536; height:1152
  property int captureCase: 0
  onCaptureCaseChanged: {
-  Color.background = captureCase % 2 ? "#eff1f5" : "#1a1b26"
-  Color.foreground = captureCase % 2 ? "#4c4f69" : "#a9b1d6"
-  Color.accent = captureCase % 2 ? "#1e66f5" : "#7aa2f7"
+  Commons.Color.background = captureCase % 2 ? "#eff1f5" : "#1a1b26"
+  Commons.Color.foreground = captureCase % 2 ? "#4c4f69" : "#a9b1d6"
+  Commons.Color.accent = captureCase % 2 ? "#1e66f5" : "#7aa2f7"
  }
- Rectangle { anchors.fill: parent; color: Color.background }
+ Rectangle { anchors.fill: parent; color: Commons.Color.background }
  Repeater { model: 32
   Rectangle { required property int index; x:index*48; width:24; height:board.height; color:index%2 ? "#435573" : "#807060"; opacity:0.35 }
  }

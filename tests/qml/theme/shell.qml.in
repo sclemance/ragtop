@@ -3,6 +3,7 @@ import QtQuick.Window
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import "ThemeData.js" as Data
 import "KeyContrast.js" as Contrast
 import "GlowWave.js" as Wave
@@ -39,9 +40,9 @@ ShellRoot {
     ["#777777", "#888888", "#999999"]
   ]
   function palette(i) {
-    Color.background = palettes[i][0]
-    Color.foreground = palettes[i][1]
-    Color.accent = palettes[i][2]
+    Commons.Color.background = palettes[i][0]
+    Commons.Color.foreground = palettes[i][1]
+    Commons.Color.accent = palettes[i][2]
   }
   // Independent sRGB calculation for the actual rendered face/label pair.
   function light(c) {
@@ -312,7 +313,7 @@ ShellRoot {
         t.equal(String(shift.fill), String(root.lock.latchedKeyColor), "lock keeps latched Shift feedback")
         root.lock.shift = false
         root.lock.capsLock = true
-        t.equal(String(shift.fill), String(Color.lock.borderActive), "lock keeps Caps feedback")
+        t.equal(String(shift.fill), String(Commons.Color.lock.borderActive), "lock keeps Caps feedback")
         root.lock.capsLock = false
         root.key.pressed = false
       }])

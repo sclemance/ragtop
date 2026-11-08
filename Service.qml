@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 import "typed-record.js" as Record
 
 // Singleton: the shell creates one of these per session, whereas the
@@ -292,9 +293,9 @@ Item {
       // The bar's, keyboard up or down: the handle is part of the screen's
       // frame, as the bar is, and the keyboard has no panel to match.
       readonly property color fill: root.barTransparent
-        ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
-        : Color.bar.background
-      readonly property color line: Color.bar.text
+        ? Qt.rgba(Commons.Color.bar.background.r, Commons.Color.bar.background.g, Commons.Color.bar.background.b, 0)
+        : Commons.Color.bar.background
+      readonly property color line: Commons.Color.bar.text
 
       WlrLayershell.namespace: "ragtop-keyboard-handle"
       WlrLayershell.layer: WlrLayer.Top
@@ -3809,7 +3810,7 @@ Item {
   // mapping: Hyprland fades a newly mapped layer in by itself, so the dim
   // around the keys arrived a beat after the keyboard's own dim between
   // them. Both fade together now, by `dimmed` and the same duration.
-  readonly property color scrimColor: Color.menu.scrim
+  readonly property color scrimColor: Commons.Color.menu.scrim
   readonly property int dimFade: 150
   readonly property bool dimmed: root.oskVisible && root.toolsOpen
   PanelWindow {

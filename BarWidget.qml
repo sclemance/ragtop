@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 BarWidget {
@@ -137,7 +138,7 @@ BarWidget {
         : root.keyboardMode === "off" ? root.service.t("bar.keyboard.off")
         : root.service.t("bar.keyboard.sensor")
       active: root.keyboardMode !== "sensor"
-      activeColor: Color.accent
+      activeColor: Commons.Color.accent
       iconComponent: Component {
         KeyIcon {
           name: root.keyboardMode === "off" ? "keyboard-off" : "keyboard"
@@ -187,7 +188,7 @@ BarWidget {
       // default, which is what it means on the keyboard button too.
       active: root.sensorStuck || root.rotationMode !== "auto"
       activeColor: root.sensorStuck
-        ? (root.bar ? root.bar.urgent : Color.urgent) : Color.accent
+        ? (root.bar ? root.bar.urgent : Commons.Color.urgent) : Commons.Color.accent
       iconComponent: Component {
         KeyIcon {
           name: rotationButton.held ? "rotate-off" : "rotate"

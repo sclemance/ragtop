@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Ragtop's own controls: the inside of a tile that is a window of its own.
@@ -61,9 +62,9 @@ Item {
     implicitWidth: Style.space(560)
     implicitHeight: body.implicitHeight + card.contentTopInset + card.contentBottomInset
     radius: Style.cornerRadius
-    color: Color.popups.background
-    borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
-                                          Color.popups.border, Math.max(1, Style.space(2)))
+    color: Commons.Color.popups.background
+    borderSpec: Border.localOrSurfaceSpec("popups", "border", Commons.Color.popups.border,
+                                          Commons.Color.popups.border, Math.max(1, Style.space(2)))
     padding: Style.spacing.popupPadding
 
     // The card asks for the height its rows need, and the window gives it
@@ -104,7 +105,7 @@ Item {
               : panel.service.t("tools.update.check")
             enabled: state !== "checking"
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: {
               if (state === "available") panel.service.runUpdate()
               else panel.service.checkForUpdates()
@@ -123,7 +124,7 @@ Item {
               : state === "dev" ? panel.service.t("tools.update.dev")
               : state === "failed" ? panel.service.t("tools.update.failed")
               : panel.service.t("tools.update.version", panel.service.updateInstalled)
-            color: Color.popups.text
+            color: Commons.Color.popups.text
             opacity: 0.7
             elide: Text.ElideRight
             font.family: Style.font.family
@@ -136,18 +137,18 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             text: panel.service.t("tools.tour")
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: panel.service.startTour()
           }
         }
 
-        PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+        PanelSeparator { width: parent.width; height: 1; foreground: Commons.Color.popups.text }
 
         // The theme, stepped rather than listed: the keyboard behind redraws
         // as you go, which is a better way to choose one than reading names.
         PanelSectionHeader {
           text: panel.service.t("tools.theme")
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
         }
 
         Row {
@@ -159,7 +160,7 @@ Item {
             width: Style.space(40)
             height: Style.spacing.controlHeight
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: panel.service.stepTheme(-1)
             // Drawn rather than set as a font glyph, the way the keyboard's own
             // keys are, so it never depends on the panel's font carrying an
@@ -169,7 +170,7 @@ Item {
               anchors.centerIn: parent
               height: Style.font.icon
               name: "left"
-              color: Color.popups.text
+              color: Commons.Color.popups.text
             }
           }
 
@@ -184,7 +185,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             text: panel.themeName
-            color: Color.popups.text
+            color: Commons.Color.popups.text
             font.family: Style.font.family
             font.pixelSize: Style.font.body
           }
@@ -193,18 +194,18 @@ Item {
             width: themeBack.width
             height: Style.spacing.controlHeight
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: panel.service.stepTheme(1)
             KeyIcon {
               anchors.centerIn: parent
               height: Style.font.icon
               name: "right"
-              color: Color.popups.text
+              color: Commons.Color.popups.text
             }
           }
         }
 
-        PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+        PanelSeparator { width: parent.width; height: 1; foreground: Commons.Color.popups.text }
 
         Toggle {
           visible: panel.service.currentTheme !== "mechanical" && panel.service.look.backlight === "accent"
@@ -212,8 +213,8 @@ Item {
           label: panel.service.t("tools.backlight.animation")
           description: panel.service.t("tools.backlight.animation.description")
           checked: panel.service.look.animateBacklight
-          foreground: Color.popups.text
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          accent: Commons.Color.accent
           onClicked: panel.service.toggleSetting("backlight-animation")
         }
 
@@ -226,14 +227,14 @@ Item {
             width: parent.width
             label: panel.service.t("tools.mechanical.backlight")
             checked: panel.service.look.backlight === "accent"
-            foreground: Color.popups.text
-            accent: Color.accent
+            foreground: Commons.Color.popups.text
+            accent: Commons.Color.accent
             onClicked: panel.service.toggleSetting("mechanical-backlight")
           }
 
           PanelSectionHeader {
             text: panel.service.t("tools.mechanical.material")
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
           }
 
           Flow {
@@ -247,9 +248,9 @@ Item {
                 text: panel.service.t("tools.mechanical." + modelData)
                 selected: panel.service.look.keycapMaterial === (modelData === "plain" ? "solid" : modelData)
                 bordered: true
-                foreground: Color.popups.text
-                background: Color.popups.background
-                accent: Color.accent
+                foreground: Commons.Color.popups.text
+                background: Commons.Color.popups.background
+                accent: Commons.Color.accent
                 onClicked: panel.service.setMechanicalMaterial(modelData)
               }
             }
@@ -261,7 +262,7 @@ Item {
             wrapMode: Text.WordWrap
             text: panel.service.t("tools.mechanical." + (panel.service.look.keycapMaterial === "solid"
               ? "plain" : panel.service.look.keycapMaterial) + ".description")
-            color: Color.popups.text
+            color: Commons.Color.popups.text
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
@@ -274,8 +275,8 @@ Item {
             label: panel.service.t("tools.mechanical.shine")
             description: panel.service.t("tools.mechanical.shine.description")
             checked: enabled && panel.service.look.shineThrough
-            foreground: Color.popups.text
-            accent: Color.accent
+            foreground: Commons.Color.popups.text
+            accent: Commons.Color.accent
             onClicked: panel.service.toggleSetting("mechanical-shine-through")
           }
 
@@ -286,8 +287,8 @@ Item {
             label: panel.service.t("tools.mechanical.effects")
             description: panel.service.t("tools.backlight.animation.description")
             checked: enabled && panel.service.look.animateBacklight
-            foreground: Color.popups.text
-            accent: Color.accent
+            foreground: Commons.Color.popups.text
+            accent: Commons.Color.accent
             onClicked: panel.service.toggleSetting("backlight-animation")
           }
         }
@@ -297,7 +298,7 @@ Item {
         // Three exclusive states, which is what a ButtonGroup is for.
         PanelSectionHeader {
           text: panel.service.t("tools.rotation")
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
         }
 
         ButtonGroup {
@@ -305,9 +306,9 @@ Item {
                     { value: "locked", label: panel.service.t("tools.rotation.locked") },
                     { value: "unlocked", label: panel.service.t("tools.rotation.unlocked") }]
           value: panel.service.rotationMode
-          foreground: Color.popups.text
-          background: Color.popups.background
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          background: Commons.Color.popups.background
+          accent: Commons.Color.accent
           // Nothing here takes keyboard focus: the panel is held rather than
           // tabbed through, and the keyboard underneath is what has the keys.
           focusable: false
@@ -335,7 +336,7 @@ Item {
             width: (parent.width - Style.spacing.controlGap) / 2
             height: Style.spacing.controlHeight
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: panel.service.rotateBy(-1)
 
             Row {
@@ -362,7 +363,7 @@ Item {
             width: (parent.width - Style.spacing.controlGap) / 2
             height: Style.spacing.controlHeight
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: panel.service.rotateBy(1)
 
             Row {
@@ -386,23 +387,23 @@ Item {
           }
         }
 
-        PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+        PanelSeparator { width: parent.width; height: 1; foreground: Commons.Color.popups.text }
 
         // Which monitor Ragtop lives on. Only where there is more than one,
         // since a row offering a single screen is a row saying nothing.
         PanelSectionHeader {
           visible: panel.service.monitorCount > 1
           text: panel.service.t("tools.display")
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
         }
 
         ButtonGroup {
           visible: panel.service.monitorCount > 1
           options: panel.service.displayOptions
           value: panel.service.displaySetting
-          foreground: Color.popups.text
-          background: Color.popups.background
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          background: Commons.Color.popups.background
+          accent: Commons.Color.accent
           focusable: false
           enabled: panel.service.displaySaving === ""
           onChanged: function(name) { panel.service.setDisplay(name) }
@@ -412,7 +413,7 @@ Item {
           visible: panel.service.displayPreview !== ""
           text: panel.service.t("tools.display.revertIn", panel.service.displaySeconds)
           wrapMode: Text.WordWrap
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -422,13 +423,13 @@ Item {
           spacing: Style.spacing.controlGap
           Button {
             text: panel.service.t("tools.display.keep")
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             bordered: true
             onClicked: panel.service.keepDisplay()
           }
           Button {
             text: panel.service.t("tools.display.revert")
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             bordered: true
             onClicked: panel.service.revertDisplay()
           }
@@ -441,20 +442,20 @@ Item {
         // them rather than as a switch beside them.
         PanelSectionHeader {
           text: panel.service.t("tools.layout")
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
         }
 
         ButtonGroup {
           options: panel.service.keyboardLayoutOptions
           value: panel.service.keyboardLayout
-          foreground: Color.popups.text
-          background: Color.popups.background
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          background: Commons.Color.popups.background
+          accent: Commons.Color.accent
           focusable: false
           onChanged: function(name) { panel.service.setKeyboardLayout(name) }
         }
 
-        PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+        PanelSeparator { width: parent.width; height: 1; foreground: Commons.Color.popups.text }
 
         // Key size.
         //
@@ -469,7 +470,7 @@ Item {
         // the handling is the one that was measured against a thumb.
         PanelSectionHeader {
           text: panel.service.t("tools.size")
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
         }
 
         Row {
@@ -486,7 +487,7 @@ Item {
             bordered: true
             text: panel.service.t("tools.size.auto")
             selected: panel.service.sizeAuto
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: panel.service.setSize("auto")
           }
 
@@ -524,13 +525,13 @@ Item {
               height: sizeSlider.trackHeight
               radius: Style.cornerRadius > 0 ? height / 2 : 0
               anchors.verticalCenter: parent.verticalCenter
-              color: Style.selectedFillFor(Color.popups.text, Color.accent)
+              color: Style.selectedFillFor(Commons.Color.popups.text, Commons.Color.accent)
 
               Rectangle {
                 width: track.width * sizeSlider.fraction
                 height: track.height
                 radius: track.radius
-                color: Color.accent
+                color: Commons.Color.accent
               }
             }
 
@@ -544,7 +545,7 @@ Item {
               x: sizeSlider.knobSize / 2
                 + sizeSlider.span * (100 - sizeSlider.min) / (sizeSlider.max - sizeSlider.min)
                 - width / 2
-              color: Color.popups.background
+              color: Commons.Color.popups.background
             }
 
             BorderSurface {
@@ -553,8 +554,8 @@ Item {
               radius: width / 2
               anchors.verticalCenter: parent.verticalCenter
               x: sizeSlider.span * sizeSlider.fraction
-              color: Color.popups.text
-              borderSpec: Border.flat(Color.popups.background, Math.max(1, Style.space(2)))
+              color: Commons.Color.popups.text
+              borderSpec: Border.flat(Commons.Color.popups.background, Math.max(1, Style.space(2)))
               Behavior on x { NumberAnimation { duration: 90 } }
             }
 
@@ -583,7 +584,7 @@ Item {
           }
         }
 
-        PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+        PanelSeparator { width: parent.width; height: 1; foreground: Commons.Color.popups.text }
 
         // Whether the keyboard comes up by itself on a text field, and the way
         // through to everything that does not belong on a surface you hold.
@@ -591,14 +592,14 @@ Item {
           width: parent.width
           label: panel.service.t("tools.autoShow")
           checked: panel.service.autoShowEnabled
-          foreground: Color.popups.text
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          accent: Commons.Color.accent
           onClicked: panel.service.toggleAutoShow()
         }
 
         PanelSectionHeader {
           text: panel.service.t("tools.memory")
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
         }
         ButtonGroup {
           options: [
@@ -607,9 +608,9 @@ Item {
             { value: "none", label: panel.service.t("tools.memory.none") }
           ]
           value: panel.service.typingMemory
-          foreground: Color.popups.text
-          background: Color.popups.background
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          background: Commons.Color.popups.background
+          accent: Commons.Color.accent
           focusable: false
           onChanged: function(value) { panel.service.queuePreference(["typing-memory", "set", value]) }
         }
@@ -617,7 +618,7 @@ Item {
           width: parent.width
           text: panel.service.t("tools.memory.help")
           wrapMode: Text.WordWrap
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -632,16 +633,16 @@ Item {
           enabled: panel.service.typingMemory !== "none"
           opacity: enabled ? 1 : 0.4
           checked: enabled && panel.service.predictionsEnabled
-          foreground: Color.popups.text
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          accent: Commons.Color.accent
           onClicked: panel.service.toggleSetting("predictions")
         }
         Toggle {
           width: parent.width
           label: panel.service.t("tools.assists")
           checked: panel.service.assistsEnabled
-          foreground: Color.popups.text
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          accent: Commons.Color.accent
           onClicked: panel.service.toggleSetting("assists")
         }
         Toggle {
@@ -650,8 +651,8 @@ Item {
           enabled: panel.service.predictionsEnabled && panel.service.typingMemory !== "none"
           opacity: enabled ? 1 : 0.4
           checked: enabled && panel.service.swipeEnabled
-          foreground: Color.popups.text
-          accent: Color.accent
+          foreground: Commons.Color.popups.text
+          accent: Commons.Color.accent
           onClicked: panel.service.toggleSetting("swipe")
         }
 
@@ -661,7 +662,7 @@ Item {
           text: panel.service.wordsFetching
             ? panel.service.t("offer.fetching", panel.service.languageName(panel.service.wordLanguage, panel.languageInfo.name || ""))
             : panel.service.t("offer.add", panel.service.languageName(panel.service.wordLanguage, panel.languageInfo.name || ""))
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
           bordered: true
           onClicked: panel.service.installWordLanguage(panel.service.wordLanguage)
         }
@@ -670,7 +671,7 @@ Item {
           visible: panel.service.wordLanguage !== "" && !panel.languageInfo.installed
           text: panel.service.t("offer.size", panel.languageInfo.size || "")
           wrapMode: Text.WordWrap
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -679,7 +680,7 @@ Item {
           visible: panel.service.preferenceFailed
           text: panel.service.t("tools.saveFailed")
           wrapMode: Text.WordWrap
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
         }
@@ -692,7 +693,7 @@ Item {
             anchors.right: parent.right
             text: panel.service.t("tools.settings")
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: { panel.dismissed(); panel.service.openSettings() }
           }
         }
