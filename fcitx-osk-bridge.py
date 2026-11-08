@@ -267,6 +267,10 @@ def arm():
 def candidates(texts, has_prev, has_next, _page, cursor):
     items = []
     for text in texts:
+        # Mozc 3.35 ends some candidates with a space ("日本語 "). It is not
+        # part of the word, so it goes, unless the candidate is nothing else:
+        # a space can itself be on offer.
+        text = text.rstrip(" ") or text
         m = NOTE.match(text)
         items.append({"text": m.group(1), "note": m.group(2)[1:-1]} if m
                      else {"text": text, "note": ""})
