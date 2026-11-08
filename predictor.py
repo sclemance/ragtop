@@ -1109,7 +1109,9 @@ class Terminal:
         # Typed into a shell, so escaped the way file names are: a name on
         # PATH may hold a space or a $( ), and as typed it must stay the
         # command's name rather than become code.
-        return [{"text": shell_escaped(n), "note": self.notes.get(n, ""), "kind": "command"}
+        # And =, which first on a line makes odd=value an assignment rather
+        # than the command of that name.
+        return [{"text": shell_escaped(n).replace("=", "\\="), "note": self.notes.get(n, ""), "kind": "command"}
                 for n in found[:SHOWN]]
 
     def files(self, cwd, token, folders_only):

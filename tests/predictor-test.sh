@@ -527,20 +527,25 @@ odd_command_names_are_escaped() {
   local bin="$sandbox/bin" cwd="$sandbox/home"
   mkdir -p "$bin"
   # shellcheck disable=SC2016  # the names are meant to hold $( ) and ` `
-  local names=('odd$(touch MARKER)' 'odd tool' 'odd`touch MARKER`' "odd'q" 'odd;x' 'odd&y')
+  local names=('odd$(touch MARKER)' 'odd tool' 'odd`touch MARKER`' "odd'q" 'odd;x' 'odd&y' 'odd=value')
   local n
-  for n in "${names[@]}"; do printf '#!/bin/sh\nexit 0\n' >"$bin/$n"; chmod +x "$bin/$n"; done
+  # Each prints its own name, so running the completion shows which ran.
+  for n in "${names[@]}"; do printf '#!/bin/sh\nprintf "%%s" "${0##*/}"\n' >"$bin/$n"; chmod +x "$bin/$n"; done
   wordlist "$words" 127:the
   out=$(echo "term $(jq -cn --arg c "$cwd" '{cwd: $c, line: "odd"}')" \
     | sandboxed /usr/bin/env PATH="$bin:/usr/bin:/bin" RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$words" 2>&1 \
     | grep '^termsuggest' | sed 's/^termsuggest //')
-  assert_equal "$(jq length <<<"$out")" 6 "every odd name offered"
+  assert_equal "$(jq length <<<"$out")" 7 "every odd name offered"
   local text
   while IFS= read -r text; do
     # What bash reads the offered text as: one word, the name itself.
     local got
     got=$(cd "$cwd" && bash -c 'eval "set -- $1"; printf "%s|%s" "$#" "$1"' _ "$text")
     [[ $got == 1\|odd* ]] || fail "offered $text, which bash reads as $got"
+    # And run where a command goes, first on the line: the command of that
+    # name runs, and nothing else.
+    got=$(cd "$cwd" && PATH="$bin:/usr/bin:/bin" bash -c "$text" 2>/dev/null)
+    printf '%s\n' "${names[@]}" | grep -qxF -- "$got" || fail "running $text ran ${got:-nothing}"
   done < <(jq -r '.[].text' <<<"$out")
   assert_equal "$([[ -e $cwd/MARKER ]] && echo made)" "" "an offered command name ran as code"
 }
