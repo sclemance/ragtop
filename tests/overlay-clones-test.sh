@@ -916,7 +916,56 @@ a_symlinked_entry_is_only_looked_at() {
   assert_equal "$([[ -L $(entry_of lock) ]] && echo link)" link "the clone's entry is still the symlink"
 }
 
+# An update the lock patch no longer fits, synced while the session is
+# locked: the lock clone stays as it is, untouched, until a sync while
+# unlocked, which then does what it always did and puts the built-in back.
+a_locked_session_keeps_its_lock_clone() {
+  make_sandbox "$rel_omarchy"
+  clones install lock
+  assert_rc 0
+  local before
+  before=$(cd "$(clone_of lock)" && find . -type f -print0 | sort -z | xargs -0 sha256sum)
+  sed -i 's/id: inputField/id: inputBox/' "$sandbox/omarchy/shell/plugins/lock/LockView.qml"
+  : >"$sandbox/calls.log"
+  clones STUB_SESSION_LOCKED=0 sync lock
+  assert_rc 1
+  assert_contains "$err" "The session is locked, so tester.lock is left as it is"
+  assert_lacks "$(calls)" "remove tester.lock"
+  assert_lacks "$(calls)" "clone omarchy.lock"
+  assert_equal "$(cd "$(clone_of lock)" && find . -type f -print0 | sort -z | xargs -0 sha256sum)" "$before" "the lock clone while locked"
+  clones STUB_SESSION_LOCKED=2 sync lock
+  assert_rc 1
+  assert_contains "$err" "Could not tell whether the session is locked"
+  assert_lacks "$(calls)" "remove tester.lock"
+  clones STUB_SESSION_LOCKED=0 remove lock
+  assert_rc 1
+  assert_lacks "$(calls)" "remove tester.lock"
+  clones STUB_SESSION_LOCKED=1 sync lock
+  assert_contains "$(calls)" "remove tester.lock"
+}
+
+# An ordinary update while locked: the other overlays move on, the lock
+# waits for a sync while unlocked.
+a_locked_update_waits_for_the_lock() {
+  make_sandbox "$rc_omarchy"
+  clones install
+  assert_rc 0
+  switch_omarchy "$rel_omarchy"
+  clones STUB_SESSION_LOCKED=0 sync
+  assert_rc 1
+  assert_contains "$out" "Re-cloned tester.menu from the updated built-in."
+  assert_lacks "$out" "Re-cloned tester.lock"
+  assert_equal "$([[ -e $(clone_of lock)/LockFeedSurface.qml ]] && echo yes)" yes "the rc1 lock clone, kept while locked"
+  clones STUB_SESSION_LOCKED=1 sync
+  assert_rc 0
+  assert_contains "$out" "Re-cloned tester.lock from the updated built-in."
+  clones status lock
+  assert_contains "$out" "lock: installed, in sync with the built-in"
+}
+
 run_test "4.5.0: install patches all six, and status, installed and sync agree" rel_install_patches_every_overlay
+run_test "4.5.0: while locked, an unpatchable update leaves the lock clone alone" a_locked_session_keeps_its_lock_clone
+run_test "4.5.0-rc1 to 4.5.0 while locked: the lock waits, the rest move on" a_locked_update_waits_for_the_lock
 run_test "4.5.0: a symlinked entry file is looked at, never written through" a_symlinked_entry_is_only_looked_at
 run_test "4.5.0: sync re-clones what uses the shared OverlayWindow when Omarchy changes it" rel_sync_follows_the_shared_window
 run_test "4.5.0: a clone with edits of its own is kept when the shared OverlayWindow changes" rel_edited_clone_survives
