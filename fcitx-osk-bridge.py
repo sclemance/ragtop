@@ -201,6 +201,10 @@ printed_field = "unset"
 # answer is on its way).
 field_asks = 0
 field_answered = 0
+# The service's last "field <n>": every report after it is said with n, on a
+# "fieldtoken" line before it, so a report already said before the service
+# asked can be told from the answer (Service.qml, fieldReported).
+field_token = 0
 
 
 def ask_field():
@@ -218,6 +222,8 @@ def ask_field():
         field = field_of(value[0]) if value else None
         if field != printed_field:
             printed_field = field
+            if field_token:
+                say("fieldtoken", field_token)
             say("field", field)
     call(CONTROLLER, "DebugInfo", reply="(s)", done=got)
 
@@ -339,10 +345,11 @@ def on_command(source, condition):
         call(CONTROLLER, "SetCurrentIM", GLib.Variant("(s)", (arg,)))
     elif cmd == "deactivate":
         call(CONTROLLER, "Deactivate")
-    elif cmd == "field":
+    elif cmd == "field" and arg.isdigit():
         # The service lost track (another window took focus): ask again, and
         # say the answer even if nothing changed, so it can trust it.
-        global printed_field
+        global printed_field, field_token
+        field_token = int(arg)
         printed_field = "unset"
         ask_field()
     return True

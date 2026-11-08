@@ -904,7 +904,12 @@ Item {
         var value
         try { value = JSON.parse(line.slice(space + 1)) } catch (e) { return }
         if (kind === "engine") root.imeEngine = value
-        else if (kind === "field") root.fieldReported(value)
+        else if (kind === "fieldtoken") root.fieldTokenSeen = value | 0
+        else if (kind === "field") {
+          var token = root.fieldTokenSeen
+          root.fieldTokenSeen = 0
+          root.fieldReported(value, token)
+        }
         else if (kind === "engines") root.imeEngines = Array.isArray(value) ? value : []
         else if (kind === "candidates") root.setSuggestions("fcitx", value)
       }
@@ -913,9 +918,10 @@ Item {
       if (running) {
         root.retryStarted("autoshow")
       } else {
-        // Whatever it last said went with it.
+        // Whatever it last said went with it, and a question it was asked.
         root.imeEngine = null
         root.fieldInfo = null
+        root.fieldWanted = 0
         root.imeEngines = []
         root.setSuggestions("fcitx", null)
       }
@@ -1789,7 +1795,18 @@ Item {
     root.askField()
   }
   // Asks the bridge to say again which field has focus, even if unchanged.
-  function askField() { if (focusBridgeProc.running) focusBridgeProc.write("field\n") }
+  // Numbered: the bridge says every report after it with that number, and
+  // until one comes, an older report, one already on its way when the window
+  // changed, is no answer (fieldReported).
+  property int fieldTokens: 0
+  property int fieldWanted: 0
+  property int fieldTokenSeen: 0
+  function askField() {
+    if (!focusBridgeProc.running) return
+    root.fieldTokens++
+    root.fieldWanted = root.fieldTokens
+    focusBridgeProc.write("field " + root.fieldTokens + "\n")
+  }
   Process {
     id: activeClassProc
     command: ["hyprctl", "-j", "activewindow"]
@@ -2106,7 +2123,14 @@ Item {
     root.pendingTyped = []
     fieldPendingLimit.restart()
   }
-  function fieldReported(value) {
+  function fieldReported(value, token) {
+    if (root.fieldWanted > 0) {
+      if ((token | 0) < root.fieldWanted) {
+        root.traceField("a report from before the field was asked about again: ignored")
+        return
+      }
+      root.fieldWanted = 0
+    }
     var was = root.fieldInfo
     var held = root.fieldPending ? root.pendingTyped : []
     root.fieldPending = false

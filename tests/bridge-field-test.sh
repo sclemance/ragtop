@@ -35,10 +35,11 @@ answer(1, "new")
 check(said[-1:] == [("field", {"id": "new"})], "the newest answer is said")
 # Asked again by the service: the answer is said even if nothing changed.
 said.clear()
-sys.stdin = io.StringIO("field\n")
+sys.stdin = io.StringIO("field 3\n")
 b.on_command(None, None)
 answer(2, "new")
-check(said == [("field", {"id": "new"})], "asked again, the same field is said again")
+check(said == [("fieldtoken", 3), ("field", {"id": "new"})],
+      "asked again with a number, the same field is said again, after that number")
 PY
 )
 echo "$out"
