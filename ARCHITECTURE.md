@@ -491,6 +491,19 @@ Spanish needed two more.
   ¿qué capitalises, and is no word for the next-word context: after "Hola,
   ¿" the word before is hola (contextNow, which also reads through « »).
 
+Portuguese is the same again with ç, after l on Portugal's board and
+Brazil's ABNT2: OWN_KEYS pt. Folded, a swipe through ç was right first 10.5%
+of the time for the 400 commonest ç words; as its own key, 92.8% (99.5% in
+the first three). The filter keeps faca and faça, forca and força apart, and
+drops 227 of 33,075 words, nearly all unaccented misspellings (nao, voce,
+tambem); ira and the verb forms publica, publico and pratica go too. One
+wordfreq list serves both Portugal and Brazil; both layouts map to it.
+Measured on held-out Tatoeba sentences: keystrokes saved 23 → 34% with
+pairs; swipe right first 93.9 → 95.0% typical, 88.1 → 90.5% sloppy.
+Gutenberg's Portuguese novels are all in the spelling before the 1911 and
+1990 reforms (Dom Casmurro, vae, titulo), so that measure (coverage 87%) is
+the weaker one here.
+
 Spanish's numbers, on Galdós's Marianela (1878) and held-out Tatoeba
 sentences: coverage 92%; keystrokes saved 18% on the novel, 21 → 32% with
 pairs on the sentences; swipe right first 92.1 → 93.0% at typical wobble and

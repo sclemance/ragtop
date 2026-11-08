@@ -121,10 +121,10 @@ ELISIONS = {
 # Letters that come apart into two, which decomposition does not do.
 LIGATURES = {"œ": "oe", "æ": "ae"}
 # Letters a language gives a key of their own, as letters rather than accented
-# ones: ñ in Spanish, beside l. Typed, they are folded like any accent, so
+# ones: ñ in Spanish and ç in Portuguese, each beside l. Typed, they are folded like any accent, so
 # "ano" still reaches año; but a swipe through ñ does not pass n, so on a
 # board with that key a word's path goes through it (key_letters).
-OWN_KEYS = {"es": {"ñ"}}
+OWN_KEYS = {"es": {"ñ"}, "pt": {"ç"}}
 
 
 def fold(word):

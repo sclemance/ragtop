@@ -674,13 +674,14 @@ to a key.
 and swipe, across prediction languages. It is offered when the letters or
 swipe fit, never as a context-free starting guess.
 
-**Beta, in English, French and Spanish, and off until you turn them on**, in Setup ›
+**Beta, in English, French, Spanish and Portuguese, and off until you turn them on**, in Setup ›
 Tablet › **Word Suggestions (beta)**, or with the switches on the keyboard's
 controls panel.
 
 **On, in Your Layout's Language** follows the layout you are typing on:
 English words on a US or UK layout, French on a French or Canadian one,
-Spanish on a Spanish or Latin American one,
+Spanish on a Spanish or Latin American one, Portuguese on a Portuguese or
+Brazilian one,
 switching as you switch layouts. Ragtop decides by the layout's name and
 variant (Canadian English is English, Swiss French is French). **English, on
 Any Layout** is the way round that decision, for writing English on another
@@ -692,7 +693,7 @@ time you type on a layout whose list Ragtop has but you do not, the strip
 says *Add French word suggestions (135 KB)* and *Not now*. Add fetches it
 (see [Privacy and security](#privacy-and-security)) and suggestions start at
 once; Not now is remembered. The controls panel offers Add again, and
-`ragtop words install fr` (or `es`) fetches it any
+`ragtop words install fr` (or `es`, `pt`) fetches it any
 time. Nothing is downloaded without that tap.
 
 **Hold a word in the strip for its other forms.** The word that is almost

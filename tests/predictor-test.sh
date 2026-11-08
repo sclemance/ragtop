@@ -361,6 +361,37 @@ PY
   assert_contains "$(grep '^suggest' <<<"$out" | sed -n 2p)" '"también"'
 }
 
+# Portuguese's ç has its own key after l, on Portugal's board and Brazil's:
+# a swipe through it is faça, through c faca. With wordfreq's ranks, forca
+# 547 beside força 365 is past the misspelling filter's gap, so folding ç
+# would make forca (gallows) a misspelling of força.
+c_cedilla_is_its_own_in_portuguese() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/pt"
+  wordlist "$langs/pt/small_pt.msgpack.gz" 383:"faça" 478:faca 365:"força" 547:forca 269:"também" 491:tambem 150:de
+  /usr/bin/python3 - >"$sandbox/qwerty-pt" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiop", "asdfghjklç", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["faça", "faca", "força"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang pt"; cat "$sandbox/qwerty-pt")
+  suggest "$langs" "faca" "tambem" "forca"
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" \
+    "faça faca força " "first word of each swipe"
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"faca"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"faça"'
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 2p)" '"tambem"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 3p)" '"forca"'
+}
+
 # Typed, ñ folds like an accent: "ano" still reaches año.
 typing_n_reaches_n_tilde() {
   langs="$sandbox/words"
@@ -704,6 +735,7 @@ run_test "predictor: a swipe without accents finds the accented word" a_swipe_ne
 run_test "predictor: in Spanish a swipe through ñ is año, through n ano" a_swipe_through_n_tilde_is_its_own
 run_test "predictor: in Spanish, typing ano still reaches año" typing_n_reaches_n_tilde
 run_test "predictor: in Spanish campana survives beside campaña; tambien still goes" n_tilde_is_no_accent_to_the_misspelling_filter
+run_test "predictor: in Portuguese ç is its own key and letter: faça and faca" c_cedilla_is_its_own_in_portuguese
 run_test "predictor: a word's forms, from its root and back to it" forms_both_ways
 run_test "predictor: -er and -est are forms only as a pair, so summer is not sum's" comparatives_only_as_a_pair
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root

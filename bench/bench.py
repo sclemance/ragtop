@@ -49,17 +49,20 @@ import predictor as P  # noqa: E402
 CACHE = os.path.expanduser("~/.cache/ragtop-bench")
 WORDFREQ = "https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data"
 # Public domain nineteenth-century novels, one per language, as held-out
-# text (Spanish: Galdós, Marianela, 1878): Project
+# text (Spanish: Galdós, Marianela, 1878; Portuguese: Machado de Assis, Dom
+# Casmurro, 1899, in its old spelling, so judge Portuguese by pairs.py): Project
 # Gutenberg's own numbers.
-TEXTS = {"en": 1661, "fr": 17989, "es": 17340}
+TEXTS = {"en": 1661, "fr": 17989, "es": 17340, "pt": 55752}
 ROWS = {
     "qwerty": ["qwertyuiop", "asdfghjkl", "zxcvbnm"],
     "azerty": ["azertyuiop", "qsdfghjklm", "wxcvbn"],
     # Spain's and Latin America's: ñ after l.
     "qwerty-es": ["qwertyuiop", "asdfghjklñ", "zxcvbnm"],
+    # Portugal's and Brazil's (ABNT2): ç after l.
+    "qwerty-pt": ["qwertyuiop", "asdfghjklç", "zxcvbnm"],
 }
 # Each language's board, when not qwerty.
-BOARD = {"fr": "azerty", "es": "qwerty-es"}
+BOARD = {"fr": "azerty", "es": "qwerty-es", "pt": "qwerty-pt"}
 # How far each row starts in from the left, in keys, as on a real board.
 STAGGER = [0.0, 0.25, 0.75]
 SEED = 7

@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import predictor as P  # noqa: E402
 
 CACHE = os.path.expanduser("~/.cache/ragtop-bench")
-TATOEBA = {"en": "eng", "fr": "fra", "de": "deu", "es": "spa"}
+TATOEBA = {"en": "eng", "fr": "fra", "de": "deu", "es": "spa", "pt": "por"}
 START = "<s>"
 CAPITALS = "<capitals>"
 # One sentence in ten, by its number, is kept back for testing.
