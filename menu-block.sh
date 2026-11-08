@@ -24,7 +24,7 @@ case "${1:-}" in
 esac
 
 /usr/bin/python3 - "$1" "$menu_file" "$(dirname "$(realpath "$0")")" <<'EOF'
-import json, os, re, sys, tempfile, tomllib
+import json, os, re, shlex, sys, tempfile, tomllib
 action, path, repo = sys.argv[1:]
 # Protocol, not prose. This exact line is how the block is found again in the
 # user's menu file, so an installed Ragtop would stop recognising its own rows
@@ -39,11 +39,17 @@ cmd = "$HOME/.config/omarchy/plugins/sclemance.ragtop/ragtop"
 # own look first, then the rest by name.
 theme_dirs = [os.path.join(os.path.dirname(cmd.replace("$HOME", os.path.expanduser("~"))), "themes"),
               os.path.expanduser("~/.config/ragtop/themes")]
+# Only names the CLI takes (theme_file in ragtop): a folder's name goes into
+# the shell commands below, which the menu runs, so anything else could run
+# as code merely by being in a themes folder.
+theme_slug = re.compile(r"[a-z0-9-]{1,32}")
 theme_labels = {}
 for d in theme_dirs:
     if not os.path.isdir(d):
         continue
     for slug in sorted(os.listdir(d)):
+        if not theme_slug.fullmatch(slug):
+            continue
         theme_path = os.path.join(d, slug, "ragtop.toml")
         if not os.path.isfile(theme_path):
             continue
@@ -128,7 +134,7 @@ rows = {
     # shows is always what the keyboard does.
     "setup.tablet.theme": dict(icon="\U000f03d8", label="Theme"),
     **{f"setup.tablet.theme.{name}": dict(icon="\U000f03d8", label=label,
-        checked=f'"{cmd}" theme is {name}', action=f'"{cmd}" theme apply {name}')
+        checked=f'"{cmd}" theme is {shlex.quote(name)}', action=f'"{cmd}" theme apply {shlex.quote(name)}')
        for name, label in themes},
     # What a key looks like is the theme's to say (themes/<slug>/ragtop.toml).
     # What is left here is what no theme author can know: how big the keys

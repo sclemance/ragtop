@@ -658,7 +658,7 @@ themes() {
   local d
   for d in "$HOME/.config/ragtop/themes/"*/ "$repo/themes/"*/; do
     [[ -f "$d/ragtop.toml" ]] && basename "$d"
-  done | sort -u | sed '/^omarchy$/d' | sed '1i omarchy'
+  done | { grep -xE '[a-z0-9-]{1,32}' || true; } | sort -u | sed '/^omarchy$/d' | sed '1i omarchy'
 }
 
 # apply_theme <name>: write the theme's settings into settings.conf, so what
