@@ -301,6 +301,24 @@ ShellRoot {
       t.ok(!root.typedFromStart, "and its start is no longer known")
     }],
     [0, function() {
+      // A word half typed, and a reply on its way, when another window
+      // takes focus with no report from the bridge between: the word goes,
+      // the field is no longer trusted, and the reply's field is over.
+      root.mode("full")
+      root.focus(root.plain)
+      root.freshFieldAt = 0
+      root.windowEvent("activewindowv2", "1111aaaa")
+      root.fieldReported(root.plain)
+      root.typeWord("secretword")
+      var generation = root.fieldGeneration
+      root.windowEvent("activewindowv2", "1111bbbb")
+      t.equal(root.currentWord, "", "another window: the word being typed is let go")
+      t.ok(!root.fieldKnown && !root.keepAnything, "and the field is no longer trusted")
+      t.ok(root.fieldGeneration > generation, "and what was asked for in the old window is over")
+      root.typeWord("next")
+      t.equal(root.letters(root.held()), "", "nothing typed is kept before a report")
+    }],
+    [0, function() {
       // A window where the line's start is never seen (a terminal running a
       // program, after another keyboard): the first word typed here is still
       // a word of the record, named and deleted by its letters.
@@ -309,6 +327,9 @@ ShellRoot {
       root.freshFieldAt = 0
       root.windowEvent("activewindowv2", "0000start")
       root.windowEvent("activewindowv2", "0000other")
+      t.ok(!root.fieldKnown, "another window: its field is not known until reported")
+      // fcitx5's report for the field in the new window.
+      root.fieldReported({ id: "bbbb", password: false, terminal: false, noCapitals: false })
       t.ok(!root.typedFromStart, "the line's start is not known")
       root.typeWord("this")
       root.press("key space")
@@ -321,6 +342,7 @@ ShellRoot {
       t.equal(root.wordsBefore(5).join("|"), "again", "and typing again starts it afresh")
       root.windowEvent("activewindowv2", "0000third")
       t.ok(!root.recordStartsAtWord, "another window clears it")
+      root.fieldReported({ id: "cccc", password: false, terminal: false, noCapitals: false })
       for (var w = 0; w < 140; w++) { root.typeWord("ab"); root.press("key space") }
       var named = root.wordsBefore(1000)
       t.ok(!root.recordStartsAtWord && named.length < 140 && named.every(function(x) { return x === "ab " }),

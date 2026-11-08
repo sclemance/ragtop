@@ -1778,11 +1778,14 @@ Item {
     // together when a window is tapped into, the window's often second,
     // and it undid the field's fresh start.
     if (Date.now() - root.freshFieldAt < 500) return
-    root.traceField("another window became active (" + root.activeClass + "): the record is cleared and no longer from the field's start")
-    root.typedTail = ""
-    root.typedFromStart = false
-    root.recordStartsAtWord = false
-    root.sentenceStart = false
+    // Otherwise it is a new field as much as a new window: what was typed,
+    // the word, a swipe or suggestion on its way, and the trust in the field
+    // all go, until the bridge reports the field that has focus now.
+    root.traceField("another window became active (" + root.activeClass + "): the record and the field are let go until a report")
+    root.fieldInfo = null
+    root.fieldPending = false
+    fieldPendingLimit.stop()
+    root.forgetField(false)
   }
   Process {
     id: activeClassProc
