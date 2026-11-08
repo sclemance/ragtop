@@ -3380,16 +3380,28 @@ Item {
       // from the setting as it is, and asking again is not a duplicate.
       if (code !== 0 && root.pendingSize === "") root.lastAskedSize = ""
       root.flushSize()
-      root.settleSize()
+      // One that landed, with nothing after it, is settled by reading the
+      // file again: the watcher need not report every write, and something
+      // else may have written since. What that read says is the size.
+      if (code === 0 && !sizeStepProc.running && root.pendingSize === "" && root.lastAskedSize !== "") {
+        root.sizeRereading = true
+        root.rereadSettings()
+      }
     }
   }
+  property bool sizeRereading: false
+  function rereadSettings() { settingsFile.reload() }
   // What was asked for stops standing in for the setting once the setting
-  // says it, with nothing more on its way. From then on the setting is the
+  // says it, or is read again after the last write, with nothing more on
+  // its way. From then on the setting is the
   // truth, so a change made elsewhere, the menu or the CLI, is what the next
   // step starts from.
   function settleSize() {
     if (root.lastAskedSize === "" || sizeStepProc.running || root.pendingSize !== "") return
-    if (String(root.settings["size-adjust"] || "").trim() === root.lastAskedSize) root.lastAskedSize = ""
+    if (root.sizeRereading || String(root.settings["size-adjust"] || "").trim() === root.lastAskedSize) {
+      root.lastAskedSize = ""
+      root.sizeRereading = false
+    }
   }
   onSettingsChanged: root.settleSize()
 

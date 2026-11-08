@@ -16,29 +16,37 @@ ShellRoot {
   property int sizeMin: 50
   property int sizeMax: 200
   function sizePercent(v) { return Number(String(v).trim()) || 100 }
-  // FROM SOURCE: stepSize pendingSize lastAskedSize setSize flushSize sizeStepProc settleSize
+  // FROM SOURCE: stepSize pendingSize lastAskedSize setSize flushSize sizeStepProc settleSize sizeRereading
+  // What settings.conf holds: rereadSettings is the settings FileView's reload.
+  property string fileValue: "100"
+  function rereadSettings() { root.observe(root.fileValue) }
   function wrote() { return root.settings["size-adjust"] }
   // As the settings file watcher would: the setting follows a write.
   function observe(v) { root.settings = Object.assign({}, root.settings, { "size-adjust": v }) }
   Component.onCompleted: t.run([
-    [0, function() { root.setSize(115) }],
+    [0, function() {
+      root.fileValue = "115"
+      root.setSize(115)
+      t.equal(root.lastAskedSize, "115", "asked for 115: it stands in for the setting while it is written")
+    }],
     [700, function() {
-      t.equal(root.lastAskedSize, "115", "asked for 115, not yet seen in the setting")
-      root.observe("115")
-      t.equal(root.lastAskedSize, "", "seen in the setting: the ask is retired")
+      t.equal(root.lastAskedSize, "", "written and read again: the ask is retired")
+      t.equal(root.wrote(), "115", "and the setting says 115")
       // Changed elsewhere, the menu or the CLI.
+      root.fileValue = "80"
       root.observe("80")
       root.stepSize(1)
-    }],
-    [700, function() {
       t.equal(root.lastAskedSize, "85", "a step after a change elsewhere starts from it: 80 to 85")
-      root.observe("85")
-      root.observe("80")
-      root.setSize(115)
+      root.fileValue = "85"
     }],
     [700, function() {
+      root.fileValue = "80"
+      root.observe("80")
+      root.fileValue = "115"
+      root.setSize(115)
       t.equal(root.lastAskedSize, "115", "115 again, after the size went back to 80, is asked, not dropped as a duplicate")
-      root.observe("115")
+    }],
+    [700, function() {
       Quickshell.execDetached(["touch", Quickshell.env("RAGTOP_SIZE_FAIL")])
     }],
     [300, function() { root.setSize(130) }],
@@ -46,6 +54,31 @@ ShellRoot {
       t.equal(root.lastAskedSize, "", "a failed write leaves nothing asked for")
       root.setSize(130)
       t.equal(root.lastAskedSize, "130", "and asking again is not taken for a duplicate")
+      Quickshell.execDetached(["rm", "-f", Quickshell.env("RAGTOP_SIZE_FAIL")])
+    }],
+    [300, function() {
+      // The watcher skips our 115: the file says 80 when it is read again.
+      root.observe("100")
+      root.fileValue = "80"
+      root.setSize(115)
+    }],
+    [700, function() {
+      t.equal(root.lastAskedSize, "", "a write that landed is settled by reading the file again")
+      t.equal(root.wrote(), "80", "which says 80, written elsewhere meanwhile")
+      root.stepSize(1)
+      t.equal(root.lastAskedSize, "85", "so the next step is 85, though 115 was never seen")
+    }],
+    [700, function() {
+      // The watcher reports 80 while our write is still running.
+      root.observe("100")
+      root.fileValue = "80"
+      root.setSize(115)
+      root.observe("80")
+    }],
+    [700, function() {
+      t.equal(root.lastAskedSize, "", "80 seen before our write ended: settled by the read after it")
+      root.stepSize(1)
+      t.equal(root.lastAskedSize, "85", "and the next step is 85")
     }],
   ])
 }
