@@ -184,6 +184,13 @@ ShellRoot {
     [1200, function() {
       t.equal(root.letters(root.held()), "", "a hide never answered: everything is let go after a second")
       t.ok(!root.fieldPending, "and nothing is in question any more")
+      t.ok(!root.fieldKnown && !root.keepAnything, "nor is the field trusted any more")
+      root.typeWord("after")
+      t.equal(root.letters(root.held()), "", "so what is typed after the timeout is not kept")
+      // The bridge's answer to that hide, late: about focus now.
+      root.fieldReported(root.plain)
+      root.typeWord("ok")
+      t.equal(root.typedTail, "ok", "a report after it trusts the field again, from then on")
     }],
     [0, function() {
       // A word still waiting on the suggester when memory is turned down.

@@ -2131,6 +2131,10 @@ Item {
                       + " held key line(s) and the record are dropped")
       root.fieldPending = false
       root.pendingTyped = []
+      // Nor is the field it was in: nothing is kept until a report says
+      // which has focus. The bridge drops any answer to an ask from before
+      // the hide, so the next report is about focus since.
+      root.fieldInfo = null
       root.forgetField(false)
     }
   }
