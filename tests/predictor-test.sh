@@ -308,6 +308,69 @@ PY
   assert_lacks "$out" '"garcon"'
 }
 
+# Spanish's ñ has a key of its own, after l: a swipe through it is año, and
+# one through n is ano. Both listed, near enough in frequency that neither is
+# taken for the other's misspelling.
+a_swipe_through_n_tilde_is_its_own() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/es"
+  wordlist "$langs/es/small_es.msgpack.gz" 300:"año" 390:ano 320:"niño" 395:nino 200:de
+  /usr/bin/python3 - >"$sandbox/qwerty-es" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["año", "ano", "niño", "nino"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang es"; cat "$sandbox/qwerty-es")
+  suggest "$langs"
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" \
+    "año ano niño nino " "first word of each swipe"
+}
+
+# With wordfreq's own ranks, campaña 390 and campana 506: a gap the filter
+# takes for a misspelling where only accents differ (tambien and también).
+# ñ is a letter, so campana is a word of its own, typed or swiped.
+n_tilde_is_no_accent_to_the_misspelling_filter() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/es"
+  wordlist "$langs/es/small_es.msgpack.gz" 390:"campaña" 506:campana 281:"también" 402:tambien 200:de
+  /usr/bin/python3 - >"$sandbox/qwerty-es" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+stops = [keys[c] for c in "campana"]
+path = []
+for a, b in zip(stops, stops[1:]):
+    path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang es"; cat "$sandbox/qwerty-es")
+  suggest "$langs" "campana" "tambien"
+  assert_contains "$out" 'swiped ["campana"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"campana"'
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 2p)" '"tambien"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 2p)" '"también"'
+}
+
+# Typed, ñ folds like an accent: "ano" still reaches año.
+typing_n_reaches_n_tilde() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/es"
+  wordlist "$langs/es/small_es.msgpack.gz" 300:"año" 320:"anoche" 200:de
+  in_languages es
+  suggest "$langs" "ano"
+  assert_contains "$out" '"año"'
+}
+
 # ---- Word forms ---------------------------------------------------------------
 
 form_words() {
@@ -638,6 +701,9 @@ run_test "predictor: an accent that was typed is kept to" a_typed_accent_is_kept
 run_test "predictor: after an elision the rest is completed, the elision kept" elisions_complete_the_rest
 run_test "predictor: each language keeps its own list" switching_back_keeps_each_list
 run_test "predictor: a swipe without accents finds the accented word" a_swipe_needs_no_accents
+run_test "predictor: in Spanish a swipe through ñ is año, through n ano" a_swipe_through_n_tilde_is_its_own
+run_test "predictor: in Spanish, typing ano still reaches año" typing_n_reaches_n_tilde
+run_test "predictor: in Spanish campana survives beside campaña; tambien still goes" n_tilde_is_no_accent_to_the_misspelling_filter
 run_test "predictor: a word's forms, from its root and back to it" forms_both_ways
 run_test "predictor: -er and -est are forms only as a pair, so summer is not sum's" comparatives_only_as_a_pair
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root

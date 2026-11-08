@@ -231,6 +231,32 @@ ShellRoot {
       t.equal(root.nextWords.length, 0, "a sentence just begun shows none either")
     }],
     [0, function() {
+      // Spanish's opening marks, and French's quotes, are not words: the word
+      // after one follows what came before it.
+      root.mode("full")
+      root.focus(root.plain)
+      root.press("type ¿")
+      t.equal(root.contextNow(), "", "¿ at a field's start is still a sentence's start")
+      root.typeWord("hola")
+      root.press("type ,")
+      root.press("key space")
+      root.press("type ¿")
+      t.equal(root.contextNow(), "hola", "after a comma and ¿, the word before is the one before ¿")
+      root.typeWord("qu")
+      t.equal(root.contextNow(), "hola", "and stays so while the next word is typed")
+      root.focus(root.plain)
+      root.press("type ¿")
+      root.typeWord("dónde")
+      root.press("key space")
+      t.equal(root.contextNow(), "dónde", "a word typed after ¿ is a word before")
+      root.focus(root.plain)
+      root.press("type «")
+      root.typeWord("bonjour")
+      root.press("type »")
+      root.press("key space")
+      t.equal(root.contextNow(), "bonjour", "so is one in « »")
+    }],
+    [0, function() {
       root.mode("full")
       root.focus(root.plain)
       root.typeWord("hello")

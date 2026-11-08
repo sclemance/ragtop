@@ -56,6 +56,11 @@ ShellRoot {
         t.ok(!test.typed(mode, ["type Hello", "type ,", "key space"]).sentenceStart,
              mode + ": after a comma it does not")
         t.ok(test.typed(mode, ["type Hello", "key Return"]).sentenceStart, mode + ": a new line starts one")
+        t.ok(test.typed(mode, ["type ¿"]).sentenceStart, mode + ": an opening ¿ keeps the sentence start")
+        t.ok(test.typed(mode, ["type Hola", "type .", "key space", "type ¡"]).sentenceStart,
+             mode + ": so does ¡ after a full stop")
+        t.ok(!test.typed(mode, ["type Hola", "key space", "type ¿"]).sentenceStart,
+             mode + ": but not mid-sentence")
       })
     }],
     [0, function() {

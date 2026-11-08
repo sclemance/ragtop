@@ -39,6 +39,7 @@ gives the same file. The exports used:
 | --- | --- | --- | --- |
 | English (`eng`) | 2026-10-26 | `f634eaaf26623c2a2e170be2dae54b18388479311ae8619d04889df4e5d021f3` | `d653178af315be3a158f14f91f3d6a4c670c62094ec38f6ed0e2fcf7a1cdd3a1` |
 | French (`fra`) | 2026-10-26 | `3cbc43eab20185907b3ff4eae8aa60d20b9caf5133076c1c1c013d169cd87a99` | `8979b831a321d52fe33422d394eed08f265f50be8f817b03475afeee5b76c352` |
+| Spanish (`spa`) | 2026-11-07 | `7bbafb2af79d50eba3b398ce2756ca1d7f6ad5a63ea01996d7ff63fa22d9fbe7` | `c6aab2f0e1ffbe8af4c15d49ed51460ca44d68f7862056456f16ad9fa43e6b80` |
 
 ## wordfreq's sources
 

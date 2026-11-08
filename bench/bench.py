@@ -48,13 +48,18 @@ import predictor as P  # noqa: E402
 
 CACHE = os.path.expanduser("~/.cache/ragtop-bench")
 WORDFREQ = "https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data"
-# Public domain novels, one per language, as held-out text: Project
+# Public domain nineteenth-century novels, one per language, as held-out
+# text (Spanish: Galdós, Marianela, 1878): Project
 # Gutenberg's own numbers.
-TEXTS = {"en": 1661, "fr": 17989}
+TEXTS = {"en": 1661, "fr": 17989, "es": 17340}
 ROWS = {
     "qwerty": ["qwertyuiop", "asdfghjkl", "zxcvbnm"],
     "azerty": ["azertyuiop", "qsdfghjklm", "wxcvbn"],
+    # Spain's and Latin America's: ñ after l.
+    "qwerty-es": ["qwertyuiop", "asdfghjklñ", "zxcvbnm"],
 }
+# Each language's board, when not qwerty.
+BOARD = {"fr": "azerty", "es": "qwerty-es"}
 # How far each row starts in from the left, in keys, as on a real board.
 STAGGER = [0.0, 0.25, 0.75]
 SEED = 7
@@ -92,12 +97,13 @@ def centres(rows):
     return {c: (STAGGER[r] + i + 0.5, r + 0.5) for r, row in enumerate(rows) for i, c in enumerate(row)}
 
 
-def finger_path(word, keys, rng, wobble=1.0):
+def finger_path(word, keys, rng, wobble=1.0, lang="en"):
     """A swipe through the word's keys: each key aimed at and missed a little,
     the line between them drawn every tenth of a key and never quite still.
     wobble scales how far off: 0.7 a careful finger, 1.4 a hurried one."""
     stops = []
-    for c in P.fold(word):
+    own = {c for c in P.OWN_KEYS.get(lang, ()) if c in keys}
+    for c in P.key_letters(word, P.fold(word), own):
         if c == "'":
             continue
         p = keys[c]
@@ -137,7 +143,7 @@ def run(lang, path, rows_name, samples):
     ranks = P.read_wordlist(path)
     pred = P.Predictor(ranks, lang)
     pred.set_rows([list(r) for r in rows])
-    swipes = P.Swipes(pred.ranks, pred.folds)
+    swipes = P.Swipes(pred.ranks, pred.folds, lang=lang)
     swipes.set_keys({"unit": 1.0, "keys": {c: list(p) for c, p in keys.items()}})
     load_ms = (time.perf_counter() - t) * 1000
     rss = (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - rss0) / 1024
@@ -198,14 +204,14 @@ def run(lang, path, rows_name, samples):
     # it was hurting, and weighing it less would have made everyday swipes
     # worse.
     def decodable(w):
-        f = P.fold(w).replace("'", "")
+        f = swipes.paths[w].replace("'", "")
         return len(f) >= 2 and all(c in keys for c in f)
 
     def swipe_on(words):
         hits1 = hits3 = 0
         lat = []
         for w in words:
-            found, ms = timed(swipes.decode, finger_path(w, keys, rng))
+            found, ms = timed(swipes.decode, finger_path(w, keys, rng, lang=lang))
             found = [x.lower() for x in found]
             hits1 += bool(found) and found[0] == w
             hits3 += w in found[:TOP]
@@ -264,7 +270,7 @@ def main():
     if a.cmd == "fetch":
         fetch()
         return
-    rows = a.rows or ("azerty" if a.lang == "fr" else "qwerty")
+    rows = a.rows or BOARD.get(a.lang, "qwerty")
     samples = {"complete": a.complete, "correct": a.correct, "swipe": a.swipe}
     if a.cmd == "run":
         r = run(a.lang, list_path(a.lang, a.lists[0]), rows, samples)

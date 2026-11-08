@@ -136,7 +136,10 @@ function note(record, line, mode, atPrompt) {
   else return null                                             // up, hold, release, route
   if (unknown) return empty(false)
   var before = t.slice(0, c)
-  var sentenceStart = before === "" ? fromStart : /([.!?] |\n)$/.test(before)
+  // Spanish opens a question or an exclamation with ¿ or ¡, and the word
+  // after it still starts the sentence: "¿Qué?".
+  var lead = before.replace(/[¡¿]+$/, "")
+  var sentenceStart = lead === "" ? fromStart : /([.!?] |\n)$/.test(lead)
   if (lean) {
     // The cursor is always at the end here: everything that moves it made
     // the record unknown above.

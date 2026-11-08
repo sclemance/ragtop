@@ -474,6 +474,28 @@ things English did not.
   offered, and after one and an apostrophe the rest is completed alone and
   offered with it.
 
+Spanish needed two more.
+
+- *ñ is a letter.* Spain's and Latin America's boards have an ñ key after l,
+  and a swipe through it does not pass n. Typed, ñ folds like an accent, so
+  "ano" still reaches año; but on a board with the key, a word's swipe path
+  goes through it (OWN_KEYS, key_letters). Measured on the 400 commonest ñ
+  words swiped through ñ: right first 8% → 85%, in the first three 15% →
+  98%. The misspelling filter keeps ñ too (Predictor.spellings), on every
+  board: campana is a word beside campaña, though wordfreq ranks it 116
+  rarer, and with ñ folded it went even from a perfect swipe (found by
+  Codex's review). Acute accents still decide: of 34,693 words it drops 399,
+  nearly all unaccented misspellings (tambien, despues, informacion); publico
+  still loses to público, the documented trade-off French makes too.
+- *¿ and ¡.* An opening mark keeps a sentence's start (typed-record.js), so
+  ¿qué capitalises, and is no word for the next-word context: after "Hola,
+  ¿" the word before is hola (contextNow, which also reads through « »).
+
+Spanish's numbers, on Galdós's Marianela (1878) and held-out Tatoeba
+sentences: coverage 92%; keystrokes saved 18% on the novel, 21 → 32% with
+pairs on the sentences; swipe right first 92.1 → 93.0% at typical wobble and
+87.4 → 89.2% sloppy, about French's.
+
 **Password fields.** fcitx5 knows what kind of field has focus, since
 applications say so through text-input (and GTK, Qt and X11 through their
 modules), and keeps it as capability flags. It does not tell an on-screen

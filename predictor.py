@@ -120,6 +120,11 @@ ELISIONS = {
 }
 # Letters that come apart into two, which decomposition does not do.
 LIGATURES = {"œ": "oe", "æ": "ae"}
+# Letters a language gives a key of their own, as letters rather than accented
+# ones: ñ in Spanish, beside l. Typed, they are folded like any accent, so
+# "ano" still reaches año; but a swipe through ñ does not pass n, so on a
+# board with that key a word's path goes through it (key_letters).
+OWN_KEYS = {"es": {"ñ"}}
 
 
 def fold(word):
@@ -128,6 +133,15 @@ def fold(word):
     word = "".join(LIGATURES.get(c, c) for c in word.lower())
     return "".join(c for c in unicodedata.normalize("NFD", word)
                    if not unicodedata.combining(c))
+
+
+def key_letters(word, folded, own):
+    """The keys a swipe of `word` passes, in order: its folded letters, but
+    for the letters in `own`, the ones this board has a key of their own for,
+    which stay themselves. `folded` is fold(word), already worked out."""
+    if not own or not any(c in own for c in word.lower()):
+        return folded
+    return "".join(c if c in own else fold(c) for c in word.lower())
 
 
 def read_msgpack(data):
@@ -269,6 +283,14 @@ class Predictor:
         # Each word's folded letters and accent count, once, here: only the
         # list's own words, never anything typed, which is not kept.
         self.folds = {w: (fold(w), accents(w)) for w in self.ranks}
+        # What the misspelling filter tells words apart by: the folded
+        # letters, but keeping the language's own letters (OWN_KEYS). campana
+        # is no misspelling of campaña, however much rarer, while tambien is
+        # one of también. The same whatever the board, so a word is a word on
+        # any layout. Only built where it differs.
+        own = OWN_KEYS.get(lang, set())
+        self.spellings = {w: (key_letters(w, f, own), n) for w, (f, n) in self.folds.items()} \
+            if own else self.folds
         # Every word under its folded form, sorted, for prefix search, and by
         # it, for corrections.
         self.folded = sorted((f, w) for w, (f, _) in self.folds.items())
@@ -479,7 +501,7 @@ class Predictor:
                     continue
                 if rank < found.get(w, 1 << 30):
                     found[w] = rank
-        found = {w: found[w] for w in spelled_right(list(found), self.ranks, self.folds)}
+        found = {w: found[w] for w in spelled_right(list(found), self.ranks, self.spellings)}
         found = self.in_context(found, before)
         best = heapq.nsmallest(SHOWN, found.items(), key=lambda kv: (kv[1], kv[0]))
         return [self.written(w, typed) for w, _ in best]
@@ -1118,13 +1140,21 @@ def mean_distance(a, b):
 
 
 class Swipes:
-    def __init__(self, ranks, folds=None, predictor=None):
+    def __init__(self, ranks, folds=None, predictor=None, lang=None):
         self.ranks = ranks
+        self.lang = lang or (predictor.lang if predictor else "en")
         # For the word before (Predictor.pairs): a swipe after "going" that
         # could be to, too or top is to, as a completion would be.
         self.predictor = predictor
         # The predictor's, for the same reason it keeps them.
         self.folds = folds or {w: (fold(w), accents(w)) for w in ranks}
+        # The misspelling filter's, the predictor's where there is one.
+        if predictor is not None:
+            self.spellings = predictor.spellings
+        else:
+            own = OWN_KEYS.get(self.lang, set())
+            self.spellings = {w: (key_letters(w, f, own), n) for w, (f, n) in self.folds.items()} \
+                if own else self.folds
         self.keys = {}
         self.unit = 1.0
         self.ends = {}
@@ -1150,11 +1180,15 @@ class Swipes:
             return
         self.keys = normal
         self.unit = float(unit)
+        # The letters each word's path goes through on these keys: folded,
+        # unless the board has a key for a letter of the language's own.
+        own = {c for c in OWN_KEYS.get(self.lang, ()) if c in normal}
+        self.paths = {w: key_letters(w, self.folds[w][0], own) for w in self.ranks}
         # Words by their first and last letters, the ones a path's ends
         # pick between, and only words every letter of which has a key.
         self.ends = {}
         for word in self.ranks:
-            letters = [c for c in self.folds[word][0] if c != "'"]
+            letters = [c for c in self.paths[word] if c != "'"]
             if len(letters) >= 2 and all(c in self.keys for c in letters):
                 self.ends.setdefault((letters[0], letters[-1]), []).append(word)
         # Each word's path length on these keys, for decode's cheap first
@@ -1166,7 +1200,7 @@ class Swipes:
         """The path through a word's keys, a letter typed twice in a row
         being one stop, as it is for a finger."""
         out = []
-        for c in self.folds[word][0]:
+        for c in self.paths[word]:
             if c == "'":
                 continue
             p = self.keys[c]
@@ -1217,7 +1251,7 @@ class Swipes:
         for a in starts:
             for b in ends:
                 for word in self.ends.get((a, b), ()):
-                    letters = self.folds[word][0]
+                    letters = self.paths[word]
                     if any(closest[c] > VISIT_SLACK * self.unit for c in letters if c != "'"):
                         continue
                     first = self.keys[next(c for c in letters if c != "'")]
@@ -1243,7 +1277,7 @@ class Swipes:
                 heapq.heappush(worst, -score)
             elif score < -worst[0]:
                 heapq.heapreplace(worst, -score)
-        keep = set(spelled_right([w for _, w in scored], self.ranks, self.folds))
+        keep = set(spelled_right([w for _, w in scored], self.ranks, self.spellings))
         scored = [(score, w) for score, w in scored if w in keep]
         return [w for _, w in heapq.nsmallest(SHOWN, scored)]
 

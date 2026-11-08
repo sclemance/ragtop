@@ -2215,13 +2215,16 @@ Item {
     var t = root.beforeCursor
     if (root.currentWord !== "" && t.slice(-root.currentWord.length) === root.currentWord)
       t = t.slice(0, t.length - root.currentWord.length)
+    // An opening mark just typed, Spanish's ¿ and ¡ or a «: the word after it
+    // follows what came before the mark.
+    t = t.replace(/[¡¿«]+$/, "")
     if (t.trim() === "") return root.typedFromStart ? "" : "-"
     if (/([.!?]["')\]]*|\n)\s*$/.test(t)) return ""
     var m = /(\S+)\s+$/.exec(t)
     if (!m) return "-"
     // A comma or a quote around a word does not change what came before:
     // the pairs were counted across them too.
-    var w = m[1].replace(/^["'(\[]+/, "").replace(/[,;:"')\]]+$/, "")
+    var w = m[1].replace(/^["'(\[¡¿«]+/, "").replace(/[,;:"')\]»]+$/, "")
     for (var i = 0; i < w.length; i++)
       if (w[i] !== "'" && w[i].toLowerCase() === w[i].toUpperCase()) return "-"
     return w === "" ? "-" : w.toLowerCase()

@@ -240,7 +240,7 @@ def measure_swipe(lang, keep=32, sentences_n=400, seed=7, wobble=1.0):
     vocab = P.read_wordlist(f"{CACHE}/words/small_{lang}.msgpack.gz")
     p = P.Predictor(vocab, lang)
     p.use_pairs(f"{CACHE}/pairs/{lang}-{keep}.tsv.gz")
-    rows = B.ROWS["azerty" if lang == "fr" else "qwerty"]
+    rows = B.ROWS[B.BOARD.get(lang, "qwerty")]
     keys = B.centres(rows)
     s = P.Swipes(p.ranks, p.folds, p)
     s.set_keys({"unit": 1.0, "keys": {c: list(v) for c, v in keys.items()}})
@@ -251,9 +251,9 @@ def measure_swipe(lang, keep=32, sentences_n=400, seed=7, wobble=1.0):
     for text in rng.sample(test, min(sentences_n, len(test))):
         before = START
         for w in tokens(text, lang):
-            f = P.fold(w).replace("'", "")
-            if w in p.ranks and len(f) >= 2 and all(c in keys for c in f):
-                path = B.finger_path(w, keys, rng, wobble)
+            f = s.paths[w].replace("'", "") if w in p.ranks else ""
+            if len(f) >= 2 and all(c in keys for c in f):
+                path = B.finger_path(w, keys, rng, wobble, lang)
                 n += 1
                 for name, b in (("plain", None), ("context", before)):
                     found = [x.lower() for x in s.decode(path, b)]
