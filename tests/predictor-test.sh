@@ -491,6 +491,16 @@ no_rules_on_two_letters() {
   assert_contains "$out" 'forms ["went", "going"]'
 }
 
+# tie and die end in e too, but go to tying and dying.
+ie_words_go_to_ying() {
+  form_words
+  wordlist "$words" 300:tie 320:tied 330:ties 340:tying 360:tiing 310:die 330:died 340:dies 350:dying
+  forms_of tie die
+  assert_contains "$out" '"tying"'
+  assert_contains "$out" '"dying"'
+  assert_lacks "$out" '"tiing"'
+}
+
 forms_follow_capitals() {
   form_words
   forms_of Stop
@@ -876,6 +886,7 @@ run_test "predictor: -er and -est are forms only as a pair, so summer is not sum
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root
 run_test "predictor: irregular forms, and no rule-made misspellings beside them" irregular_forms
 run_test "predictor: forms take the word's capitals" forms_follow_capitals
+run_test "predictor: tie and die take tying and dying among their forms" ie_words_go_to_ying
 run_test "predictor: no rule-made forms on two letters, so ly is not lying's" no_rules_on_two_letters
 run_test "predictor: a rare piece joins, and leads the strip" a_rare_piece_joins_strongly
 run_test "predictor: common pieces join only quietly, maybe for may be" common_pieces_join_weakly

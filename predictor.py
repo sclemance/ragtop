@@ -666,10 +666,11 @@ def grow_en(base):
         out |= {base[:-1] + "ies", base[:-1] + "ied"}
     else:
         out.add(base + "s")
-    if base.endswith("e"):
+    # -ie before -e, which it also ends in: tie, tied, tying.
+    if base.endswith("ie"):
+        out |= {base + "d", base[:-2] + "ying"}
+    elif base.endswith("e"):
         out |= {base + "d", base[:-1] + "ing"}
-    elif base.endswith("ie"):
-        out.add(base[:-2] + "ying")
     else:
         out |= {base + "ed", base + "ing"}
     # A short word ending consonant, vowel, consonant doubles the last:
