@@ -444,6 +444,12 @@ patch_clone() {
 
 clone_matches_base() {
   local tmp result=1
+  # Ragtop's clones hold folders and plain files only. Anything else, a
+  # symlink above all, is someone's own arrangement: it counts as an edit,
+  # and nothing is copied, since undoing the patch in a copy would write
+  # through a copied symlink to wherever it points.
+  [[ -d $clone_dir && ! -L $clone_dir ]] || return 1
+  [[ -z $(find "$clone_dir" -mindepth 1 ! -type f ! -type d -print -quit) ]] || return 1
   tmp=$(mktemp -d)
   cp -a "$clone_dir/." "$tmp/"
   replace "$tmp/$entry" revert "${patch[@]}" "${window_patch[@]}" "${legacy[@]}"

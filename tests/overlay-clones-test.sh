@@ -897,7 +897,27 @@ updating_rc_to_release_recloned_what_changed() {
   assert_equal "$(progress_files)" "" "progress markers left behind"
 }
 
+# A clone whose entry file is a symlink, to a dotfiles copy say: status only
+# looks, so the file it points to stays exactly as it was, and the clone
+# counts as having edits of its own.
+a_symlinked_entry_is_only_looked_at() {
+  make_sandbox "$rel_omarchy"
+  clones install lock
+  assert_rc 0
+  local mine="$sandbox/home/my-lock-view.qml" before
+  mv "$(entry_of lock)" "$mine"
+  ln -s "$mine" "$(entry_of lock)"
+  before=$(sha256sum "$mine")
+  clones status lock
+  assert_equal "$(sha256sum "$mine")" "$before" "the symlink's target after status"
+  assert_contains "$out" "lock: note: the clone has edits besides Ragtop's"
+  clones sync lock
+  assert_equal "$(sha256sum "$mine")" "$before" "the symlink's target after sync"
+  assert_equal "$([[ -L $(entry_of lock) ]] && echo link)" link "the clone's entry is still the symlink"
+}
+
 run_test "4.5.0: install patches all six, and status, installed and sync agree" rel_install_patches_every_overlay
+run_test "4.5.0: a symlinked entry file is looked at, never written through" a_symlinked_entry_is_only_looked_at
 run_test "4.5.0: sync re-clones what uses the shared OverlayWindow when Omarchy changes it" rel_sync_follows_the_shared_window
 run_test "4.5.0: a clone with edits of its own is kept when the shared OverlayWindow changes" rel_edited_clone_survives
 run_test "4.5.0-rc1 to 4.5.0: sync re-clones the four that changed, and the lock loses its feed surface" updating_rc_to_release_recloned_what_changed
