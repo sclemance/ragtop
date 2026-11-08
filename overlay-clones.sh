@@ -761,9 +761,12 @@ install_one() {
 # a manual sync) does it. Other overlays are never held back.
 lock_may_change() {
   [[ $name == lock ]] || return 0
-  command -v omarchy-hyprland-session-locked >/dev/null || return 0
-  local state=0
-  omarchy-hyprland-session-locked || state=$?
+  # No probe is no telling, not a yes: only an answer of unlocked will do.
+  local state=2
+  if command -v omarchy-hyprland-session-locked >/dev/null; then
+    state=0
+    omarchy-hyprland-session-locked || state=$?
+  fi
   (( state == 1 )) && return 0
   if (( state == 0 )); then
     echo "The session is locked, so $clone_id is left as it is until a sync while unlocked." >&2
@@ -891,18 +894,23 @@ apply_selection() {
   done
   if (( ${#operations[@]} == 0 )); then return 0; fi
   # Switching the active session-lock implementation while locked is unsafe.
+  # With no probe there is no telling, which matters only where the lock is
+  # among what changes.
+  local lock_state=1
   if command -v omarchy-hyprland-session-locked >/dev/null; then
-    local lock_state=0
+    lock_state=0
     omarchy-hyprland-session-locked || lock_state=$?
-    # 2 is "could not tell", e.g. no monitor has a workspace yet. That is
-    # refused too, but not as a lock: the desktop may well be unlocked.
-    if (( lock_state == 0 )); then
-      echo "The session is locked; unlock it and choose overlays again." >&2
-      return 1
-    elif (( lock_state != 1 )); then
-      echo "Could not tell whether the session is locked, so no overlays were changed. Try again in a moment." >&2
-      return 1
-    fi
+  elif [[ " ${operations[*]} " == *":lock:"* ]]; then
+    lock_state=2
+  fi
+  # 2 is "could not tell", e.g. no monitor has a workspace yet. That is
+  # refused too, but not as a lock: the desktop may well be unlocked.
+  if (( lock_state == 0 )); then
+    echo "The session is locked; unlock it and choose overlays again." >&2
+    return 1
+  elif (( lock_state != 1 )); then
+    echo "Could not tell whether the session is locked, so no overlays were changed. Try again in a moment." >&2
+    return 1
   fi
   # Until it is published, the batch holds only copies made for it: nothing
   # live has moved, so a batch that stops early is simply let go.

@@ -964,7 +964,32 @@ a_locked_update_waits_for_the_lock() {
 }
 
 run_test "4.5.0: install patches all six, and status, installed and sync agree" rel_install_patches_every_overlay
+# With no lock probe at all there is no telling, which is no yes: the lock
+# clone stays as it is, while other overlays still sync and can be chosen.
+no_probe_is_no_answer() {
+  make_sandbox "$rel_omarchy"
+  clones install menu lock
+  assert_rc 0
+  # A PATH like the tests' own, with no omarchy-hyprland-session-locked on it.
+  local bin="$sandbox/no-probe" f
+  mkdir -p "$bin"
+  for f in "$tests_dir"/stub-bin/* /usr/bin/*; do
+    [[ ${f##*/} == omarchy-hyprland-session-locked || -e $bin/${f##*/} ]] || ln -s "$f" "$bin/${f##*/}"
+  done
+  sed -i 's/id: inputField/id: inputBox/' "$sandbox/omarchy/shell/plugins/lock/LockView.qml"
+  : >"$sandbox/calls.log"
+  clones PATH="$bin" sync lock
+  assert_rc 1
+  assert_contains "$err" "Could not tell whether the session is locked, so tester.lock is left as it is"
+  assert_lacks "$(calls)" "remove tester.lock"
+  clones PATH="$bin" apply 'menu' ''
+  assert_lacks "$err" "Could not tell whether the session is locked"
+  clones PATH="$bin" apply '' 'lock'
+  assert_contains "$err" "Could not tell whether the session is locked"
+}
+
 run_test "4.5.0: while locked, an unpatchable update leaves the lock clone alone" a_locked_session_keeps_its_lock_clone
+run_test "4.5.0: with no lock probe, the lock clone is left alone and other overlays are not" no_probe_is_no_answer
 run_test "4.5.0-rc1 to 4.5.0 while locked: the lock waits, the rest move on" a_locked_update_waits_for_the_lock
 run_test "4.5.0: a symlinked entry file is looked at, never written through" a_symlinked_entry_is_only_looked_at
 run_test "4.5.0: sync re-clones what uses the shared OverlayWindow when Omarchy changes it" rel_sync_follows_the_shared_window
