@@ -3579,7 +3579,16 @@ Item {
     command: ["hyprctl", "getoption", "-j", "decoration:blur:enabled"]
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.globalBlurWasOn = JSON.parse(text()).int === 1 || JSON.parse(text()).bool === true } catch (e) {}
+        // text is the collector's property, not a method. An answer that is
+        // not understood counts as blur being the user's: Ragtop takes over
+        // global blur only when it saw it off.
+        var known = false, on = false
+        try {
+          var v = JSON.parse(text)
+          known = typeof v.int === "number" || typeof v.bool === "boolean"
+          on = v.int === 1 || v.bool === true
+        } catch (e) {}
+        root.globalBlurWasOn = on || !known
         root.blurChecked = true
         root.applyBlur()
       }

@@ -1,0 +1,46 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+// Whether Ragtop takes over Hyprland's global blur: only when it asked and
+// was told it was off. hyprctl is replaced by printf, and what Ragtop would
+// send is recorded rather than sent.
+ShellRoot {
+  id: root
+  Harness { id: t }
+  property bool blurKeyboard: false
+  property string answer: ""
+  property var sent: []
+  QtObject {
+    id: blurProc
+    property var command: []
+    property bool running: false
+    onRunningChanged: if (running) { root.sent.push(command.join(" ")); running = false }
+  }
+  // FROM SOURCE: globalBlurWasOn blurChecked blurCheckProc applyBlur
+  function ask(reply) {
+    root.sent = []
+    root.blurChecked = false
+    root.globalBlurWasOn = false
+    blurCheckProc.command = ["printf", "%s", reply]
+    root.applyBlur()
+  }
+  function touchesGlobal() { return root.sent.join("\n").indexOf("hl.config(") !== -1 }
+  Component.onCompleted: t.run([
+    [0, function() { root.ask('{"option":"decoration:blur:enabled","int":1}') }],
+    [500, function() {
+      t.ok(root.blurChecked, "on: the answer was read")
+      t.ok(root.globalBlurWasOn, "on: global blur is the user's")
+      t.ok(!root.touchesGlobal(), "on: Ragtop leaves global blur alone")
+      root.ask('{"option":"decoration:blur:enabled","int":0}')
+    }],
+    [500, function() {
+      t.ok(!root.globalBlurWasOn, "off: Ragtop may take blur over")
+      t.ok(root.touchesGlobal(), "off: and sets it for its own layers")
+      root.ask("not json")
+    }],
+    [500, function() {
+      t.ok(root.blurChecked && root.globalBlurWasOn, "unknown: counted as the user's")
+      t.ok(!root.touchesGlobal(), "unknown: global blur left alone")
+    }],
+  ])
+}
