@@ -1105,7 +1105,11 @@ class Terminal:
             self.load()
         found = [n for n in self.commands if n.startswith(prefix)]
         found.sort(key=lambda n: (self.commands[n], n))
-        return [{"text": n, "note": self.notes.get(n, ""), "kind": "command"} for n in found[:SHOWN]]
+        # Typed into a shell, so escaped the way file names are: a name on
+        # PATH may hold a space or a $( ), and as typed it must stay the
+        # command's name rather than become code.
+        return [{"text": shell_escaped(n), "note": self.notes.get(n, ""), "kind": "command"}
+                for n in found[:SHOWN]]
 
     def files(self, cwd, token, folders_only):
         # The typed path as the shell will read it: unescaped, ~ for home.

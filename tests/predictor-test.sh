@@ -511,6 +511,30 @@ term() {
   out=$(grep '^termsuggest' <<<"$out" | sed 's/^termsuggest //' | jq -c '[.[] | .text]')
 }
 
+# A name on PATH can hold anything a file name can. Offered, it is escaped,
+# so the shell reads it as that one command's name and runs nothing else.
+odd_command_names_are_escaped() {
+  local bin="$sandbox/bin" cwd="$sandbox/home"
+  mkdir -p "$bin"
+  # shellcheck disable=SC2016  # the names are meant to hold $( ) and ` `
+  local names=('odd$(touch MARKER)' 'odd tool' 'odd`touch MARKER`' "odd'q" 'odd;x' 'odd&y')
+  local n
+  for n in "${names[@]}"; do printf '#!/bin/sh\nexit 0\n' >"$bin/$n"; chmod +x "$bin/$n"; done
+  wordlist "$words" 127:the
+  out=$(echo "term $(jq -cn --arg c "$cwd" '{cwd: $c, line: "odd"}')" \
+    | sandboxed /usr/bin/env PATH="$bin:/usr/bin:/bin" RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$words" 2>&1 \
+    | grep '^termsuggest' | sed 's/^termsuggest //')
+  assert_equal "$(jq length <<<"$out")" 6 "every odd name offered"
+  local text
+  while IFS= read -r text; do
+    # What bash reads the offered text as: one word, the name itself.
+    local got
+    got=$(cd "$cwd" && bash -c 'eval "set -- $1"; printf "%s|%s" "$#" "$1"' _ "$text")
+    [[ $got == 1\|odd* ]] || fail "offered $text, which bash reads as $got"
+  done < <(jq -r '.[].text' <<<"$out")
+  assert_equal "$([[ -e $cwd/MARKER ]] && echo made)" "" "an offered command name ran as code"
+}
+
 commands_at_the_start() {
   term gre "sudo pac" "git log | gre" "echo hi && gre"
   assert_equal "$(sed -n 1p <<<"$out" | jq -r '.[0]')" grep "first word"
@@ -863,6 +887,7 @@ run_test "predictor: next words, and completions ranked by the word before" next
 run_test "predictor: the bundled copy is read when nothing was fetched" the_bundled_copy_is_read
 run_test "predictor: the word before steers a swipe" a_swipe_follows_the_word_before
 run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
+run_test "predictor: a command name with shell syntax in it is offered escaped" odd_command_names_are_escaped
 run_test "predictor: then files and folders from the terminal's folder" files_after_it
 run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names
 run_test "predictor: a quoted name is completed as one escaped word" quoted_names
