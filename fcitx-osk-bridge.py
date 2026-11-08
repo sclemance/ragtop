@@ -195,17 +195,20 @@ def field_of(debug_info):
 
 
 printed_field = "unset"
-# Each ask is numbered, and an answer older than one already printed is
-# dropped: what it says is about a field that may no longer have focus.
+# Each ask is numbered, and only the newest is answered: an answer to an
+# older one is about a field that may no longer have focus, whether a later
+# answer has come yet or not (a focus change asks again while the last
+# answer is on its way).
 field_asks = 0
 field_answered = 0
 
 
 def ask_field():
     """Which field has focus, by asking fcitx5 for its report."""
-    global field_asks
+    global field_asks, field_answered
     field_asks += 1
     number = field_asks
+    field_answered = max(field_answered, number)
 
     def got(value):
         global printed_field, field_answered
@@ -336,6 +339,12 @@ def on_command(source, condition):
         call(CONTROLLER, "SetCurrentIM", GLib.Variant("(s)", (arg,)))
     elif cmd == "deactivate":
         call(CONTROLLER, "Deactivate")
+    elif cmd == "field":
+        # The service lost track (another window took focus): ask again, and
+        # say the answer even if nothing changed, so it can trust it.
+        global printed_field
+        printed_field = "unset"
+        ask_field()
     return True
 
 
