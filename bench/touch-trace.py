@@ -7,10 +7,12 @@ what Ragtop did with each touch (`ragtop touch-trace compare`).
 Reads the kernel's touch events, before Hyprland or Ragtop see them, so a
 tap that the panel reported and Ragtop never acted on can be told apart from
 one the panel never reported at all. Needs root, since the touchscreen is
-only readable by root and the input group. Runs until Ctrl+C.
+only readable by root and the input group. Root is given up as soon as the
+touchscreen is open, so the log is written as the user who ran sudo. Runs
+until Ctrl+C.
 
-Each finger down and up is appended to $XDG_RUNTIME_DIR/ragtop-touch-kernel.log
-(of the user who ran sudo) as a JSON line: {"t": milliseconds since the
+Each finger down and up is appended to /run/user/<uid>/ragtop-touch-kernel.log
+(the runtime folder of the user who ran sudo) as a JSON line: {"t": milliseconds since the
 epoch, "ev": "down" or "up", "slot": the finger, "x", "y": the share of the
 panel's width and height}. It is in the runtime folder, so it goes at the
 next reboot, and it is the user's to delete before then. Where a finger is
@@ -22,6 +24,8 @@ turned with it. The comparison goes by time first for that reason.
 import fcntl
 import json
 import os
+import re
+import stat
 import struct
 import sys
 
@@ -57,6 +61,37 @@ def find_touchscreen():
     return found
 
 
+def become_user():
+    """Give up root for the user who ran sudo, and return their uid."""
+    if os.geteuid() != 0:
+        return os.getuid()
+    try:
+        uid, gid = int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"])
+    except (KeyError, ValueError):
+        uid = 0
+    if uid == 0:
+        sys.exit("Run it with sudo from your own account, so the log is written as you.")
+    os.setgroups([])
+    os.setgid(gid)
+    os.setuid(uid)
+    return uid
+
+
+def open_log(path, uid):
+    """The log, opened as the user: only a file of theirs, never through a
+    link, and private whether it is new or not."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    except OSError as e:
+        sys.exit(f"Can't write {path}: {e.strerror}. Remove it and try again.")
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != uid:
+        os.close(fd)
+        sys.exit(f"{path} is not a file of yours. Remove it and try again.")
+    os.fchmod(fd, 0o600)
+    return os.fdopen(fd, "a", buffering=1)
+
+
 def main():
     if len(sys.argv) > 1:
         device = sys.argv[1]
@@ -66,17 +101,23 @@ def main():
             sys.exit("No touchscreen found. Name one: bench/touch-trace.py /dev/input/eventN")
         name, device = found[0]
         print(f"Touchscreen: {name} ({device})")
-    uid = int(os.environ.get("SUDO_UID", os.getuid()))
-    gid = int(os.environ.get("SUDO_GID", os.getgid()))
-    log = f"/run/user/{uid}/ragtop-touch-kernel.log"
-    with open(device, "rb") as dev:
+    device = os.path.realpath(device)
+    if not re.fullmatch(r"/dev/input/event\d+", device):
+        sys.exit(f"{device} is not an input device: name one as /dev/input/eventN")
+    try:
+        dev = open(device, "rb")
+    except PermissionError:
+        sys.exit("The touchscreen is only readable by root: run it with sudo.")
+    with dev:
+        if not stat.S_ISCHR(os.fstat(dev.fileno()).st_mode):
+            sys.exit(f"{device} is not an input device: name one as /dev/input/eventN")
         ranges = {}
         for axis in (ABS_MT_POSITION_X, ABS_MT_POSITION_Y):
             info = ABSINFO.unpack(fcntl.ioctl(dev, eviocgabs(axis), b"\0" * ABSINFO.size))
             ranges[axis] = (info[1], max(1, info[2] - info[1]))
-        out = open(log, "a", buffering=1)
-        os.chown(log, uid, gid)
-        os.chmod(log, 0o600)
+        uid = become_user()
+        log = f"/run/user/{uid}/ragtop-touch-kernel.log"
+        out = open_log(log, uid)
         print(f"Recording to {log}. Type, and Ctrl+C when done.")
         slot = 0
         slots = {}        # slot -> {"id", "x", "y", "new"}
@@ -113,5 +154,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         pass
-    except PermissionError:
-        sys.exit("The touchscreen is only readable by root: run it with sudo.")
