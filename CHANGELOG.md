@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.48.3 — 2026-11-08
+
+- `bench/touch-trace.py`, the sudo diagnostic, gives up root as soon as the touchscreen is open and writes its log as the user who ran it. The log is never opened through a link, only a regular file of theirs is used, and it is made private on every run. It no longer runs as plain root, and it takes only a `/dev/input/eventN` touchscreen.
+
 ## 0.48.2 — 2026-11-01
 
 - What was typed is kept when the focused window's title changes. Hyprland repeats its window event on every title change (Claude Code's spinner, shells on each prompt), and Ragtop had taken each one for another window and forgotten the line.
