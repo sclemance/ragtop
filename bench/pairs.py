@@ -37,6 +37,15 @@ CACHE = os.path.expanduser("~/.cache/ragtop-bench")
 TATOEBA = {"en": "eng", "fr": "fra", "de": "deu", "es": "spa", "pt": "por", "it": "ita"}
 START = "<s>"
 CAPITALS = "<capitals>"
+WRITTEN = P.WRITTEN
+# Languages whose wordfreq list is casefolded where lower case is not
+# enough: German's ß is ss there (strasse). Their sentences are matched the
+# same way, and how they are written kept apart (written_forms).
+CASEFOLDED = P.CASEFOLDED
+# A spelling of a list word is kept in the written line when at least this
+# share of its uses in the sentences spell it so: Maße and Masse are both
+# German, under the list's one masse, and both stay reachable.
+WRITTEN_SHARE = 0.1
 # One sentence in ten, by its number, is kept back for testing.
 HELD_OUT = 10
 WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)*")
@@ -58,7 +67,10 @@ def tokens(sentence, lang):
     # un'altro never is.
     elided = P.ELIDED.get(lang, set())
     apocopes = P.APOCOPES.get(lang, set())
-    for w in TOKEN.findall(sentence.replace("’", "'").lower()):
+    text = sentence.replace("’", "'").lower()
+    if lang in CASEFOLDED:
+        text = text.casefold()
+    for w in TOKEN.findall(text):
         if w.endswith("'"):
             w = w if w[:-1] in apocopes else w[:-1]
             if not w:
@@ -108,7 +120,7 @@ def capitals(lang, vocab, part="train"):
     for _, text in sentences(lang, part):
         for i, w in enumerate(WORD.findall(text.replace("\u2019", "'"))):
             total += 1
-            low = w.lower()
+            low = w.casefold() if lang in CASEFOLDED else w.lower()
             used[low] += 1
             if i > 0:
                 inside[low] += 1
@@ -124,6 +136,43 @@ def capitals(lang, vocab, part="train"):
         else:
             caps.add(w)
     return names, caps
+
+
+def written_forms(lang, vocab, part="train"):
+    """{list word: [as written, ...]} in a casefolded language, commonest
+    first: each spelling the sentences use for it often enough, with the
+    capital it has mid-sentence. strasse is [Straße]; masse is [Masse, Maße],
+    floss [floss, Floß]. Only words where the list's own spelling is not the
+    whole story. From the data, as the capitals are."""
+    if lang not in CASEFOLDED:
+        return {}
+    spelt = collections.defaultdict(collections.Counter)
+    inside = collections.defaultdict(collections.Counter)
+    upper = collections.defaultdict(collections.Counter)
+    for _, text in sentences(lang, part):
+        for i, w in enumerate(WORD.findall(text.replace("\u2019", "'"))):
+            low = w.lower()
+            key = low.casefold()
+            if key not in vocab:
+                continue
+            spelt[key][low] += 1
+            if i > 0:
+                inside[key][low] += 1
+                if w[:1].isupper():
+                    upper[key][low] += 1
+    out = {}
+    for key, forms in spelt.items():
+        total = sum(forms.values())
+        kept = []
+        for low, n in sorted(forms.items(), key=lambda f: (-f[1], f[0])):
+            if n / total < WRITTEN_SHARE:
+                continue
+            mid = inside[key][low]
+            capital = mid > 0 and upper[key][low] / mid >= 0.5
+            kept.append(low[:1].upper() + low[1:] if capital else low)
+        if kept and kept != [key] and any(k.lower() != key for k in kept):
+            out[key] = kept
+    return out
 
 
 def build(lang, keep, min_count=2, part="train", out=None):
@@ -158,6 +207,11 @@ def build(lang, keep, min_count=2, part="train", out=None):
     lines = [f"{before}\t" + " ".join(f"{w} {c}" for w, c in table[before]) for before in sorted(table)]
     # The words written with a capital, under a name no word can be.
     lines.append(f"{CAPITALS}\t" + " ".join(sorted(caps)))
+    # And, where the list spells words otherwise, how they are written; only
+    # then, so every other language's file stays as it was.
+    forms = written_forms(lang, vocab, part)
+    if forms:
+        lines.append(f"{WRITTEN}\t" + " ".join(f"{k}:{','.join(v)}" for k, v in sorted(forms.items())))
     data = ("\n".join(lines) + "\n").encode()
     with open(out_path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0, filename="") as f:
         f.write(data)

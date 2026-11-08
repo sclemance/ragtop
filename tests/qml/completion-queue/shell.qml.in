@@ -11,7 +11,14 @@ ShellRoot {
   function contextNow() { return context }
   function updateContext() { predictorProc.write("after " + context + "\n") }
   property var displayed: null
-  function setSuggestions(source, value) { displayed = value }
+  property var suggestions: ({ source: "" })
+  function setSuggestions(source, value) { displayed = value; suggestions = { source: value ? source : "" } }
+  // Service.qml's is a binding on the layout; here it is set by hand.
+  property string wordRegion: ""
+  property var formsAsked: []
+  property var joinAsked: []
+  property var sentContext: null
+  property var nextWords: []
   QtObject { id: predictorProc; property bool running: true; property var sent: []
     function write(line) { sent.push(line) } }
   QtObject { id: terminalProc; property bool running: true; property var sent: []
@@ -30,6 +37,7 @@ ShellRoot {
   // FROM SOURCE: asked pendingCompletion cancelCompletions completionCurrent queueCompletion flushCompletion completionAnswer
   // FROM SOURCE: terminalStarted terminalSequence termPending termInFlight termLatest clearTerminalRequests cancelTerminal terminalCurrent askTerm flushTerminal termAnswer
   // FROM SOURCE: onFieldGenerationChanged
+  // FROM SOURCE: sendLanguage onWordRegionChanged
   function answer(id, text, update) { termAnswer({id: id, items: [{text: text}], update: update}) }
   Component.onCompleted: t.run([
     [0, function() {
@@ -104,6 +112,34 @@ ShellRoot {
       t.equal(termPending, null, "disabled feature retains no pending text")
       t.equal(termInFlight, null, "shutdown drops protocol barrier")
       t.ok(terminalProc.resets > 0, "field cancellation clears worker's pending metadata update")
+    }],
+    [10, function() {
+      // A German layout, then a Swiss one: ß becomes ss, and nothing worked
+      // out for the old spelling may show.
+      cancelCompletions(); asked = []; predictorProc.sent = []
+      nextWords = ["weiß"]
+      wordLanguage = "de"; context = "the"; currentWord = "stra"
+      queueCompletion(); flushCompletion()
+      completionAnswer(["Straße"])
+      t.equal(displayed.items[0].text, "Straße", "region: Straße shown on a German layout")
+      wordRegion = "ch"
+      t.equal(displayed, null, "region: a Swiss layout clears it")
+      t.ok(predictorProc.sent.indexOf("lang de\nregion ch\n") !== -1, "region: the language and region are sent")
+      t.equal(currentWord, "stra", "region: the word being typed stays")
+      t.equal(nextWords.length, 0, "region: next words for the old spelling go too")
+    }],
+    [10, function() {
+      t.equal(predictorProc.sent[predictorProc.sent.length - 1], "complete stra\n", "region: and is asked about again")
+      completionAnswer(["Strasse"])
+      t.equal(displayed.items[0].text, "Strasse", "region: the answer for the Swiss spelling is shown")
+      queueCompletion(); flushCompletion()
+      wordRegion = ""
+      completionAnswer(["Strasse"])
+      t.equal(displayed, null, "region: a reply from before the switch back is rejected")
+    }],
+    [10, function() {
+      completionAnswer(["Straße"])
+      t.equal(displayed.items[0].text, "Straße", "region: back on the German layout, Straße")
     }]
   ])
 }

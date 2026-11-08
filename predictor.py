@@ -69,6 +69,7 @@ import gzip
 import heapq
 import json
 import math
+import re
 import os
 import shlex
 import struct
@@ -86,6 +87,16 @@ CONTEXT_BACKOFF = 40
 # What stands for the start of a sentence among the words before.
 START = "<s>"
 CAPITALS = "<capitals>"
+# Words as they are written where the list has them otherwise: wordfreq
+# casefolds, so German's straße is strasse in it. Read from the pairs, which
+# count how the sentences write each (pairs.py), as "strasse:straße".
+WRITTEN = "<written>"
+# Languages whose wordfreq list is casefolded, ß as ss: the word before is
+# looked up casefolded too, as the pairs were counted (pairs.py).
+CASEFOLDED = {"de"}
+# Where German is written with ss for ß: Switzerland (and Liechtenstein).
+# The service says which (region), from the layout.
+SS_REGIONS = {"ch"}
 # Product names missing from general-language corpora. A modest frequency
 # makes them available for typing/swiping without crowding out common words.
 # These are vocabulary, not invented next-word pairs or learned user text.
@@ -139,13 +150,13 @@ APOCOPES = {
     "it": {"po", "mo", "be"},
 }
 # Letters that come apart into two, which decomposition does not do.
-LIGATURES = {"œ": "oe", "æ": "ae"}
+LIGATURES = {"œ": "oe", "æ": "ae", "ß": "ss"}
 # Letters a language's board gives a key of their own: ñ in Spanish and ç in
 # Portuguese, each after l; è after p and ò and à after l in Italian. Typed,
 # they fold like any accent, so "ano" still reaches año; but a swipe through
 # ñ does not pass n, so on a board with that key a word's path goes through
 # it (key_letters).
-OWN_KEYS = {"es": {"ñ"}, "pt": {"ç"}, "it": {"è", "ò", "à"}}
+OWN_KEYS = {"es": {"ñ"}, "pt": {"ç"}, "it": {"è", "ò", "à"}, "de": {"ü", "ö", "ä"}}
 # Of those, the ones that are letters rather than accents, which the
 # misspelling filter keeps apart too (Predictor.spellings): campana is no
 # misspelling of campaña, faca none of faça. Italian's are accents, and citta
@@ -337,6 +348,9 @@ class Predictor:
         # Which words follow which, when a pairs file is installed (use_pairs).
         self.pair_lines = {}
         self.capitals = set(EXTRA_WORDS)
+        self.written_forms = {}
+        # The layout's region, which decides ß or ss where it matters.
+        self.region = ""
 
     def use_dictionary(self, dictionary, source):
         """Takes a dictionary for joins at once, and, for a language with no
@@ -386,9 +400,12 @@ class Predictor:
         """A word's rank for what was typed: its own, or worse by
         ACCENT_PENALTY when only its folded form matches the typing, and by
         TYPED_ACCENT_PENALTY when the typing has an accent the word lacks."""
-        if word.startswith(typed):
+        # Against the word as it is written: fuß typed is Fuß, though the
+        # list has fuss.
+        shown = self.form(word, typed).lower()
+        if shown.startswith(typed) or word.startswith(typed):
             return self.ranks[word]
-        against = any(t != w and fold_letter(t) != t for t, w in zip(typed, word))
+        against = any(t != w and fold_letter(t) != t for t, w in zip(typed, shown))
         return self.ranks[word] + (TYPED_ACCENT_PENALTY if against else ACCENT_PENALTY)
 
     def completions(self, prefix):
@@ -450,6 +467,14 @@ class Predictor:
                     lines[before] = rest
         caps = lines.pop(CAPITALS, "")
         self.capitals = set(caps.split()) | set(EXTRA_WORDS)
+        self.written_forms = {k: v.split(",") for k, _, v in
+                              (p.partition(":") for p in lines.pop(WRITTEN, "").split()) if v}
+        # A word's accents are its commonest form's: Fuß has one where the
+        # list's fuss has none, so typing fuß is not taken to go against it.
+        # In place, so the swipe decoder, which shares folds, sees it too.
+        for word, forms in self.written_forms.items():
+            if word in self.folds:
+                self.folds[word] = (self.folds[word][0], accents(forms[0].lower()))
         self.pair_lines = lines
 
     def followers(self, before):
@@ -497,12 +522,29 @@ class Predictor:
                 break
         return out
 
+    def form(self, word, typed=""):
+        """How `word` is spelt for what was typed: of its written forms (the
+        list's masse is Masse or Maße), the first the typing is on its way to,
+        else the commonest; with ss for ß where the region writes it so. In
+        the form's own case: Straße, Floß."""
+        forms = self.written_forms.get(word)
+        if not forms:
+            out = word
+        else:
+            low = typed.lower()
+            out = next((f for f in forms if low and f.lower().startswith(low)), forms[0])
+        return out.replace("ß", "ss") if self.region in SS_REGIONS else out
+
     def written(self, word, typed=""):
-        """`word` as it is written: with its capital where the pairs say it
+        """`word` as it is written: as the sentences spell it (Straße for
+        the list's strasse), and with its capital where the pairs say it
         always has one, I and Paris, unless the typing asked for more."""
+        form = self.form(word, typed)
+        if word in self.written_forms:
+            return cased(form, typed) if typed[:1].isupper() else form
         if word in self.capitals and not typed[:1].isupper():
-            return word[:1].upper() + word[1:]
-        return cased(word, typed) if typed else word
+            return form[:1].upper() + form[1:]
+        return cased(form, typed) if typed else form
 
     def in_context(self, found, before):
         """`found`, {word: rank}, ranked by the word before as well: a word
@@ -1348,6 +1390,9 @@ class Session:
         self.loaded = {}      # lang -> (Predictor, Swipes), or None when missing
         self.predictor = self.swipes = None
         self.rows = self.keys = None
+        # The layout's region ("region"), which every language's predictor
+        # is told as it comes into use: ß or ss in German.
+        self.region = ""
         # The word before the one being typed, from "after": START at the
         # start of a sentence, None when it is not known. Held for the next
         # "complete", never written anywhere.
@@ -1434,10 +1479,17 @@ def handle(session, terminal, source, one_list, line):
             ok = session.use(rest, found or os.path.join(source, rest, f"small_{rest}.msgpack.gz"))
         except (OSError, ValueError, EOFError):
             ok = False
+        if ok:
+            session.predictor.region = session.region
         print(f"ready {rest} {len(session.predictor.words)}" if ok else f"missing {rest}", flush=True)
         if ok:
             d = session.predictor.dictionary
             print(f"dictionary {rest} {d.name if d else '-'}", flush=True)
+    elif cmd == "region":
+        # "region ch" for a Swiss layout, "region" alone for none.
+        session.region = rest if re.fullmatch(r"[a-z]{0,3}", rest) else ""
+        if session.predictor:
+            session.predictor.region = session.region
     elif cmd == "keys":
         try:
             session.keys = json.loads(rest)
@@ -1501,6 +1553,9 @@ def handle(session, terminal, source, one_list, line):
         # The word just finished, "after" alone at a sentence's start,
         # "after -" when what came before is not known.
         session.before = None if rest == "-" else (rest.lower() if rest else START)
+        # weiß, as the service reads it, is weiss to a casefolded list's pairs.
+        if session.before and session.predictor and session.predictor.lang in CASEFOLDED:
+            session.before = session.before.casefold()
         # j'ai: the word is ai, as the pairs were counted.
         if session.before and "'" in session.before and session.predictor:
             head, _, tail = session.before.partition("'")

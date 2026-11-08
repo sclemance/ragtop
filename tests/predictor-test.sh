@@ -708,6 +708,56 @@ italian_elided_words_and_apocopes() {
   assert_contains "$out" 'next ["solo", "un"]'
 }
 
+# German: wordfreq casefolds, so the list has strasse and fuss, and its
+# nouns lower case. The pairs say how they are written (<written>, from the
+# sentences) and which take a capital, so they are offered as Straße and
+# Fuß, and typing fuß is no accent against fuss. ü has its own key after p:
+# a swipe through it is für, through u fur.
+german_written_forms_capitals_and_umlauts() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/de"
+  wordlist "$dir/de/small_de.msgpack.gz" 373:strasse 380:strassen 450:fuss 470:fussball 212:"für" 465:fur \
+    266:schon 348:"schön" 359:haus 150:die 200:ich 300:weiss 231:dass 340:nicht 410:masse 500:floss
+  pairs_file "$dir/de/pairs_de.tsv.gz" $'ich\tbin 50' $'weiss\tnicht 40 dass 30' $'<capitals>\thaus' \
+    $'<written>\tfloss:floss,Floß fuss:Fuß fussball:Fußball masse:Maße,Masse strasse:Straße strassen:Straßen weiss:weiß'
+  /usr/bin/python3 - >"$sandbox/qwertz" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertzuiopü", "asdfghjklöä", "yxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["für", "fur"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  out=$( { echo "lang de"; cat "$sandbox/qwertz"; echo "complete stra"; echo "complete fuß"; echo "complete schö";
+           echo "complete hau"; echo "complete maße"; echo "complete masse"; echo "complete floß"; echo "complete floss";
+           echo "after weiß"; echo "region ch"; echo "complete stra"; echo "region"; echo "complete stra"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  local s1 s2 s3 s4
+  s1=$(grep '^suggest' <<<"$out" | sed -n 1p); s2=$(grep '^suggest' <<<"$out" | sed -n 2p)
+  s3=$(grep '^suggest' <<<"$out" | sed -n 3p); s4=$(grep '^suggest' <<<"$out" | sed -n 4p)
+  assert_contains "$s1" 'suggest ["Straße", "Straßen"'
+  assert_lacks "$s1" 'strasse'
+  assert_contains "$s2" '"Fuß"'
+  assert_contains "$s3" 'suggest ["schön", "schon"'
+  assert_contains "$s4" '"Haus"'
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" "für fur " "first word of each swipe"
+  # One list word, two German words: each spelling reaches its own.
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 5p)" '"Maße"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 6p)" '"Masse"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 7p)" '"Floß"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 8p)" '"floss"'
+  # weiß, as the service sends it, finds weiss's pairs.
+  assert_contains "$out" 'next ["nicht", "dass"]'
+  # On a Swiss layout, ss; and back to ß after.
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 9p)" 'suggest ["Strasse", "Strassen"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 10p)" 'suggest ["Straße", "Straßen"'
+}
+
 # English is in the repository: a machine that has fetched nothing still
 # has it, pairs and all.
 the_bundled_copy_is_read() {
@@ -796,6 +846,7 @@ run_test "predictor: in Spanish campana survives beside campaña; tambien still 
 run_test "predictor: in Portuguese ç is its own key and letter: faça and faca" c_cedilla_is_its_own_in_portuguese
 run_test "predictor: in Italian à and ò are on the swipe path, and un is a word" italian_accent_keys_are_on_the_path
 run_test "predictor: in Italian un' takes only what agrees with it, and po' is never a bare next word" italian_elided_words_and_apocopes
+run_test "predictor: German is written as the sentences write it, Straße and Fuß, nouns capitalised, ü on the swipe path" german_written_forms_capitals_and_umlauts
 run_test "predictor: a word's forms, from its root and back to it" forms_both_ways
 run_test "predictor: -er and -est are forms only as a pair, so summer is not sum's" comparatives_only_as_a_pair
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root

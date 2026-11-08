@@ -525,6 +525,34 @@ Portuguese pairs build byte-identical to their pins. Held-out Tatoeba:
 keystrokes saved 24 → 38% with pairs; swipe right first 92.8 → 94.4%
 typical, 87.5 → 90.3% sloppy. Manzoni's I promessi sposi: coverage 88%.
 
+German brought two things the others did not. wordfreq casefolds, so its
+list has strasse, fuss and gross for Straße, Fuß and groß, and every noun in
+lower case. The pairs read both back from the sentences: German's are
+matched casefolded (CASEFOLDED), the capitals line carries its nouns (Haus,
+Frau, not ich or schön), and a new written line holds each list word's
+spellings in the sentences, with the capital each has mid-sentence, every
+one used at least a tenth of the time (WRITTEN: strasse:Straße,
+masse:Maße,Masse, floss:floss,Floß). One list word can be two German
+words, so the predictor offers the spelling the typing is on its way to, or
+else the commonest (Predictor.form): maße gives Maße, masse Masse, and a
+word's accents and its ranking against the typing follow that form, so fuß
+typed is Fuß. ß folds to ss (LIGATURES), so either spelling reaches it, and
+the word before is looked up casefolded, so weiß finds weiss's pairs. The
+written line is only in a file that has entries, so every other language's
+pairs build as before. Swiss German writes ss for ß: the service tells the
+predictor the layout's region ("region ch", wordRegion) and it writes ss
+there. Codex's review found all three (DE001 to DE003).
+
+ü after p, ö and ä after l join OWN_KEYS: right first for the commonest
+words with each, ü 6.5% → 96%, ö 45% → 94%, ä 2% → 97%. They stay out of
+SPELLED_APART: schon and schön, musste and müsste survive anyway, never
+beaten by fewer accents, and the 46 words the filter drops are unumlauted
+misspellings (fur, uber, konnen, munchen). Not done: Neo's ß key, on its
+letter rows, is not on the swipe path, since the list word has ss.
+Held-out Tatoeba: keystrokes saved 26 → 35% with pairs; swipe right first
+94.3 → 95.3% typical, 89.3 → 91.6% sloppy. Fontane's Effi Briest: coverage
+89%, keystrokes saved 22%.
+
 Spanish's numbers, on Galdós's Marianela (1878) and held-out Tatoeba
 sentences: coverage 92%; keystrokes saved 18% on the novel, 21 → 32% with
 pairs on the sentences; swipe right first 92.1 → 93.0% at typical wobble and

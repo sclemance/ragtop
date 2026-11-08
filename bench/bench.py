@@ -51,9 +51,10 @@ WORDFREQ = "https://raw.githubusercontent.com/rspeer/wordfreq/v3.2/wordfreq/data
 # Public domain nineteenth-century novels, one per language, as held-out
 # text (Spanish: Galdós, Marianela, 1878; Portuguese: Machado de Assis, Dom
 # Casmurro, 1899, in its old spelling, so judge Portuguese by pairs.py;
-# Italian: Manzoni, I promessi sposi, 1840): Project
+# Italian: Manzoni, I promessi sposi, 1840; German: Fontane, Effi Briest,
+# 1895): Project
 # Gutenberg's own numbers.
-TEXTS = {"en": 1661, "fr": 17989, "es": 17340, "pt": 55752, "it": 45334}
+TEXTS = {"en": 1661, "fr": 17989, "es": 17340, "pt": 55752, "it": 45334, "de": 5323}
 ROWS = {
     "qwerty": ["qwertyuiop", "asdfghjkl", "zxcvbnm"],
     "azerty": ["azertyuiop", "qsdfghjklm", "wxcvbn"],
@@ -63,9 +64,11 @@ ROWS = {
     "qwerty-pt": ["qwertyuiop", "asdfghjklç", "zxcvbnm"],
     # Italy's: è after p, ò and à after l.
     "qwerty-it": ["qwertyuiopè", "asdfghjklòà", "zxcvbnm"],
+    # Germany's and Austria's: ü after p, ö and ä after l, z and y swapped.
+    "qwertz-de": ["qwertzuiopü", "asdfghjklöä", "yxcvbnm"],
 }
 # Each language's board, when not qwerty.
-BOARD = {"fr": "azerty", "es": "qwerty-es", "pt": "qwerty-pt", "it": "qwerty-it"}
+BOARD = {"fr": "azerty", "es": "qwerty-es", "pt": "qwerty-pt", "it": "qwerty-it", "de": "qwertz-de"}
 # How far each row starts in from the left, in keys, as on a real board.
 STAGGER = [0.0, 0.25, 0.75]
 SEED = 7

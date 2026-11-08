@@ -32,6 +32,8 @@ ShellRoot {
   function clearTerminalRequests() {}
   property bool touchTrace: false
   function readTermPlace() {}
+  // The layout's region (Service.qml's is a binding on the layout).
+  property string wordRegion: ""
 
   // ---- Service.qml's own ----------------------------------------------------
   // FROM SOURCE: fieldInfo fieldShown fieldHidden fieldReported fieldPending pendingTyped fieldPendingLimit

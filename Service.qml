@@ -1992,7 +1992,28 @@ Item {
   readonly property bool wordsReady: root.wordLanguage !== "" && root.wordsLoaded === root.wordLanguage
   function sendLanguage() {
     if (predictorProc.running && root.wordLanguage !== "")
-      predictorProc.write("lang " + root.wordLanguage + "\n")
+      predictorProc.write("lang " + root.wordLanguage + "\nregion " + root.wordRegion + "\n")
+  }
+  // Where a language is written differently by region, the layout's: Swiss
+  // German writes ss for ß (predictor.py, SS_REGIONS).
+  readonly property string wordRegion: root.keyLabels && root.keyLabels.code === "ch"
+    && root.wordLanguage === "de" ? "ch" : ""
+  // A region changes how words are spelt, so whatever was worked out under
+  // the old one is let go, as for a language: replies on their way, and what
+  // the strip shows. The word being typed stays, and is asked about again.
+  onWordRegionChanged: {
+    root.cancelCompletions()
+    var gone = function() { return undefined }
+    root.formsAsked = root.formsAsked.map(gone)
+    root.joinAsked = root.joinAsked.map(gone)
+    if (["predict", "swipe", "forms", "next"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+    // Next words too, which an emptied word would show again (DE005).
+    root.nextWords = []
+    root.sendLanguage()
+    root.sentContext = null
+    Qt.callLater(root.updateContext)
+    if (root.currentWord !== "") root.queueCompletion()
   }
 
   // A language Ragtop has a list for and has not fetched is offered in the
@@ -2234,7 +2255,7 @@ Item {
     var c = root.contextNow()
     if (c === root.sentContext) return
     root.sentContext = c
-    root.nextAsked.push({ field: root.fieldGeneration, word: c !== "" && c !== "-" })
+    root.nextAsked.push({ field: root.fieldGeneration, region: root.wordRegion, word: c !== "" && c !== "-" })
     predictorProc.write(c === "" ? "after\n" : "after " + c + "\n")
   }
   // The predictor's answer to "after": shown while no word is being typed
@@ -2249,7 +2270,8 @@ Item {
   property var nextAsked: []
   function nextReplied(words) {
     var asked = root.nextAsked.shift()
-    if (asked && asked.field === root.fieldGeneration) root.nextArrived(asked.word ? words : [])
+    if (asked && asked.field === root.fieldGeneration && asked.region === root.wordRegion)
+      root.nextArrived(asked.word ? words : [])
   }
   function nextArrived(words) {
     if (!root.keepWord) words = []
@@ -2345,12 +2367,12 @@ Item {
   }
   function completionCurrent(ask) {
     return !!ask && root.predicting && ask.field === root.fieldGeneration
-      && ask.language === root.wordLanguage && ask.word === root.currentWord
-      && ask.context === root.contextNow()
+      && ask.language === root.wordLanguage && ask.region === root.wordRegion
+      && ask.word === root.currentWord && ask.context === root.contextNow()
   }
   function queueCompletion() {
     root.pendingCompletion = root.predicting && root.currentWord !== ""
-      ? { field: root.fieldGeneration, language: root.wordLanguage,
+      ? { field: root.fieldGeneration, language: root.wordLanguage, region: root.wordRegion,
           word: root.currentWord, context: root.contextNow() } : null
     Qt.callLater(root.flushCompletion)
   }
@@ -2872,7 +2894,7 @@ Item {
     root.peekPath = null
     if (!root.swipeActive || !predictorProc.running) return
     root.flushSwipeKeys()
-    root.swipesAsked.push({ field: root.fieldGeneration, shifted: shifted })
+    root.swipesAsked.push({ field: root.fieldGeneration, region: root.wordRegion, shifted: shifted })
     predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
       return [Math.round(p[0]), Math.round(p[1])]
     })) + "\n")
@@ -2890,7 +2912,8 @@ Item {
                         what: words.length > 0 ? "swipe read as a word" : "nothing: no word fits the swipe" })
     if (!root.swipeActive || !keyboardHelper.running) return
     // Drawn in a field that has since lost focus: the word was for there.
-    if (ask.field !== root.fieldGeneration) {
+    // Or spelt for another region (Straße where Strasse is written now).
+    if (ask.field !== root.fieldGeneration || ask.region !== root.wordRegion) {
       root.traceField("a swiped word was not typed: the field changed while it was read")
       if (root.suggestions.source === "swipe" && root.swipedWord === "") root.setSuggestions("swipe", null)
       return
