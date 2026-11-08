@@ -42,23 +42,39 @@ function isWordChar(c) {
 // is two UTF-16 units here, a surrogate pair, which is never cut in two.
 // The arrows and Delete go by grapheme instead, in Qt as in most toolkits:
 // e and a combining accent, or an emoji and its skin tone, are one step.
-// Where that could differ from a code point (atJoin), the record does not
-// guess and becomes unknown.
+// Where that could differ from a code point (atJoin: anywhere not surely
+// between two graphemes), the record does not guess and becomes unknown.
 function isHigh(u) { return u >= 0xd800 && u <= 0xdbff }
 function isLow(u) { return u >= 0xdc00 && u <= 0xdfff }
 function paired(t, i) { return i > 0 && isLow(t.charCodeAt(i)) && isHigh(t.charCodeAt(i - 1)) }
-// Whether a grapheme may run on across offset i, so a step to i by code
-// point might land inside one: before a combining mark, a variation
-// selector, a skin tone or a joiner, after a joiner, or between two
-// regional indicators (a flag).
-var EXTENDS = /^(?:[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe00-\ufe0f\ufe20-\ufe2f\u200d]|\ud83c[\udffb-\udfff]|\udb40[\udc00-\udc7f])/
-var INDICATOR = /\ud83c[\udde6-\uddff]/
-function atJoin(t, i) {
-  if (i <= 0 || i >= t.length) return false
-  if (EXTENDS.test(t.slice(i))) return true
-  if (t[i - 1] === "\u200d") return true
-  return INDICATOR.test(t.slice(i, i + 2)) && i >= 2 && INDICATOR.test(t.slice(i - 2, i))
+// Whether offset i is surely between two graphemes, as a text field's arrows
+// and Delete see them. Only claimed between characters known never to join
+// anything: printable ASCII, Latin, Greek and Cyrillic letters (precomposed,
+// no combining marks), common punctuation and symbols, and a lone emoji
+// beside one of those. Anything else, any script with marks or jamo, any
+// variation selector, joiner or flag, and the record lets go rather than
+// guess (Codex found Hebrew, Arabic, Devanagari, Hangul and more behaving
+// so in a Qt field).
+function plain(u) {
+  return (u >= 0x20 && u <= 0x7e) || u === 0x0a || u === 0x09
+    || (u >= 0xa0 && u <= 0x2ff) || (u >= 0x370 && u <= 0x482) || (u >= 0x48a && u <= 0x52f)
+    || (u >= 0x2010 && u <= 0x2027) || (u >= 0x2030 && u <= 0x205e)
+    || (u >= 0x20a0 && u <= 0x20c0) || (u >= 0x2100 && u <= 0x21ff)
 }
+// A single emoji, which needs no other code point to be whole: not a skin
+// tone (1F3FB-1F3FF), which joins the one before, nor a regional indicator,
+// two of which make a flag.
+function lone(u) {
+  return (u >= 0x1f300 && u <= 0x1f3fa) || (u >= 0x1f400 && u <= 0x1f64f)
+    || (u >= 0x1f680 && u <= 0x1f6ff) || (u >= 0x1f900 && u <= 0x1f9ff) || (u >= 0x1fa70 && u <= 0x1faff)
+}
+function cpBefore(t, i) { return paired(t, i - 1) ? t.codePointAt(i - 2) : t.charCodeAt(i - 1) }
+function between(t, i) {
+  if (i <= 0 || i >= t.length) return true
+  var a = cpBefore(t, i), b = t.codePointAt(i)
+  return (plain(a) && plain(b)) || (lone(a) && plain(b)) || (plain(a) && lone(b))
+}
+function atJoin(t, i) { return !between(t, i) }
 // How many units the character before c, or at c, takes.
 function stepBack(t, c) { return c >= 2 && paired(t, c - 1) ? 2 : 1 }
 function stepForward(t, c) { return c + 1 < t.length && paired(t, c + 1) ? 2 : 1 }

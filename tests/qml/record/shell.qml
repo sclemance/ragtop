@@ -71,11 +71,22 @@ ShellRoot {
       r = test.typed("full", ["type ae\u0301b", "key Left", "key Left"])
       t.ok(r.tail === "" && !r.fromStart, "Left into e and its accent: the record lets go")
       r = test.typed("full", ["type ae\u0301b", "key Left", "key Delete"])
-      t.equal(r.tail, "ae\u0301", "Delete of a plain b, beside it, is still known")
+      t.ok(r.tail === "" && !r.fromStart, "Left to just after an accent lets go too: no guessing next to one")
       r = test.typed("full", ["type a👍🏽", "key Left"])
       t.ok(r.tail === "" && !r.fromStart, "Left into an emoji and its skin tone: lets go")
       r = test.typed("full", ["type a👍🏽b", "key Home", "key Right", "key Delete"])
       t.ok(r.tail === "" && !r.fromStart, "Delete of an emoji with a skin tone: lets go")
+      // Marks and scripts beyond the plain ones: Hebrew sheva, Arabic
+      // shadda, a Devanagari vowel sign, Hangul jamo, a variation selector
+      // after a Han character. None is guessed at.
+      ;["ae\u05b0b", "ae\u0651b", "a\u0915\u093fb", "a\u1100\u1161b", "a\u6f22\udb40\udd00b"].forEach(function(s, k) {
+        var q = test.typed("full", ["type " + s, "key Left", "key Left"])
+        t.ok(q.tail === "" && !q.fromStart, "case " + k + ": Left into an unsure grapheme lets go")
+      })
+      r = test.typed("full", ["type héllo wörld", "key Left", "key Left", "key Delete"])
+      t.equal(r.tail, "héllo wörd", "Latin letters, accented or not, are still followed")
+      r = test.typed("full", ["type a😀 b", "key Left", "key Left", "key Left", "key Delete"])
+      t.equal(r.tail, "a b", "and a lone emoji beside them")
       r = test.typed("full", ["type ae\u0301", "key BackSpace"])
       t.equal(r.tail, "ae", "BackSpace takes the combining accent alone")
     }],
