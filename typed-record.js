@@ -38,12 +38,27 @@ function isWordChar(c) {
   return c === WORD || c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9")
 }
 
-// A character as applications count one for the cursor and BackSpace: a
-// code point. An emoji past U+FFFF is two UTF-16 units here, a surrogate
-// pair, which is never cut in two.
+// A character as BackSpace counts one: a code point. An emoji past U+FFFF
+// is two UTF-16 units here, a surrogate pair, which is never cut in two.
+// The arrows and Delete go by grapheme instead, in Qt as in most toolkits:
+// e and a combining accent, or an emoji and its skin tone, are one step.
+// Where that could differ from a code point (atJoin), the record does not
+// guess and becomes unknown.
 function isHigh(u) { return u >= 0xd800 && u <= 0xdbff }
 function isLow(u) { return u >= 0xdc00 && u <= 0xdfff }
 function paired(t, i) { return i > 0 && isLow(t.charCodeAt(i)) && isHigh(t.charCodeAt(i - 1)) }
+// Whether a grapheme may run on across offset i, so a step to i by code
+// point might land inside one: before a combining mark, a variation
+// selector, a skin tone or a joiner, after a joiner, or between two
+// regional indicators (a flag).
+var EXTENDS = /^(?:[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe00-\ufe0f\ufe20-\ufe2f\u200d]|\ud83c[\udffb-\udfff]|\udb40[\udc00-\udc7f])/
+var INDICATOR = /\ud83c[\udde6-\uddff]/
+function atJoin(t, i) {
+  if (i <= 0 || i >= t.length) return false
+  if (EXTENDS.test(t.slice(i))) return true
+  if (t[i - 1] === "\u200d") return true
+  return INDICATOR.test(t.slice(i, i + 2)) && i >= 2 && INDICATOR.test(t.slice(i - 2, i))
+}
 // How many units the character before c, or at c, takes.
 function stepBack(t, c) { return c >= 2 && paired(t, c - 1) ? 2 : 1 }
 function stepForward(t, c) { return c + 1 < t.length && paired(t, c + 1) ? 2 : 1 }
@@ -142,12 +157,21 @@ function note(record, line, mode, atPrompt) {
                        || keysym === "Home" || keysym === "End") && lean) {
     unknown = true
   } else if (named && keysym === "Delete") {
-    if (c < t.length) t = t.slice(0, c) + t.slice(c + stepForward(t, c))
+    if (c < t.length) {
+      var f = stepForward(t, c)
+      if (atJoin(t, c) || atJoin(t, c + f)) unknown = true
+      else t = t.slice(0, c) + t.slice(c + f)
+    }
   } else if (named && keysym === "Left") {
-    if (c > 0) c -= stepBack(t, c)
-    else unknown = !fromStart
+    if (c > 0) {
+      c -= stepBack(t, c)
+      if (atJoin(t, c)) unknown = true
+    } else unknown = !fromStart
   } else if (named && keysym === "Right") {
-    if (c < t.length) c += stepForward(t, c)
+    if (c < t.length) {
+      c += stepForward(t, c)
+      if (atJoin(t, c)) unknown = true
+    }
   } else if (named && keysym === "Home") {
     if (lineStart === 0 && !fromStart) unknown = true
     else c = lineStart

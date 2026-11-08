@@ -61,6 +61,23 @@ ShellRoot {
       r = test.typed("full", ["type " + long])
       t.ok(!/^[\udc00-\udfff]/.test(r.tail), "the length cut never leaves half an emoji at the start")
       t.equal(Record.codePoints("x😀y"), 3, "x😀y is three characters to BackSpace")
+      long = "x"
+      for (var j = 0; j < 300; j++) long += "😀"
+      r = test.typed("full", ["type " + long])
+      t.ok(!/^[\udc00-\udfff]/.test(r.tail), "nor at an odd offset")
+      // A grapheme of more than one code point: the arrows and Delete cross
+      // it whole in a real text field, so the record lets go rather than
+      // guess. BackSpace takes the accent alone, as the field does.
+      r = test.typed("full", ["type ae\u0301b", "key Left", "key Left"])
+      t.ok(r.tail === "" && !r.fromStart, "Left into e and its accent: the record lets go")
+      r = test.typed("full", ["type ae\u0301b", "key Left", "key Delete"])
+      t.equal(r.tail, "ae\u0301", "Delete of a plain b, beside it, is still known")
+      r = test.typed("full", ["type a👍🏽", "key Left"])
+      t.ok(r.tail === "" && !r.fromStart, "Left into an emoji and its skin tone: lets go")
+      r = test.typed("full", ["type a👍🏽b", "key Home", "key Right", "key Delete"])
+      t.ok(r.tail === "" && !r.fromStart, "Delete of an emoji with a skin tone: lets go")
+      r = test.typed("full", ["type ae\u0301", "key BackSpace"])
+      t.equal(r.tail, "ae", "BackSpace takes the combining accent alone")
     }],
     [0, function() {
       ["full", "word", "none"].forEach(function(mode) {
