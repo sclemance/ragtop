@@ -38,6 +38,28 @@ function isWordChar(c) {
   return c === WORD || c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9")
 }
 
+// A character as applications count one for the cursor and BackSpace: a
+// code point. An emoji past U+FFFF is two UTF-16 units here, a surrogate
+// pair, which is never cut in two.
+function isHigh(u) { return u >= 0xd800 && u <= 0xdbff }
+function isLow(u) { return u >= 0xdc00 && u <= 0xdfff }
+function paired(t, i) { return i > 0 && isLow(t.charCodeAt(i)) && isHigh(t.charCodeAt(i - 1)) }
+// How many units the character before c, or at c, takes.
+function stepBack(t, c) { return c >= 2 && paired(t, c - 1) ? 2 : 1 }
+function stepForward(t, c) { return c + 1 < t.length && paired(t, c + 1) ? 2 : 1 }
+// How many characters s is, so how many BackSpaces take it back.
+function codePoints(s) {
+  var n = 0
+  for (var i = 0; i < s.length; i++) if (!paired(s, i)) n++
+  return n
+}
+// The last n units of t, or one fewer where that would split a pair.
+function lastUnits(t, n) {
+  var cut = Math.max(0, t.length - n)
+  if (cut > 0 && paired(t, cut)) cut++
+  return t.slice(cut)
+}
+
 function isLetter(c) {
   return c !== WORD && (c === "'" || c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9"))
 }
@@ -70,7 +92,7 @@ function kinds(text) {
 function keep(text, mode) {
   if (mode === "full") {
     if (text.length <= MOST) return { tail: text, cut: false }
-    return { tail: text.slice(text.length - MOST), cut: true }
+    return { tail: lastUnits(text, MOST), cut: true }
   }
   var w = text.length
   if (mode === "word") while (w > 0 && isLetter(text[w - 1])) w--
@@ -114,18 +136,18 @@ function note(record, line, mode, atPrompt) {
     // Kinds cannot be taken back a letter at a time: only the word being
     // typed, which word keeps as it is.
     if (lean && !(mode === "word" && c > 0 && isLetter(t[c - 1]))) unknown = true
-    else if (c > 0) { t = t.slice(0, c - 1) + t.slice(c); c-- }
+    else if (c > 0) { var b = stepBack(t, c); t = t.slice(0, c - b) + t.slice(c); c -= b }
     else unknown = !fromStart
   } else if (named && (keysym === "Delete" || keysym === "Left" || keysym === "Right"
                        || keysym === "Home" || keysym === "End") && lean) {
     unknown = true
   } else if (named && keysym === "Delete") {
-    if (c < t.length) t = t.slice(0, c) + t.slice(c + 1)
+    if (c < t.length) t = t.slice(0, c) + t.slice(c + stepForward(t, c))
   } else if (named && keysym === "Left") {
-    if (c > 0) c--
+    if (c > 0) c -= stepBack(t, c)
     else unknown = !fromStart
   } else if (named && keysym === "Right") {
-    if (c < t.length) c++
+    if (c < t.length) c += stepForward(t, c)
   } else if (named && keysym === "Home") {
     if (lineStart === 0 && !fromStart) unknown = true
     else c = lineStart
@@ -148,8 +170,9 @@ function note(record, line, mode, atPrompt) {
     c = t.length
     if (kept.cut) fromStart = false
   } else if (t.length > MOST) {
-    var cut = t.length - MOST
-    t = t.slice(cut)
+    var kept = lastUnits(t, MOST)
+    var cut = t.length - kept.length
+    t = kept
     c = Math.max(0, c - cut)
     fromStart = false
   }

@@ -1281,7 +1281,7 @@ Item {
     // key's release, when it comes, is swallowed: it was never pressed.
     if (command === "key BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
       var out = ""
-      for (var i = root.swipeLead.length; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+      for (var i = Record.codePoints(root.swipeLead); i < Record.codePoints(root.swipedWord); i++) out += "key BackSpace\n"
       root.writeKeys(out)
       root.swipedWord = ""
       root.autoSpaced = false
@@ -1561,7 +1561,7 @@ Item {
     if (n <= 0 || !keyboardHelper.running) return
     var known = root.secretField ? [] : root.wordsBefore(n)
     var out = ""
-    known.forEach(function(w) { for (var i = 0; i < w.length; i++) out += "key BackSpace\n" })
+    known.forEach(function(w) { for (var i = 0; i < Record.codePoints(w); i++) out += "key BackSpace\n" })
     for (var k = known.length; k < n; k++)
       out += root.inTerminal ? "key w ctrl\n" : "key BackSpace ctrl\n"
     root.writeKeys(out)
@@ -2404,7 +2404,7 @@ Item {
     // No word in progress means these were for one already finished.
     if (!keyboardHelper.running || root.currentWord === "") return
     var out = ""
-    for (var i = 0; i < root.currentWord.length; i++) out += "key BackSpace\n"
+    for (var i = 0; i < Record.codePoints(root.currentWord); i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + text + " \n")
     root.currentWord = ""
     root.autoSpaced = true
@@ -2741,7 +2741,7 @@ Item {
       return
     }
     var out = ""
-    for (var i = 0; i < f.word.length + f.tail.length; i++) out += "key BackSpace\n"
+    for (var i = 0; i < Record.codePoints(f.word + f.tail); i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + text + f.tail + "\n")
     if (f.swiped) root.swipedWord = root.swipeLead + text + f.tail
     root.finished = { word: text, tail: f.tail, swiped: f.swiped }
@@ -2792,7 +2792,7 @@ Item {
     var f = root.finished, p = root.joinPair
     if (!f || !p || !keyboardHelper.running) return
     var out = ""
-    var back = p.first.length + p.between.length + f.word.length + f.tail.length
+    var back = Record.codePoints(p.first + p.between + f.word + f.tail)
     for (var i = 0; i < back; i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + text + f.tail + "\n")
     // A BackSpace now is an ordinary one: undoing the swipe would take the
@@ -2953,7 +2953,7 @@ Item {
   function swapTo(text, index) {
     if (!keyboardHelper.running || root.swipedWord === "") return
     var out = ""
-    for (var i = 0; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+    for (var i = 0; i < Record.codePoints(root.swipedWord); i++) out += "key BackSpace\n"
     var word = root.swipeLead + text + " "
     root.writeKeys(out + "type " + word + "\n")
     root.swipedWord = word

@@ -48,6 +48,21 @@ ShellRoot {
           t.ok(false, "none held a letter after " + i + " commands")
     }],
     [0, function() {
+      // An emoji past U+FFFF is one character to the application, two UTF-16
+      // units here: BackSpace, the arrows and the length cut never split it.
+      var r = test.typed("full", ["type keep 😀 ", "key BackSpace", "key BackSpace"])
+      t.equal(r.tail, "keep ", "two BackSpaces take the space and the whole emoji")
+      r = test.typed("full", ["type a😀b", "key Left", "key Left", "key BackSpace"])
+      t.equal(r.tail, "😀b", "Left steps over the emoji, and BackSpace takes the a")
+      r = test.typed("full", ["type a😀b", "key Home", "key Right", "key Delete"])
+      t.equal(r.tail, "ab", "Delete takes the whole emoji")
+      var long = ""
+      for (var i = 0; i < 300; i++) long += "😀"
+      r = test.typed("full", ["type " + long])
+      t.ok(!/^[\udc00-\udfff]/.test(r.tail), "the length cut never leaves half an emoji at the start")
+      t.equal(Record.codePoints("x😀y"), 3, "x😀y is three characters to BackSpace")
+    }],
+    [0, function() {
       ["full", "word", "none"].forEach(function(mode) {
         t.ok(test.typed(mode, []).sentenceStart, mode + ": a fresh field starts a sentence")
         t.ok(!test.typed(mode, ["type Hello"]).sentenceStart, mode + ": inside a word is no sentence start")
