@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // A short tour of the keyboard, drawn on Ragtop's overlay layer (Service.qml,
@@ -473,7 +474,7 @@ Item {
       height: hole.height
       color: "transparent"
       radius: Style.cornerRadius
-      border.color: Color.accent
+      border.color: Commons.Color.accent
       border.width: Math.max(1, Style.space(2))
     }
   }
@@ -580,7 +581,7 @@ Item {
     height: Math.max(bubble.y + bubble.height, tour.tailed ? tour.tailTipY : 0) - y + edge * 2
     readonly property var shape: [bubble.x, bubble.y, bubble.width, bubble.height, tour.tailed,
                                   tour.tailBase, tour.tailTipX, tour.tailTipY, tour.side,
-                                  Color.popups.background, Color.popups.border]
+                                  Commons.Color.popups.background, Commons.Color.popups.border]
     onShapeChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
@@ -608,10 +609,10 @@ Item {
       ctx.arcTo(x0, y1, x0, y0, r)
       ctx.arcTo(x0, y0, x1, y0, r)
       ctx.closePath()
-      ctx.fillStyle = Color.popups.background
+      ctx.fillStyle = Commons.Color.popups.background
       ctx.fill()
       ctx.lineJoin = "round"
-      ctx.strokeStyle = Color.popups.border
+      ctx.strokeStyle = Commons.Color.popups.border
       ctx.lineWidth = outline.edge
       ctx.stroke()
     }
@@ -652,7 +653,7 @@ Item {
         textFormat: Text.PlainText
         visible: tour.running
         text: tour.service.t("tour.step", tour.step + 1, tour.steps.length)
-        color: Color.popups.text
+        color: Commons.Color.popups.text
         opacity: 0.6
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
@@ -662,7 +663,7 @@ Item {
         width: parent.width
         wrapMode: Text.Wrap
         text: tour.running ? tour.service.t(tour.current.title) : tour.service.t("tour.offer")
-        color: Color.popups.text
+        color: Commons.Color.popups.text
         font.family: Style.font.family
         font.pixelSize: Style.font.body
         font.bold: true
@@ -674,7 +675,7 @@ Item {
         text: !tour.running
           ? tour.service.t("tour.offer.body")
           : typeof tour.current.body === "function" ? tour.current.body() : tour.current.body
-        color: Color.popups.text
+        color: Commons.Color.popups.text
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
       }
@@ -692,7 +693,7 @@ Item {
           width: parent.width
           wrapMode: Text.Wrap
           text: tour.current.preview ? tour.service.t(tour.current.preview) : ""
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           opacity: 0.6
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
@@ -704,7 +705,7 @@ Item {
             id: nextLabel
             textFormat: Text.PlainText
             text: tour.service.t("tour.preview.next")
-            color: Color.popups.text
+            color: Commons.Color.popups.text
             opacity: 0.6
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
@@ -716,14 +717,14 @@ Item {
             Rectangle {
               anchors.fill: parent
               radius: height / 2
-              color: Color.popups.text
+              color: Commons.Color.popups.text
               opacity: 0.2
             }
             Rectangle {
               width: parent.width * Math.max(0, Math.min(1, tour.previewLeft))
               height: parent.height
               radius: height / 2
-              color: Color.accent
+              color: Commons.Color.accent
             }
           }
         }
@@ -738,7 +739,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           visible: !tour.running || tour.step < tour.steps.length - 1
           text: tour.running ? tour.service.t("tour.skip") : tour.service.t("tour.noThanks")
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
           onClicked: tour.running ? tour.service.endTour() : tour.service.declineTour()
         }
         Row {
@@ -750,7 +751,7 @@ Item {
             visible: tour.running && tour.step > 0
             text: tour.service.t("tour.back")
             bordered: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: tour.go(tour.step - 1)
           }
           Button {
@@ -759,7 +760,7 @@ Item {
               : tour.step < tour.steps.length - 1 ? tour.service.t("tour.next") : tour.service.t("tour.finish")
             bordered: true
             selected: true
-            foreground: Color.popups.text
+            foreground: Commons.Color.popups.text
             onClicked: {
               if (!tour.running) tour.service.startTour()
               else if (tour.step < tour.steps.length - 1) tour.go(tour.step + 1)

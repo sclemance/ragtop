@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 import "typed-record.js" as Record
 
 // Singleton: the shell creates one of these per session, whereas the
@@ -292,9 +293,9 @@ Item {
       // The bar's, keyboard up or down: the handle is part of the screen's
       // frame, as the bar is, and the keyboard has no panel to match.
       readonly property color fill: root.barTransparent
-        ? Qt.rgba(Color.bar.background.r, Color.bar.background.g, Color.bar.background.b, 0)
-        : Color.bar.background
-      readonly property color line: Color.bar.text
+        ? Qt.rgba(Commons.Color.bar.background.r, Commons.Color.bar.background.g, Commons.Color.bar.background.b, 0)
+        : Commons.Color.bar.background
+      readonly property color line: Commons.Color.bar.text
 
       WlrLayershell.namespace: "ragtop-keyboard-handle"
       WlrLayershell.layer: WlrLayer.Top
@@ -903,7 +904,12 @@ Item {
         var value
         try { value = JSON.parse(line.slice(space + 1)) } catch (e) { return }
         if (kind === "engine") root.imeEngine = value
-        else if (kind === "field") root.fieldReported(value)
+        else if (kind === "fieldtoken") root.fieldTokenSeen = value | 0
+        else if (kind === "field") {
+          var token = root.fieldTokenSeen
+          root.fieldTokenSeen = 0
+          root.fieldReported(value, token)
+        }
         else if (kind === "engines") root.imeEngines = Array.isArray(value) ? value : []
         else if (kind === "candidates") root.setSuggestions("fcitx", value)
       }
@@ -912,9 +918,10 @@ Item {
       if (running) {
         root.retryStarted("autoshow")
       } else {
-        // Whatever it last said went with it.
+        // Whatever it last said went with it, and a question it was asked.
         root.imeEngine = null
         root.fieldInfo = null
+        root.fieldWanted = 0
         root.imeEngines = []
         root.setSuggestions("fcitx", null)
       }
@@ -1280,7 +1287,7 @@ Item {
     // key's release, when it comes, is swallowed: it was never pressed.
     if (command === "key BackSpace" && root.swipedWord !== "" && keyboardHelper.running) {
       var out = ""
-      for (var i = root.swipeLead.length; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+      for (var i = Record.codePoints(root.swipeLead); i < Record.codePoints(root.swipedWord); i++) out += "key BackSpace\n"
       root.writeKeys(out)
       root.swipedWord = ""
       root.autoSpaced = false
@@ -1560,7 +1567,7 @@ Item {
     if (n <= 0 || !keyboardHelper.running) return
     var known = root.secretField ? [] : root.wordsBefore(n)
     var out = ""
-    known.forEach(function(w) { for (var i = 0; i < w.length; i++) out += "key BackSpace\n" })
+    known.forEach(function(w) { for (var i = 0; i < Record.codePoints(w); i++) out += "key BackSpace\n" })
     for (var k = known.length; k < n; k++)
       out += root.inTerminal ? "key w ctrl\n" : "key BackSpace ctrl\n"
     root.writeKeys(out)
@@ -1772,16 +1779,33 @@ Item {
     root.activeWindowAddress = data
     root.termJustFocused = true
     Qt.callLater(root.readTermPlace)
-    // A new window is a new place to type, and where in it is unknown,
-    // unless fcitx5 has just said a text field took focus: the two come
-    // together when a window is tapped into, the window's often second,
-    // and it undid the field's fresh start.
-    if (Date.now() - root.freshFieldAt < 500) return
-    root.traceField("another window became active (" + root.activeClass + "): the record is cleared and no longer from the field's start")
-    root.typedTail = ""
-    root.typedFromStart = false
-    root.recordStartsAtWord = false
-    root.sentenceStart = false
+    // A new window is a new field as much as a new place: what was typed,
+    // the word, a swipe or suggestion on its way all go, however soon after
+    // a field took focus (A005: time is no proof the field is this window's).
+    // Only the start is kept when fcitx5 has just said a field took focus,
+    // as the two come together when a window is tapped into, the window's
+    // often second.
+    var fresh = Date.now() - root.freshFieldAt < 500
+    root.traceField("another window became active (" + root.activeClass + "): the record is let go, and what is typed is held until the bridge, asked again, reports")
+    root.forgetField(fresh)
+    // Then the field is in question, as after a hide: what is typed is held
+    // apart until the bridge says which field has focus (fieldReported), or
+    // let go if it does not say within a second.
+    root.fieldHidden()
+    root.askField()
+  }
+  // Asks the bridge to say again which field has focus, even if unchanged.
+  // Numbered: the bridge says every report after it with that number, and
+  // until one comes, an older report, one already on its way when the window
+  // changed, is no answer (fieldReported).
+  property int fieldTokens: 0
+  property int fieldWanted: 0
+  property int fieldTokenSeen: 0
+  function askField() {
+    if (!focusBridgeProc.running) return
+    root.fieldTokens++
+    root.fieldWanted = root.fieldTokens
+    focusBridgeProc.write("field " + root.fieldTokens + "\n")
   }
   Process {
     id: activeClassProc
@@ -1991,7 +2015,28 @@ Item {
   readonly property bool wordsReady: root.wordLanguage !== "" && root.wordsLoaded === root.wordLanguage
   function sendLanguage() {
     if (predictorProc.running && root.wordLanguage !== "")
-      predictorProc.write("lang " + root.wordLanguage + "\n")
+      predictorProc.write("lang " + root.wordLanguage + "\nregion " + root.wordRegion + "\n")
+  }
+  // Where a language is written differently by region, the layout's: Swiss
+  // German writes ss for ß (predictor.py, SS_REGIONS).
+  readonly property string wordRegion: root.keyLabels && root.keyLabels.code === "ch"
+    && root.wordLanguage === "de" ? "ch" : ""
+  // A region changes how words are spelt, so whatever was worked out under
+  // the old one is let go, as for a language: replies on their way, and what
+  // the strip shows. The word being typed stays, and is asked about again.
+  onWordRegionChanged: {
+    root.cancelCompletions()
+    var gone = function() { return undefined }
+    root.formsAsked = root.formsAsked.map(gone)
+    root.joinAsked = root.joinAsked.map(gone)
+    if (["predict", "swipe", "forms", "next"].indexOf(root.suggestions.source) !== -1)
+      root.setSuggestions(root.suggestions.source, null)
+    // Next words too, which an emptied word would show again (DE005).
+    root.nextWords = []
+    root.sendLanguage()
+    root.sentContext = null
+    Qt.callLater(root.updateContext)
+    if (root.currentWord !== "") root.queueCompletion()
   }
 
   // A language Ragtop has a list for and has not fetched is offered in the
@@ -2078,7 +2123,14 @@ Item {
     root.pendingTyped = []
     fieldPendingLimit.restart()
   }
-  function fieldReported(value) {
+  function fieldReported(value, token) {
+    if (root.fieldWanted > 0) {
+      if ((token | 0) < root.fieldWanted) {
+        root.traceField("a report from before the field was asked about again: ignored")
+        return
+      }
+      root.fieldWanted = 0
+    }
     var was = root.fieldInfo
     var held = root.fieldPending ? root.pendingTyped : []
     root.fieldPending = false
@@ -2109,6 +2161,10 @@ Item {
                       + " held key line(s) and the record are dropped")
       root.fieldPending = false
       root.pendingTyped = []
+      // Nor is the field it was in: nothing is kept until a report says
+      // which has focus. The bridge drops any answer to an ask from before
+      // the hide, so the next report is about focus since.
+      root.fieldInfo = null
       root.forgetField(false)
     }
   }
@@ -2214,13 +2270,16 @@ Item {
     var t = root.beforeCursor
     if (root.currentWord !== "" && t.slice(-root.currentWord.length) === root.currentWord)
       t = t.slice(0, t.length - root.currentWord.length)
+    // An opening mark just typed, Spanish's ¿ and ¡ or a «: the word after it
+    // follows what came before the mark.
+    t = t.replace(/[¡¿«]+$/, "")
     if (t.trim() === "") return root.typedFromStart ? "" : "-"
     if (/([.!?]["')\]]*|\n)\s*$/.test(t)) return ""
     var m = /(\S+)\s+$/.exec(t)
     if (!m) return "-"
     // A comma or a quote around a word does not change what came before:
     // the pairs were counted across them too.
-    var w = m[1].replace(/^["'(\[]+/, "").replace(/[,;:"')\]]+$/, "")
+    var w = m[1].replace(/^["'(\[¡¿«]+/, "").replace(/[,;:"')\]»]+$/, "")
     for (var i = 0; i < w.length; i++)
       if (w[i] !== "'" && w[i].toLowerCase() === w[i].toUpperCase()) return "-"
     return w === "" ? "-" : w.toLowerCase()
@@ -2230,7 +2289,7 @@ Item {
     var c = root.contextNow()
     if (c === root.sentContext) return
     root.sentContext = c
-    root.nextAsked.push({ field: root.fieldGeneration, word: c !== "" && c !== "-" })
+    root.nextAsked.push({ field: root.fieldGeneration, region: root.wordRegion, word: c !== "" && c !== "-" })
     predictorProc.write(c === "" ? "after\n" : "after " + c + "\n")
   }
   // The predictor's answer to "after": shown while no word is being typed
@@ -2245,7 +2304,8 @@ Item {
   property var nextAsked: []
   function nextReplied(words) {
     var asked = root.nextAsked.shift()
-    if (asked && asked.field === root.fieldGeneration) root.nextArrived(asked.word ? words : [])
+    if (asked && asked.field === root.fieldGeneration && asked.region === root.wordRegion)
+      root.nextArrived(asked.word ? words : [])
   }
   function nextArrived(words) {
     if (!root.keepWord) words = []
@@ -2341,12 +2401,12 @@ Item {
   }
   function completionCurrent(ask) {
     return !!ask && root.predicting && ask.field === root.fieldGeneration
-      && ask.language === root.wordLanguage && ask.word === root.currentWord
-      && ask.context === root.contextNow()
+      && ask.language === root.wordLanguage && ask.region === root.wordRegion
+      && ask.word === root.currentWord && ask.context === root.contextNow()
   }
   function queueCompletion() {
     root.pendingCompletion = root.predicting && root.currentWord !== ""
-      ? { field: root.fieldGeneration, language: root.wordLanguage,
+      ? { field: root.fieldGeneration, language: root.wordLanguage, region: root.wordRegion,
           word: root.currentWord, context: root.contextNow() } : null
     Qt.callLater(root.flushCompletion)
   }
@@ -2378,7 +2438,7 @@ Item {
     // No word in progress means these were for one already finished.
     if (!keyboardHelper.running || root.currentWord === "") return
     var out = ""
-    for (var i = 0; i < root.currentWord.length; i++) out += "key BackSpace\n"
+    for (var i = 0; i < Record.codePoints(root.currentWord); i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + text + " \n")
     root.currentWord = ""
     root.autoSpaced = true
@@ -2715,7 +2775,7 @@ Item {
       return
     }
     var out = ""
-    for (var i = 0; i < f.word.length + f.tail.length; i++) out += "key BackSpace\n"
+    for (var i = 0; i < Record.codePoints(f.word + f.tail); i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + text + f.tail + "\n")
     if (f.swiped) root.swipedWord = root.swipeLead + text + f.tail
     root.finished = { word: text, tail: f.tail, swiped: f.swiped }
@@ -2766,7 +2826,7 @@ Item {
     var f = root.finished, p = root.joinPair
     if (!f || !p || !keyboardHelper.running) return
     var out = ""
-    var back = p.first.length + p.between.length + f.word.length + f.tail.length
+    var back = Record.codePoints(p.first + p.between + f.word + f.tail)
     for (var i = 0; i < back; i++) out += "key BackSpace\n"
     root.writeKeys(out + "type " + text + f.tail + "\n")
     // A BackSpace now is an ordinary one: undoing the swipe would take the
@@ -2868,7 +2928,7 @@ Item {
     root.peekPath = null
     if (!root.swipeActive || !predictorProc.running) return
     root.flushSwipeKeys()
-    root.swipesAsked.push({ field: root.fieldGeneration, shifted: shifted })
+    root.swipesAsked.push({ field: root.fieldGeneration, region: root.wordRegion, shifted: shifted })
     predictorProc.write("swipe " + JSON.stringify(points.map(function(p) {
       return [Math.round(p[0]), Math.round(p[1])]
     })) + "\n")
@@ -2886,7 +2946,8 @@ Item {
                         what: words.length > 0 ? "swipe read as a word" : "nothing: no word fits the swipe" })
     if (!root.swipeActive || !keyboardHelper.running) return
     // Drawn in a field that has since lost focus: the word was for there.
-    if (ask.field !== root.fieldGeneration) {
+    // Or spelt for another region (Straße where Strasse is written now).
+    if (ask.field !== root.fieldGeneration || ask.region !== root.wordRegion) {
       root.traceField("a swiped word was not typed: the field changed while it was read")
       if (root.suggestions.source === "swipe" && root.swipedWord === "") root.setSuggestions("swipe", null)
       return
@@ -2926,7 +2987,7 @@ Item {
   function swapTo(text, index) {
     if (!keyboardHelper.running || root.swipedWord === "") return
     var out = ""
-    for (var i = 0; i < root.swipedWord.length; i++) out += "key BackSpace\n"
+    for (var i = 0; i < Record.codePoints(root.swipedWord); i++) out += "key BackSpace\n"
     var word = root.swipeLead + text + " "
     root.writeKeys(out + "type " + word + "\n")
     root.swipedWord = word
@@ -3346,7 +3407,37 @@ Item {
                             "size-adjust", "set", next]
     sizeStepProc.running = true
   }
-  Process { id: sizeStepProc; onExited: root.flushSize() }
+  Process {
+    id: sizeStepProc
+    onExited: function(code) {
+      // A write that failed leaves nothing asked for: the next step starts
+      // from the setting as it is, and asking again is not a duplicate.
+      if (code !== 0 && root.pendingSize === "") root.lastAskedSize = ""
+      root.flushSize()
+      // One that landed, with nothing after it, is settled by reading the
+      // file again: the watcher need not report every write, and something
+      // else may have written since. What that read says is the size.
+      if (code === 0 && !sizeStepProc.running && root.pendingSize === "" && root.lastAskedSize !== "") {
+        root.sizeRereading = true
+        root.rereadSettings()
+      }
+    }
+  }
+  property bool sizeRereading: false
+  function rereadSettings() { settingsFile.reload() }
+  // What was asked for stops standing in for the setting once the setting
+  // says it, or is read again after the last write, with nothing more on
+  // its way. From then on the setting is the
+  // truth, so a change made elsewhere, the menu or the CLI, is what the next
+  // step starts from.
+  function settleSize() {
+    if (root.lastAskedSize === "" || sizeStepProc.running || root.pendingSize !== "") return
+    if (root.sizeRereading || String(root.settings["size-adjust"] || "").trim() === root.lastAskedSize) {
+      root.lastAskedSize = ""
+      root.sizeRereading = false
+    }
+  }
+  onSettingsChanged: root.settleSize()
 
   // Whether the keyboard comes up by itself on a text field. It belongs
   // beside the other things you change while holding the machine, since the
@@ -3552,7 +3643,16 @@ Item {
     command: ["hyprctl", "getoption", "-j", "decoration:blur:enabled"]
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.globalBlurWasOn = JSON.parse(text()).int === 1 || JSON.parse(text()).bool === true } catch (e) {}
+        // text is the collector's property, not a method. An answer that is
+        // not understood counts as blur being the user's: Ragtop takes over
+        // global blur only when it saw it off.
+        var known = false, on = false
+        try {
+          var v = JSON.parse(text)
+          known = typeof v.int === "number" || typeof v.bool === "boolean"
+          on = v.int === 1 || v.bool === true
+        } catch (e) {}
+        root.globalBlurWasOn = on || !known
         root.blurChecked = true
         root.applyBlur()
       }
@@ -3809,7 +3909,7 @@ Item {
   // mapping: Hyprland fades a newly mapped layer in by itself, so the dim
   // around the keys arrived a beat after the keyboard's own dim between
   // them. Both fade together now, by `dimmed` and the same duration.
-  readonly property color scrimColor: Color.menu.scrim
+  readonly property color scrimColor: Commons.Color.menu.scrim
   readonly property int dimFade: 150
   readonly property bool dimmed: root.oskVisible && root.toolsOpen
   PanelWindow {

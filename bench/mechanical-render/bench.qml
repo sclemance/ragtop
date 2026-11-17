@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import "GlowWave.js" as Wave
 Item {
  id: board
@@ -11,7 +12,7 @@ Item {
  property int held:-1
  property int presses:0
  KeyboardTheme { id:skin; look:{"shape": "rounded", "relief": "raised", "fill": "surface", "size": 100, "keyTransparency": 0, "labels": "normal", "depth": 8, "chamfer": 8, "keyColor": "", "labelColor": "", "keyFillAlpha": "auto", "borderWidth": 1, "radius": 5, "corners": "auto", "specialKeys": "off", "backlight": "accent", "keycapMaterial": "solid", "keycapProfile": "sculpted", "wallOpacity": 50, "backlightMotion": "ripple", "animateBacklight": true}; glowPalette:{"mode": "dark", "accent": "#509475", "selection": "#32473B", "muted": "#53685B", "background": "#111c18", "dark_background": "#0c1512", "darker_background": "#090f0d", "lighter_background": "#23372B", "foreground": "#C1C497", "dark_foreground": "#81B8A8", "light_foreground": "#D6D5BC", "bright_foreground": "#F7E8B2", "red": "#FF5345", "yellow": "#459451", "orange": "#a2734b", "green": "#549e6a", "cyan": "#2DD5B7", "blue": "#509475", "magenta": "#D2689C", "brown": "#513925", "bright_red": "#db9f9c", "bright_yellow": "#E5C736", "bright_green": "#63b07a", "bright_cyan": "#8CD3CB", "bright_blue": "#ACD4CF", "bright_magenta": "#75bbb3"} }
- Rectangle { anchors.fill:parent; color:Color.background }
+ Rectangle { anchors.fill:parent; color:Commons.Color.background }
  Repeater {
   model:board.pattern ? 32 : 0
   Rectangle {

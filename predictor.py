@@ -69,6 +69,7 @@ import gzip
 import heapq
 import json
 import math
+import re
 import os
 import shlex
 import struct
@@ -86,6 +87,16 @@ CONTEXT_BACKOFF = 40
 # What stands for the start of a sentence among the words before.
 START = "<s>"
 CAPITALS = "<capitals>"
+# Words as they are written where the list has them otherwise: wordfreq
+# casefolds, so German's straße is strasse in it. Read from the pairs, which
+# count how the sentences write each (pairs.py), as "strasse:straße".
+WRITTEN = "<written>"
+# Languages whose wordfreq list is casefolded, ß as ss: the word before is
+# looked up casefolded too, as the pairs were counted (pairs.py).
+CASEFOLDED = {"de"}
+# Where German is written with ss for ß: Switzerland (and Liechtenstein).
+# The service says which (region), from the layout.
+SS_REGIONS = {"ch"}
 # Product names missing from general-language corpora. A modest frequency
 # makes them available for typing/swiping without crowding out common words.
 # These are vocabulary, not invented next-word pairs or learned user text.
@@ -117,9 +128,40 @@ MISSPELLING_GAP = 100
 # as words; after one and an apostrophe, the rest is completed on its own.
 ELISIONS = {
     "fr": {"l", "d", "j", "c", "n", "s", "m", "t", "qu", "jusqu", "lorsqu", "puisqu", "quoiqu"},
+    # dell'anno, quest'anno, c'è, anch'io: wordfreq lists some joined, which
+    # suggest prefers when one completes what was typed.
+    "it": {"l", "dell", "dall", "nell", "sull", "all", "coll", "quest", "quell", "c", "d", "m", "t",
+           "s", "v", "n", "bell", "sant", "tutt", "anch", "com", "cos", "dov"},
+}
+# Words that are elided too, but are words as they are: un'altra beside un
+# amico, nessun'altra beside nessun dubbio. Split and completed after their
+# apostrophe like an elision, and still offered on their own.
+ELIDED = {
+    "it": {"un", "nessun", "buon", "grand", "qualcun"},
+}
+# Words cut short with an apostrophe after them, and no words without it:
+# un po', mo', be'. The pairs keep the apostrophe (pairs.py), and they are
+# never offered as next words: the apostrophe ends them, and what follows
+# takes a space, which a next word ending in one would not get. Not the
+# imperatives da', fa', sta', va', di', which are words without it too and
+# whose pairs would take over theirs (found by Codex's review): those are
+# read as da, fa, sta, va and di, as they always were.
+APOCOPES = {
+    "it": {"po", "mo", "be"},
 }
 # Letters that come apart into two, which decomposition does not do.
-LIGATURES = {"œ": "oe", "æ": "ae"}
+LIGATURES = {"œ": "oe", "æ": "ae", "ß": "ss"}
+# Letters a language's board gives a key of their own: ñ in Spanish and ç in
+# Portuguese, each after l; è after p and ò and à after l in Italian. Typed,
+# they fold like any accent, so "ano" still reaches año; but a swipe through
+# ñ does not pass n, so on a board with that key a word's path goes through
+# it (key_letters).
+OWN_KEYS = {"es": {"ñ"}, "pt": {"ç"}, "it": {"è", "ò", "à"}, "de": {"ü", "ö", "ä"}}
+# Of those, the ones that are letters rather than accents, which the
+# misspelling filter keeps apart too (Predictor.spellings): campana is no
+# misspelling of campaña, faca none of faça. Italian's are accents, and citta
+# is a misspelling of città.
+SPELLED_APART = {"es": {"ñ"}, "pt": {"ç"}}
 
 
 def fold(word):
@@ -128,6 +170,15 @@ def fold(word):
     word = "".join(LIGATURES.get(c, c) for c in word.lower())
     return "".join(c for c in unicodedata.normalize("NFD", word)
                    if not unicodedata.combining(c))
+
+
+def key_letters(word, folded, own):
+    """The keys a swipe of `word` passes, in order: its folded letters, but
+    for the letters in `own`, the ones this board has a key of their own for,
+    which stay themselves. `folded` is fold(word), already worked out."""
+    if not own or not any(c in own for c in word.lower()):
+        return folded
+    return "".join(c if c in own else fold(c) for c in word.lower())
 
 
 def read_msgpack(data):
@@ -262,6 +313,11 @@ class Predictor:
     def __init__(self, ranks, lang="en"):
         self.lang = lang
         self.elisions = ELISIONS.get(lang, set())
+        # Heads that are words as well: after un' only what the pairs have
+        # seen after un' is offered, un'altra and never un'altro.
+        self.also_words = ELIDED.get(lang, set())
+        self.elided = self.elisions | self.also_words
+        self.apocopes = APOCOPES.get(lang, set())
         self.ranks = {w: r for w, r in ranks.items() if w not in self.elisions}
         for word, rank in EXTRA_WORDS.items():
             self.ranks.setdefault(word, rank)
@@ -269,6 +325,14 @@ class Predictor:
         # Each word's folded letters and accent count, once, here: only the
         # list's own words, never anything typed, which is not kept.
         self.folds = {w: (fold(w), accents(w)) for w in self.ranks}
+        # What the misspelling filter tells words apart by: the folded
+        # letters, but keeping the language's own letters (SPELLED_APART). campana
+        # is no misspelling of campaña, however much rarer, while tambien is
+        # one of también. The same whatever the board, so a word is a word on
+        # any layout. Only built where it differs.
+        own = SPELLED_APART.get(lang, set())
+        self.spellings = {w: (key_letters(w, f, own), n) for w, (f, n) in self.folds.items()} \
+            if own else self.folds
         # Every word under its folded form, sorted, for prefix search, and by
         # it, for corrections.
         self.folded = sorted((f, w) for w, (f, _) in self.folds.items())
@@ -284,6 +348,9 @@ class Predictor:
         # Which words follow which, when a pairs file is installed (use_pairs).
         self.pair_lines = {}
         self.capitals = set(EXTRA_WORDS)
+        self.written_forms = {}
+        # The layout's region, which decides ß or ss where it matters.
+        self.region = ""
 
     def use_dictionary(self, dictionary, source):
         """Takes a dictionary for joins at once, and, for a language with no
@@ -333,9 +400,12 @@ class Predictor:
         """A word's rank for what was typed: its own, or worse by
         ACCENT_PENALTY when only its folded form matches the typing, and by
         TYPED_ACCENT_PENALTY when the typing has an accent the word lacks."""
-        if word.startswith(typed):
+        # Against the word as it is written: fuß typed is Fuß, though the
+        # list has fuss.
+        shown = self.form(word, typed).lower()
+        if shown.startswith(typed) or word.startswith(typed):
             return self.ranks[word]
-        against = any(t != w and fold_letter(t) != t for t, w in zip(typed, word))
+        against = any(t != w and fold_letter(t) != t for t, w in zip(typed, shown))
         return self.ranks[word] + (TYPED_ACCENT_PENALTY if against else ACCENT_PENALTY)
 
     def completions(self, prefix):
@@ -397,6 +467,14 @@ class Predictor:
                     lines[before] = rest
         caps = lines.pop(CAPITALS, "")
         self.capitals = set(caps.split()) | set(EXTRA_WORDS)
+        self.written_forms = {k: v.split(",") for k, _, v in
+                              (p.partition(":") for p in lines.pop(WRITTEN, "").split()) if v}
+        # A word's accents are its commonest form's: Fuß has one where the
+        # list's fuss has none, so typing fuß is not taken to go against it.
+        # In place, so the swipe decoder, which shares folds, sees it too.
+        for word, forms in self.written_forms.items():
+            if word in self.folds:
+                self.folds[word] = (self.folds[word][0], accents(forms[0].lower()))
         self.pair_lines = lines
 
     def followers(self, before):
@@ -412,15 +490,24 @@ class Predictor:
         kept = []
         for k in range(0, len(parts) - 1, 2):
             w, c = parts[k], parts[k + 1]
-            if (w in self.ranks or w in self.elisions) and c.isdigit() and int(c) > 0:
+            if (w in self.ranks or w in self.elisions or self.marked(w)) and c.isdigit() and int(c) > 0:
                 kept.append((w, int(c)))
         total = sum(c for _, c in kept)
         return [(w, round(-100 * math.log10(c / total))) for w, c in kept] if total else []
 
+    def marked(self, w):
+        """Whether `w` is a pairs word with its apostrophe kept: an elided
+        word, un', or an apocope, po'."""
+        return w.endswith("'") and (w[:-1] in self.also_words or w[:-1] in self.apocopes)
+
     def context(self, before):
         """{word: score} of what follows `before`, a few dozen at most, for
-        ranking completions and swipes by it."""
-        return dict(self.followers(before))
+        ranking completions and swipes by it. po' ranks po, as it is typed."""
+        out = {}
+        for w, score in self.followers(before):
+            key = w[:-1] if w.endswith("'") and w[:-1] in self.apocopes else w
+            out.setdefault(key, score)
+        return out
 
     def next(self, before):
         """The words likeliest to come after `before`, START at the start of
@@ -428,17 +515,36 @@ class Predictor:
         with its apostrophe, j', since it is typed with no space after."""
         out = []
         for w, _ in self.followers(before):
-            out.append(w + "'" if w in self.elisions else self.written(w))
+            if w.endswith("'") and w[:-1] in self.apocopes:
+                continue
+            out.append(w + "'" if w in self.elisions else w if self.marked(w) else self.written(w))
             if len(out) == SHOWN:
                 break
         return out
 
+    def form(self, word, typed=""):
+        """How `word` is spelt for what was typed: of its written forms (the
+        list's masse is Masse or Maße), the first the typing is on its way to,
+        else the commonest; with ss for ß where the region writes it so. In
+        the form's own case: Straße, Floß."""
+        forms = self.written_forms.get(word)
+        if not forms:
+            out = word
+        else:
+            low = typed.lower()
+            out = next((f for f in forms if low and f.lower().startswith(low)), forms[0])
+        return out.replace("ß", "ss") if self.region in SS_REGIONS else out
+
     def written(self, word, typed=""):
-        """`word` as it is written: with its capital where the pairs say it
+        """`word` as it is written: as the sentences spell it (Straße for
+        the list's strasse), and with its capital where the pairs say it
         always has one, I and Paris, unless the typing asked for more."""
+        form = self.form(word, typed)
+        if word in self.written_forms:
+            return cased(form, typed) if typed[:1].isupper() else form
         if word in self.capitals and not typed[:1].isupper():
-            return word[:1].upper() + word[1:]
-        return cased(word, typed) if typed else word
+            return form[:1].upper() + form[1:]
+        return cased(form, typed) if typed else form
 
     def in_context(self, found, before):
         """`found`, {word: rank}, ranked by the word before as well: a word
@@ -459,8 +565,14 @@ class Predictor:
         # After an elision and its apostrophe, l'ét, the rest is a word of
         # its own: completed alone, and offered with the elision in front.
         head, apostrophe, tail = typed.rpartition("'")
-        if apostrophe and head.lower() in self.elisions and not any(self.completions(typed.lower())):
-            return [head + "'" + w for w in self.suggest(tail, head.lower())] if tail else []
+        if apostrophe and head.lower() in self.elided and not any(self.completions(typed.lower())):
+            if not tail:
+                return []
+            if head.lower() in self.also_words:
+                # un': only what is seen after un', which agrees with it.
+                seen = self.context(head.lower() + "'")
+                return [head + "'" + w for w in self.suggest(tail, head.lower() + "'") if w.lower() in seen]
+            return [head + "'" + w for w in self.suggest(tail, head.lower())]
         word = typed.lower()
         if not word:
             return []
@@ -479,7 +591,7 @@ class Predictor:
                     continue
                 if rank < found.get(w, 1 << 30):
                     found[w] = rank
-        found = {w: found[w] for w in spelled_right(list(found), self.ranks, self.folds)}
+        found = {w: found[w] for w in spelled_right(list(found), self.ranks, self.spellings)}
         found = self.in_context(found, before)
         best = heapq.nsmallest(SHOWN, found.items(), key=lambda kv: (kv[1], kv[0]))
         return [self.written(w, typed) for w, _ in best]
@@ -554,10 +666,11 @@ def grow_en(base):
         out |= {base[:-1] + "ies", base[:-1] + "ied"}
     else:
         out.add(base + "s")
-    if base.endswith("e"):
+    # -ie before -e, which it also ends in: tie, tied, tying.
+    if base.endswith("ie"):
+        out |= {base + "d", base[:-2] + "ying"}
+    elif base.endswith("e"):
         out |= {base + "d", base[:-1] + "ing"}
-    elif base.endswith("ie"):
-        out.add(base[:-2] + "ying")
     else:
         out |= {base + "ed", base + "ing"}
     # A short word ending consonant, vowel, consonant doubles the last:
@@ -993,7 +1106,13 @@ class Terminal:
             self.load()
         found = [n for n in self.commands if n.startswith(prefix)]
         found.sort(key=lambda n: (self.commands[n], n))
-        return [{"text": n, "note": self.notes.get(n, ""), "kind": "command"} for n in found[:SHOWN]]
+        # Typed into a shell, so escaped the way file names are: a name on
+        # PATH may hold a space or a $( ), and as typed it must stay the
+        # command's name rather than become code.
+        # And =, which first on a line makes odd=value an assignment rather
+        # than the command of that name.
+        return [{"text": shell_escaped(n).replace("=", "\\="), "note": self.notes.get(n, ""), "kind": "command"}
+                for n in found[:SHOWN]]
 
     def files(self, cwd, token, folders_only):
         # The typed path as the shell will read it: unescaped, ~ for home.
@@ -1118,13 +1237,21 @@ def mean_distance(a, b):
 
 
 class Swipes:
-    def __init__(self, ranks, folds=None, predictor=None):
+    def __init__(self, ranks, folds=None, predictor=None, lang=None):
         self.ranks = ranks
+        self.lang = lang or (predictor.lang if predictor else "en")
         # For the word before (Predictor.pairs): a swipe after "going" that
         # could be to, too or top is to, as a completion would be.
         self.predictor = predictor
         # The predictor's, for the same reason it keeps them.
         self.folds = folds or {w: (fold(w), accents(w)) for w in ranks}
+        # The misspelling filter's, the predictor's where there is one.
+        if predictor is not None:
+            self.spellings = predictor.spellings
+        else:
+            own = SPELLED_APART.get(self.lang, set())
+            self.spellings = {w: (key_letters(w, f, own), n) for w, (f, n) in self.folds.items()} \
+                if own else self.folds
         self.keys = {}
         self.unit = 1.0
         self.ends = {}
@@ -1150,11 +1277,15 @@ class Swipes:
             return
         self.keys = normal
         self.unit = float(unit)
+        # The letters each word's path goes through on these keys: folded,
+        # unless the board has a key for a letter of the language's own.
+        own = {c for c in OWN_KEYS.get(self.lang, ()) if c in normal}
+        self.paths = {w: key_letters(w, self.folds[w][0], own) for w in self.ranks}
         # Words by their first and last letters, the ones a path's ends
         # pick between, and only words every letter of which has a key.
         self.ends = {}
         for word in self.ranks:
-            letters = [c for c in self.folds[word][0] if c != "'"]
+            letters = [c for c in self.paths[word] if c != "'"]
             if len(letters) >= 2 and all(c in self.keys for c in letters):
                 self.ends.setdefault((letters[0], letters[-1]), []).append(word)
         # Each word's path length on these keys, for decode's cheap first
@@ -1166,7 +1297,7 @@ class Swipes:
         """The path through a word's keys, a letter typed twice in a row
         being one stop, as it is for a finger."""
         out = []
-        for c in self.folds[word][0]:
+        for c in self.paths[word]:
             if c == "'":
                 continue
             p = self.keys[c]
@@ -1217,7 +1348,7 @@ class Swipes:
         for a in starts:
             for b in ends:
                 for word in self.ends.get((a, b), ()):
-                    letters = self.folds[word][0]
+                    letters = self.paths[word]
                     if any(closest[c] > VISIT_SLACK * self.unit for c in letters if c != "'"):
                         continue
                     first = self.keys[next(c for c in letters if c != "'")]
@@ -1243,7 +1374,7 @@ class Swipes:
                 heapq.heappush(worst, -score)
             elif score < -worst[0]:
                 heapq.heapreplace(worst, -score)
-        keep = set(spelled_right([w for _, w in scored], self.ranks, self.folds))
+        keep = set(spelled_right([w for _, w in scored], self.ranks, self.spellings))
         scored = [(score, w) for score, w in scored if w in keep]
         return [w for _, w in heapq.nsmallest(SHOWN, scored)]
 
@@ -1266,6 +1397,9 @@ class Session:
         self.loaded = {}      # lang -> (Predictor, Swipes), or None when missing
         self.predictor = self.swipes = None
         self.rows = self.keys = None
+        # The layout's region ("region"), which every language's predictor
+        # is told as it comes into use: ß or ss in German.
+        self.region = ""
         # The word before the one being typed, from "after": START at the
         # start of a sentence, None when it is not known. Held for the next
         # "complete", never written anywhere.
@@ -1352,10 +1486,17 @@ def handle(session, terminal, source, one_list, line):
             ok = session.use(rest, found or os.path.join(source, rest, f"small_{rest}.msgpack.gz"))
         except (OSError, ValueError, EOFError):
             ok = False
+        if ok:
+            session.predictor.region = session.region
         print(f"ready {rest} {len(session.predictor.words)}" if ok else f"missing {rest}", flush=True)
         if ok:
             d = session.predictor.dictionary
             print(f"dictionary {rest} {d.name if d else '-'}", flush=True)
+    elif cmd == "region":
+        # "region ch" for a Swiss layout, "region" alone for none.
+        session.region = rest if re.fullmatch(r"[a-z]{0,3}", rest) else ""
+        if session.predictor:
+            session.predictor.region = session.region
     elif cmd == "keys":
         try:
             session.keys = json.loads(rest)
@@ -1419,11 +1560,19 @@ def handle(session, terminal, source, one_list, line):
         # The word just finished, "after" alone at a sentence's start,
         # "after -" when what came before is not known.
         session.before = None if rest == "-" else (rest.lower() if rest else START)
+        # weiß, as the service reads it, is weiss to a casefolded list's pairs.
+        if session.before and session.predictor and session.predictor.lang in CASEFOLDED:
+            session.before = session.before.casefold()
         # j'ai: the word is ai, as the pairs were counted.
         if session.before and "'" in session.before and session.predictor:
             head, _, tail = session.before.partition("'")
-            if head in session.predictor.elisions and tail:
+            if head in session.predictor.elided and tail:
                 session.before = tail
+        # po, as the service reads it off the text, is po' to the pairs: po
+        # is no word without its apostrophe (APOCOPES).
+        if session.predictor and session.before in session.predictor.apocopes \
+                and session.before + "'" in session.predictor.pair_lines:
+            session.before += "'"
         p = session.predictor
         # Nothing at a sentence's start: with no word before, what comes next
         # is only what sentences in general start with, "I the he she you",

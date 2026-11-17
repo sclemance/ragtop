@@ -444,6 +444,12 @@ patch_clone() {
 
 clone_matches_base() {
   local tmp result=1
+  # Ragtop's clones hold folders and plain files only. Anything else, a
+  # symlink above all, is someone's own arrangement: it counts as an edit,
+  # and nothing is copied, since undoing the patch in a copy would write
+  # through a copied symlink to wherever it points.
+  [[ -d $clone_dir && ! -L $clone_dir ]] || return 1
+  [[ -z $(find "$clone_dir" -mindepth 1 ! -type f ! -type d -print -quit) ]] || return 1
   tmp=$(mktemp -d)
   cp -a "$clone_dir/." "$tmp/"
   replace "$tmp/$entry" revert "${patch[@]}" "${window_patch[@]}" "${legacy[@]}"
@@ -748,10 +754,33 @@ install_one() {
   echo "Cloned and patched $clone_id."
 }
 
+# Whether the lock overlay may be changed now: only with the session surely
+# unlocked. Replacing, removing or re-cloning the lock screen's code while it
+# is up could take the lock down with it, so a change to it waits, and says
+# so; the next sync while unlocked (the shell's start, the post-update hook,
+# a manual sync) does it. Other overlays are never held back.
+lock_may_change() {
+  [[ $name == lock ]] || return 0
+  # No probe is no telling, not a yes: only an answer of unlocked will do.
+  local state=2
+  if command -v omarchy-hyprland-session-locked >/dev/null; then
+    state=0
+    omarchy-hyprland-session-locked || state=$?
+  fi
+  (( state == 1 )) && return 0
+  if (( state == 0 )); then
+    echo "The session is locked, so $clone_id is left as it is until a sync while unlocked." >&2
+  else
+    echo "Could not tell whether the session is locked, so $clone_id is left as it is for now." >&2
+  fi
+  return 1
+}
+
 sync_one() {
   if ! is_patched; then
     # Nothing to sync unless an earlier run left a clone half-made.
     if [[ -f $progress_file ]]; then
+      lock_may_change || return 1
       install_one >/dev/null || return 1
       echo "Finished an interrupted $clone_id clone."
       synced=1
@@ -774,6 +803,7 @@ sync_one() {
     notify "$(t clones.edited "$(t "overlay.name.$name")")"
     return 1
   fi
+  lock_may_change || return 1
   remove_our_clone || return 1
   # Whatever goes wrong from here, install_one leaves either a patched clone or
   # none, and says which on stderr. Only a patched one has been synced.
@@ -797,6 +827,10 @@ sync_batch() {
     select_overlay "$spec"
     if ! is_patched || in_sync || ! clone_is_ours; then
       sync_one || result=1
+      continue
+    fi
+    if ! lock_may_change; then
+      result=1
       continue
     fi
     if [[ -z $batch_dir ]]; then
@@ -860,18 +894,23 @@ apply_selection() {
   done
   if (( ${#operations[@]} == 0 )); then return 0; fi
   # Switching the active session-lock implementation while locked is unsafe.
+  # With no probe there is no telling, which matters only where the lock is
+  # among what changes.
+  local lock_state=1
   if command -v omarchy-hyprland-session-locked >/dev/null; then
-    local lock_state=0
+    lock_state=0
     omarchy-hyprland-session-locked || lock_state=$?
-    # 2 is "could not tell", e.g. no monitor has a workspace yet. That is
-    # refused too, but not as a lock: the desktop may well be unlocked.
-    if (( lock_state == 0 )); then
-      echo "The session is locked; unlock it and choose overlays again." >&2
-      return 1
-    elif (( lock_state != 1 )); then
-      echo "Could not tell whether the session is locked, so no overlays were changed. Try again in a moment." >&2
-      return 1
-    fi
+  elif [[ " ${operations[*]} " == *":lock:"* ]]; then
+    lock_state=2
+  fi
+  # 2 is "could not tell", e.g. no monitor has a workspace yet. That is
+  # refused too, but not as a lock: the desktop may well be unlocked.
+  if (( lock_state == 0 )); then
+    echo "The session is locked; unlock it and choose overlays again." >&2
+    return 1
+  elif (( lock_state != 1 )); then
+    echo "Could not tell whether the session is locked, so no overlays were changed. Try again in a moment." >&2
+    return 1
   fi
   # Until it is published, the batch holds only copies made for it: nothing
   # live has moved, so a batch that stops early is simply let go.
@@ -1052,8 +1091,8 @@ else
 for o in "${selected[@]}"; do
   select_overlay "$o"
   case "$command" in
-    install) install_one || status=1 ;;
-    remove) remove_one || status=1 ;;
+    install) if lock_may_change; then install_one || status=1; else status=1; fi ;;
+    remove) if lock_may_change; then remove_one || status=1; else status=1; fi ;;
     status) status_one ;;
     installed) is_patched || status=1 ;;
     tappable) tappable_one ;;

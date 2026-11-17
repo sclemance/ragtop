@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.49.0 - 2026-11-17
+
+- Validate theme directory names before listing them and shell-quote them in menu commands. Crafted names can no longer execute commands when Omarchy evaluates the menu. Adding or refreshing the menu replaces unsafe rows written by older versions.
+- Add Spanish, Portuguese, Italian and German word suggestions and swipe vocabulary, with language-specific handling of accents, apostrophes and spelling. Their word lists and pairs download only when requested and are checked against pinned SHA-256 hashes.
+- Use Omarchy's Commons.Color explicitly so theme colours keep working with Qt 6.12. Add the released Omarchy 4.5.0 overlay fixtures and compatibility tests.
+- Remove trailing spaces added to Japanese candidates by Mozc 3.35 while preserving candidates that consist only of spaces.
+- Treat symlinks and other special files in overlay clones as user edits. Checking a clone no longer risks writing through a copied symlink.
+- Leave the lock clone in place while the session is locked or its lock state cannot be determined. A deferred update is retried at the next sync while unlocked.
+- Clear typed state when focus moves to another window and keep it untrusted until the newest numbered field query answers. Old or unanswered queries cannot restore the previous field's state.
+- Shell-escape command names offered in terminal completion, including names containing equals signs.
+- Read Hyprland's blur response correctly and leave unknown state alone.
+- Count full Unicode characters in the typed record and stop trusting cursor edits across combining characters or joined emoji. Read key-size settings back after writes so the controls follow the value that was saved.
+- Correct the suggested English forms of tie and die to tying and dying.
+
 ## 0.48.3 — 2026-11-08
 
 - `bench/touch-trace.py`, the sudo diagnostic, gives up root as soon as the touchscreen is open and writes its log as the user who ran it. The log is never opened through a link, only a regular file of theirs is used, and it is made private on every run. It no longer runs as plain root, and it takes only a `/dev/input/eventN` touchscreen.

@@ -1,8 +1,8 @@
 #!/bin/bash
 # quick: skip, about a minute: clones and patches whole Omarchy trees, several times over.
-# overlay-clones.sh, run for real against copies of two Omarchy trees: 4.0.4,
-# whose overlays are each a window of their own, and 7cc6a55, where four of
-# them became instances of the shared OverlayWindow.
+# overlay-clones.sh, run for real against copies of Omarchy trees: 4.0.4,
+# whose overlays are each a window of their own; 7cc6a55, where four of them
+# became instances of the shared OverlayWindow; and 4.5.0-rc1 and 4.5.0.
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 all=(menu emojis clipboard polkit image-picker lock)
@@ -706,7 +706,7 @@ PYTHON
 # Reconstruct revision 5 entries and records using the desktop locale, then
 # verify from C. Real content edits must still prevent refresh.
 legacy_locale_and_policy_migrate() {
-  for tree in "$old_omarchy" "$new_omarchy" "$rc_omarchy"; do
+  for tree in "$old_omarchy" "$new_omarchy" "$rc_omarchy" "$rel_omarchy"; do
     make_sandbox "$tree"
     clones install
     assert_rc 0
@@ -862,6 +862,139 @@ run_test "4.5.0-rc1: sync re-clones what uses the shared OverlayWindow when Omar
 run_test "4.5.0-rc1: a clone with edits of its own is kept when the shared OverlayWindow changes" rc_edited_clone_survives
 run_test "7cc6a55 to 4.5.0-rc1: sync moves every clone over to the new window" updating_to_rc_moves_every_clone_over
 run_test "7cc6a55: remove takes the clones away, and the hook with the last" new_remove_takes_clones_and_hook_away
+
+# --- Omarchy 4.5.0: the release, with the lock's feed surface gone ---------
+
+rel_install_patches_every_overlay() { shared=$rel_omarchy new_install_patches_every_overlay; }
+rel_sync_follows_the_shared_window() { shared=$rel_omarchy new_sync_follows_the_shared_window; }
+rel_edited_clone_survives() { shared=$rel_omarchy new_edited_clone_survives_a_shared_window_change; }
+
+# The update from the release candidate to the release: the window is the
+# same, so only the four built-ins that changed are re-cloned, and the lock
+# clone loses the file 4.5.0 dropped.
+updating_rc_to_release_recloned_what_changed() {
+  make_sandbox "$rc_omarchy"
+  clones install
+  assert_rc 0
+  assert_equal "$([[ -e $(clone_of lock)/LockFeedSurface.qml ]] && echo yes)" yes "rc1 lock clone has LockFeedSurface.qml"
+  switch_omarchy "$rel_omarchy"
+  clones sync
+  assert_rc 0
+  local o
+  for o in menu emojis clipboard lock; do
+    assert_contains "$out" "Re-cloned tester.$o from the updated built-in."
+  done
+  for o in polkit image-picker; do
+    assert_contains "$out" "tester.$o matches the built-in, so nothing to sync."
+    assert_lacks "$out" "Re-cloned tester.$o"
+  done
+  assert_contains "$out" "Applied 4 overlay replacements together."
+  assert_equal "$([[ -e $(clone_of lock)/LockFeedSurface.qml ]] && echo yes)" "" "LockFeedSurface.qml left in the lock clone"
+  assert_contains "$(<"$(entry_of lock)")" 'LockKeyboard.qml'
+  clones status
+  for o in "${all[@]}"; do assert_contains "$out" "$o: installed, in sync with the built-in"; done
+  assert_lacks "$out" "edits besides"
+  assert_equal "$(progress_files)" "" "progress markers left behind"
+}
+
+# A clone whose entry file is a symlink, to a dotfiles copy say: status only
+# looks, so the file it points to stays exactly as it was, and the clone
+# counts as having edits of its own.
+a_symlinked_entry_is_only_looked_at() {
+  make_sandbox "$rel_omarchy"
+  clones install lock
+  assert_rc 0
+  local mine="$sandbox/home/my-lock-view.qml" before
+  mv "$(entry_of lock)" "$mine"
+  ln -s "$mine" "$(entry_of lock)"
+  before=$(sha256sum "$mine")
+  clones status lock
+  assert_equal "$(sha256sum "$mine")" "$before" "the symlink's target after status"
+  assert_contains "$out" "lock: note: the clone has edits besides Ragtop's"
+  clones sync lock
+  assert_equal "$(sha256sum "$mine")" "$before" "the symlink's target after sync"
+  assert_equal "$([[ -L $(entry_of lock) ]] && echo link)" link "the clone's entry is still the symlink"
+}
+
+# An update the lock patch no longer fits, synced while the session is
+# locked: the lock clone stays as it is, untouched, until a sync while
+# unlocked, which then does what it always did and puts the built-in back.
+a_locked_session_keeps_its_lock_clone() {
+  make_sandbox "$rel_omarchy"
+  clones install lock
+  assert_rc 0
+  local before
+  before=$(cd "$(clone_of lock)" && find . -type f -print0 | sort -z | xargs -0 sha256sum)
+  sed -i 's/id: inputField/id: inputBox/' "$sandbox/omarchy/shell/plugins/lock/LockView.qml"
+  : >"$sandbox/calls.log"
+  clones STUB_SESSION_LOCKED=0 sync lock
+  assert_rc 1
+  assert_contains "$err" "The session is locked, so tester.lock is left as it is"
+  assert_lacks "$(calls)" "remove tester.lock"
+  assert_lacks "$(calls)" "clone omarchy.lock"
+  assert_equal "$(cd "$(clone_of lock)" && find . -type f -print0 | sort -z | xargs -0 sha256sum)" "$before" "the lock clone while locked"
+  clones STUB_SESSION_LOCKED=2 sync lock
+  assert_rc 1
+  assert_contains "$err" "Could not tell whether the session is locked"
+  assert_lacks "$(calls)" "remove tester.lock"
+  clones STUB_SESSION_LOCKED=0 remove lock
+  assert_rc 1
+  assert_lacks "$(calls)" "remove tester.lock"
+  clones STUB_SESSION_LOCKED=1 sync lock
+  assert_contains "$(calls)" "remove tester.lock"
+}
+
+# An ordinary update while locked: the other overlays move on, the lock
+# waits for a sync while unlocked.
+a_locked_update_waits_for_the_lock() {
+  make_sandbox "$rc_omarchy"
+  clones install
+  assert_rc 0
+  switch_omarchy "$rel_omarchy"
+  clones STUB_SESSION_LOCKED=0 sync
+  assert_rc 1
+  assert_contains "$out" "Re-cloned tester.menu from the updated built-in."
+  assert_lacks "$out" "Re-cloned tester.lock"
+  assert_equal "$([[ -e $(clone_of lock)/LockFeedSurface.qml ]] && echo yes)" yes "the rc1 lock clone, kept while locked"
+  clones STUB_SESSION_LOCKED=1 sync
+  assert_rc 0
+  assert_contains "$out" "Re-cloned tester.lock from the updated built-in."
+  clones status lock
+  assert_contains "$out" "lock: installed, in sync with the built-in"
+}
+
+run_test "4.5.0: install patches all six, and status, installed and sync agree" rel_install_patches_every_overlay
+# With no lock probe at all there is no telling, which is no yes: the lock
+# clone stays as it is, while other overlays still sync and can be chosen.
+no_probe_is_no_answer() {
+  make_sandbox "$rel_omarchy"
+  clones install menu lock
+  assert_rc 0
+  # A PATH like the tests' own, with no omarchy-hyprland-session-locked on it.
+  local bin="$sandbox/no-probe" f
+  mkdir -p "$bin"
+  for f in "$tests_dir"/stub-bin/* /usr/bin/*; do
+    [[ ${f##*/} == omarchy-hyprland-session-locked || -e $bin/${f##*/} ]] || ln -s "$f" "$bin/${f##*/}"
+  done
+  sed -i 's/id: inputField/id: inputBox/' "$sandbox/omarchy/shell/plugins/lock/LockView.qml"
+  : >"$sandbox/calls.log"
+  clones PATH="$bin" sync lock
+  assert_rc 1
+  assert_contains "$err" "Could not tell whether the session is locked, so tester.lock is left as it is"
+  assert_lacks "$(calls)" "remove tester.lock"
+  clones PATH="$bin" apply 'menu' ''
+  assert_lacks "$err" "Could not tell whether the session is locked"
+  clones PATH="$bin" apply '' 'lock'
+  assert_contains "$err" "Could not tell whether the session is locked"
+}
+
+run_test "4.5.0: while locked, an unpatchable update leaves the lock clone alone" a_locked_session_keeps_its_lock_clone
+run_test "4.5.0: with no lock probe, the lock clone is left alone and other overlays are not" no_probe_is_no_answer
+run_test "4.5.0-rc1 to 4.5.0 while locked: the lock waits, the rest move on" a_locked_update_waits_for_the_lock
+run_test "4.5.0: a symlinked entry file is looked at, never written through" a_symlinked_entry_is_only_looked_at
+run_test "4.5.0: sync re-clones what uses the shared OverlayWindow when Omarchy changes it" rel_sync_follows_the_shared_window
+run_test "4.5.0: a clone with edits of its own is kept when the shared OverlayWindow changes" rel_edited_clone_survives
+run_test "4.5.0-rc1 to 4.5.0: sync re-clones the four that changed, and the lock loses its feed surface" updating_rc_to_release_recloned_what_changed
 
 
 run_test "4.0.4: install patches all six, and status, installed and the hook agree" old_install_patches_every_overlay

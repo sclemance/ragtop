@@ -38,6 +38,59 @@ function isWordChar(c) {
   return c === WORD || c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9")
 }
 
+// A character as BackSpace counts one: a code point. An emoji past U+FFFF
+// is two UTF-16 units here, a surrogate pair, which is never cut in two.
+// The arrows and Delete go by grapheme instead, in Qt as in most toolkits:
+// e and a combining accent, or an emoji and its skin tone, are one step.
+// Where that could differ from a code point (atJoin: anywhere not surely
+// between two graphemes), the record does not guess and becomes unknown.
+function isHigh(u) { return u >= 0xd800 && u <= 0xdbff }
+function isLow(u) { return u >= 0xdc00 && u <= 0xdfff }
+function paired(t, i) { return i > 0 && isLow(t.charCodeAt(i)) && isHigh(t.charCodeAt(i - 1)) }
+// Whether offset i is surely between two graphemes, as a text field's arrows
+// and Delete see them. Only claimed between characters known never to join
+// anything: printable ASCII, Latin, Greek and Cyrillic letters (precomposed,
+// no combining marks), common punctuation and symbols, and a lone emoji
+// beside one of those. Anything else, any script with marks or jamo, any
+// variation selector, joiner or flag, and the record lets go rather than
+// guess (Codex found Hebrew, Arabic, Devanagari, Hangul and more behaving
+// so in a Qt field).
+function plain(u) {
+  return (u >= 0x20 && u <= 0x7e) || u === 0x0a || u === 0x09
+    || (u >= 0xa0 && u <= 0x2ff) || (u >= 0x370 && u <= 0x482) || (u >= 0x48a && u <= 0x52f)
+    || (u >= 0x2010 && u <= 0x2027) || (u >= 0x2030 && u <= 0x205e)
+    || (u >= 0x20a0 && u <= 0x20c0) || (u >= 0x2100 && u <= 0x21ff)
+}
+// A single emoji, which needs no other code point to be whole: not a skin
+// tone (1F3FB-1F3FF), which joins the one before, nor a regional indicator,
+// two of which make a flag.
+function lone(u) {
+  return (u >= 0x1f300 && u <= 0x1f3fa) || (u >= 0x1f400 && u <= 0x1f64f)
+    || (u >= 0x1f680 && u <= 0x1f6ff) || (u >= 0x1f900 && u <= 0x1f9ff) || (u >= 0x1fa70 && u <= 0x1faff)
+}
+function cpBefore(t, i) { return paired(t, i - 1) ? t.codePointAt(i - 2) : t.charCodeAt(i - 1) }
+function between(t, i) {
+  if (i <= 0 || i >= t.length) return true
+  var a = cpBefore(t, i), b = t.codePointAt(i)
+  return (plain(a) && plain(b)) || (lone(a) && plain(b)) || (plain(a) && lone(b))
+}
+function atJoin(t, i) { return !between(t, i) }
+// How many units the character before c, or at c, takes.
+function stepBack(t, c) { return c >= 2 && paired(t, c - 1) ? 2 : 1 }
+function stepForward(t, c) { return c + 1 < t.length && paired(t, c + 1) ? 2 : 1 }
+// How many characters s is, so how many BackSpaces take it back.
+function codePoints(s) {
+  var n = 0
+  for (var i = 0; i < s.length; i++) if (!paired(s, i)) n++
+  return n
+}
+// The last n units of t, or one fewer where that would split a pair.
+function lastUnits(t, n) {
+  var cut = Math.max(0, t.length - n)
+  if (cut > 0 && paired(t, cut)) cut++
+  return t.slice(cut)
+}
+
 function isLetter(c) {
   return c !== WORD && (c === "'" || c.toLowerCase() !== c.toUpperCase() || (c >= "0" && c <= "9"))
 }
@@ -70,7 +123,7 @@ function kinds(text) {
 function keep(text, mode) {
   if (mode === "full") {
     if (text.length <= MOST) return { tail: text, cut: false }
-    return { tail: text.slice(text.length - MOST), cut: true }
+    return { tail: lastUnits(text, MOST), cut: true }
   }
   var w = text.length
   if (mode === "word") while (w > 0 && isLetter(text[w - 1])) w--
@@ -114,18 +167,27 @@ function note(record, line, mode, atPrompt) {
     // Kinds cannot be taken back a letter at a time: only the word being
     // typed, which word keeps as it is.
     if (lean && !(mode === "word" && c > 0 && isLetter(t[c - 1]))) unknown = true
-    else if (c > 0) { t = t.slice(0, c - 1) + t.slice(c); c-- }
+    else if (c > 0) { var b = stepBack(t, c); t = t.slice(0, c - b) + t.slice(c); c -= b }
     else unknown = !fromStart
   } else if (named && (keysym === "Delete" || keysym === "Left" || keysym === "Right"
                        || keysym === "Home" || keysym === "End") && lean) {
     unknown = true
   } else if (named && keysym === "Delete") {
-    if (c < t.length) t = t.slice(0, c) + t.slice(c + 1)
+    if (c < t.length) {
+      var f = stepForward(t, c)
+      if (atJoin(t, c) || atJoin(t, c + f)) unknown = true
+      else t = t.slice(0, c) + t.slice(c + f)
+    }
   } else if (named && keysym === "Left") {
-    if (c > 0) c--
-    else unknown = !fromStart
+    if (c > 0) {
+      c -= stepBack(t, c)
+      if (atJoin(t, c)) unknown = true
+    } else unknown = !fromStart
   } else if (named && keysym === "Right") {
-    if (c < t.length) c++
+    if (c < t.length) {
+      c += stepForward(t, c)
+      if (atJoin(t, c)) unknown = true
+    }
   } else if (named && keysym === "Home") {
     if (lineStart === 0 && !fromStart) unknown = true
     else c = lineStart
@@ -136,7 +198,10 @@ function note(record, line, mode, atPrompt) {
   else return null                                             // up, hold, release, route
   if (unknown) return empty(false)
   var before = t.slice(0, c)
-  var sentenceStart = before === "" ? fromStart : /([.!?] |\n)$/.test(before)
+  // Spanish opens a question or an exclamation with ¿ or ¡, and the word
+  // after it still starts the sentence: "¿Qué?".
+  var lead = before.replace(/[¡¿]+$/, "")
+  var sentenceStart = lead === "" ? fromStart : /([.!?] |\n)$/.test(lead)
   if (lean) {
     // The cursor is always at the end here: everything that moves it made
     // the record unknown above.
@@ -145,8 +210,9 @@ function note(record, line, mode, atPrompt) {
     c = t.length
     if (kept.cut) fromStart = false
   } else if (t.length > MOST) {
-    var cut = t.length - MOST
-    t = t.slice(cut)
+    var kept = lastUnits(t, MOST)
+    var cut = t.length - kept.length
+    t = kept
     c = Math.max(0, c - cut)
     fromStart = false
   }

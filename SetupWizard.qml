@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Ragtop's setup, in the shell rather than in a terminal.
@@ -239,7 +240,7 @@ Item {
   // from reaching a terminal.
   Rectangle {
     anchors.fill: parent
-    color: Util.alpha(Color.background, 0.7)
+    color: Util.alpha(Commons.Color.background, 0.7)
   }
 
   readonly property Item card: cardSurface
@@ -256,9 +257,9 @@ Item {
     height: Math.min(parent.height - 2 * Style.gapsOut,
                      chrome + body.implicitHeight + 2 * Style.spacing.popupPadding)
     radius: Style.cornerRadius
-    color: Color.popups.background
-    borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
-                                          Color.popups.border, Math.max(1, Style.space(2)))
+    color: Commons.Color.popups.background
+    borderSpec: Border.localOrSurfaceSpec("popups", "border", Commons.Color.popups.border,
+                                          Commons.Color.popups.border, Math.max(1, Style.space(2)))
     padding: Style.spacing.popupPadding
 
     Column {
@@ -280,7 +281,7 @@ Item {
           textFormat: Text.PlainText
           id: title
           text: root.overlaysOnly ? root.service.t("setup.overlays.title") : root.service.t("setup.title")
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.title
         }
@@ -294,14 +295,14 @@ Item {
           anchors.verticalCenter: title.verticalCenter
           visible: !root.overlaysOnly
           text: root.service.t("setup.stepOf", root.step + 1, root.steps.length, root.service.t(root.steps[root.step]))
-          color: Color.popups.text
+          color: Commons.Color.popups.text
           opacity: 0.6
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
       }
 
-      PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+      PanelSeparator { width: parent.width; height: 1; foreground: Commons.Color.popups.text }
 
       Flickable {
         width: parent.width
@@ -320,7 +321,7 @@ Item {
         }
       }
 
-      PanelSeparator { width: parent.width; height: 1; foreground: Color.popups.text }
+      PanelSeparator { width: parent.width; height: 1; foreground: Commons.Color.popups.text }
 
       Row {
         id: buttons
@@ -331,7 +332,7 @@ Item {
           text: root.overlaysOnly ? root.service.t("setup.cancel")
             : root.step === 0 ? root.service.t("setup.notNow") : root.service.t("setup.back")
           bordered: true
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
           onClicked: {
             if (root.step === 0) root.finished()
             else root.step = root.step - 1
@@ -344,7 +345,7 @@ Item {
           bordered: true
           enabled: !last || root.canApply
           opacity: enabled ? 1 : 0.5
-          foreground: last ? Color.accent : Color.popups.text
+          foreground: last ? Commons.Color.accent : Commons.Color.popups.text
           onClicked: {
             if (!last) root.step = root.step + 1
             else root.apply()
@@ -362,7 +363,7 @@ Item {
     // in them and render it, which for Qt includes fetching a remote
     // image named in an img tag.
     textFormat: Text.PlainText
-    color: Color.popups.text
+    color: Commons.Color.popups.text
     font.family: Style.font.family
     font.pixelSize: Style.font.body
     wrapMode: Text.WordWrap
@@ -373,7 +374,7 @@ Item {
     // in them and render it, which for Qt includes fetching a remote
     // image named in an img tag.
     textFormat: Text.PlainText
-    color: Color.popups.text
+    color: Commons.Color.popups.text
     opacity: 0.65
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
@@ -387,7 +388,7 @@ Item {
     // in them and render it, which for Qt includes fetching a remote
     // image named in an img tag.
     textFormat: Text.PlainText
-    color: Color.accent
+    color: Commons.Color.accent
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
     wrapMode: Text.WrapAnywhere
@@ -440,7 +441,7 @@ Item {
             // image named in an img tag.
             textFormat: Text.PlainText
             text: modelData.ok ? "✓" : "✗"
-            color: modelData.ok ? Color.accent : Color.urgent
+            color: modelData.ok ? Commons.Color.accent : Commons.Color.urgent
             font.family: Style.font.family
             font.pixelSize: Style.font.body
           }
@@ -468,21 +469,21 @@ Item {
         Button {
           text: root.checkingDeps ? root.service.t("setup.deps.checking") : root.service.t("setup.deps.checkAgain")
           bordered: true
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
           onClicked: root.checkDeps()
         }
         Button {
           visible: root.missingDeps.length > 0
           text: root.service.t("setup.deps.terminal")
           bordered: true
-          foreground: Color.accent
+          foreground: Commons.Color.accent
           onClicked: root.installInTerminal()
         }
         Button {
           visible: root.missingDeps.length > 0
           text: root.service.t("setup.deps.copy")
           bordered: true
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
           onClicked: copyProc.running = true
         }
       }
@@ -518,7 +519,7 @@ Item {
         visible: parent.offering
         text: root.installingRule ? root.service.t("setup.switch.waiting") : root.service.t("setup.switch.install")
         bordered: true
-        foreground: Color.accent
+        foreground: Commons.Color.accent
         onClicked: {
           root.installingRule = true
           ruleInstallProc.running = true
@@ -554,13 +555,13 @@ Item {
         Button {
           text: root.manualMode === "on" ? root.service.t("setup.switch.alwaysOn") : root.service.t("setup.switch.stayTablet")
           bordered: true
-          foreground: root.manualMode === "on" ? Color.accent : Color.popups.text
+          foreground: root.manualMode === "on" ? Commons.Color.accent : Commons.Color.popups.text
           onClicked: root.setManualMode("on")
         }
         Button {
           text: root.manualMode === "off" ? root.service.t("setup.switch.alwaysOff") : root.service.t("setup.switch.stayLaptop")
           bordered: true
-          foreground: root.manualMode === "off" ? Color.accent : Color.popups.text
+          foreground: root.manualMode === "off" ? Commons.Color.accent : Commons.Color.popups.text
           onClicked: root.setManualMode("off")
         }
       }
@@ -591,11 +592,11 @@ Item {
         label: root.service.t("setup.overlays.all")
         description: root.service.t("setup.overlays.allDetail")
         checked: root.allOverlays
-        foreground: Color.popups.text
+        foreground: Commons.Color.popups.text
         onClicked: root.setAllOverlays(!root.allOverlays)
       }
 
-      PanelSeparator { width: parent.width; foreground: Color.popups.text }
+      PanelSeparator { width: parent.width; foreground: Commons.Color.popups.text }
 
       Repeater {
         model: root.overlays
@@ -606,14 +607,14 @@ Item {
           label: root.service.t(modelData.label)
           description: root.service.t(modelData.detail)
           checked: modelData.on
-          foreground: Color.popups.text
+          foreground: Commons.Color.popups.text
           onClicked: root.setOverlay(modelData.id, !modelData.on)
         }
       }
 
       // On its own, this is also the last page: what Apply will do, before
       // anything is done.
-      PanelSeparator { visible: root.overlaysOnly; width: parent.width; foreground: Color.popups.text }
+      PanelSeparator { visible: root.overlaysOnly; width: parent.width; foreground: Commons.Color.popups.text }
       Note {
         visible: root.overlaysOnly
         width: parent.width
@@ -631,7 +632,7 @@ Item {
       Body {
         width: parent.width
         visible: root.overlaysOnly && root.applyError !== ""
-        color: Color.urgent
+        color: Commons.Color.urgent
         text: root.applyError
       }
     }
@@ -663,7 +664,7 @@ Item {
       Body {
         width: parent.width
         visible: root.applyError !== ""
-        color: Color.urgent
+        color: Commons.Color.urgent
         text: root.applyError
       }
     }

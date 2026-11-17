@@ -308,6 +308,131 @@ PY
   assert_lacks "$out" '"garcon"'
 }
 
+# Spanish's ñ has a key of its own, after l: a swipe through it is año, and
+# one through n is ano. Both listed, near enough in frequency that neither is
+# taken for the other's misspelling.
+a_swipe_through_n_tilde_is_its_own() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/es"
+  wordlist "$langs/es/small_es.msgpack.gz" 300:"año" 390:ano 320:"niño" 395:nino 200:de
+  /usr/bin/python3 - >"$sandbox/qwerty-es" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["año", "ano", "niño", "nino"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang es"; cat "$sandbox/qwerty-es")
+  suggest "$langs"
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" \
+    "año ano niño nino " "first word of each swipe"
+}
+
+# With wordfreq's own ranks, campaña 390 and campana 506: a gap the filter
+# takes for a misspelling where only accents differ (tambien and también).
+# ñ is a letter, so campana is a word of its own, typed or swiped.
+n_tilde_is_no_accent_to_the_misspelling_filter() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/es"
+  wordlist "$langs/es/small_es.msgpack.gz" 390:"campaña" 506:campana 281:"también" 402:tambien 200:de
+  /usr/bin/python3 - >"$sandbox/qwerty-es" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiop", "asdfghjklñ", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+stops = [keys[c] for c in "campana"]
+path = []
+for a, b in zip(stops, stops[1:]):
+    path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang es"; cat "$sandbox/qwerty-es")
+  suggest "$langs" "campana" "tambien"
+  assert_contains "$out" 'swiped ["campana"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"campana"'
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 2p)" '"tambien"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 2p)" '"también"'
+}
+
+# Portuguese's ç has its own key after l, on Portugal's board and Brazil's:
+# a swipe through it is faça, through c faca. With wordfreq's ranks, forca
+# 547 beside força 365 is past the misspelling filter's gap, so folding ç
+# would make forca (gallows) a misspelling of força.
+c_cedilla_is_its_own_in_portuguese() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/pt"
+  wordlist "$langs/pt/small_pt.msgpack.gz" 383:"faça" 478:faca 365:"força" 547:forca 269:"também" 491:tambem 150:de
+  /usr/bin/python3 - >"$sandbox/qwerty-pt" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiop", "asdfghjklç", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["faça", "faca", "força"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang pt"; cat "$sandbox/qwerty-pt")
+  suggest "$langs" "faca" "tambem" "forca"
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" \
+    "faça faca força " "first word of each swipe"
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"faca"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"faça"'
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 2p)" '"tambem"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 3p)" '"forca"'
+}
+
+# Italy's board has è after p, ò and à after l: a swipe through à is città,
+# and one through ò però. Typed, "citta" still reaches città, and stays the
+# misspelling it is: Italian's are accents, not letters of their own.
+italian_accent_keys_are_on_the_path() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/it"
+  wordlist "$langs/it/small_it.msgpack.gz" 323:"città" 484:citta 330:"però" 458:pero 200:di 184:un 300:altra 310:altro 360:al
+  /usr/bin/python3 - >"$sandbox/qwerty-it" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertyuiopè", "asdfghjklòà", "zxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["città", "però"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  mapfile -t pre < <(echo "lang it"; cat "$sandbox/qwerty-it")
+  suggest "$langs" "citta" "un'al" "un"
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" "città però " "first word of each swipe"
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"città"'
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 1p)" '"citta"'
+  # Without pairs nothing is known to agree with un', so nothing is offered
+  # after it (italian_elided_words_and_apocopes has the pairs).
+  assert_lacks "$(grep '^suggest' <<<"$out" | sed -n 2p)" "un'altro"
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 3p)" '"un"'
+}
+
+# Typed, ñ folds like an accent: "ano" still reaches año.
+typing_n_reaches_n_tilde() {
+  langs="$sandbox/words"
+  mkdir -p "$langs/es"
+  wordlist "$langs/es/small_es.msgpack.gz" 300:"año" 320:"anoche" 200:de
+  in_languages es
+  suggest "$langs" "ano"
+  assert_contains "$out" '"año"'
+}
+
 # ---- Word forms ---------------------------------------------------------------
 
 form_words() {
@@ -366,6 +491,16 @@ no_rules_on_two_letters() {
   assert_contains "$out" 'forms ["went", "going"]'
 }
 
+# tie and die end in e too, but go to tying and dying.
+ie_words_go_to_ying() {
+  form_words
+  wordlist "$words" 300:tie 320:tied 330:ties 340:tying 360:tiing 310:die 330:died 340:dies 350:dying
+  forms_of tie die
+  assert_contains "$out" '"tying"'
+  assert_contains "$out" '"dying"'
+  assert_lacks "$out" '"tiing"'
+}
+
 forms_follow_capitals() {
   form_words
   forms_of Stop
@@ -384,6 +519,35 @@ term() {
   wordlist "$words" 127:the
   suggest "$words"
   out=$(grep '^termsuggest' <<<"$out" | sed 's/^termsuggest //' | jq -c '[.[] | .text]')
+}
+
+# A name on PATH can hold anything a file name can. Offered, it is escaped,
+# so the shell reads it as that one command's name and runs nothing else.
+odd_command_names_are_escaped() {
+  local bin="$sandbox/bin" cwd="$sandbox/home"
+  mkdir -p "$bin"
+  # shellcheck disable=SC2016  # the names are meant to hold $( ) and ` `
+  local names=('odd$(touch MARKER)' 'odd tool' 'odd`touch MARKER`' "odd'q" 'odd;x' 'odd&y' 'odd=value')
+  local n
+  # Each prints its own name, so running the completion shows which ran.
+  for n in "${names[@]}"; do printf '#!/bin/sh\nprintf "%%s" "${0##*/}"\n' >"$bin/$n"; chmod +x "$bin/$n"; done
+  wordlist "$words" 127:the
+  out=$(echo "term $(jq -cn --arg c "$cwd" '{cwd: $c, line: "odd"}')" \
+    | sandboxed /usr/bin/env PATH="$bin:/usr/bin:/bin" RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$words" 2>&1 \
+    | grep '^termsuggest' | sed 's/^termsuggest //')
+  assert_equal "$(jq length <<<"$out")" 7 "every odd name offered"
+  local text
+  while IFS= read -r text; do
+    # What bash reads the offered text as: one word, the name itself.
+    local got
+    got=$(cd "$cwd" && bash -c 'eval "set -- $1"; printf "%s|%s" "$#" "$1"' _ "$text")
+    [[ $got == 1\|odd* ]] || fail "offered $text, which bash reads as $got"
+    # And run where a command goes, first on the line: the command of that
+    # name runs, and nothing else.
+    got=$(cd "$cwd" && PATH="$bin:/usr/bin:/bin" bash -c "$text" 2>/dev/null)
+    printf '%s\n' "${names[@]}" | grep -qxF -- "$got" || fail "running $text ran ${got:-nothing}"
+  done < <(jq -r '.[].text' <<<"$out")
+  assert_equal "$([[ -e $cwd/MARKER ]] && echo made)" "" "an offered command name ran as code"
 }
 
 commands_at_the_start() {
@@ -556,6 +720,83 @@ next_words_and_context() {
   [[ $(grep -c '^suggest \["the", "to"' <<<"$out") -eq 1 ]] || fail "without context the should lead: $out"
 }
 
+# Italian's un' takes only what agrees with it: what the pairs saw after
+# un' (un'altra, un'amica), never any word after un' (un'altro, un'amico,
+# un'cane). po' keeps its apostrophe in the pairs, and is never offered as a
+# next word, which would type it without one or without its space.
+italian_elided_words_and_apocopes() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/it"
+  wordlist "$dir/it/small_it.msgpack.gz" 184:un 300:altra 310:altro 320:amica 330:amico 340:cane 325:po \
+    350:viaggio 216:di 250:troppo 216:da 280:solo 150:il
+  pairs_file "$dir/it/pairs_it.tsv.gz" $'un\tpo\' 90 viaggio 40 altro 30 amico 20' $'un\'\taltra 50 amica 30' \
+    $'po\'\tdi 40 troppo 10' $'è\tun\' 20 un 10' $'da\tsolo 30 un 10' $'da\'\til 9' $'<capitals>\t'
+  out=$( { echo "lang it"; echo "complete un'al"; echo "complete un'am"; echo "complete un'ca";
+           echo "after un"; echo "after po"; echo "after da"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  local s1 s2 s3
+  s1=$(grep '^suggest' <<<"$out" | sed -n 1p); s2=$(grep '^suggest' <<<"$out" | sed -n 2p); s3=$(grep '^suggest' <<<"$out" | sed -n 3p)
+  assert_contains "$s1" "\"un'altra\""
+  assert_lacks "$s1" "un'altro"
+  assert_contains "$s2" "\"un'amica\""
+  assert_lacks "$s2" "un'amico"
+  assert_lacks "$s3" "un'cane"
+  assert_contains "$out" 'next ["viaggio", "altro", "amico"]'
+  assert_contains "$out" 'next ["di", "troppo"]'
+  # da is a word as it is: its own pairs, never da''s.
+  assert_contains "$out" 'next ["solo", "un"]'
+}
+
+# German: wordfreq casefolds, so the list has strasse and fuss, and its
+# nouns lower case. The pairs say how they are written (<written>, from the
+# sentences) and which take a capital, so they are offered as Straße and
+# Fuß, and typing fuß is no accent against fuss. ü has its own key after p:
+# a swipe through it is für, through u fur.
+german_written_forms_capitals_and_umlauts() {
+  local dir="$sandbox/langs"
+  mkdir -p "$dir/de"
+  wordlist "$dir/de/small_de.msgpack.gz" 373:strasse 380:strassen 450:fuss 470:fussball 212:"für" 465:fur \
+    266:schon 348:"schön" 359:haus 150:die 200:ich 300:weiss 231:dass 340:nicht 410:masse 500:floss
+  pairs_file "$dir/de/pairs_de.tsv.gz" $'ich\tbin 50' $'weiss\tnicht 40 dass 30' $'<capitals>\thaus' \
+    $'<written>\tfloss:floss,Floß fuss:Fuß fussball:Fußball masse:Maße,Masse strasse:Straße strassen:Straßen weiss:weiß'
+  /usr/bin/python3 - >"$sandbox/qwertz" <<'PY'
+import json
+U = 60.0
+rows, off = ["qwertzuiopü", "asdfghjklöä", "yxcvbnm"], [0, 0.25, 0.75]
+keys = {c: [(i + off[r]) * U + U / 2, r * U * 1.2 + U / 2] for r, row in enumerate(rows) for i, c in enumerate(row)}
+print("keys " + json.dumps({"unit": U, "keys": keys}))
+for word in ["für", "fur"]:
+    stops = [keys[c] for c in word]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        path += [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(5)]
+    print("swipe " + json.dumps(path + [stops[-1]]))
+PY
+  out=$( { echo "lang de"; cat "$sandbox/qwertz"; echo "complete stra"; echo "complete fuß"; echo "complete schö";
+           echo "complete hau"; echo "complete maße"; echo "complete masse"; echo "complete floß"; echo "complete floss";
+           echo "after weiß"; echo "region ch"; echo "complete stra"; echo "region"; echo "complete stra"; echo "quit"; } \
+    | sandboxed /usr/bin/env RAGTOP_DICTIONARY_DIRS= /usr/bin/python3 "$repo/predictor.py" "$dir" 2>&1) || true
+  local s1 s2 s3 s4
+  s1=$(grep '^suggest' <<<"$out" | sed -n 1p); s2=$(grep '^suggest' <<<"$out" | sed -n 2p)
+  s3=$(grep '^suggest' <<<"$out" | sed -n 3p); s4=$(grep '^suggest' <<<"$out" | sed -n 4p)
+  assert_contains "$s1" 'suggest ["Straße", "Straßen"'
+  assert_lacks "$s1" 'strasse'
+  assert_contains "$s2" '"Fuß"'
+  assert_contains "$s3" 'suggest ["schön", "schon"'
+  assert_contains "$s4" '"Haus"'
+  assert_equal "$(swiped_lines | sed 's/^swiped \["\([^"]*\)".*/\1/' | tr '\n' ' ')" "für fur " "first word of each swipe"
+  # One list word, two German words: each spelling reaches its own.
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 5p)" '"Maße"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 6p)" '"Masse"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 7p)" '"Floß"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 8p)" '"floss"'
+  # weiß, as the service sends it, finds weiss's pairs.
+  assert_contains "$out" 'next ["nicht", "dass"]'
+  # On a Swiss layout, ss; and back to ß after.
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 9p)" 'suggest ["Strasse", "Strassen"'
+  assert_contains "$(grep '^suggest' <<<"$out" | sed -n 10p)" 'suggest ["Straße", "Straßen"'
+}
+
 # English is in the repository: a machine that has fetched nothing still
 # has it, pairs and all.
 the_bundled_copy_is_read() {
@@ -638,11 +879,19 @@ run_test "predictor: an accent that was typed is kept to" a_typed_accent_is_kept
 run_test "predictor: after an elision the rest is completed, the elision kept" elisions_complete_the_rest
 run_test "predictor: each language keeps its own list" switching_back_keeps_each_list
 run_test "predictor: a swipe without accents finds the accented word" a_swipe_needs_no_accents
+run_test "predictor: in Spanish a swipe through ñ is año, through n ano" a_swipe_through_n_tilde_is_its_own
+run_test "predictor: in Spanish, typing ano still reaches año" typing_n_reaches_n_tilde
+run_test "predictor: in Spanish campana survives beside campaña; tambien still goes" n_tilde_is_no_accent_to_the_misspelling_filter
+run_test "predictor: in Portuguese ç is its own key and letter: faça and faca" c_cedilla_is_its_own_in_portuguese
+run_test "predictor: in Italian à and ò are on the swipe path, and un is a word" italian_accent_keys_are_on_the_path
+run_test "predictor: in Italian un' takes only what agrees with it, and po' is never a bare next word" italian_elided_words_and_apocopes
+run_test "predictor: German is written as the sentences write it, Straße and Fuß, nouns capitalised, ü on the swipe path" german_written_forms_capitals_and_umlauts
 run_test "predictor: a word's forms, from its root and back to it" forms_both_ways
 run_test "predictor: -er and -est are forms only as a pair, so summer is not sum's" comparatives_only_as_a_pair
 run_test "predictor: a form comes from its commonest root, try and not tri" the_commonest_root
 run_test "predictor: irregular forms, and no rule-made misspellings beside them" irregular_forms
 run_test "predictor: forms take the word's capitals" forms_follow_capitals
+run_test "predictor: tie and die take tying and dying among their forms" ie_words_go_to_ying
 run_test "predictor: no rule-made forms on two letters, so ly is not lying's" no_rules_on_two_letters
 run_test "predictor: a rare piece joins, and leads the strip" a_rare_piece_joins_strongly
 run_test "predictor: common pieces join only quietly, maybe for may be" common_pieces_join_weakly
@@ -654,6 +903,7 @@ run_test "predictor: next words, and completions ranked by the word before" next
 run_test "predictor: the bundled copy is read when nothing was fetched" the_bundled_copy_is_read
 run_test "predictor: the word before steers a swipe" a_swipe_follows_the_word_before
 run_test "predictor: a terminal's command line starts with a command, after sudo or a pipe too" commands_at_the_start
+run_test "predictor: a command name with shell syntax in it is offered escaped" odd_command_names_are_escaped
 run_test "predictor: then files and folders from the terminal's folder" files_after_it
 run_test "predictor: a name with a space is offered escaped, and completed so" escaped_names
 run_test "predictor: a quoted name is completed as one escaped word" quoted_names

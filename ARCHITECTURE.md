@@ -474,6 +474,90 @@ things English did not.
   offered, and after one and an apostrophe the rest is completed alone and
   offered with it.
 
+Spanish needed two more.
+
+- *ñ is a letter.* Spain's and Latin America's boards have an ñ key after l,
+  and a swipe through it does not pass n. Typed, ñ folds like an accent, so
+  "ano" still reaches año; but on a board with the key, a word's swipe path
+  goes through it (OWN_KEYS, key_letters). Measured on the 400 commonest ñ
+  words swiped through ñ: right first 8% → 85%, in the first three 15% →
+  98%. The misspelling filter keeps ñ too (Predictor.spellings), on every
+  board: campana is a word beside campaña, though wordfreq ranks it 116
+  rarer, and with ñ folded it went even from a perfect swipe (found by
+  Codex's review). Acute accents still decide: of 34,693 words it drops 399,
+  nearly all unaccented misspellings (tambien, despues, informacion); publico
+  still loses to público, the documented trade-off French makes too.
+- *¿ and ¡.* An opening mark keeps a sentence's start (typed-record.js), so
+  ¿qué capitalises, and is no word for the next-word context: after "Hola,
+  ¿" the word before is hola (contextNow, which also reads through « »).
+
+Portuguese is the same again with ç, after l on Portugal's board and
+Brazil's ABNT2: OWN_KEYS pt. Folded, a swipe through ç was right first 10.5%
+of the time for the 400 commonest ç words; as its own key, 92.8% (99.5% in
+the first three). The filter keeps faca and faça, forca and força apart, and
+drops 227 of 33,075 words, nearly all unaccented misspellings (nao, voce,
+tambem); ira and the verb forms publica, publico and pratica go too. One
+wordfreq list serves both Portugal and Brazil; both layouts map to it.
+Measured on held-out Tatoeba sentences: keystrokes saved 23 → 34% with
+pairs; swipe right first 93.9 → 95.0% typical, 88.1 → 90.5% sloppy.
+Gutenberg's Portuguese novels are all in the spelling before the 1911 and
+1990 reforms (Dom Casmurro, vae, titulo), so that measure (coverage 87%) is
+the weaker one here.
+
+Italian's board has keys for accented letters: è after p, ò and à after l.
+They join OWN_KEYS for the swipe path, which for the commonest words with
+each takes right first from 0% to 95% (à), 2% to 94% (ò) and 0% to 94% (è).
+They are accents, not letters of their own, so they stay out of
+SPELLED_APART: citta is the misspelling of città it looks like, and the
+filter drops 78 such words (piu, perche, citta; pero, the pear, too).
+Elisions as in French (dell'anno, quest'anno, c'è), and ELIDED for the words
+that are also elided but are words as they are (un'altra beside un amico).
+The pairs keep un' apart from un, and after un' only what they saw after
+un' is offered: un'altra and un'amica, never un'altro or un'cane (found by
+Codex's review). APOCOPES (po', mo', be', words only cut short) keep their
+apostrophe in the pairs too, and are never offered as next words, which
+would type them without it or without their space; typed, po is completed
+as any word. The imperatives da', fa', sta', va' and di' are left out: they
+are words without the apostrophe too, and taking them apart would hand da's
+pairs to da' (Codex's review again). The pairs tokenizer
+takes a trailing apostrophe only for those, so English, French, Spanish and
+Portuguese pairs build byte-identical to their pins. Held-out Tatoeba:
+keystrokes saved 24 → 38% with pairs; swipe right first 92.8 → 94.4%
+typical, 87.5 → 90.3% sloppy. Manzoni's I promessi sposi: coverage 88%.
+
+German brought two things the others did not. wordfreq casefolds, so its
+list has strasse, fuss and gross for Straße, Fuß and groß, and every noun in
+lower case. The pairs read both back from the sentences: German's are
+matched casefolded (CASEFOLDED), the capitals line carries its nouns (Haus,
+Frau, not ich or schön), and a new written line holds each list word's
+spellings in the sentences, with the capital each has mid-sentence, every
+one used at least a tenth of the time (WRITTEN: strasse:Straße,
+masse:Maße,Masse, floss:floss,Floß). One list word can be two German
+words, so the predictor offers the spelling the typing is on its way to, or
+else the commonest (Predictor.form): maße gives Maße, masse Masse, and a
+word's accents and its ranking against the typing follow that form, so fuß
+typed is Fuß. ß folds to ss (LIGATURES), so either spelling reaches it, and
+the word before is looked up casefolded, so weiß finds weiss's pairs. The
+written line is only in a file that has entries, so every other language's
+pairs build as before. Swiss German writes ss for ß: the service tells the
+predictor the layout's region ("region ch", wordRegion) and it writes ss
+there. Codex's review found all three (DE001 to DE003).
+
+ü after p, ö and ä after l join OWN_KEYS: right first for the commonest
+words with each, ü 6.5% → 96%, ö 45% → 94%, ä 2% → 97%. They stay out of
+SPELLED_APART: schon and schön, musste and müsste survive anyway, never
+beaten by fewer accents, and the 46 words the filter drops are unumlauted
+misspellings (fur, uber, konnen, munchen). Not done: Neo's ß key, on its
+letter rows, is not on the swipe path, since the list word has ss.
+Held-out Tatoeba: keystrokes saved 26 → 35% with pairs; swipe right first
+94.3 → 95.3% typical, 89.3 → 91.6% sloppy. Fontane's Effi Briest: coverage
+89%, keystrokes saved 22%.
+
+Spanish's numbers, on Galdós's Marianela (1878) and held-out Tatoeba
+sentences: coverage 92%; keystrokes saved 18% on the novel, 21 → 32% with
+pairs on the sentences; swipe right first 92.1 → 93.0% at typical wobble and
+87.4 → 89.2% sloppy, about French's.
+
 **Password fields.** fcitx5 knows what kind of field has focus, since
 applications say so through text-input (and GTK, Qt and X11 through their
 modules), and keeps it as capability flags. It does not tell an on-screen

@@ -48,6 +48,49 @@ ShellRoot {
           t.ok(false, "none held a letter after " + i + " commands")
     }],
     [0, function() {
+      // An emoji past U+FFFF is one character to the application, two UTF-16
+      // units here: BackSpace, the arrows and the length cut never split it.
+      var r = test.typed("full", ["type keep 😀 ", "key BackSpace", "key BackSpace"])
+      t.equal(r.tail, "keep ", "two BackSpaces take the space and the whole emoji")
+      r = test.typed("full", ["type a😀b", "key Left", "key Left", "key BackSpace"])
+      t.equal(r.tail, "😀b", "Left steps over the emoji, and BackSpace takes the a")
+      r = test.typed("full", ["type a😀b", "key Home", "key Right", "key Delete"])
+      t.equal(r.tail, "ab", "Delete takes the whole emoji")
+      var long = ""
+      for (var i = 0; i < 300; i++) long += "😀"
+      r = test.typed("full", ["type " + long])
+      t.ok(!/^[\udc00-\udfff]/.test(r.tail), "the length cut never leaves half an emoji at the start")
+      t.equal(Record.codePoints("x😀y"), 3, "x😀y is three characters to BackSpace")
+      long = "x"
+      for (var j = 0; j < 300; j++) long += "😀"
+      r = test.typed("full", ["type " + long])
+      t.ok(!/^[\udc00-\udfff]/.test(r.tail), "nor at an odd offset")
+      // A grapheme of more than one code point: the arrows and Delete cross
+      // it whole in a real text field, so the record lets go rather than
+      // guess. BackSpace takes the accent alone, as the field does.
+      r = test.typed("full", ["type ae\u0301b", "key Left", "key Left"])
+      t.ok(r.tail === "" && !r.fromStart, "Left into e and its accent: the record lets go")
+      r = test.typed("full", ["type ae\u0301b", "key Left", "key Delete"])
+      t.ok(r.tail === "" && !r.fromStart, "Left to just after an accent lets go too: no guessing next to one")
+      r = test.typed("full", ["type a👍🏽", "key Left"])
+      t.ok(r.tail === "" && !r.fromStart, "Left into an emoji and its skin tone: lets go")
+      r = test.typed("full", ["type a👍🏽b", "key Home", "key Right", "key Delete"])
+      t.ok(r.tail === "" && !r.fromStart, "Delete of an emoji with a skin tone: lets go")
+      // Marks and scripts beyond the plain ones: Hebrew sheva, Arabic
+      // shadda, a Devanagari vowel sign, Hangul jamo, a variation selector
+      // after a Han character. None is guessed at.
+      ;["ae\u05b0b", "ae\u0651b", "a\u0915\u093fb", "a\u1100\u1161b", "a\u6f22\udb40\udd00b"].forEach(function(s, k) {
+        var q = test.typed("full", ["type " + s, "key Left", "key Left"])
+        t.ok(q.tail === "" && !q.fromStart, "case " + k + ": Left into an unsure grapheme lets go")
+      })
+      r = test.typed("full", ["type héllo wörld", "key Left", "key Left", "key Delete"])
+      t.equal(r.tail, "héllo wörd", "Latin letters, accented or not, are still followed")
+      r = test.typed("full", ["type a😀 b", "key Left", "key Left", "key Left", "key Delete"])
+      t.equal(r.tail, "a b", "and a lone emoji beside them")
+      r = test.typed("full", ["type ae\u0301", "key BackSpace"])
+      t.equal(r.tail, "ae", "BackSpace takes the combining accent alone")
+    }],
+    [0, function() {
       ["full", "word", "none"].forEach(function(mode) {
         t.ok(test.typed(mode, []).sentenceStart, mode + ": a fresh field starts a sentence")
         t.ok(!test.typed(mode, ["type Hello"]).sentenceStart, mode + ": inside a word is no sentence start")
@@ -56,6 +99,11 @@ ShellRoot {
         t.ok(!test.typed(mode, ["type Hello", "type ,", "key space"]).sentenceStart,
              mode + ": after a comma it does not")
         t.ok(test.typed(mode, ["type Hello", "key Return"]).sentenceStart, mode + ": a new line starts one")
+        t.ok(test.typed(mode, ["type ¿"]).sentenceStart, mode + ": an opening ¿ keeps the sentence start")
+        t.ok(test.typed(mode, ["type Hola", "type .", "key space", "type ¡"]).sentenceStart,
+             mode + ": so does ¡ after a full stop")
+        t.ok(!test.typed(mode, ["type Hola", "key space", "type ¿"]).sentenceStart,
+             mode + ": but not mid-sentence")
       })
     }],
     [0, function() {

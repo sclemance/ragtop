@@ -195,17 +195,24 @@ def field_of(debug_info):
 
 
 printed_field = "unset"
-# Each ask is numbered, and an answer older than one already printed is
-# dropped: what it says is about a field that may no longer have focus.
+# Each ask is numbered, and only the newest is answered: an answer to an
+# older one is about a field that may no longer have focus, whether a later
+# answer has come yet or not (a focus change asks again while the last
+# answer is on its way).
 field_asks = 0
 field_answered = 0
+# The service's last "field <n>": every report after it is said with n, on a
+# "fieldtoken" line before it, so a report already said before the service
+# asked can be told from the answer (Service.qml, fieldReported).
+field_token = 0
 
 
 def ask_field():
     """Which field has focus, by asking fcitx5 for its report."""
-    global field_asks
+    global field_asks, field_answered
     field_asks += 1
     number = field_asks
+    field_answered = max(field_answered, number)
 
     def got(value):
         global printed_field, field_answered
@@ -215,6 +222,8 @@ def ask_field():
         field = field_of(value[0]) if value else None
         if field != printed_field:
             printed_field = field
+            if field_token:
+                say("fieldtoken", field_token)
             say("field", field)
     call(CONTROLLER, "DebugInfo", reply="(s)", done=got)
 
@@ -267,6 +276,10 @@ def arm():
 def candidates(texts, has_prev, has_next, _page, cursor):
     items = []
     for text in texts:
+        # Mozc 3.35 ends some candidates with a space ("日本語 "). It is not
+        # part of the word, so it goes, unless the candidate is nothing else:
+        # a space can itself be on offer.
+        text = text.rstrip(" ") or text
         m = NOTE.match(text)
         items.append({"text": m.group(1), "note": m.group(2)[1:-1]} if m
                      else {"text": text, "note": ""})
@@ -332,6 +345,13 @@ def on_command(source, condition):
         call(CONTROLLER, "SetCurrentIM", GLib.Variant("(s)", (arg,)))
     elif cmd == "deactivate":
         call(CONTROLLER, "Deactivate")
+    elif cmd == "field" and arg.isdigit():
+        # The service lost track (another window took focus): ask again, and
+        # say the answer even if nothing changed, so it can trust it.
+        global printed_field, field_token
+        field_token = int(arg)
+        printed_field = "unset"
+        ask_field()
     return True
 
 
