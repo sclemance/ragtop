@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.49.1 - 2026-11-17
+
+- Keep the desktop keyboard item visible while it fades out, addressing a blank landscape keyboard reported on the HP EliteBook x360 1030 G8. Disable its input when the fade finishes so held keys stop repeating while hidden.
+- Prefer a tablet-mode switch without key capabilities when several devices advertise the switch. Setup and the service now choose the Intel HID switches over combined HP WMI hotkeys on the reported machine, without broadening device permissions. Keep the first combined device as a fallback and retain the explicit device override.
+
+Thanks to HDHristov for both fixes and the HP EliteBook testing.
+
 ## 0.49.0 - 2026-11-17
 
 - Validate theme directory names before listing them and shell-quote them in menu commands. Crafted names can no longer execute commands when Omarchy evaluates the menu. Adding or refreshing the menu replaces unsafe rows written by older versions.
