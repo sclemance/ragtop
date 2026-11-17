@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Validate theme directory names before listing them and shell-quote them in menu commands. Crafted names can no longer execute commands when Omarchy evaluates the menu. Adding or refreshing the menu replaces unsafe rows written by older versions.
+
 ## 0.48.3 — 2026-11-08
 
 - `bench/touch-trace.py`, the sudo diagnostic, gives up root as soon as the touchscreen is open and writes its log as the user who ran it. The log is never opened through a link, only a regular file of theirs is used, and it is made private on every run. It no longer runs as plain root, and it takes only a `/dev/input/eventN` touchscreen.
