@@ -1,0 +1,29 @@
+[
+  {
+    "description": "prefers Intel switch-only device over HP combined hotkeys",
+    "devices": "N: Name=\"HP WMI hotkeys\"\nH: Handlers=kbd event9 \nB: KEY=180000 20000\nB: SW=22\n\nN: Name=\"Intel HID switches\"\nH: Handlers=event19 \nB: SW=2\n",
+    "path": "/dev/input/event19", "name": "Intel HID switches"
+  },
+  {
+    "description": "falls back to a combined tablet switch",
+    "devices": "N: Name=\"HP WMI hotkeys\"\nH: Handlers=kbd event9 \nB: KEY=180000\nB: SW=22\n",
+    "path": "/dev/input/event9", "name": "HP WMI hotkeys"
+  },
+  {
+    "description": "ignores switch-only devices without tablet mode",
+    "devices": "N: Name=\"Lid Switch\"\nH: Handlers=event1 \nB: SW=1\n\nN: Name=\"hotkeys\"\nH: Handlers=kbd event9 \nB: KEY=1\nB: SW=2\n",
+    "path": "/dev/input/event9", "name": "hotkeys"
+  },
+  {
+    "description": "preserves first switch-only candidate",
+    "devices": "N: Name=\"first\"\nH: Handlers=event2 \nB: SW=2\n\nN: Name=\"second\"\nH: Handlers=event3 \nB: SW=2\n",
+    "path": "/dev/input/event2", "name": "first"
+  },
+  {
+    "description": "reads the least significant word of a multiword mask",
+    "devices": "N: Name=\"switch\"\nH: Handlers=event5 \nB: SW=1 0000000000000002\n",
+    "path": "/dev/input/event5", "name": "switch"
+  },
+  {"description": "returns nothing without a tablet switch", "devices": "N: Name=\"lid\"\nH: Handlers=event1 \nB: SW=1\n", "path": "", "name": ""},
+  {"description": "ignores a switch without an event handler", "devices": "N: Name=\"switch\"\nH: Handlers=kbd \nB: SW=2\n", "path": "", "name": ""}
+]

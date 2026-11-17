@@ -1,0 +1,14 @@
+import QtQuick
+import Quickshell
+
+ShellRoot {
+  id: root
+  Harness { id: t }
+  // FROM SOURCE: findSwitchDevice
+  readonly property var cases: @CASES@
+  Component.onCompleted: t.run([[0, function() {
+    root.cases.forEach(function(c) {
+      t.equal(root.findSwitchDevice(c.devices), c.path, c.description)
+    })
+  }]])
+}
