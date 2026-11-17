@@ -1,21 +1,25 @@
 #!/bin/bash
-# The desktop keyboard fades without hiding its item or unmapping its surface.
-# This checks the source contract; the rendering failure needs a real compositor.
+# Real touch handling and repeat timers, offscreen with an inert key sink.
+# The reported blank rendering still needs the affected compositor to check.
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
-
-check_keyboard_visibility() {
-  /usr/bin/python3 - "$repo/Service.qml" <<'PY'
-import re
+make_sandbox "$old_omarchy"
+qml_harness keyboard-visibility
+sandboxed /usr/bin/python3 "$tests_dir/qml/extract.py" "$repo/Keyboard.qml" \
+  "$tests_dir/qml/keyboard-visibility/KeyboardInput.qml.in" "$harness/KeyboardInput.qml"
+sandboxed /usr/bin/python3 - "$repo" "$harness" <<'PY'
+from pathlib import Path
 import sys
 
-source = open(sys.argv[1], encoding="utf-8").read()
-window = source.split('    id: keyboardWindow\n', 1)[1].split('    Keyboard {\n', 1)[0]
-keyboard = source.split('    Keyboard {\n      id: keyboard\n', 1)[1].split('\n    }\n', 1)[0]
-assert re.search(r'^    visible: root\.keyboardAvailable && root\.layerRulesReady$', window, re.M), "keyboard surface must stay mapped while available"
-assert re.search(r'^      opacity: root\.keysShown \? 1 : 0$', keyboard, re.M), "keys must follow the requested visibility"
-assert not re.search(r'^      visible:', keyboard, re.M), "keyboard item must not be hidden during the fade"
+repo, harness = map(Path, sys.argv[1:])
+service = (repo / 'Service.qml').read_text()
+keyboard = (repo / 'Keyboard.qml').read_text()
+# Run the actual placement bindings and touch area alongside the extracted
+# handlers. Only layout and the service's external key sink are stand-ins.
+placement = service.split('    Keyboard {\n      id: keyboard\n', 1)[1].split('      service: root', 1)[0]
+touch = keyboard.split('  MultiPointTouchArea {', 1)[1].split('\n  // ---- Tracing touches', 1)[0]
+component = harness / 'KeyboardInput.qml'
+component.write_text(component.read_text().replace('  // PLACEMENT', placement)
+                     .replace('  // TOUCH AREA', '  MultiPointTouchArea {' + touch))
 PY
-}
-
-run_test "desktop keyboard fades without unmapping or hiding its item" check_keyboard_visibility
+run_qml QT_QUICK_BACKEND=software
 finish

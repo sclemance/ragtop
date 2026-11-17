@@ -1,0 +1,41 @@
+import QtQuick
+
+// A single key target with the real desktop keyboard's touch handlers.
+Item {
+  id: root
+  property bool keysShown: true
+  property string selectedKey: "left"
+  readonly property bool repeatRunning: keyRepeat.running
+  property var service: QtObject {
+    property bool touchTrace: false
+    property bool toolsOpen: false
+    property int repeatDelay: 600
+    property int repeatInterval: 40
+    property var sent: []
+    function sendKeys(command) { sent = sent.concat(command) }
+  }
+  property var mods: ({})
+  property var held: ({})
+  property var holdGrid: ({})
+  property var keysyms: ({left: "Left", delete: "Delete"})
+  property var popup: null
+  property var erase: null
+  property var stripTouch: null
+  property int pendingPoint: -1
+  property bool stripShown: false
+  function effectiveKey(key) { return key }
+  function roleOf(key) { return key }
+  function keyAt(x, y) { return selectedKey }
+  function holdOpenFor(key) { return "" }
+  function isCharacter(key) { return false }
+  function commitPending() {}
+  function swipeStart(point, key) {}
+  function swipeLifted(point) { return false }
+  function namedKeyMods() { return [] }
+  function afterKey() {}
+  function moved(point) {}
+  Item { id: board; anchors.fill: parent }
+  // PLACEMENT
+  // FROM SOURCE: holdable liftKeys press release lift repeating keyRepeat
+  // TOUCH AREA
+}
