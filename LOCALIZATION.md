@@ -5,15 +5,10 @@
 Because in 2026, localization isn't as hard as it used to be, and Linux is for
 everyone, not just English speakers.
 
-The machinery is already on the disk. A stock Omarchy machine carries 250
-locale directories and the catalogs to go with them: pacman speaks 43
-languages on it, systemd 53, GTK 117. Every one of those projects solved this
-with tools that ship in the base system. What's missing in Omarchy's case
-isn't technology, it's a decision, and a decision can arrive any time, which
-is exactly why a plugin written today shouldn't make it harder to act on.
-
-So this is not a file about translating Ragtop. It is about not standing in
-the way of the day someone does.
+The system already provides translated catalogs for many of its tools.
+Ragtop uses the same approach for its own interface. This document describes
+the shipped catalogs, how to contribute translations, and the protocol
+strings that must stay unchanged.
 
 Omarchy decided in October 2026: **"Omarchy in 50 languages"**
 ([omarchy#15326](https://github.com/omacom/omarchy/pull/15326), merged into
@@ -52,9 +47,9 @@ Omarchy decided in October 2026: **"Omarchy in 50 languages"**
   output does. What a person reads on the desktop, and the installer, is
   translated.
 - **Languages** use Omarchy's codes (`fr`, `de`, `es-MX`, `pt-BR`...). The
-  first are English, French, German, Spanish, Italian and Portuguese (see
-  the README's language support); each needs a native speaker's review
-  before it ships.
+  included catalogs are `en`, `fr`, `de`, `es-MX`, `it`, `pt` and `pt-BR`.
+  The non-English catalogs ship as drafts and still need fluent-speaker
+  review, including the name check below.
 
 ## For translators
 
@@ -81,7 +76,8 @@ newspaper), and English has slurs built on "rag-" (raghead), which the name
 is not but might be heard near. Other languages have not been checked by
 anyone who speaks them, so every language's review answers one more
 question: does "Ragtop", left as it is, sound like anything offensive, crude
-or unfortunate there? Recorded in the table below before a language ships.
+or unfortunate there? Record completed reviews in the table below. The
+included non-English catalogs have not yet completed this review.
 
 | Language | Name reviewed by | Finding |
 | --- | --- | --- |
@@ -104,15 +100,15 @@ merges and reorders most of the rendered rows, again with nothing failing.
 
 So: a string that something else reads back is **protocol**. It is English
 because ASCII is a convenient alphabet, not because it is a language, and it
-must never be translated. Ragtop's protocol strings, all of them:
+must never be translated. Examples of Ragtop's protocol strings:
 
 | Where | What |
 | --- | --- |
 | `$XDG_RUNTIME_DIR/ragtop-mode` | `tablet` / `laptop`, compared in `Service.qml` and in every overlay clone's patch |
-| `settings.conf` | keys and values (`auto`, `on`, `off`, `opaque`, `oneshot`, `raised`…), written by `ragtop`, read by `Service.qml` |
+| `settings.conf` | keys and values (`auto`, `on`, `off`, `layout`, `raised`…), written by `ragtop`, read by `Service.qml` |
 | `install.conf` | `overlays=` and its space-separated overlay names |
-| `keyboard-helper.py` stdin/stdout | the commands (`type`, `key`, `down`, `up`, `hold`, `release`, `reload`, `quit`) and the replies `ok`, `error: …`, `labels <json>` |
-| `fcitx-osk-bridge.py` stdout | `show` |
+| `keyboard-helper.py` stdin/stdout | command names and reply prefixes, including `type`, `key`, `route`, `forget`, `reload`, `ok`, `error: …` and `labels <json>` |
+| `fcitx-osk-bridge.py` stdout | `show`, `hide` and the prefixes and JSON field names of its input-method and field-state messages |
 | `overlay-clones.sh status` | `<name>: installed…`, parsed by `install.sh`'s offer and printed by `ragtop overlay status` |
 | `overlay-clones.sh tappable` | the overlay names it prints, one per line, read by `Service.qml` |
 | `overlay-clones.sh`, `setup-check.sh` | the marker strings they grep for: `id: ragtopMode`, `// Ragtop: tablet settings.` |
@@ -165,8 +161,8 @@ Most of the keyboard doesn't need translating, because it isn't words:
 | `?123`, `#+=` | Symbols, effectively |
 | **`ABC`** | The one genuinely Latin-centric label: the key back to the letters page says `ABC` whatever script you type. GBoard shows `АБВ` on Cyrillic. Ragtop already knows the layout's letters, so this could be derived rather than translated |
 | The space bar's layout name | Done: the keymap spells it `German`, and it goes through xkeyboard-config's catalog to reach `Deutsch` (see above) |
-| `Select`, `Cancel` on the picker strip | Two words, the only prose drawn on a Ragtop surface |
-| Menu labels and notifications | The bulk of it, and the part a language pack would reach first |
+| `Select`, `Cancel` on the picker strip | Translated through the shell catalog, alongside the controls, setup, tour and other surface text |
+| Menu labels and notifications | Translated through the menu, shell and CLI catalogs |
 
 Menu labels have a budget of roughly **15 characters** before the ✓ pushes
 them off the end of the row, worth remembering since most languages run
