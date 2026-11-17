@@ -1157,7 +1157,7 @@ Item {
       var words = sw[1].trim().split(/\s+/)
       if (parseInt(words[words.length - 1], 16) & 2) {
         var candidate = "/dev/input/" + handler[1]
-        // Prefer a switch-only device; keep combined devices as a fallback.
+        // Prefer a switch-only device. Keep combined devices as a fallback.
         if (!/^B: KEY=/m.test(blocks[i])) return candidate
         if (!fallback) fallback = candidate
       }

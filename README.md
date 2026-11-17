@@ -1218,6 +1218,10 @@ read by nothing and can go.
 
 Ragtop picks the input device that advertises the standard tablet-mode
 switch (`SW_TABLET_MODE`) and watches it, so a fold registers immediately.
+If several devices report the switch, Ragtop prefers the first one without
+key capabilities, which can use the switch-only access rule below. If none
+qualifies, it falls back to the first combined device. Set
+`tabletSwitchDevice` explicitly if your machine needs a different choice.
 If none exists yet, it
 keeps looking every 10 seconds, which covers keyboards that attach later.
 
