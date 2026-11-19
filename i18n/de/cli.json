@@ -39,7 +39,7 @@
   "install.exists": "%1 existiert bereits und ist nicht dieser Checkout. Entferne es zuerst.",
   "install.found": "%1 gefunden unter %2",
   "install.isCheckout": "%1 ist dieser Checkout",
-  "install.joinGroup": "Alternativ trittst du seiner Gruppe bei und meldest dich neu an (das gibt auch deine Tastaturen frei):",
+  "install.switchManual": "Der automatische Tablet-Modus ist nicht verfügbar. Wähle Einrichtung › Tablet › Tablet-Modus › Immer an oder melde dieses Gerät, damit eine gezielte Zugriffsregel geprüft werden kann.",
   "install.linked": "verknüpft %1 -> %2",
   "install.menu": "Ragtops Einstellungen werden dem Omarchy-Menü hinzugefügt (Einrichtung › Tablet)",
   "install.missing": "fehlt: %1",

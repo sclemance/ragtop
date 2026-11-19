@@ -39,7 +39,7 @@
   "install.exists": "%1 already exists and isn't this checkout. Remove it first.",
   "install.found": "found %1 at %2",
   "install.isCheckout": "%1 is this checkout",
-  "install.joinGroup": "Alternatively, join its group and log in again (this also exposes your keyboards):",
+  "install.switchManual": "Automatic tablet mode is unavailable. Use Setup › Tablet › Tablet Mode › Always On, or report this device so a narrow access rule can be checked.",
   "install.linked": "linked %1 -> %2",
   "install.menu": "Adding Ragtop's settings to the Omarchy menu (Setup › Tablet)",
   "install.missing": "missing: %1",

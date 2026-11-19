@@ -39,7 +39,7 @@
   "install.exists": "%1 existe déjà et n'est pas ce dépôt. Supprimez-le d'abord.",
   "install.found": "%1 trouvé sur %2",
   "install.isCheckout": "%1 est ce dépôt",
-  "install.joinGroup": "Ou bien rejoignez son groupe et reconnectez-vous (cela donne aussi accès à vos claviers) :",
+  "install.switchManual": "Le mode tablette automatique est indisponible. Choisissez Configuration › Tablette › Mode tablette › Toujours activé, ou signalez cet appareil pour vérifier une règle d’accès limitée.",
   "install.linked": "lien %1 -> %2",
   "install.menu": "Ajout des réglages de Ragtop au menu Omarchy (Configuration › Tablette)",
   "install.missing": "manquant : %1",

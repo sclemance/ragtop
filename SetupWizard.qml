@@ -314,7 +314,8 @@ Item {
         Loader {
           id: body
           width: parent.width
-          sourceComponent: root.step === 0 ? welcomeStep
+          sourceComponent: root.overlaysOnly ? overlayStep
+            : root.step === 0 ? welcomeStep
             : root.step === 1 ? depsStep
             : root.step === 2 ? switchStep
             : root.step === 3 ? overlayStep : finishStep

@@ -1,8 +1,8 @@
 # Theming the keyboard
 
-A Ragtop theme sets the keyboard's **form**. Its colours keep coming from
-your Omarchy theme, which is why any Ragtop theme looks right on any Omarchy
-one, and why there is no palette in here.
+A Ragtop theme sets the keyboard's **form**. Its colours follow your Omarchy
+theme by default. Individual key, label and backlight colours can be
+overridden as described below.
 
 ## What a theme is
 
@@ -373,8 +373,10 @@ With animation enabled, the default `backlight-motion = "ripple"` transitions
 the pressed light in 90 ms and sends a wave up to 2.4 key pitches away.
 Neighbours dip towards 50% with the complementary colour and the brightness
 floor above, delayed by 65 ms per pitch, with a 90 ms dip and 300 ms recovery.
-Each key replaces its prior wave; held keys resist incoming waves. Hiding
-the keyboard destroys the helpers. Static frosting/blur still has a
+Each key replaces its prior wave, and held keys resist incoming waves.
+The helpers load only for visible keys with backlighting and animation
+enabled. The desktop keyboard stays visible at zero opacity when closed,
+so fading it out does not itself unload those helpers. Static frosting/blur still has a
 compositor cost with animation disabled. A theme may explicitly set
 `backlight-motion = "off"` to suppress ripple animation.
 

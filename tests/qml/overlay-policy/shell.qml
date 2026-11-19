@@ -10,7 +10,6 @@ ShellRoot {
   Gate1 { id: gate1 }
   Gate2 { id: gate2 }
   Gate3 { id: gate3 }
-  Gate4 { id: gate4 }
   FileView {
     id: settings
     path: Quickshell.env("HOME") + "/.config/ragtop/settings.conf"
@@ -24,7 +23,7 @@ ShellRoot {
     blockWrites: true
   }
   function check(want, description) {
-    for (var gate of [gate0, gate1, gate2, gate3, gate4]) {
+    for (var gate of [gate0, gate1, gate2, gate3]) {
       t.equal(gate.askedFocus, want ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive, description + ": focus")
       t.equal(gate.exclusion, want ? ExclusionMode.Normal : ExclusionMode.Ignore, description + ": geometry")
     }
@@ -76,11 +75,11 @@ ShellRoot {
     }],
     [400, function() {
       test.check(true, "default Automatic follows tablet mode")
-      gate4.imagesLoaded = false
-      t.equal(gate4.askedFocus, WlrKeyboardFocus.None, "loading image picker takes no focus")
-      gate4.imagesLoaded = true
-      gate4.opened = false
-      t.equal(gate4.askedFocus, WlrKeyboardFocus.None, "closed image picker takes no focus")
+      gate3.imagesLoaded = false
+      t.equal(gate3.askedFocus, WlrKeyboardFocus.None, "loading image picker takes no focus")
+      gate3.imagesLoaded = true
+      gate3.opened = false
+      t.equal(gate3.askedFocus, WlrKeyboardFocus.None, "closed image picker takes no focus")
     }]
   ])
 }

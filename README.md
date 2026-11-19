@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="preview.png" width="100%" alt="Ragtop: Made for Convertables. Great for Tablets. Built for Omarchy. Glass keyboard in the 75% layout.">
+  <img src="preview.png" width="100%" alt="Ragtop: Made for Convertibles. Great for Tablets. Built for Omarchy. Glass keyboard in the 75% layout.">
 </h1>
 
 Fold the screen back, like a
@@ -14,7 +14,8 @@ Omarchy menu can be typed into. Put it back and everything returns to normal.
 > [!TIP]
 > **Ragtop is in beta, and your machine is the test.** Install it, fold the
 > screen back and enjoy it, then tell us how it went, whether it worked or
-> not. It has only been tried on two machines so far, so every report counts.
+> not. Our own touchscreen testing covers two machines. Community hardware
+> reports are listed below, and every report counts.
 >
 > **[What we'd most like to hear](#tested-hardware-feedback-wanted)** &middot;
 > **[Send a hardware report](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)** &middot;
@@ -67,8 +68,8 @@ and [the lock screen](#the-lock-screen).
 
 A convertible is a convertible whether its keyboard folds away or comes off.
 Both report the same thing, a kernel tablet-mode switch, and Ragtop follows
-either without knowing which it is looking at. That is now two machines: a
-hinge that folds, and a slate that detaches.
+either without knowing which it is looking at. Our own touchscreen testing
+covers a hinge that folds and a slate that detaches.
 
 | Kind | How it goes | |
 | --- | --- | --- |
@@ -78,8 +79,8 @@ hinge that folds, and a slate that detaches.
 
 The only thing any of this decides is *how Ragtop learns it is in tablet
 mode*. Everything after that, rotation, the keyboard, the handle, the
-overlays and the lock screen, is the same on all three and needs a touchscreen
-and nothing else.
+overlays and the lock screen, follows the same rules on all three. Each
+feature still needs the hardware and packages listed below.
 
 ### What it costs to have less
 
@@ -94,9 +95,10 @@ thing:
 | `python-gobject` or fcitx5 | The keyboard coming up on its own at a text field | Bringing it up from the handle, and everything else |
 | A touchscreen | Touch, obviously, but the keys, the handle and the panels all take a mouse | Rotation and tablet-mode switching, which is most of what a non-touch convertible wants |
 
-A plain laptop with none of the above is not a failure case either: Ragtop
-stays out of the way, the bar icons never appear, and nothing reserves screen
-space until tablet mode turns on.
+A plain laptop with none of the above is not a failure case either. The
+keyboard mode button stays in the bar, and rotation controls depend on the
+sensor. With the default Follow Sensor setting, the keyboard reserves no
+space until tablet mode turns on. Always On can enable it without a switch.
 
 ## Features
 
@@ -164,25 +166,36 @@ convertible and pointless on a slate.
 
 ## Tested hardware, feedback wanted
 
-Ragtop has been tested on these:
+Our own touchscreen testing has covered these devices. These are historical
+results, not a claim that every release or feature has been retested on both:
 
 | Device | Shape | Status |
 | --- | --- | --- |
 | Lenovo 300w Yoga Gen 4 | Convertible | Works. Folding switches modes, rotation follows the device |
 | Microsoft Surface Book 2 | Detachable | Tablet mode and rotation work: **detaching the slate turns the keyboard on exactly as folding a hinge does**, reattaching turns it off, and rotation is correct. Touch typing works once the linux-surface kernel is installed. See below |
 
-Nothing in Ragtop is written for either model: the tablet-mode switch is
+Community reports add the **HP EliteBook x360 1030 G8**. Hristov reported a
+blank landscape keyboard and selection of the wrong tablet switch, and
+contributed [PR #4](https://github.com/sclemance/ragtop/pull/4) and
+[PR #5](https://github.com/sclemance/ragtop/pull/5). Both are included in
+0.49.1, with a separate correction to cancel held input after fading. We do
+not have an HP tablet, so confirmation of the combined release on that
+hardware is still welcome. The contributor's switch testing also included
+a separate watcher-startup change that is not part of those PRs.
+
+Nothing in Ragtop is written for these models: the tablet-mode switch is
 auto-detected, and rotation comes from the standard accelerometer stack.
 
-**On a Surface, touch is the machine's problem, not Ragtop's.** Surface
-hardware needs the
+**On our Surface Book 2, touch required linux-surface.** Touch typing worked
+after installing the
 [linux-surface](https://github.com/linux-surface/linux-surface) kernel and
-firmware before its touchscreen works at all, and a stock kernel gives you a
-machine that detaches, rotates and runs Ragtop, with nothing to touch it with.
+firmware. The stock kernel on that test setup supported detaching and
+rotation but did not provide a working touchscreen. Other Surface models
+and kernel versions can differ.
 Worth knowing before you conclude the plugin is broken: check whether a touch
 device exists at all with `hyprctl devices | grep -i touch`. **If you have a
 machine we haven't listed, please try it and open an issue**, whether it works
-or not. Two machines is not a sample. There is a [hardware report
+or not. Hardware coverage is still limited. There is a [hardware report
 form](https://github.com/sclemance/ragtop/issues/new?template=hardware-report.yml)
 that asks for exactly this.
 
@@ -289,9 +302,9 @@ long as the field has focus.
 | **Typing memory** | **Setup › Tablet › Typing Memory**, or `ragtop typing-memory set`. **Full**, the default, keeps the text Ragtop typed into the field that has focus, up to 400 characters, so that deleting words can name them, BackSpace back into a word brings its suggestions back, and the next word is chosen by the one before. **Current Word Only** keeps the word being typed and lets it go once it is finished; a swiped word is held until the next key, so that another of the swipe's guesses can take its place. Suggestions and swipe still work, those three do not. **Nothing** keeps no typed characters at all, so there are no suggestions and no swipe either. In every mode, capitals, double-space full stops and hyphen joins still work. In Current Word Only and Nothing, what came before the word is kept only as the last three kinds of thing typed: a word, the end of a sentence (. ! ?), other punctuation (, ; :), a hyphen, a space, a new line, or any other mark. Never a letter, never which word, and never which mark within a kind. |
 | **When it is let go** | In every mode, when focus leaves the field, whether for another field, another window or none, and when a field takes focus, until fcitx5 has said which field it is. Ragtop asks fcitx5 which field has focus after every change it hears of, by the field's own id, so two fields that look alike are still two. When a field first takes focus, nothing is recorded until it is identified. After an ambiguous hide event, Full and Current Word Only may retain input temporarily while confirming whether the same field still has focus, for at most one second. That queue is discarded if focus changed or the check times out; Nothing does not queue typed characters. |
 | **Word suggestions and swipe** | Off unless you turn them on. The suggester is a separate Ragtop process. It is asked about the word being typed and, in Full, the word before it. It holds that word before until the next one replaces it or the field is left, and nothing else of what you typed once it has answered. Nothing is learned from what you type: its word lists are the bundled or downloaded ones, never your own writing. |
-| **Network** | Only when you ask, never by itself, and two things. **Add** on a language's offer in the strip or controls panel, or `ragtop words install`: that language's word list and pairs, about half a megabyte, from Ragtop's own `data-v1` release on GitHub, each checked against a fixed SHA-256 before it is kept. English's are in Ragtop itself and are never fetched. **Check for updates** on the controls panel, or `ragtop update check`: Ragtop's own `manifest.json` from its repository on GitHub, a couple of kilobytes, to read the version an update would install. Nothing else in Ragtop opens a socket, calls out, or names an address, and nothing you type ever leaves the machine. |
-| **What it reads** | The tablet-mode switch, which reports tablet mode or not and carries no keys. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
-| **Root** | One udev rule, offered and never assumed, installed through Omarchy's polkit prompt. Nothing of Ragtop's runs as root afterwards. No daemon, no setuid binary, and everything that ever runs privileged is the literal script in `udev-rule.sh`. |
+| **Network** | Ragtop fetches language data only when you choose Add or run `ragtop words install`: the word list and pairs come from its `data-v1` release on GitHub and are checked against fixed SHA-256 hashes. English is bundled. Check for updates, or `ragtop update check`, fetches the repository manifest from GitHub. Choosing to install or update the plugin also uses Omarchy's GitHub download path. These requests do not include what you type. |
+| **What it reads** | The selected tablet-switch device. The watcher handles only tablet-mode changes and discards unrelated events if a combined device is selected. The accelerometer, through `iio-sensor-proxy`. Whether the focused window wants text, through fcitx5. Window and layout events, from Hyprland's own socket. |
+| **Root** | Normal setup offers one udev rule through Omarchy's polkit prompt, using `udev-rule.sh`. The running keyboard and its helpers are unprivileged. The optional developer tool `sudo bench/touch-trace.py` separately opens the touchscreen device with elevated access, then drops to the invoking user before opening its log. See [Tracing touches](ARCHITECTURE.md#tracing-touches). |
 | **Its socket** | `omarchy-shell ragtop <function>` toggles the keyboard, the controls, the size and rotation, and reports what they are doing. Not one of those functions takes an argument, so nothing reaching the socket can be handed a value to act on or a key to send. |
 | **Diagnostics** | **Setup › Tablet › Copy Diagnostics** copies versions, hardware and settings. No paths under your home directory, no host name, no user name, and nothing you typed. |
 | **The overlay clones** | A clone is Omarchy's own code living in your config, where anything running as you can rewrite it. The password prompt and the lock screen are on that list. They stay off until you choose them in System Overlays and press Apply. See [Omarchy's overlays](#omarchys-overlays). |
@@ -321,11 +334,11 @@ saying so; `ragtop typing-memory set none` is the way round it.
 
 **What memory can and cannot promise.** What Ragtop lets go it stops holding
 on to; it cannot scrub the bytes, which the shell's JavaScript and Python
-leave to their own memory management. Between a key being tapped and the
-application receiving it, and while words are showing in the strip, they pass
-through the Omarchy shell, the key sender and the suggester in every mode, as
-they must for any on-screen keyboard. Anything that runs inside the Omarchy
-shell, which every Omarchy plugin does, shares its memory; and swap, or a
+leave to their own memory management. Keys and text pass through the Omarchy
+shell and key sender before reaching the application. When suggestions are
+enabled, the relevant word or terminal helper also receives the text needed
+for its requests. Typing Memory set to Nothing disables those requests.
+Anything that runs inside the Omarchy shell shares its memory, and swap or a
 crash report of the shell, can copy whatever is in memory at that moment to
 disk. Typing Memory decides how much is there to copy, not whether a program
 you have installed can watch you type.
@@ -359,8 +372,9 @@ won't bring it up. To turn this off, tap **Setup › Tablet › Auto Keyboard** 
 the Omarchy menu.
 
 If you've turned on touch typing for them, the keyboard also comes up on its own
-when you open the Omarchy menu, the emoji or clipboard picker, or a password
-prompt, and goes away when you close it.
+when you open the Omarchy menu or the emoji or clipboard picker, and goes
+away when you close it. The polkit password prompt uses an embedded password
+keyboard instead, with the prompt retaining exclusive focus.
 
 **Tapping the screen ends the screensaver.** Omarchy's screensaver is a
 fullscreen terminal that quits when it reads a key, which a touchscreen never
@@ -691,7 +705,7 @@ again brings back whichever you chose.
 
 **Each language's word list is offered where its words would go.** The first
 time you type on a layout whose list Ragtop has but you do not, the strip
-says *Add French word suggestions (135 KB)* and *Not now*. Add fetches it
+says, for example, *Add French word suggestions (495 KB)* and *Not now*. Add fetches it
 (see [Privacy and security](#privacy-and-security)) and suggestions start at
 once; Not now is remembered. The controls panel offers Add again, and
 `ragtop words install fr` (or `es`, `pt`, `it`, `de`) fetches it any
@@ -961,7 +975,7 @@ The theme and background pickers (both Omarchy's image picker) have the same
 problem and one of their own: see [The theme and background
 pickers](#the-theme-and-background-pickers).
 
-Ragtop can replace them with clones (made with Omarchy's own
+Ragtop can replace the menu and pickers with clones (made with Omarchy's own
 `omarchy plugin clone`) that cooperate whenever the Keyboard setting enables
 the keyboard: Always On in either device mode, or Follow Sensor in tablet
 mode. They
@@ -972,6 +986,13 @@ focus and reserved-space behavior. On-demand focus can let a window under
 the mouse on another monitor take focus away.
 The menu's clone carries one more change, for a reason that has nothing to do
 with touch: see [The menu's Apps list](#the-menus-apps-list).
+
+The **Password Prompt** clone keeps exclusive focus and embeds the same flat
+password keyboard used on the lock screen. Its taps edit only the prompt's
+own password field, and Enter calls the prompt's original submit handler.
+It sends no virtual key events. While a polkit prompt is open, Ragtop hides
+the desktop keyboard and blocks its outgoing input, including delayed
+suggestion results. The embedded keyboard follows the Keyboard setting.
 
 Replacing part of Omarchy is your call, so each clone is off until you turn it
 on. The installer offers all of them once, with the trade-off below and No as
@@ -1002,16 +1023,16 @@ What turning one on means:
   placement stay intact; the shell coalesces the changes into a reload.
   Previous copies remain in the reported hidden backup directory. Initial
   installation and removal still use Omarchy's per-plugin commands.
-- **With the keyboard enabled it doesn't hold focus exclusively.** That's the fix,
-  but it also means another window could take keyboard focus while the overlay
+- **The menu and picker clones do not hold focus exclusively with the keyboard enabled.**
+  Another window could take keyboard focus while the overlay
   is open, for example one under the mouse on a second monitor, and receive
   what you type.
 - **The password prompt matters most.** Its clone keeps its authentication role
   (Omarchy passes a clone its original's capabilities), but its code then lives
-  in your user-writable config instead of the root-owned system folder, and the
-  point above applies to your password. Anything running as you could already
-  interfere with your session in other ways, but it's the one to think about
-  before turning on.
+  in your user-writable config instead of the root-owned system folder. Its
+  embedded keyboard edits that prompt directly. The on-demand focus trade-off
+  above does not apply to authentication. The user-writable clone still needs
+  the same trust as other code running in your session.
 
 ### Overlays that share a window
 
@@ -1239,12 +1260,15 @@ If tablet mode is never detected:
   keyboard, the installer offers to install
   `/etc/udev/rules.d/70-ragtop-tablet-switch.rules`:
 
-  ``` SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1",
-  ENV{ID_INPUT_KEY}!="1", TAG+="uaccess" ```
+  ```
+  SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{ID_INPUT_KEY}!="1", TAG+="uaccess"
+  ```
 
   It gives the user logged in at the machine read access to switch devices
   only (tablet mode, lid, headphone jack), never keyboards, and takes effect
-  without logging out. The uninstaller removes it.
+  without logging out. The uninstaller removes it. If access is still unavailable,
+  setup offers **Tablet Mode › Always On** instead. It does not recommend
+  joining the input-device group.
 - Rotation is separate: it needs `iio-sensor-proxy` to see your accelerometer
   with the right orientation, which is handled by your distribution's hardware
   database, not Ragtop.
@@ -1253,7 +1277,9 @@ If tablet mode is never detected:
 
 True today, and worth saying if you want them gone:
 
-- **Word suggestions and swipe are English and French only, and in beta.** See
+- **Word suggestions and swipe are in beta for English, French, Spanish,
+  Portuguese, Italian and German.** Other prediction languages are not yet
+  included. See
   [Word suggestions and swipe](#word-suggestions-and-swipe).
 - **Chinese, Japanese and Korean are in beta.** They work through
   fcitx5's engines, with their choices in a strip above the keys, and have
@@ -1332,10 +1358,9 @@ reaches them through [Fn](#which-board).
   says, would close some of that. Learning pairs from your own typing would
   mean keeping what you type, so that could only be opt-in, kept on the
   machine, and never fed from a password field or a terminal.
-- **More languages** for suggestions and swipe. wordfreq has lists for 42,
-  and each is added once its accents, apostrophes and capitals have been made
-  to work: Spanish and Portuguese next, then German, whose nouns wordfreq
-  keeps in lower case.
+- **More languages** for suggestions and swipe, beyond the six already
+  included. Each needs its accents, apostrophes and capitals checked, and
+  benchmark results that justify adding its data.
 - **Whether a folded machine silences its own keyboard.** On a Lenovo Yoga the
   built-in keyboard and touchpad appear to stop reporting when the screen is
   folded back, which would mean Ragtop has nothing to do. Whether that is the
@@ -1527,14 +1552,20 @@ afterwards, and rolls back if that fails. There are no release channels.
 Whatever is on the branch is what you get, so the branch is kept shippable
 and every push is, in effect, a release.
 
+The marketplace listing has a separate approval process. It publishes an
+exact verified commit snapshot, which can lag behind `main`. A successful
+update from the repository does not mean that commit has marketplace
+approval. See the marketplace's
+[verification process](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/VERIFICATION.md).
+
 The version in `manifest.json` is required, since `omarchy plugin validate`
 refuses a manifest without one, but Omarchy itself never shows it: not in
 `omarchy plugin list`, not in its JSON. So it is here for people, in the
 release tags and in bug reports.
 
-**Ragtop is in beta, and the version is 0.x while that is true.** It runs two
-machines every day and it wants strangers to break it, so bugs and hardware
-reports are the point of this stage, and so is telling us what is awkward.
+**Ragtop is in beta, and the version is 0.x while that is true.** Bugs,
+hardware reports and feedback about awkward behavior are the point of this
+stage.
 Features will change and be added meanwhile, because usability is not
 something you finish before shipping and then stop doing. What 0.x says
 honestly is that the settings file, the `ragtop` command and the rest are

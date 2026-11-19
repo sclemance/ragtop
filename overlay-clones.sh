@@ -4,7 +4,7 @@
 # picker) and its lock screen, patched for tablets.
 #
 # While the Keyboard setting enables the keyboard (Always On, or Follow
-# Sensor with tablet mode from $XDG_RUNTIME_DIR/ragtop-mode), each clone:
+# Sensor with tablet mode from $XDG_RUNTIME_DIR/ragtop-mode), menu and picker clones:
 #   - takes keyboard focus on demand instead of exclusively. Hyprland routes
 #     every touch to a layer surface with exclusive focus before hit-testing
 #     anything above it, so with a stock overlay a tap on the on-screen
@@ -25,9 +25,9 @@
 # it closes, which is how Ragtop's service follows it. Anything written a
 # third way is not patched.
 #
-# The lock screen is a session lock, which hides every other surface, the
-# on-screen keyboard included, so its clone instead loads Ragtop's own
-# LockKeyboard.qml at the bottom, following Ragtop's Keyboard setting.
+# The polkit prompt keeps exclusive focus and the lock keeps its session
+# lock. Both load LockKeyboard.qml inside their own surface. It edits only
+# their password field and never sends virtual keys to compositor focus.
 #
 # Clones stop receiving Omarchy's updates, so `sync` re-clones and re-patches
 # any whose built-in has changed. `install` registers it as an Omarchy
@@ -49,7 +49,7 @@ overlays=(menu:Menu.qml emojis:Emojis.qml clipboard:Clipboard.qml polkit:PolkitA
 
 # Bumped whenever the patches below change, so `sync` re-clones a clone that
 # was made by an older Ragtop even though Omarchy's own file hasn't moved.
-patch_revision=6
+patch_revision=7
 
 plugins_dir="$HOME/.config/omarchy/plugins"
 omarchy_root="${OMARCHY_PATH:-/usr/share/omarchy}"
@@ -294,6 +294,42 @@ patched_window=${patched_window/ragtopTablet: ragtopMode.tablet/ragtopTablet: ra
 patched_window="$patched_window
 $lock_settings_view"
 
+# Authentication keeps exclusive focus. Its keyboard lives on the same
+# surface and edits only that prompt, never the compositor's focused window.
+stock_polkit_view='    BorderSurface {
+      id: card'
+patched_polkit_view="    $mode_file_view
+$lock_settings_view
+$(cat <<'POLKIT_KEYBOARD'
+    QtObject {
+      id: ragtopPasswordView
+      readonly property real height: panel.height
+      readonly property real fieldHeight: root.cardHeight
+      readonly property bool inputEnabled: root.dialogVisible && root.responseRequired
+        && !root.closing && !root.submitted && !root.errorFlash && polkitAgent.flow !== null
+      readonly property bool authenticatingPassword: root.submitted
+      readonly property string passwordText: passwordInput.text
+      function wakeRequested() { if (inputEnabled) root.refocus() }
+      function passwordTextEdited(text) { if (inputEnabled) passwordInput.text = text }
+      function submitPassword(text) {
+        if (!inputEnabled) return
+        passwordInput.text = text
+        root.submitResponse()
+      }
+    }
+    Loader {
+      id: ragtopPasswordKeyboard
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      active: ragtopKeyboardSettings.available && root.dialogVisible
+      source: "file://" + Quickshell.env("HOME") + "/.config/omarchy/plugins/sclemance.ragtop/LockKeyboard.qml"
+      onLoaded: item.view = ragtopPasswordView
+    }
+POLKIT_KEYBOARD
+)
+$stock_polkit_view"
+
 # Per-overlay paths and patch (stock/patched text pairs), set by select_overlay.
 # `window_patch` is what an entry file gets instead of `patch` when its
 # surface is an instance of the shared OverlayWindow. `legacy` holds pairs
@@ -311,6 +347,10 @@ select_overlay() {
   if [[ $name == lock ]]; then
     patch=("$stock_lock_import" "$patched_lock_import" "$stock_lock_view" "$patched_lock_view")
     legacy=("$stock_lock_view" "$legacy_lock_view_v4" "$stock_lock_view" "$legacy_lock_view")
+  elif [[ $name == polkit ]]; then
+    patch=("$stock_polkit_view" "$patched_polkit_view")
+    legacy=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion"
+            "$stock_focus" "$legacy_focus")
   elif [[ $name == menu ]]; then
     patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion"
            "$stock_menu_apps" "$patched_menu_apps")
@@ -322,8 +362,7 @@ select_overlay() {
     legacy=("$stock_picker_focus" "$legacy_picker_focus")
   else
     patch=("$stock_focus" "$patched_focus" "$stock_exclusion" "$patched_exclusion")
-    # The password prompt is still a window of its own at 7cc6a55.
-    [[ $name == polkit ]] || window_patch=("$stock_window" "$patched_window")
+    window_patch=("$stock_window" "$patched_window")
     legacy=("$stock_focus" "$legacy_focus")
   fi
   if [[ $name != lock ]]; then
@@ -438,7 +477,14 @@ patch_clone() {
   else
     # The lines `patch` looks for are a window's own. Found in a file that
     # also has an OverlayWindow, they are not what they were written for.
-    replace "$clone_dir/$entry" apply --never 'OverlayWindow {' "${patch[@]}"
+    if [[ $name == polkit ]]; then
+      replace "$clone_dir/$entry" apply --never 'OverlayWindow {' \
+        --line "$stock_focus" --line "$stock_exclusion" \
+        --once 'id: passwordInput' --once 'function submitResponse()' \
+        --once 'function refocus()' "${patch[@]}"
+    else
+      replace "$clone_dir/$entry" apply --never 'OverlayWindow {' "${patch[@]}"
+    fi
   fi
 }
 
@@ -626,7 +672,8 @@ write_file() {
 }
 
 # The copy kept outside Ragtop: this script and what it reads. Replaced as a
-# whole, so a copy is never half one version and half another.
+# whole through an atomic directory exchange, so the hooks always find a
+# complete version even if publication is interrupted.
 refresh_keeper() {
   [[ $repo != "$keeper_dir" ]] || return 0
   if [[ -d $keeper_dir ]] && cmp -s "$self" "$keeper_dir/overlay-clones.sh" &&
@@ -643,8 +690,10 @@ refresh_keeper() {
     rm -rf -- "$tmp"
     return 1
   fi
-  rm -rf -- "$keeper_dir"
-  mv "$tmp" "$keeper_dir"
+  if ! /usr/bin/python3 "$repo/overlay-publish.py" keeper "$tmp" "$keeper_dir"; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
 }
 
 install_hook() {
@@ -1025,7 +1074,7 @@ cooperative_focus_on() {
   esac
 }
 tappable_one() {
-  [[ $name != lock ]] || return 0
+  [[ $name != lock && $name != polkit ]] || return 0
   if [[ -e $clone_dir || -L $clone_dir ]]; then
     if is_patched; then echo "$name"; fi
   elif grep -qs '^    cooperativeFocus: ' "$builtin_dir/$entry" && cooperative_focus_on; then

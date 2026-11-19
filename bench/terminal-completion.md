@@ -38,7 +38,7 @@ startup, 109 ms first command lookup, 0.44 ms median warm request/response
 (30 queries), and about 20 MiB RSS. These are local samples, not latency
 promises; cold filesystem and system load matter. The previous in-predictor
 first command lookup measured about 350 ms. The additional helper has a
-memory cost persists after first use until a privacy/feature shutdown; ordinary
+memory cost that persists after first use until a privacy/feature shutdown; ordinary
 focus changes and hide/show reuse the warm worker. The principal guarantee is that
 terminal work no longer serializes word and swipe work. Touch-to-text latency
 and large/network-mounted directories were not benchmarked.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.49.2 - 2026-11-19
+
+- Keep the polkit password prompt's exclusive focus and embed the password keyboard inside its own surface. Touch input edits only that prompt and submits through its original handler. Hide the desktop keyboard and block its typed input while the prompt is open. Upgrade unedited older clones without overwriting user edits.
+- Remove the installer's broad input-group recommendation. If the narrow tablet-switch rule cannot provide access, suggest manual Tablet Mode instead.
+- Rotate only after the lock probe succeeds and explicitly reports an unlocked session. Errors, missing answers and timeouts defer rotation and retry.
+- Open the overlay controls from System Overlays so selections can be changed and applied.
+- Replace the kept overlay cleanup helper atomically, preserving a complete copy if publication is interrupted.
+- Correct documentation for the current setup, privacy controls, overlays, localization and development workflow.
+
 ## 0.49.1 - 2026-11-17
 
 - Keep the desktop keyboard item visible while it fades out, addressing a blank landscape keyboard reported on the HP EliteBook x360 1030 G8. Disable its input when the fade finishes so held keys stop repeating while hidden.

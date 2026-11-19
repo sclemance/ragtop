@@ -74,6 +74,19 @@ def move_new(first, second):
     rename_pair(first, second, 1)  # RENAME_NOREPLACE
 
 
+def publish_keeper(staged, live):
+    """Keep the cleanup helper available throughout a replacement."""
+    signature(staged)
+    if os.path.lexists(live):
+        signature(live)
+        exchange(staged, live)
+        # An interruption here leaves the complete new keeper at its usual
+        # path and the old copy in staging. It never leaves the hooks stranded.
+        shutil.rmtree(staged)
+    else:
+        move_new(staged, live)
+
+
 def configured(config, records):
     """Mirror Omarchy's clone enable/restore semantics for our six overlays."""
     config = copy.deepcopy(config)
@@ -256,6 +269,8 @@ def main():
         apply([json.loads(arg) for arg in sys.argv[4:]], sys.argv[2], sys.argv[3])
     elif sys.argv[1] == "publish":
         publish([json.loads(arg) for arg in sys.argv[2:]])
+    elif sys.argv[1] == "keeper" and len(sys.argv) == 4:
+        publish_keeper(*sys.argv[2:])
     else:
         raise ValueError("Usage: overlay-publish.py stage <builtin> <live> <staged> | publish <records...>")
 

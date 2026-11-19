@@ -3,13 +3,15 @@
 What Ragtop is made of and how the pieces reach the machine. README.md says
 what it does and how to use it. This says how it works.
 
-Written against Omarchy 4.0.4, Hyprland 0.56.2 and Quickshell 0.3.1.
+Originally written against Omarchy 4.0.4, Hyprland 0.56.2 and Quickshell
+0.3.1. The overlay fixtures now also cover Omarchy 4.5.0. Historical
+measurements below describe their stated environment.
 
 ## Where it runs
 
 Ragtop is an Omarchy plugin, which means it is QML loaded into Omarchy's own
-Quickshell process. It is not a program of its own and it has no process of
-its own. `manifest.json` declares two entry points:
+Quickshell process. Its UI has no separate process, but the service starts
+helper processes described below. `manifest.json` declares two entry points:
 
 - `service` is `Service.qml`, loaded once at shell start and never visible.
   It owns every piece of state and every child process.
@@ -41,7 +43,7 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `KeyboardTheme.qml` | Reads the look settings and resolves them into colours, sizes and corners. |
 | `SuggestionStrip.qml` | The band above the keys with an input method's choices. Draws, and says which item a touch means. |
 | `KeyIcon.qml` | Icons Ragtop draws itself as paths rather than taking from a font. |
-| `LockKeyboard.qml` | A second, standalone keyboard for the lock screen. See below for why it is separate. |
+| `LockKeyboard.qml` | A standalone password keyboard embedded in the lock screen and polkit prompt. See below for why it is separate. |
 | `LockKeyIcon.qml` | The same idea for the lock screen. |
 | `Tour.qml` | The guided tour, drawn on the overlay layer. Shows, never changes. |
 | `ToolsPanel.qml` | The settings panel that comes up over the keyboard. |
@@ -64,16 +66,17 @@ directory is a symlink into the repo and the watcher does not follow it.
 ## Surfaces on screen
 
 Every surface is a Quickshell `PanelWindow`, which is a Wayland layer
-surface. There are six.
+surface. There are seven.
 
 | Namespace | Layer | Exclusion | What it is |
 | --- | --- | --- | --- |
 | `ragtop-keyboard` | Top | Normal | The keyboard. Reserves its visible height (below). |
 | `ragtop-keyboard-handle` | Top | Auto | The grab handle when the keyboard is down. |
-| `ragtop-tools` | Top | Normal | The settings panel. |
+| `ragtop-tools` | Overlay | Normal | The settings panel. |
 | `ragtop-picker-nav` | Top | Auto | The image picker strip. |
 | `ragtop-overlay` | Top | Ignore | Full screen and above the keys: the dim behind the controls, and the tour. Takes no touches unless one of those is up. |
 | `ragtop-screensaver-catcher` | Overlay | Ignore | Swallows the first tap that dismisses the screensaver. |
+| `ragtop-setup` | Overlay | Ignore | The setup wizard. |
 
 Two things decide what a touch hits.
 
@@ -93,15 +96,17 @@ was first ordered 2 and drew under the keys, which the controls' dim never
 showed, since it leaves a hole for the keyboard. The tour dims the keys
 themselves, so it has to be over them.
 
-**Input masks** decide where a surface takes touches at all. Every surface
-sets `mask: Region { item: ... }` pointing at whatever it actually draws.
+**Input masks** decide where a surface takes touches at all. A
+`mask: Region { item: ... }` limits input to the referenced item.
 Outside that region touches fall through to whatever is underneath. This is
 why the overlay can cover the whole screen and still take nothing at all
 while neither the controls nor the tour is up.
 
 The keyboard's surface keeps one height while a suggestion strip comes and
 goes, its room kept clear when hidden, and reserves only what can be seen
-(`exclusiveZone: keyboard.visibleHeight`). Hyprland places a resized layer
+(`exclusiveZone: root.oskVisible ? keyboard.reservedHeight : 0`). The
+reservation settles between touches, so a changing strip does not resize
+the workspace during a swipe. Hyprland places a resized layer
 surface a frame late, which made the keys bounce; changing only the
 reservation moves the windows above and leaves the keyboard still. Its
 contents are laid out from the bottom for the same reason. And the surface
@@ -109,6 +114,12 @@ stays mapped for as long as there is a keyboard, hidden by drawing nothing,
 masking every touch out and reserving nothing: Hyprland puts a newly mapped
 layer at the screen's edge before its layer rule orders it, so mapping it at
 each show pushed the handle up above it for a tenth of a second.
+
+The desktop `Keyboard` item also stays visible while its opacity fades to
+zero. Toggling the item's visibility left its keys blank on a reported HP
+setup. `enabled: opacity > 0` cancels held touches and their repeat timer
+when the fade finishes. The behavioral test covers input cancellation and
+reopening, not the compositor-specific rendering fault.
 
 There is no background behind the keys, on the keyboard or the picker strip:
 an opinionated change in 0.48.0, in line with Omarchy's design, since the
@@ -184,11 +195,14 @@ A convertible reports being folded as an evdev switch event, `EV_SW` code
 state with an ioctl so it is right from the first moment rather than from
 the first change, then blocks reading events and prints a line per change.
 
-`find-tablet-switch.py` picks the device. The bar widget also takes an
-explicit device path in its settings for machines where detection is wrong.
+`find-tablet-switch.py` picks the device during setup. The service's
+`findSwitchDevice` uses the same selection order: the first tablet switch
+without key capabilities, or the first combined device if none qualifies.
+Shared fixtures check both implementations. The bar widget also takes an
+explicit `tabletSwitchDevice` path for machines where detection is wrong.
 
-The device is only readable because of a udev rule that `udev-rule.sh`
-installs:
+If the selected device is not already readable, setup offers the udev rule
+that `udev-rule.sh` installs:
 
 ```
 SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_SWITCH}=="1", ENV{ID_INPUT_KEY}!="1", TAG+="uaccess"
@@ -214,6 +228,11 @@ the transform itself:
 | left-up | 1 |
 | bottom-up | 2 |
 | right-up | 3 |
+
+Before applying a transform, the service checks the session lock. Only a
+successful probe answering `false` permits rotation. A locked session,
+missing or malformed answer, failed command or three-second timeout defers
+rotation and retries after two seconds.
 
 `monitor-sensor` asks iio-sensor-proxy to claim the accelerometer over
 D-Bus. That call can hang. When it does, `monitor-sensor` gives up and
@@ -629,14 +648,15 @@ about 150, a rule-made form far rarer than the root is dropped (childs). The
 rules and table are about 6 KB, and other languages are expected at 10 to 25
 KB each, French's conjugations the largest.
 
-**What turns them off.** A layout whose xkb name is not English (the helper
-now reports `code` in its labels, since the name is translated), unless the
-setting is `all`, the override for that derived decision; a CJK engine; and
-a password field, which turns off more than these (below). The setting
-is `predictions=off|english|all` (`on` from before is read as english), and
-`predictions-on` remembers which of the two a toggle brings back. Swipe is
-only active with suggestions (`swipeActive` requires `predicting`), and its
-own setting survives them being off.
+**What turns them off.** Word suggestions require a supported layout
+language and an installed word list, unless `all` selects English on any
+layout. The setting is `predictions=off|layout|all`. Legacy `on` and
+`english` values are read as `layout`, and `predictions-on` remembers which
+mode a toggle restores. A composing CJK engine, a sensitive or unidentified
+field, and Typing Memory set to Nothing disable word prediction. At a
+recognized terminal prompt, terminal completions take its place. Swipe is
+only active with word suggestions (`swipeActive` requires `predicting`),
+and its own setting survives them being off.
 
 ## The overlay clones
 
@@ -645,12 +665,18 @@ routes every touch to a layer surface with exclusive focus before hit
 testing anything above it, so with a stock overlay a tap on the on-screen
 keyboard lands on the overlay and closes it.
 
-`overlay-clones.sh` clones the menu, emoji picker, clipboard picker, polkit
-prompt, image picker and lock screen, and patches each one to take focus on
-demand instead, and to respect reserved space so it sits above the keyboard.
-The patch is conditional on `$XDG_RUNTIME_DIR/ragtop-mode`, so in laptop
-mode each clone behaves exactly like the original. The focus approach comes
-from Gimbal (MIT).
+`overlay-clones.sh` supports six clones. The menu and three pickers use
+on-demand focus and respect reserved space while the Keyboard setting enables
+the desktop keyboard. The focus approach comes from Gimbal (MIT).
+
+The polkit prompt keeps exclusive focus. Like the lock screen, it embeds
+`LockKeyboard.qml` inside its own surface. A small adapter edits only the
+polkit password field and calls its original submission handler, guarded by
+whether the prompt is still requesting input. No password tap goes through
+Wayland's virtual keyboard or the desktop suggestion helpers. The desktop
+service tracks polkit's namespace independently of cooperative overlays,
+hides its own keyboard and blocks outgoing input while the prompt is open.
+Revision 7 migrates unedited older clones through the normal sync path.
 
 A clone stops receiving Omarchy's updates, so `sync` re-clones and re-patches
 any whose built-in has changed, and `install` registers it as an Omarchy
@@ -666,7 +692,10 @@ Three things trigger it: the service's `Component.onDestruction`, through
 `post-boot` hook; and the `post-update` hook. It removes only clones that
 `clone_is_ours`, through the same `apply_selection` as Setup, and then the
 hooks and the copy. Startup sync rewrites the hooks and refreshes the copy,
-so an existing install picks this up without a reinstall. The polkit and lock clones keep their authentication
+so an existing install picks this up without a reinstall. Keeper refresh
+stages a complete replacement, then uses the same atomic directory exchange
+as clone publication. Interruption leaves a complete old or new helper at
+the hooks' path. The polkit and lock clones keep their authentication
 capability because Omarchy stamps a clone with its source's capabilities via
 `clonedFrom`.
 
@@ -721,17 +750,19 @@ of allowed values, writes what survives, and **clears every look key the
 theme did not name**. A theme is a whole look rather than a patch, so
 switching themes cannot leave part of the last one behind.
 
-That validation exists in three places and all three have to agree:
-
-1. `ragtop` (Python), which decides what may be written at all.
-2. `Service.qml`, which reads the settings into the live theme.
-3. `LockKeyboard.qml`, which reads them again for the lock screen.
+The Python reader inside `ragtop` validates theme fields before writing
+them. `Service.qml` checks the saved settings again when constructing the
+desktop theme. Those two sets of allowed values must agree.
 
 The CLI drops unknown keys silently and on purpose, so a value the CLI has
 not been taught never reaches QML and the keyboard renders the fallback with
-no error anywhere explaining why. Anything added to one of the three has to
-be added to all three, and in the CLI to both the whitelist and the list of
-keys an apply clears.
+no error anywhere explaining why. A new desktop theme field has to
+be added to both readers. The CLI derives the keys an apply clears from its
+validation tables, plus `corners`.
+
+`LockKeyboard.qml` does not read desktop theme fields. It uses the flat
+Omarchy appearance in lock colours and independently validates only the
+user's `sizeNudge` from the runtime style file.
 
 The CLI also carries `ragtop diagnostics`, which gathers what a bug report
 needs and deliberately leaves out home directory paths, the host name and
@@ -739,18 +770,21 @@ the user name, since it is meant to be pasted into a public issue.
 
 ## Background processes
 
-Four things run as child processes and each can die while everything on
-screen still looks right:
+The persistent background workers include:
 
 - `keyboard-helper.py`
 - `fcitx-osk-bridge.py`
 - `tablet-switch.py`
 - `monitor-sensor`
+- `predictor.py`
+- `terminal-helper.py`
 
-They share one retry policy: backoff of 3s, 15s, 60s, 5m, a run of ten
+The key sender, focus bridge and switch watcher share a retry policy:
+backoff of 3s, 15s, 60s, 5m, a run of ten
 seconds counts as good and resets the count, and the user is told once at
 the second consecutive failure rather than every time. The sensor has its
-own longer backoff for the reason above.
+own longer backoff for the reason above. Prediction and terminal workers
+have their own demand and retry handling. See Completion scheduling below.
 
 `ragtop health` exists because of this. It returns the state of each of
 them, and it is the only honest answer to "is it working".
@@ -763,13 +797,15 @@ nothing on the socket can be handed a value to act on:
 
 ```
 showKeyboard  hideKeyboard  toggleKeyboard  keyboardVisible
-toggleControls  growKeyboard  shrinkKeyboard
-cycleRotation  rotationState
-startTour  openSetup  closeSetup  health
+openControls  toggleControls  growKeyboard  shrinkKeyboard
+cycleRotation  rotationState  cycleKeyboardMode  keyboardModeState
+startTour  openSetup  openOverlays  closeSetup  health
+keyboardState  pickerState  touchTraceOn  touchTraceOff  touchTraceLog
 ```
 
-A temporary probe function is the standard way to test something that needs
-touch or needs to be seen. Add it, use it, remove it before committing.
+These functions change UI state or return diagnostics. None sends a key.
+Test touch handling through the isolated Qt harness or a real touch on the
+keyboard. Do not expose key injection through the IPC interface.
 
 ## Dependencies
 
@@ -803,9 +839,10 @@ tests/run                    # everything
 tests/run overlay-clones     # one file: tests/overlay-clones-test.sh
 ```
 
-Needs `bash`, `python3`, `jq` and `quickshell`. The tests cover the overlay
-clones, which is the part of Ragtop that breaks when Omarchy changes and
-cannot be checked by looking.
+Needs `bash`, `python3`, `jq` and `quickshell`. The tests cover overlay
+clones, keyboard input and rendering contracts, prediction, settings,
+installation and cleanup. Some integration tests need additional packages
+and report a skip when those are missing.
 
 Nothing in them touches the machine they run on. Each test gets a throwaway
 `HOME` and `XDG_RUNTIME_DIR` and an environment built from nothing, so there
@@ -815,11 +852,13 @@ filesystem what the real ones do and leaves out the running shell.
 
 | File | What it runs |
 | --- | --- |
-| `overlay-clones-test.sh` | The real `overlay-clones.sh` against copies of three Omarchy trees in `tests/fixtures`: 4.0.4, `7cc6a55` and 4.5.0-rc1. Install, status, sync, remove, edited clones, failed patches, moving between the two, shapes it must refuse. |
+| `overlay-clones-test.sh` | The real `overlay-clones.sh` against four Omarchy trees in `tests/fixtures`: 4.0.4, `7cc6a55`, 4.5.0-rc1 and 4.5.0. Install, status, sync, remove, edited clones, failed patches, upgrades and shapes it must refuse. |
 | `input-methods-test.sh` | The real bridge and the helper's fcitx route against a private fcitx5 with Mozc, Pinyin and Hangul, on a bus of its own: 日本語, 你好 and 한글 typed and chosen, shortcuts kept off the route. Skipped where the engines are not installed. |
 | `predictor-test.sh` | `predictor.py` against a made-up list in wordfreq's format: ranking, capitals, corrections by neighbouring keys, and swipes drawn through QWERTY with a fixed miss at every key. |
 | `suggestion-strip-test.sh` | `SuggestionStrip.qml` loaded offscreen: which item a touch means, at the arrows and scrolled. |
-| `overlay-window-test.sh` | The window the patcher generates for a clone, from `7cc6a55` and from 4.5.0-rc1, loaded by quickshell offscreen: what it asks for closed and open, in laptop and tablet mode, and when it lets its content be seen. |
+| `overlay-window-test.sh` | The window the patcher generates for a clone, from `7cc6a55`, 4.5.0-rc1 and 4.5.0, loaded by quickshell offscreen: what it asks for closed and open, in laptop and tablet mode, and when it lets its content be seen. |
+| `keyboard-visibility-test.sh` | Actual Qt touches and repeat timers offscreen: held Left and Delete cancel after fading, stay stopped while hidden, and accept a fresh tap after reopening. |
+| `tablet-switch-test.sh` | Shared device fixtures run through the Python setup selector and the extracted QML service selector, including the HP/Intel ordering and combined-device fallback. |
 
 The QML tests stop where the compositor starts. A `PanelWindow` cannot exist
 without one, so the generated window is loaded with `PanelWindow`, the
