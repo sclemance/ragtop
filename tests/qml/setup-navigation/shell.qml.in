@@ -1,0 +1,42 @@
+import QtQuick
+import Quickshell
+
+ShellRoot {
+  id: root
+  Harness { id: t }
+  // FROM SOURCE: overlaysOnly step steps overlays chosenOverlays installedOverlays overlaysRead applying overlaysToAdd overlaysToDrop overlaysChange canApply setOverlay setAllOverlays
+  Component { id: welcomeStep; Item { objectName: "welcome" } }
+  Component { id: depsStep; Item { objectName: "dependencies" } }
+  Component { id: switchStep; Item { objectName: "switch" } }
+  Component { id: overlayStep; Item { objectName: "overlays" } }
+  Component { id: finishStep; Item { objectName: "finish" } }
+  Loader { id: body
+    // PAGE BINDING
+  }
+  Component.onCompleted: t.run([
+    [20, function() {
+      t.equal(body.item.objectName, "welcome", "full setup starts at welcome")
+      root.overlaysOnly = true
+    }],
+    [20, function() {
+      t.equal(body.item.objectName, "overlays", "System Overlays opens the overlay controls")
+      t.equal(root.steps.length, 1, "System Overlays has one step")
+      t.ok(!root.canApply, "cannot apply before installed state loads")
+      root.overlaysRead = true
+      t.ok(!root.canApply, "unchanged selection cannot apply")
+      root.setOverlay("menu", true)
+      t.ok(root.canApply, "changing a toggle enables Apply")
+      t.equal(root.overlaysToAdd[0].id, "menu", "changed toggle is in additions")
+      root.setOverlay("menu", false)
+      t.ok(!root.canApply, "undoing the change disables Apply")
+      root.overlaysOnly = false
+      root.step = 3
+    }],
+    [20, function() {
+      t.equal(body.item.objectName, "overlays", "full setup still reaches overlays at step four")
+      t.ok(root.canApply, "full setup applies even without overlay changes")
+      root.applying = true
+      t.ok(!root.canApply, "in-flight apply cannot be submitted again")
+    }]
+  ])
+}

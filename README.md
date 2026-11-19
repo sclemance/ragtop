@@ -372,8 +372,9 @@ won't bring it up. To turn this off, tap **Setup › Tablet › Auto Keyboard** 
 the Omarchy menu.
 
 If you've turned on touch typing for them, the keyboard also comes up on its own
-when you open the Omarchy menu, the emoji or clipboard picker, or a password
-prompt, and goes away when you close it.
+when you open the Omarchy menu or the emoji or clipboard picker, and goes
+away when you close it. The polkit password prompt uses an embedded password
+keyboard instead, with the prompt retaining exclusive focus.
 
 **Tapping the screen ends the screensaver.** Omarchy's screensaver is a
 fullscreen terminal that quits when it reads a key, which a touchscreen never
@@ -974,7 +975,7 @@ The theme and background pickers (both Omarchy's image picker) have the same
 problem and one of their own: see [The theme and background
 pickers](#the-theme-and-background-pickers).
 
-Ragtop can replace them with clones (made with Omarchy's own
+Ragtop can replace the menu and pickers with clones (made with Omarchy's own
 `omarchy plugin clone`) that cooperate whenever the Keyboard setting enables
 the keyboard: Always On in either device mode, or Follow Sensor in tablet
 mode. They
@@ -985,6 +986,13 @@ focus and reserved-space behavior. On-demand focus can let a window under
 the mouse on another monitor take focus away.
 The menu's clone carries one more change, for a reason that has nothing to do
 with touch: see [The menu's Apps list](#the-menus-apps-list).
+
+The **Password Prompt** clone keeps exclusive focus and embeds the same flat
+password keyboard used on the lock screen. Its taps edit only the prompt's
+own password field, and Enter calls the prompt's original submit handler.
+It sends no virtual key events. While a polkit prompt is open, Ragtop hides
+the desktop keyboard and blocks its outgoing input, including delayed
+suggestion results. The embedded keyboard follows the Keyboard setting.
 
 Replacing part of Omarchy is your call, so each clone is off until you turn it
 on. The installer offers all of them once, with the trade-off below and No as
@@ -1015,16 +1023,16 @@ What turning one on means:
   placement stay intact; the shell coalesces the changes into a reload.
   Previous copies remain in the reported hidden backup directory. Initial
   installation and removal still use Omarchy's per-plugin commands.
-- **With the keyboard enabled it doesn't hold focus exclusively.** That's the fix,
-  but it also means another window could take keyboard focus while the overlay
+- **The menu and picker clones do not hold focus exclusively with the keyboard enabled.**
+  Another window could take keyboard focus while the overlay
   is open, for example one under the mouse on a second monitor, and receive
   what you type.
 - **The password prompt matters most.** Its clone keeps its authentication role
   (Omarchy passes a clone its original's capabilities), but its code then lives
-  in your user-writable config instead of the root-owned system folder, and the
-  point above applies to your password. Anything running as you could already
-  interfere with your session in other ways, but it's the one to think about
-  before turning on.
+  in your user-writable config instead of the root-owned system folder. Its
+  embedded keyboard edits that prompt directly. The on-demand focus trade-off
+  above does not apply to authentication. The user-writable clone still needs
+  the same trust as other code running in your session.
 
 ### Overlays that share a window
 
@@ -1258,7 +1266,9 @@ If tablet mode is never detected:
 
   It gives the user logged in at the machine read access to switch devices
   only (tablet mode, lid, headphone jack), never keyboards, and takes effect
-  without logging out. The uninstaller removes it.
+  without logging out. The uninstaller removes it. If access is still unavailable,
+  setup offers **Tablet Mode › Always On** instead. It does not recommend
+  joining the input-device group.
 - Rotation is separate: it needs `iio-sensor-proxy` to see your accelerometer
   with the right orientation, which is handled by your distribution's hardware
   database, not Ragtop.

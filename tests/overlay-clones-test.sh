@@ -197,7 +197,7 @@ new_install_patches_every_overlay() {
   # and keep the patch and the capability they had.
   assert_no_path "$(helper_of polkit)"
   assert_no_path "$(helper_of lock)"
-  assert_contains "$(<"$(entry_of polkit)")" 'WlrLayershell.keyboardFocus: ragtopKeyboardSettings.available ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive'
+  assert_contains "$(<"$(entry_of polkit)")" 'WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive'
   assert_contains "$(<"$(entry_of lock)")" 'sclemance.ragtop/LockKeyboard.qml'
   assert_equal "$(jq -c .omarchy.capabilities "$(clone_of polkit)/manifest.json")" '["authentication"]'
   assert_equal "$(jq -c .omarchy.capabilities "$(clone_of lock)/manifest.json")" '["authentication"]'
@@ -350,7 +350,7 @@ tappable_names_ragtops_clones() {
     before=$(everything_in_the_sandbox)
     clones tappable
     assert_rc 0
-    assert_equal "$out" $'menu\npolkit\nimage-picker'
+    assert_equal "$out" $'menu\nimage-picker'
     assert_equal "$(everything_in_the_sandbox)" "$before" "the sandbox after asking"
   done
 }
@@ -607,7 +607,7 @@ updating_omarchy_moves_clones_to_the_shared_window() {
     assert_equal "$(wc -l <"$(clone_of "$o")/.ragtop-base")" 3 "lines in $o's .ragtop-base"
   done
   assert_lacks "$(<"$(entry_of menu)")" "$old_per_open_focus"
-  assert_contains "$(<"$(entry_of polkit)")" "$old_per_open_focus"
+  assert_contains "$(<"$(entry_of polkit)")" 'WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive'
   assert_equal "$(wc -l <"$(clone_of polkit)/.ragtop-base")" 2 "lines in polkit's .ragtop-base"
   assert_equal "$(wc -l <"$(clone_of lock)/.ragtop-base")" 2 "lines in lock's .ragtop-base"
   clones status
@@ -660,7 +660,7 @@ an_edited_clone_is_kept_across_an_update() {
 a_clone_from_the_ragtop_before_is_repatched() {
   make_sandbox "$old_omarchy"
   clones install menu
-  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 6 "the patch revision recorded"
+  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 7 "the patch revision recorded"
   # As the Ragtop before this one left it.
   sed -i '2s/.*/3/' "$(clone_of menu)/.ragtop-base"
   clones status menu
@@ -668,7 +668,7 @@ a_clone_from_the_ragtop_before_is_repatched() {
   clones sync menu
   assert_rc 0
   assert_contains "$out" "Re-patched tester.menu for this version of Ragtop."
-  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 6 "the patch revision recorded"
+  assert_equal "$(sed -n 2p "$(clone_of menu)/.ragtop-base")" 7 "the patch revision recorded"
 }
 
 
@@ -695,7 +695,7 @@ PYTHON
   assert_rc 0
   assert_contains "$out" "Re-patched tester.lock for this version of Ragtop."
   assert_contains "$(<"$(entry_of lock)")" 'active: ragtopKeyboardSettings.available'
-  assert_equal "$(sed -n 2p "$(clone_of lock)/.ragtop-base")" 6 "lock patch revision"
+  assert_equal "$(sed -n 2p "$(clone_of lock)/.ragtop-base")" 7 "lock patch revision"
   clones sync lock
   assert_rc 0
   assert_lacks "$out" "Re-patched"
@@ -717,6 +717,17 @@ for path in Path(sys.argv[1]).glob('tester.*/*.qml'):
     if path.name == 'LockView.qml' or 'RagtopOverlayWindow' in path.name:
         continue
     s = path.read_text()
+    if path.name == 'PolkitAgent.qml':
+        start = s.index('    FileView { id: ragtopMode;')
+        end = s.index('    BorderSurface {\n      id: card', start)
+        mode = s[start:s.index('\n', start)]
+        s = s[:start] + s[end:]
+        s = s.replace('    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive',
+            '    WlrLayershell.keyboardFocus: ragtopMode.tablet ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive\n' + mode)
+        s = s.replace('    exclusionMode: ExclusionMode.Ignore',
+            '    exclusionMode: ragtopMode.tablet ? ExclusionMode.Normal : ExclusionMode.Ignore\n    exclusiveZone: 0')
+        path.write_text(s)
+        continue
     start = s.find('    FileView {\n      id: ragtopKeyboardSettings')
     if start < 0:
         continue
@@ -770,7 +781,7 @@ run_test "legacy locale hashes and Keyboard policy migrate without replacing rea
 
 run_test "revision 4 lock gains Keyboard policy and remains in sync" a_revision_four_lock_is_repatched
 
-run_test "a clone made at patch revision 3 is re-patched at 6" a_clone_from_the_ragtop_before_is_repatched
+run_test "a clone made at patch revision 3 is re-patched at 7" a_clone_from_the_ragtop_before_is_repatched
 run_test "4.0.4 to 7cc6a55: sync moves every clone over, the four onto a window of their own" updating_omarchy_moves_clones_to_the_shared_window
 run_test "7cc6a55 to 4.0.4: sync moves every clone back and leaves no window file behind" downgrading_omarchy_moves_clones_back
 run_test "4.0.4 to 7cc6a55: a clone with edits of its own is kept as it was" an_edited_clone_is_kept_across_an_update

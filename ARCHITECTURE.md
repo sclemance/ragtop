@@ -43,7 +43,7 @@ directory is a symlink into the repo and the watcher does not follow it.
 | `KeyboardTheme.qml` | Reads the look settings and resolves them into colours, sizes and corners. |
 | `SuggestionStrip.qml` | The band above the keys with an input method's choices. Draws, and says which item a touch means. |
 | `KeyIcon.qml` | Icons Ragtop draws itself as paths rather than taking from a font. |
-| `LockKeyboard.qml` | A second, standalone keyboard for the lock screen. See below for why it is separate. |
+| `LockKeyboard.qml` | A standalone password keyboard embedded in the lock screen and polkit prompt. See below for why it is separate. |
 | `LockKeyIcon.qml` | The same idea for the lock screen. |
 | `Tour.qml` | The guided tour, drawn on the overlay layer. Shows, never changes. |
 | `ToolsPanel.qml` | The settings panel that comes up over the keyboard. |
@@ -228,6 +228,11 @@ the transform itself:
 | left-up | 1 |
 | bottom-up | 2 |
 | right-up | 3 |
+
+Before applying a transform, the service checks the session lock. Only a
+successful probe answering `false` permits rotation. A locked session,
+missing or malformed answer, failed command or three-second timeout defers
+rotation and retries after two seconds.
 
 `monitor-sensor` asks iio-sensor-proxy to claim the accelerometer over
 D-Bus. That call can hang. When it does, `monitor-sensor` gives up and
@@ -660,12 +665,18 @@ routes every touch to a layer surface with exclusive focus before hit
 testing anything above it, so with a stock overlay a tap on the on-screen
 keyboard lands on the overlay and closes it.
 
-`overlay-clones.sh` clones the menu, emoji picker, clipboard picker, polkit
-prompt, image picker and lock screen, and patches each one to take focus on
-demand instead, and to respect reserved space so it sits above the keyboard.
-The patch is conditional on `$XDG_RUNTIME_DIR/ragtop-mode`, so in laptop
-mode each clone behaves exactly like the original. The focus approach comes
-from Gimbal (MIT).
+`overlay-clones.sh` supports six clones. The menu and three pickers use
+on-demand focus and respect reserved space while the Keyboard setting enables
+the desktop keyboard. The focus approach comes from Gimbal (MIT).
+
+The polkit prompt keeps exclusive focus. Like the lock screen, it embeds
+`LockKeyboard.qml` inside its own surface. A small adapter edits only the
+polkit password field and calls its original submission handler, guarded by
+whether the prompt is still requesting input. No password tap goes through
+Wayland's virtual keyboard or the desktop suggestion helpers. The desktop
+service tracks polkit's namespace independently of cooperative overlays,
+hides its own keyboard and blocks outgoing input while the prompt is open.
+Revision 7 migrates unedited older clones through the normal sync path.
 
 A clone stops receiving Omarchy's updates, so `sync` re-clones and re-patches
 any whose built-in has changed, and `install` registers it as an Omarchy
@@ -681,7 +692,10 @@ Three things trigger it: the service's `Component.onDestruction`, through
 `post-boot` hook; and the `post-update` hook. It removes only clones that
 `clone_is_ours`, through the same `apply_selection` as Setup, and then the
 hooks and the copy. Startup sync rewrites the hooks and refreshes the copy,
-so an existing install picks this up without a reinstall. The polkit and lock clones keep their authentication
+so an existing install picks this up without a reinstall. Keeper refresh
+stages a complete replacement, then uses the same atomic directory exchange
+as clone publication. Interruption leaves a complete old or new helper at
+the hooks' path. The polkit and lock clones keep their authentication
 capability because Omarchy stamps a clone with its source's capabilities via
 `clonedFrom`.
 

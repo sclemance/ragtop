@@ -95,9 +95,8 @@ check_switch() {
   tell install.found "${device#*$'\t'}" "$path"
   [[ -r $path ]] && return
   warn "$(t install.unreadable "$path" "$USER")"
-  offer_udev_rule && return
-  warn "$(t install.joinGroup)"
-  warn "  sudo usermod -aG $(stat -c %G "$path") $USER"
+  if offer_udev_rule && [[ -r $path ]]; then return; fi
+  warn "$(t install.switchManual)"
 }
 
 # offer_udev_rule: with permission, install the uaccess rule. The rule and

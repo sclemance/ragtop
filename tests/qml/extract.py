@@ -44,7 +44,7 @@ def members(lines, names):
             if indent > 2:
                 j += 1
                 continue
-            if indent == 2 and nxt.strip().startswith("}"):
+            if indent == 2 and nxt.strip().startswith(("}", "]")):
                 j += 1
             break
         found[name] = "\n".join(lines[i:j])

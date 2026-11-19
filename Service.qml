@@ -686,12 +686,13 @@ Item {
 
   Process {
     id: lockCheckProc
-    command: ["omarchy-shell", "lock", "isLocked"]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        if (text.trim() === "true") lockRecheck.restart()
-        else root.rotateNow(root.pendingOrientation)
-      }
+    command: ["timeout", "3", "omarchy-shell", "lock", "isLocked"]
+    stdout: StdioCollector { id: lockCheckOutput; waitForEnd: true }
+    onExited: function(code) {
+      // Only a successful, explicit unlocked answer permits rotation.
+      if (code === 0 && lockCheckOutput.text.trim() === "false")
+        root.rotateNow(root.pendingOrientation)
+      else lockRecheck.restart()
     }
   }
   Timer {
@@ -1121,6 +1122,12 @@ Item {
 
       if (name !== "openlayer" && name !== "closelayer") return
       var ns = String(event.data || "")
+      // Authentication is tracked even without a Ragtop clone. Its keyboard
+      // is inside its own surface, so it is not in the cooperative overlay set.
+      if (ns === "omarchy-polkit") {
+        root.passwordOpen = name === "openlayer"
+        return
+      }
       if (ns === root.pickerNamespace) {
         root.pickerOpen = name === "openlayer"
         return
@@ -1633,6 +1640,9 @@ Item {
   // between words. Anything else typed lets it go.
   property bool hyphenJoined: false
   function writeKeys(text) {
+    // Authentication uses the keyboard inside the exclusive polkit surface.
+    // Delayed desktop input must not be sent to compositor focus meanwhile.
+    if (root.passwordOpen && !/^(route (fcitx|wayland)|reload|forget)\n$/.test(text)) return
     root.hyphenJoined = false
     root.lastKeysAt = Date.now()
     text.split("\n").forEach(root.noteTyped)
@@ -2098,8 +2108,8 @@ Item {
     }
   }
   // The one password prompt Ragtop can see: Omarchy's polkit agent, whose
-  // patched clone types with this keyboard.
-  readonly property bool passwordOpen: root.openOverlays.indexOf("omarchy-polkit") !== -1
+  // patched clone has its own keyboard that edits the prompt directly.
+  property bool passwordOpen: false
 
   // What kind of field has focus, from fcitx5 through the bridge:
   // { password, terminal, noCapitals }, or null when there is no telling.
@@ -3206,7 +3216,7 @@ Item {
   // does, by drawing alone: the keyboard stays up, so the windows above keep
   // their place and the tour keeps its keyboard.
   property bool tourLowered: false
-  readonly property bool keysShown: root.oskVisible && !root.tourLowered
+  readonly property bool keysShown: root.oskVisible && !root.tourLowered && !root.passwordOpen
   // Answered for this session, either way, so the offer does not come back
   // before the setting it wrote has been read.
   property bool tourAnswered: false

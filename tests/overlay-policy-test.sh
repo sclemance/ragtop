@@ -2,7 +2,7 @@
 # Actual 4.0.4 focus/settings bindings, without native surfaces or input.
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 make_sandbox "$old_omarchy"
-clones install menu emojis clipboard polkit image-picker
+clones install menu emojis clipboard image-picker
 if [[ $rc != 0 ]]; then echo "not ok - policy clones install: $err"; exit 1; fi
 mkdir -p "$sandbox/home/.config/ragtop"
 echo laptop >"$sandbox/run/ragtop-mode"
@@ -11,7 +11,7 @@ qml_harness overlay-policy
 from pathlib import Path
 import sys
 plugins, harness = map(Path, sys.argv[1:])
-for i, (name, entry) in enumerate([('menu','Menu.qml'), ('emojis','Emojis.qml'), ('clipboard','Clipboard.qml'), ('polkit','PolkitAgent.qml'), ('image-picker','ImagePicker.qml')]):
+for i, (name, entry) in enumerate([('menu','Menu.qml'), ('emojis','Emojis.qml'), ('clipboard','Clipboard.qml'),  ('image-picker','ImagePicker.qml')]):
     source = (plugins / ('tester.' + name) / entry).read_text()
     start = source.index('    WlrLayershell.keyboardFocus:')
     end = source.index('    exclusiveZone: 0', start)

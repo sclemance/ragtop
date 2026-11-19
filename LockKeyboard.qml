@@ -5,17 +5,13 @@ import qs.Commons
 import qs.Commons as Commons
 import "KeyContrast.js" as KeyContrast
 
-// On-screen keyboard for Omarchy's lock screen. The lock
-// screen is a session lock, which hides every other surface, the on-screen
-// keyboard included, so Ragtop's patched clone of it (overlay-clones.sh) loads
-// this inside it and sets `view` to its LockView. Keys edit the password through
-// LockView's own signals, the path typing takes, so checking it is untouched.
-// From the service it takes only data: the active layout's letters/symbols
-// and the user's key-size adjustment, re-checked here. Appearance is always
-// Omarchy's flat keyboard in the lock screen's own palette (Commons.Color.lock).
-//
-// Deliberately separate from Keyboard.qml. It edits the password through
-// LockView's signals: no key events, helper, or modifiers other than Shift.
+// Password keyboard embedded in Omarchy's lock and polkit surfaces.
+// LockView supplies its password signals directly. The polkit clone supplies
+// an adapter that edits its own field and calls its original submit handler.
+// Neither route sends virtual key events or follows compositor focus.
+// From the desktop service it reads only checked layout data and sizeNudge.
+// Appearance stays flat in Commons.Color.lock, with no desktop theme effects.
+// Deliberately separate from Keyboard.qml and its suggestion/key helpers.
 Item {
   id: root
 

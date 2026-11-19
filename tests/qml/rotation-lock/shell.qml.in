@@ -1,0 +1,44 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+
+ShellRoot {
+  id: root
+  Harness { id: t }
+  property bool rotationLocked: false
+  property string appliedOrientation: ""
+  property string pendingOrientation: "left-up"
+  property int rotations: 0
+  function rotateNow(value) { rotations++; appliedOrientation = value }
+  // FROM SOURCE: applyOrientation lockCheckProc lockRecheck
+  FileView { id: response; path: Quickshell.env("XDG_RUNTIME_DIR") + "/probe"; blockWrites: true }
+  Component.onCompleted: {
+    var steps = []
+    ;["0 true", "0 empty", "0 unknown", "1 false", "1 empty", "0 hang", "0 false"].forEach(function(answer) {
+      steps.push([30, function() {
+        root.appliedOrientation = ""
+        root.rotations = 0
+        response.setText(answer + "\n")
+        root.applyOrientation(root.pendingOrientation)
+      }])
+      steps.push([answer === "0 hang" ? 3300 : 250, function() {
+        var unlocked = answer === "0 false"
+        t.equal(root.rotations, unlocked ? 1 : 0, answer + ": only definite unlocked success rotates")
+        t.equal(lockRecheck.running, !unlocked, answer + ": indeterminate or locked answers retry")
+        lockRecheck.stop()
+      }])
+    })
+    steps.push([30, function() {
+      root.appliedOrientation = ""
+      root.rotations = 0
+      response.setText("1 empty\n")
+      root.applyOrientation(root.pendingOrientation)
+    }])
+    steps.push([250, function() { response.setText("0 false\n") }])
+    steps.push([2200, function() {
+      t.equal(root.rotations, 1, "retry recovers after a failed probe")
+      t.equal(root.appliedOrientation, "left-up", "retry uses the pending orientation")
+    }])
+    t.run(steps)
+  }
+}

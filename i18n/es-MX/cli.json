@@ -39,7 +39,7 @@
   "install.exists": "%1 ya existe y no es este repositorio. Quítalo primero.",
   "install.found": "se encontró %1 en %2",
   "install.isCheckout": "%1 es este repositorio",
-  "install.joinGroup": "Otra opción: únete a su grupo y vuelve a iniciar sesión (esto también expone tus teclados):",
+  "install.switchManual": "El modo tableta automático no está disponible. Usa Configuración › Tableta › Modo tableta › Siempre activado, o reporta este dispositivo para revisar una regla de acceso limitada.",
   "install.linked": "enlazado %1 -> %2",
   "install.menu": "Agregando la configuración de Ragtop al menú de Omarchy (Configurar › Tableta)",
   "install.missing": "falta: %1",
